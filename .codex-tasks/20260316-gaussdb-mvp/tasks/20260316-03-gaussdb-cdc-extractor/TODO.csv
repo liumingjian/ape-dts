@@ -1,0 +1,5 @@
+id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
+1,新增 GaussDBCdc 配置与解析（dt-common）,DONE,DbType::GaussDBPg 支持 extract_type=cdc 并产出 ExtractorConfig::GaussDBCdc,cargo test -p dt-common --no-run,2026-03-17 08:38 +0800,0,ExtractorConfig::GaussDBCdc + task_config 解析分支已加入
+2,新增 dt-connector extractor/gaussdb + JsonDecoder 单测,DONE,GaussDBCdcClient/Extractor/Decoder 编译且单测通过,cargo test -p dt-connector,2026-03-17 08:50 +0800,0,新增 gaussdb cdc client/extractor/decoder；decoder 单测覆盖 insert/update/delete/begin/commit
+3,dt-task 注册 GaussDBCdcExtractor 工厂,DONE,ExtractorUtil 可创建 GaussDBCdcExtractor,cargo test -p dt-task --no-run,2026-03-17 08:52 +0800,0,ExtractorUtil + ConnClient 分支已补齐
+4,子任务验收回归,DONE,子任务 3 验收命令通过,cargo test -p dt-connector,2026-03-17 08:52 +0800,0,验收通过

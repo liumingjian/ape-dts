@@ -1,0 +1,36 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.19s
+warning: the following packages contain code that will be rejected by a future version of Rust: snap v0.2.5
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 2`
+     Running tests/integration_test.rs (target/debug/deps/integration_test-e223343e61fbfc15)
+
+running 1 test
+executing sql: DROP TABLE IF EXISTS public.gaussdb_check_basic
+executing sql: CREATE TABLE public.gaussdb_check_basic ( id INTEGER PRIMARY KEY, val TEXT )
+executing sql: DROP TABLE IF EXISTS public.gaussdb_check_basic
+executing sql: CREATE TABLE public.gaussdb_check_basic ( id INTEGER PRIMARY KEY, val TEXT )
+executing sql: INSERT INTO public.gaussdb_check_basic (id, val) VALUES (1, 'a'), (2, 'b')
+executing sql: INSERT INTO public.gaussdb_check_basic (id, val) VALUES (1, 'a'), (2, 'b')
+2026-03-24T18:15:20.226918+08:00 INFO default_logger - start task: [taskID: 16484abd1ab8abc9, taskType: Some(Check)]
+2026-03-24T18:15:20.227004+08:00 WARN default_logger - recorder unsupported resumer config: Dummy
+2026-03-24T18:15:20.227017+08:00 WARN default_logger - recovery unsupported resumer config: Dummy
+2026-03-24T18:15:20.227030+08:00 INFO default_logger - recovery initialization for task_id: 16484abd1ab8abc9 finished in 0 ms
+2026-03-24T18:15:20.395597+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-03-24T18:15:20.395621+08:00 ERROR default_logger - buffer_memory_mb=0 is too large and will be ignored to prevent overflow
+2026-03-24T18:15:20.395635+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-03-24T18:15:20.400032+08:00 INFO default_logger - begin to estimate record count
+2026-03-24T18:15:20.400049+08:00 INFO default_logger - estimate record count: 0
+2026-03-24T18:15:20.403260+08:00 INFO default_logger - schema: public, tb: gaussdb_snapshot_basic, insert events filtered
+2026-03-24T18:15:20.406359+08:00 ERROR default_logger - panic: panicked at dt-tests/tests/test_runner/test_base.rs:72:9:
+check failed after 6 attempts: single task: [public.gaussdb_check_basic] failed, error: error occurred while decoding column "category": mismatched types; Rust type `alloc::string::String` (as SQL type `TEXT`) is not compatible with SQL type `"CHAR"`
+backtrace:
+disabled backtrace
+test pg_to_gaussdb::check_tests::test::check_basic_test ... FAILED
+
+failures:
+
+failures:
+    pg_to_gaussdb::check_tests::test::check_basic_test
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 344 filtered out; finished in 1.94s
+
+error: test failed, to rerun pass `-p dt-tests --test integration_test`

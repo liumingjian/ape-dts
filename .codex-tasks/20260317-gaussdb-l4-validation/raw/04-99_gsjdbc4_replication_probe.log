@@ -1,0 +1,18 @@
+Exception in thread "main" org.postgresql.util.PSQLException: 尝试连线已失败。
+	at org.postgresql.core.v3.ConnectionFactoryImpl.openConnectionImpl(ConnectionFactoryImpl.java:679)
+	at org.postgresql.core.v3.ConnectionFactoryImpl.openConnectionImpl(ConnectionFactoryImpl.java:784)
+	at org.postgresql.core.ConnectionFactory.openConnection(ConnectionFactory.java:71)
+	at org.postgresql.jdbc.PgConnection.<init>(PgConnection.java:402)
+	at org.postgresql.Driver.makeConnectionInternal(Driver.java:774)
+	at org.postgresql.Driver.makeConnection(Driver.java:770)
+	at org.postgresql.Driver.connect(Driver.java:424)
+	at java.sql.DriverManager.getConnection(DriverManager.java:664)
+	at java.sql.DriverManager.getConnection(DriverManager.java:208)
+	at Gsjdbc4ReplicationProbe.queryConfirmedFlushLsn(Gsjdbc4ReplicationProbe.java:45)
+	at Gsjdbc4ReplicationProbe.main(Gsjdbc4ReplicationProbe.java:73)
+Caused by: java.io.EOFException: EOF Exception
+	at org.postgresql.core.PGStream.receiveChar(PGStream.java:336)
+	at org.postgresql.core.v3.ConnectionFactoryImpl.doAuthentication(ConnectionFactoryImpl.java:1095)
+	at org.postgresql.core.v3.ConnectionFactoryImpl.tryConnect(ConnectionFactoryImpl.java:330)
+	at org.postgresql.core.v3.ConnectionFactoryImpl.openConnectionImpl(ConnectionFactoryImpl.java:445)
+	... 10 more

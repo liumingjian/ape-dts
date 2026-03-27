@@ -1,0 +1,11 @@
+.DS_Store
+
+# Do not commit local scratch dirs or credentials
+**/tmp/
+**/.env.local
+**/*.pgpass
+**/pgpass
+
+# Build artifacts
+**/*.class
+

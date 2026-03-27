@@ -1,0 +1,80 @@
+   Compiling dt-connector v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-connector)
+   Compiling dt-parallelizer v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-parallelizer)
+   Compiling dt-pipeline v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-pipeline)
+   Compiling dt-task v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-task)
+   Compiling dt-precheck v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-precheck)
+   Compiling dt-tests v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-tests)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.96s
+warning: the following packages contain code that will be rejected by a future version of Rust: snap v0.2.5
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 2`
+     Running tests/integration_test.rs (target/debug/deps/integration_test-65ad912c08554e97)
+
+running 1 test
+executing sql: DROP TABLE IF EXISTS public.gaussdb_cdc_basic
+executing sql: CREATE TABLE public.gaussdb_cdc_basic ( id INTEGER PRIMARY KEY, val TEXT )
+executing sql: DROP TABLE IF EXISTS public.gaussdb_cdc_basic
+executing sql: CREATE TABLE public.gaussdb_cdc_basic ( id INTEGER PRIMARY KEY, val TEXT )
+2026-03-25T14:52:41.573434+08:00 INFO default_logger - start task: [taskID: 47c551b14b7d2510, taskType: Some(Cdc)]
+2026-03-25T14:52:41.573648+08:00 WARN default_logger - recorder unsupported resumer config: Dummy
+2026-03-25T14:52:41.573678+08:00 WARN default_logger - recovery unsupported resumer config: Dummy
+2026-03-25T14:52:41.573725+08:00 INFO default_logger - recovery initialization for task_id: 47c551b14b7d2510 finished in 0 ms
+2026-03-25T14:52:41.913276+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-03-25T14:52:41.913541+08:00 ERROR default_logger - buffer_memory_mb=0 is too large and will be ignored to prevent overflow
+2026-03-25T14:52:41.913719+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-03-25T14:52:41.942385+08:00 INFO default_logger - GaussDBCdcExtractor starts, slot_name: ape_test_gaussdb, start_lsn: , keepalive_interval_secs: 10, heartbeat_interval_secs: 1, heartbeat_tb: heartbeat_db.ape_dts_heartbeat
+2026-03-25T14:52:41.957507+08:00 INFO default_logger - MergeParallelizer starts, parallel_size: 1, checkpoint_interval_secs: 1
+2026-03-25T14:52:42.205648+08:00 INFO default_logger - gaussdb sql connection starts (ssl=on)
+2026-03-25T14:52:42.360191+08:00 INFO default_logger - slot: ape_test_gaussdb exists: true
+2026-03-25T14:52:42.360220+08:00 INFO default_logger - slot confirmed_flush_lsn(confirmed_flush/restart_lsn): 0/28BA4368
+2026-03-25T14:52:42.360235+08:00 WARN default_logger - start_lsn is empty, will use confirmed_flush_lsn
+2026-03-25T14:52:42.360247+08:00 INFO default_logger - execute: SELECT pg_drop_replication_slot ('ape_test_gaussdb')
+2026-03-25T14:52:42.416430+08:00 INFO default_logger - execute: SELECT * FROM pg_create_logical_replication_slot('ape_test_gaussdb', 'mppdb_decoding')
+2026-03-25T14:52:42.499655+08:00 INFO default_logger - slot created, returned start_lsn: 0/2981D508
+2026-03-25T14:52:42.957693+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-25T14:52:42.957740+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-25T14:52:42.959272+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-25T14:52:42.959288+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-25T14:52:42.959298+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-25T14:52:43.753719+08:00 INFO default_logger - execute: START_REPLICATION SLOT ape_test_gaussdb LOGICAL 0/2981D508
+2026-03-25T14:52:43.753815+08:00 INFO default_logger - gaussdb replication connection starts (ssl=on)
+2026-03-25T14:52:43.802851+08:00 INFO default_logger - try starting heartbeat, heartbeat_interval_secs: 1, heartbeat_tb: heartbeat_db.ape_dts_heartbeat, 
+2026-03-25T14:52:43.802907+08:00 INFO default_logger - heartbeat started
+2026-03-25T14:52:43.957862+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-25T14:52:43.957904+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-25T14:52:43.958588+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-25T14:52:43.958605+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-25T14:52:43.958618+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-25T14:52:43.958633+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T14:52:43.958646+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+executing sql: INSERT INTO public.gaussdb_cdc_basic (id, val) VALUES (1, 'a'), (2, 'b')
+2026-03-25T14:52:44.724526+08:00 ERROR default_logger - Failed to decode mppdb_decoding message at lsn 0/2981D6E0: missing field 'table', raw: {"table_name":"public.gaussdb_cdc_basic","op_type":"INSERT","columns_name":["id","val"],"columns_type":["integer","text"],"columns_val":["1","'a'"],"old_keys_name":[],"old_keys_type":[],"old_keys_val":[]}
+2026-03-25T14:52:44.724706+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-25T14:52:44.724723+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-25T14:52:44.766966+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-03-25T14:52:44.767057+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-25T14:52:44.767072+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-25T14:52:44.767083+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-25T14:52:44.767094+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T14:52:44.767117+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T14:52:44.767400+08:00 ERROR default_logger - panic: panicked at dt-tests/tests/test_runner/base_test_runner.rs:97:77:
+called `Result::unwrap()` on an `Err` value: extractor.extract failed: extractor error: mppdb_decoding json decode failed: missing field 'table'
+backtrace:
+disabled backtrace
+2026-03-25T14:52:55.402541+08:00 WARN sqlx::postgres::notice - Fast path bit num leak.
+comparing row data for src_tb: ("public", "gaussdb_cdc_basic"), dst_tb: ("public", "gaussdb_cdc_basic"), src_data count: 2, dst_data count: 0
+row count mismatch: src=2, dst=0
+compare tb data failed, src_tb: ("public", "gaussdb_cdc_basic"), dst_tb: ("public", "gaussdb_cdc_basic")
+2026-03-25T14:52:55.434377+08:00 ERROR default_logger - panic: panicked at dt-tests/tests/test_runner/rdb_test_runner.rs:815:17:
+assertion failed: self.compare_tb_data(&src_db_tbs[i], &dst_db_tbs[i]).await?
+backtrace:
+disabled backtrace
+test gaussdb_to_pg::cdc_tests::test::cdc_basic_test ... FAILED
+
+failures:
+
+failures:
+    gaussdb_to_pg::cdc_tests::test::cdc_basic_test
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 344 filtered out; finished in 17.95s
+
+error: test failed, to rerun pass `-p dt-tests --test integration_test`

@@ -1,0 +1,29 @@
+
+running 1 test
+skip gaussdb candidate (connect failed): postgres://10.250.0.30:8000/postgres, error: encountered unexpected or invalid data: unsupported SASL authentication mechanisms: 
+skip gaussdb candidate (connect failed): postgres://10.250.0.51:8000/postgres, error: encountered unexpected or invalid data: unsupported SASL authentication mechanisms: 
+pg_struct failed (attempt 1/6), will retry: pool timed out while waiting for an open connection
+skip gaussdb candidate (connect failed): postgres://10.250.0.30:8000/postgres, error: encountered unexpected or invalid data: unsupported SASL authentication mechanisms: 
+skip gaussdb candidate (connect failed): postgres://10.250.0.51:8000/postgres, error: encountered unexpected or invalid data: unsupported SASL authentication mechanisms: 
+test pg_to_gaussdb::struct_tests::test::struct_basic_test has been running for over 60 seconds
+pg_struct failed (attempt 2/6), will retry: pool timed out while waiting for an open connection
+skip gaussdb candidate (connect failed): postgres://10.250.0.30:8000/postgres, error: encountered unexpected or invalid data: unsupported SASL authentication mechanisms: 
+skip gaussdb candidate (connect failed): postgres://10.250.0.51:8000/postgres, error: encountered unexpected or invalid data: unsupported SASL authentication mechanisms: 
+pg_struct failed (attempt 3/6), will retry: pool timed out while waiting for an open connection
+skip gaussdb candidate (connect failed): postgres://10.250.0.30:8000/postgres, error: pool timed out while waiting for an open connection
+skip gaussdb candidate (connect failed): postgres://10.250.0.51:8000/postgres, error: pool timed out while waiting for an open connection
+pg_struct failed (attempt 4/6), will retry: pool timed out while waiting for an open connection
+skip gaussdb candidate (connect failed): postgres://10.250.0.30:8000/postgres, error: pool timed out while waiting for an open connection
+skip gaussdb candidate (connect failed): postgres://10.250.0.51:8000/postgres, error: pool timed out while waiting for an open connection
+pg_struct failed (attempt 5/6), will retry: pool timed out while waiting for an open connection
+skip gaussdb candidate (connect failed): postgres://10.250.0.30:8000/postgres, error: encountered unexpected or invalid data: unsupported SASL authentication mechanisms: 
+skip gaussdb candidate (connect failed): postgres://10.250.0.51:8000/postgres, error: encountered unexpected or invalid data: unsupported SASL authentication mechanisms: 
+test pg_to_gaussdb::struct_tests::test::struct_basic_test ... FAILED
+
+failures:
+
+failures:
+    pg_to_gaussdb::struct_tests::test::struct_basic_test
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 344 filtered out; finished in 322.27s
+
