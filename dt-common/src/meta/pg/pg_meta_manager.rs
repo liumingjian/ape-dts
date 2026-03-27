@@ -8,6 +8,8 @@ use anyhow::{bail, Context};
 use futures::TryStreamExt;
 use sqlx::{Pool, Postgres, Row};
 
+use crate::{log_warn, utils::time_util::TimeUtil};
+
 use crate::meta::{
     foreign_key::ForeignKey, rdb_meta_manager::RdbMetaManager, rdb_tb_meta::RdbTbMeta,
     row_data::RowData,
@@ -78,37 +80,36 @@ impl PgMetaManager {
     ) -> anyhow::Result<&'a PgTbMeta> {
         let full_name = format!(r#""{}"."{}""#, schema, tb);
         if !self.name_to_tb_meta.contains_key(&full_name) {
-            let oid = Self::get_oid(&self.conn_pool, schema, tb).await?;
-            let (cols, col_origin_type_map, col_type_map, nullable_cols) =
-                Self::parse_cols(&self.conn_pool, &mut self.type_registry, schema, tb).await?;
-            let key_map = Self::parse_keys(&self.conn_pool, schema, tb).await?;
-            let (order_cols, partition_col, id_cols) =
-                RdbMetaManager::parse_rdb_cols(&key_map, &cols, &nullable_cols)?;
-            // disable get_foreign_keys since we don't support foreign key check
-            let (foreign_keys, ref_by_foreign_keys) = (vec![], vec![]);
-            // let (foreign_keys, ref_by_foreign_keys) =
-            //     Self::get_foreign_keys(&self.conn_pool, schema, tb).await?;
-
-            let basic = RdbTbMeta {
-                schema: schema.to_string(),
-                tb: tb.to_string(),
-                cols,
-                nullable_cols,
-                col_origin_type_map,
-                key_map,
-                order_cols,
-                partition_col,
-                id_cols,
-                foreign_keys,
-                ref_by_foreign_keys,
-            };
-            let tb_meta = PgTbMeta {
-                oid,
-                col_type_map,
-                basic,
-            };
-            self.oid_to_tb_meta.insert(oid, tb_meta.clone());
-            self.name_to_tb_meta.insert(full_name.clone(), tb_meta);
+            let mut last_err: Option<anyhow::Error> = None;
+            for attempt in 1..=3 {
+                match self.build_tb_meta(schema, tb).await {
+                    Ok(tb_meta) => {
+                        self.oid_to_tb_meta.insert(tb_meta.oid, tb_meta.clone());
+                        self.name_to_tb_meta.insert(full_name.clone(), tb_meta);
+                        last_err = None;
+                        break;
+                    }
+                    Err(e) => {
+                        let retryable = Self::is_retryable_metadata_error(&e);
+                        if attempt < 3 && retryable {
+                            log_warn!(
+                                "get_tb_meta failed for {}.{} (attempt {}/3), will retry: {}",
+                                schema,
+                                tb,
+                                attempt,
+                                e
+                            );
+                            last_err = Some(e);
+                            TimeUtil::sleep_millis(300 * attempt as u64).await;
+                            continue;
+                        }
+                        return Err(e);
+                    }
+                }
+            }
+            if let Some(e) = last_err {
+                return Err(e);
+            }
         }
         Ok(self.name_to_tb_meta.get(&full_name).unwrap())
     }
@@ -126,6 +127,47 @@ impl PgMetaManager {
     pub fn invalidate_cache_by_ddl_data(&mut self, ddl_data: &DdlData) {
         let (schema, tb) = ddl_data.get_schema_tb();
         self.invalidate_cache(&schema, &tb);
+    }
+
+    async fn build_tb_meta(&mut self, schema: &str, tb: &str) -> anyhow::Result<PgTbMeta> {
+        let oid = Self::get_oid(&self.conn_pool, schema, tb).await?;
+        let (cols, col_origin_type_map, col_type_map, nullable_cols) =
+            Self::parse_cols(&self.conn_pool, &mut self.type_registry, schema, tb).await?;
+        let key_map = Self::parse_keys(&self.conn_pool, schema, tb).await?;
+        let (order_cols, partition_col, id_cols) =
+            RdbMetaManager::parse_rdb_cols(&key_map, &cols, &nullable_cols)?;
+        // disable get_foreign_keys since we don't support foreign key check
+        let (foreign_keys, ref_by_foreign_keys) = (vec![], vec![]);
+
+        let basic = RdbTbMeta {
+            schema: schema.to_string(),
+            tb: tb.to_string(),
+            cols,
+            nullable_cols,
+            col_origin_type_map,
+            key_map,
+            order_cols,
+            partition_col,
+            id_cols,
+            foreign_keys,
+            ref_by_foreign_keys,
+        };
+        Ok(PgTbMeta {
+            oid,
+            col_type_map,
+            basic,
+        })
+    }
+
+    fn is_retryable_metadata_error(err: &anyhow::Error) -> bool {
+        let msg = format!("{:#}", err).to_lowercase();
+        msg.contains("unexpected end of file")
+            || msg.contains("connection reset")
+            || msg.contains("broken pipe")
+            || msg.contains("connection refused")
+            || msg.contains("pool timed out")
+            || msg.contains("terminating connection")
+            || msg.contains("server closed the connection")
     }
 
     async fn parse_cols(
@@ -151,7 +193,7 @@ impl PgMetaManager {
             ORDER BY ordinal_position;",
             schema, tb
         );
-        let mut rows = sqlx::query(&sql).fetch(conn_pool);
+        let mut rows = sqlx::query(&sql).disable_arguments().fetch(conn_pool);
         while let Some(row) = rows.try_next().await? {
             let col: String = row.try_get("column_name")?;
             cols.push(col.clone());
@@ -172,7 +214,7 @@ impl PgMetaManager {
             tb, schema
         );
 
-        let mut rows = sqlx::query(&sql).fetch(conn_pool);
+        let mut rows = sqlx::query(&sql).disable_arguments().fetch(conn_pool);
         while let Some(row) = rows.try_next().await? {
             let col: String = row.try_get("col_name")?;
             if !cols.contains(&col) {
@@ -219,7 +261,7 @@ impl PgMetaManager {
         );
 
         let mut key_map: HashMap<String, Vec<String>> = HashMap::new();
-        let mut rows = sqlx::query(&sql).fetch(conn_pool);
+        let mut rows = sqlx::query(&sql).disable_arguments().fetch(conn_pool);
         while let Some(row) = rows.try_next().await? {
             let col_name: String = row.try_get("col_name")?;
             let constraint_type: String = row.try_get("constraint_type")?;
@@ -240,7 +282,7 @@ impl PgMetaManager {
 
     async fn get_oid(conn_pool: &Pool<Postgres>, schema: &str, tb: &str) -> anyhow::Result<i32> {
         let sql = format!(r#"SELECT '"{}"."{}"'::regclass::oid;"#, schema, tb);
-        let mut rows = sqlx::query(&sql).fetch(conn_pool);
+        let mut rows = sqlx::query(&sql).disable_arguments().fetch(conn_pool);
         if let Some(row) = rows.try_next().await? {
             let oid: i32 = row.try_get_unchecked("oid")?;
             return Ok(oid);

@@ -494,6 +494,11 @@ impl PgStructFetcher {
     ) -> anyhow::Result<HashMap<String, String>> {
         let fetcher = PgStructCheckFetcher {
             conn_pool: self.conn_pool.clone(),
+            db_type: self
+                .filter
+                .as_ref()
+                .map(|filter| filter.db_type.clone())
+                .unwrap_or(DbType::Pg),
         };
 
         let oid = fetcher.get_oid(schema, tb).await?;

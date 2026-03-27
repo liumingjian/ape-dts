@@ -30,7 +30,7 @@ impl ConstraintType {
                 _ => Self::Unknown,
             },
 
-            DbType::Pg => match str {
+            DbType::Pg | DbType::GaussDBPg => match str {
                 "p" | "112" => Self::Primary,
                 "u" | "117" => Self::Unique,
                 "c" | "99" => Self::Check,
@@ -52,7 +52,7 @@ impl ConstraintType {
                 Self::Unknown => "unknown",
             },
 
-            DbType::Pg => match self {
+            DbType::Pg | DbType::GaussDBPg => match self {
                 Self::Primary => "p",
                 Self::Unique => "u",
                 Self::Foreign => "f",

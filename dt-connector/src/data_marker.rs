@@ -53,7 +53,7 @@ impl DataMarker {
         };
 
         match *db_type {
-            DbType::Mysql | DbType::Pg | DbType::Mongo => {
+            DbType::Mysql | DbType::Pg | DbType::GaussDBPg | DbType::Mongo => {
                 let marker_info: Vec<&str> = config.marker.split('.').collect();
                 me.marker_schema = marker_info[0].to_string();
                 me.marker_tb = marker_info[1].to_string();

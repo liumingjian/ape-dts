@@ -31,6 +31,7 @@ use dt_connector::{
         base_extractor::BaseExtractor,
         extractor_monitor::ExtractorMonitor,
         foxlake::foxlake_s3_extractor::FoxlakeS3Extractor,
+        gaussdb::gaussdb_cdc_extractor::GaussDBCdcExtractor,
         kafka::kafka_extractor::KafkaExtractor,
         mongo::{
             mongo_cdc_extractor::MongoCdcExtractor, mongo_check_extractor::MongoCheckExtractor,
@@ -318,6 +319,41 @@ impl ExtractorUtil {
                     heartbeat_interval_secs,
                     heartbeat_tb,
                     ddl_meta_tb,
+                    base_extractor,
+                    recovery,
+                };
+                Box::new(extractor)
+            }
+
+            ExtractorConfig::GaussDBCdc {
+                url,
+                connection_auth,
+                slot_name,
+                start_lsn,
+                recreate_slot_if_exists,
+                keepalive_interval_secs,
+                heartbeat_interval_secs,
+                heartbeat_tb,
+                start_time_utc,
+                end_time_utc,
+            } => {
+                let conn_pool = match extractor_client {
+                    ConnClient::PostgreSQL(conn_pool) => conn_pool,
+                    _ => bail!("connection pool not found"),
+                };
+                base_extractor.time_filter = TimeFilter::new(&start_time_utc, &end_time_utc)?;
+                let extractor = GaussDBCdcExtractor {
+                    filter,
+                    url,
+                    connection_auth,
+                    conn_pool,
+                    slot_name,
+                    start_lsn,
+                    recreate_slot_if_exists,
+                    syncer,
+                    keepalive_interval_secs,
+                    heartbeat_interval_secs,
+                    heartbeat_tb,
                     base_extractor,
                     recovery,
                 };
@@ -612,7 +648,7 @@ impl ExtractorUtil {
                 let meta_manager = MysqlMetaManager::new(conn_pool.clone()).await?;
                 Some(RdbMetaManager::from_mysql(meta_manager))
             }
-            DbType::Pg => {
+            DbType::Pg | DbType::GaussDBPg => {
                 let conn_pool =
                     TaskUtil::create_pg_conn_pool(extractor_url, connection_auth, 1, true, false)
                         .await?;

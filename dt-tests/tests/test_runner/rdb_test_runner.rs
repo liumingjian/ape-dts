@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    env,
     str::FromStr,
 };
 
@@ -29,6 +30,7 @@ use dt_task::{task_runner::TaskRunner, task_util::TaskUtil};
 
 use sqlx::{query, types::BigDecimal, MySql, Pool, Postgres, Row};
 use tokio::task::JoinHandle;
+use url::Url;
 
 use crate::{
     test_config_util::TestConfigUtil,
@@ -67,7 +69,14 @@ impl RdbTestRunner {
         let mut src_conn_pool_pg = None;
         let mut dst_conn_pool_pg = None;
 
-        let config = TaskConfig::new(&base.task_config_file).unwrap();
+        let mut config = TaskConfig::new(&base.task_config_file).unwrap();
+        Self::maybe_rewrite_gaussdb_primary_urls(
+            &base.task_config_file,
+            &base.struct_task_config_file,
+            &config,
+        )
+        .await?;
+        config = TaskConfig::new(&base.task_config_file).unwrap();
         let src_db_type = &config.extractor_basic.db_type;
         let dst_db_type = &config.sinker_basic.db_type;
         let src_url = &config.extractor_basic.url;
@@ -78,7 +87,7 @@ impl RdbTestRunner {
         // generate mock sqls
         let mut unordered_compare = false;
         let mock_result: Option<(Vec<String>, Vec<String>)> = match src_db_type {
-            DbType::Pg => MockConfig::<PgType>::new(&base.task_config_file)
+            DbType::Pg | DbType::GaussDBPg => MockConfig::<PgType>::new(&base.task_config_file)
                 .map(|c| (c.mock_ddl_stmts(), c.mock_dml_stmts())),
             DbType::Mysql => MockConfig::<MysqlType>::new(&base.task_config_file)
                 .map(|c| (c.mock_ddl_stmts(), c.mock_dml_stmts())),
@@ -107,10 +116,40 @@ impl RdbTestRunner {
                     .await?,
                 );
             }
-            DbType::Pg => {
+            DbType::Pg | DbType::GaussDBPg => {
+                let disable_fk_checks = matches!(src_db_type, DbType::Pg);
+                let max_connections = if matches!(src_db_type, DbType::GaussDBPg) {
+                    // GaussDB cluster endpoints may be behind VIP/LB; using multiple pooled
+                    // connections can intermittently hit standby nodes (read-only transaction)
+                    // or trigger unstable behavior during tests. Keep a single connection for
+                    // deterministic DDL/DML and comparison queries.
+                    1
+                } else {
+                    5
+                };
+                let pool_timeout = if matches!(src_db_type, DbType::GaussDBPg) {
+                    std::time::Duration::from_secs(90)
+                } else {
+                    std::time::Duration::from_secs(30)
+                };
                 src_conn_pool_pg = Some(
-                    TaskUtil::create_pg_conn_pool(src_url, src_connection_auth, 5, false, true)
-                        .await?,
+                    tokio::time::timeout(
+                        pool_timeout,
+                        TaskUtil::create_pg_conn_pool(
+                            src_url,
+                            src_connection_auth,
+                            max_connections,
+                            false,
+                            disable_fk_checks,
+                        ),
+                    )
+                    .await
+                    .map_err(|_| {
+                        anyhow::anyhow!(
+                            "operation timed out: create_pg_conn_pool(src) url={}",
+                            src_url
+                        )
+                    })??,
                 );
             }
             _ => {}
@@ -134,10 +173,36 @@ impl RdbTestRunner {
                         .await?,
                     );
                 }
-                DbType::Pg => {
+                DbType::Pg | DbType::GaussDBPg => {
+                    let disable_fk_checks = matches!(dst_db_type, DbType::Pg);
+                    let max_connections = if matches!(dst_db_type, DbType::GaussDBPg) {
+                        1
+                    } else {
+                        5
+                    };
+                    let pool_timeout = if matches!(dst_db_type, DbType::GaussDBPg) {
+                        std::time::Duration::from_secs(90)
+                    } else {
+                        std::time::Duration::from_secs(30)
+                    };
                     dst_conn_pool_pg = Some(
-                        TaskUtil::create_pg_conn_pool(dst_url, dst_connection_auth, 5, false, true)
-                            .await?,
+                        tokio::time::timeout(
+                            pool_timeout,
+                            TaskUtil::create_pg_conn_pool(
+                                dst_url,
+                                dst_connection_auth,
+                                max_connections,
+                                false,
+                                disable_fk_checks,
+                            ),
+                        )
+                        .await
+                        .map_err(|_| {
+                            anyhow::anyhow!(
+                                "operation timed out: create_pg_conn_pool(dst) url={}",
+                                dst_url
+                            )
+                        })??,
                     );
                 }
                 _ => {}
@@ -178,6 +243,275 @@ impl RdbTestRunner {
             base,
             unordered_compare,
         })
+    }
+
+    async fn maybe_rewrite_gaussdb_primary_urls(
+        task_config_file: &str,
+        struct_task_config_file: &str,
+        config: &TaskConfig,
+    ) -> anyhow::Result<()> {
+        let candidates = match env::var("gaussdb_pg_candidate_hosts") {
+            Ok(v) => v,
+            Err(_) => return Ok(()),
+        };
+
+        let (base_url, auth) = if config.extractor_basic.db_type == DbType::GaussDBPg {
+            (
+                config.extractor_basic.url.clone(),
+                config.extractor_basic.connection_auth.clone(),
+            )
+        } else if config.sinker_basic.db_type == DbType::GaussDBPg {
+            (
+                config.sinker_basic.url.clone(),
+                config.sinker_basic.connection_auth.clone(),
+            )
+        } else {
+            return Ok(());
+        };
+
+        let primary_url = match Self::resolve_gaussdb_rw_url(&base_url, &auth, &candidates).await? {
+            Some(v) => v,
+            None => return Ok(()),
+        };
+
+        let mut updates = Vec::new();
+        if config.extractor_basic.db_type == DbType::GaussDBPg {
+            updates.push((
+                "extractor".to_string(),
+                "url".to_string(),
+                primary_url.clone(),
+            ));
+        }
+        if config.sinker_basic.db_type == DbType::GaussDBPg {
+            updates.push(("sinker".to_string(), "url".to_string(), primary_url.clone()));
+        }
+        if !updates.is_empty() {
+            TestConfigUtil::update_task_config(task_config_file, task_config_file, &updates);
+        }
+
+        if !struct_task_config_file.is_empty() {
+            let struct_config = TaskConfig::new(struct_task_config_file)?;
+            let mut struct_updates = Vec::new();
+            if struct_config.extractor_basic.db_type == DbType::GaussDBPg {
+                struct_updates.push((
+                    "extractor".to_string(),
+                    "url".to_string(),
+                    primary_url.clone(),
+                ));
+            }
+            if struct_config.sinker_basic.db_type == DbType::GaussDBPg {
+                struct_updates.push(("sinker".to_string(), "url".to_string(), primary_url.clone()));
+            }
+            if !struct_updates.is_empty() {
+                TestConfigUtil::update_task_config(
+                    struct_task_config_file,
+                    struct_task_config_file,
+                    &struct_updates,
+                );
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn resolve_gaussdb_rw_url(
+        base_url: &str,
+        auth: &dt_common::config::connection_auth_config::ConnectionAuthConfig,
+        candidates: &str,
+    ) -> anyhow::Result<Option<String>> {
+        let base = Url::parse(base_url)?;
+        let base_host = base.host_str().map(|s| s.to_string()).unwrap_or_default();
+        let base_port = base.port();
+
+        // Prefer direct node hosts over VIP/LB host in base_url, because VIPs may route
+        // different connections to primary/standby and cause intermittent "read-only transaction"
+        // errors during tests.
+        let mut ordered_candidates: Vec<&str> = Vec::new();
+        for candidate in candidates.split(',').map(|s| s.trim()) {
+            if candidate.is_empty() {
+                continue;
+            }
+            let host = candidate
+                .rsplit_once(':')
+                .map(|(h, _)| h)
+                .unwrap_or(candidate)
+                .trim();
+            if host != base_host {
+                ordered_candidates.push(candidate);
+            }
+        }
+        for candidate in candidates.split(',').map(|s| s.trim()) {
+            if candidate.is_empty() {
+                continue;
+            }
+            let host = candidate
+                .rsplit_once(':')
+                .map(|(h, _)| h)
+                .unwrap_or(candidate)
+                .trim();
+            if host == base_host {
+                ordered_candidates.push(candidate);
+            }
+        }
+
+        for candidate in ordered_candidates {
+            if candidate.is_empty() {
+                continue;
+            }
+
+            let (host, port) = match candidate.rsplit_once(':') {
+                Some((h, p)) if !h.is_empty() && p.chars().all(|c| c.is_ascii_digit()) => {
+                    (h.to_string(), Some(p.parse::<u16>()?))
+                }
+                _ => (candidate.to_string(), base_port),
+            };
+
+            let mut u = base.clone();
+            u.set_host(Some(&host))
+                .map_err(|_| anyhow::anyhow!("failed to set host in url: {}", base_url))?;
+            if let Some(port) = port {
+                u.set_port(Some(port))
+                    .map_err(|_| anyhow::anyhow!("failed to set port in url: {}", base_url))?;
+            }
+
+            let mut candidate_urls = vec![u.to_string()];
+            if !candidate_urls[0]
+                .to_lowercase()
+                .contains("sslmode=disable")
+            {
+                let mut no_ssl = u.clone();
+                let other_pairs: Vec<(String, String)> = no_ssl
+                    .query_pairs()
+                    .into_owned()
+                    .filter(|(k, _)| k != "sslmode")
+                    .collect();
+                no_ssl.query_pairs_mut().clear();
+                {
+                    let mut qp = no_ssl.query_pairs_mut();
+                    for (k, v) in other_pairs {
+                        qp.append_pair(&k, &v);
+                    }
+                    qp.append_pair("sslmode", "disable");
+                }
+                candidate_urls.push(no_ssl.to_string());
+            }
+
+            for url in candidate_urls {
+                // Probe multiple fresh connections to avoid VIP/LB flakiness.
+                let mut all_rw = true;
+                let mut server_addr_seen: Option<String> = None;
+                for probe_idx in 1..=2 {
+                    let pool = match tokio::time::timeout(
+                        std::time::Duration::from_secs(20),
+                        TaskUtil::create_pg_conn_pool(&url, auth, 1, false, false),
+                    )
+                    .await
+                    {
+                        Ok(Ok(pool)) => pool,
+                        Ok(Err(e)) => {
+                            println!(
+                                "skip gaussdb candidate (connect failed): {}, error: {}",
+                                url, e
+                            );
+                            all_rw = false;
+                            break;
+                        }
+                        Err(_) => {
+                            println!(
+                                "skip gaussdb candidate (connect timeout#{}) : {}",
+                                probe_idx, url
+                            );
+                            all_rw = false;
+                            break;
+                        }
+                    };
+
+                    let probe_res: Result<(bool, String), sqlx::Error> = match tokio::time::timeout(
+                        std::time::Duration::from_secs(10),
+                        sqlx::query_as("SELECT pg_is_in_recovery()::bool, inet_server_addr()::text")
+                            .fetch_one(&pool),
+                    )
+                    .await
+                    {
+                        Ok(v) => v,
+                        Err(_) => Err(sqlx::Error::PoolTimedOut),
+                    };
+                    let (in_recovery, server_addr) = match probe_res {
+                        Ok(v) => v,
+                        Err(e) => {
+                            println!(
+                                "skip gaussdb candidate (probe failed#{}) : {}, error: {}",
+                                probe_idx, url, e
+                            );
+                            pool.close().await;
+                            all_rw = false;
+                            break;
+                        }
+                    };
+                    pool.close().await;
+                    if in_recovery {
+                        println!("skip gaussdb candidate (standby/in_recovery): {}", url);
+                        all_rw = false;
+                        break;
+                    }
+                    if let Some(prev) = &server_addr_seen {
+                        if prev != &server_addr {
+                            println!(
+                                "skip gaussdb candidate (routes to multiple server_addr): {} ({} -> {})",
+                                url, prev, server_addr
+                            );
+                            all_rw = false;
+                            break;
+                        }
+                    } else {
+                        server_addr_seen = Some(server_addr);
+                    }
+                }
+
+                if all_rw {
+                    if let Some(addr) = &server_addr_seen {
+                        println!("selected gaussdb rw url: {} (server_addr={})", url, addr);
+                    } else {
+                        println!("selected gaussdb rw url: {}", url);
+                    }
+                    return Ok(Some(url));
+                }
+            }
+        }
+
+        Ok(None)
+    }
+
+    async fn maybe_create_gaussdb_rw_pg_pool(
+        base_url: &str,
+        auth: &dt_common::config::connection_auth_config::ConnectionAuthConfig,
+    ) -> anyhow::Result<Option<(String, Pool<Postgres>)>> {
+        let candidates = match env::var("gaussdb_pg_candidate_hosts") {
+            Ok(v) => v,
+            Err(_) => return Ok(None),
+        };
+
+        let Some(url) = Self::resolve_gaussdb_rw_url(base_url, auth, &candidates).await? else {
+            return Ok(None);
+        };
+
+        let pool = TaskUtil::create_pg_conn_pool(&url, auth, 1, false, false).await?;
+        Ok(Some((url, pool)))
+    }
+
+    async fn create_gaussdb_rw_pg_pool_with_wait(
+        base_url: &str,
+        auth: &dt_common::config::connection_auth_config::ConnectionAuthConfig,
+        max_wait_millis: u64,
+    ) -> anyhow::Result<Option<(String, Pool<Postgres>)>> {
+        let start = std::time::Instant::now();
+        while start.elapsed().as_millis() < max_wait_millis as u128 {
+            if let Some(v) = Self::maybe_create_gaussdb_rw_pg_pool(base_url, auth).await? {
+                return Ok(Some(v));
+            }
+            TimeUtil::sleep_millis(500).await;
+        }
+        Ok(None)
     }
 
     pub async fn close(&self) -> anyhow::Result<()> {
@@ -443,9 +777,11 @@ impl RdbTestRunner {
         // start task
         let task = self.spawn_cdc_task(start_millis, parse_millis).await?;
 
-        self.execute_test_sqls_and_compare(parse_millis).await?;
-
-        self.base.wait_task_finish(&task).await
+        let res = self.execute_test_sqls_and_compare(parse_millis).await;
+        // Always abort the task to avoid leaking long-running CDC tasks across retries.
+        // Other runners (mongo/redis) do the same.
+        let _ = self.base.abort_task(&task).await;
+        res
     }
 
     pub async fn run_heartbeat_test(
@@ -456,6 +792,9 @@ impl RdbTestRunner {
         let config = TaskConfig::new(&self.base.task_config_file).unwrap();
         let (heartbeat_tb, db_type) = match config.extractor {
             ExtractorConfig::PgCdc { heartbeat_tb, .. } => (heartbeat_tb.clone(), DbType::Pg),
+            ExtractorConfig::GaussDBCdc { heartbeat_tb, .. } => {
+                (heartbeat_tb.clone(), DbType::GaussDBPg)
+            }
             ExtractorConfig::MysqlCdc { heartbeat_tb, .. } => (heartbeat_tb.clone(), DbType::Mysql),
             _ => (String::new(), DbType::Mysql),
         };
@@ -511,8 +850,122 @@ impl RdbTestRunner {
         self.update_cdc_task_config(start_millis, total_parse_millis)
             .await?;
         let task = self.base.spawn_task().await?;
-        TimeUtil::sleep_millis(start_millis).await;
+        // For GaussDB CDC, task startup (slot create + START_REPLICATION) can be slow. If we
+        // execute DML before the replication slot becomes active, those changes will be missed.
+        // Wait (up to start_millis) for the slot to become active, otherwise fall back to a fixed sleep.
+        let config = TaskConfig::new(&self.base.task_config_file).unwrap();
+        match config.extractor {
+            ExtractorConfig::GaussDBCdc { ref slot_name, .. } => {
+                if let Err(e) = self
+                    .wait_gaussdb_cdc_slot_active(slot_name, start_millis)
+                    .await
+                {
+                    let _ = self.base.abort_task(&task).await;
+                    return Err(e);
+                }
+            }
+            _ => TimeUtil::sleep_millis(start_millis).await,
+        }
         Ok(task)
+    }
+
+    async fn wait_gaussdb_cdc_slot_active(
+        &self,
+        slot_name: &str,
+        max_wait_millis: u64,
+    ) -> anyhow::Result<()> {
+        if env::var("gaussdb_pg_candidate_hosts").is_err() {
+            let Some(pool) = &self.src_conn_pool_pg else {
+                return Ok(());
+            };
+
+            let start = std::time::Instant::now();
+            while start.elapsed().as_millis() < max_wait_millis as u128 {
+                match sqlx::query_scalar::<_, bool>(
+                    "SELECT active FROM pg_catalog.pg_replication_slots WHERE slot_name = $1",
+                )
+                .bind(slot_name)
+                .fetch_optional(pool)
+                .await
+                {
+                    Ok(Some(true)) => return Ok(()),
+                    Ok(_) => {}
+                    Err(_) => {}
+                }
+                TimeUtil::sleep_millis(500).await;
+            }
+
+            anyhow::bail!(
+                "operation timed out: gaussdb cdc slot '{}' did not become active within {} ms",
+                slot_name,
+                max_wait_millis
+            )
+        }
+
+        let base_url = &self.config.extractor_basic.url;
+        let auth = &self.config.extractor_basic.connection_auth;
+
+        let start = std::time::Instant::now();
+        let mut last_url: Option<String> = None;
+        let mut pool: Option<Pool<Postgres>> = None;
+        let mut last_resolve_at = std::time::Instant::now();
+
+        while start.elapsed().as_millis() < max_wait_millis as u128 {
+            if pool.is_none() {
+                match Self::maybe_create_gaussdb_rw_pg_pool(base_url, auth).await? {
+                    Some((url, p)) => {
+                        last_url = Some(url);
+                        pool = Some(p);
+                        last_resolve_at = std::time::Instant::now();
+                    }
+                    None => {
+                        TimeUtil::sleep_millis(500).await;
+                        continue;
+                    }
+                }
+            }
+
+            let p = pool.as_ref().unwrap();
+            match sqlx::query_scalar::<_, bool>(
+                "SELECT active FROM pg_catalog.pg_replication_slots WHERE slot_name = $1",
+            )
+            .bind(slot_name)
+            .fetch_optional(p)
+            .await
+            {
+                Ok(Some(true)) => {
+                    if let Some(tmp) = pool.take() {
+                        tmp.close().await;
+                    }
+                    return Ok(());
+                }
+                Ok(_) => {}
+                Err(_) => {
+                    if let Some(tmp) = pool.take() {
+                        tmp.close().await;
+                    }
+                }
+            }
+
+            if last_resolve_at.elapsed().as_secs() >= 5 {
+                if let Some(tmp) = pool.take() {
+                    tmp.close().await;
+                }
+            }
+
+            TimeUtil::sleep_millis(500).await;
+        }
+
+        if let Some(tmp) = pool {
+            tmp.close().await;
+        }
+
+        anyhow::bail!(
+            "operation timed out: gaussdb cdc slot '{}' did not become active within {} ms (last_url={:?})",
+            slot_name,
+            max_wait_millis,
+            last_url
+        )
     }
 
     fn get_total_parse_millis(&self, parse_millis: u64) -> u64 {
@@ -610,6 +1063,25 @@ impl RdbTestRunner {
         if let Some(pool) = &self.src_conn_pool_mysql {
             RdbUtil::execute_sqls_mysql(pool, sqls).await?;
         }
+        if matches!(self.config.extractor_basic.db_type, DbType::GaussDBPg) {
+            if let Some(pool) = Self::create_gaussdb_rw_pg_pool_with_wait(
+                &self.config.extractor_basic.url,
+                &self.config.extractor_basic.connection_auth,
+                20_000,
+            )
+            .await?
+            {
+                let (_url, pool) = pool;
+                let res = RdbUtil::execute_sqls_pg(&pool, sqls).await;
+                pool.close().await;
+                return res;
+            } else if env::var("gaussdb_pg_candidate_hosts").is_ok() {
+                anyhow::bail!(
+                    "operation timed out: resolve gaussdb rw url for executing src sqls"
+                );
+            }
+        }
+
         if let Some(pool) = &self.src_conn_pool_pg {
             RdbUtil::execute_sqls_pg(pool, sqls).await?;
         }
@@ -620,6 +1092,25 @@ impl RdbTestRunner {
         if let Some(pool) = &self.dst_conn_pool_mysql {
             RdbUtil::execute_sqls_mysql(pool, sqls).await?;
         }
+        if matches!(self.config.sinker_basic.db_type, DbType::GaussDBPg) {
+            if let Some(pool) = Self::create_gaussdb_rw_pg_pool_with_wait(
+                &self.config.sinker_basic.url,
+                &self.config.sinker_basic.connection_auth,
+                20_000,
+            )
+            .await?
+            {
+                let (_url, pool) = pool;
+                let res = RdbUtil::execute_sqls_pg(&pool, sqls).await;
+                pool.close().await;
+                return res;
+            } else if env::var("gaussdb_pg_candidate_hosts").is_ok() {
+                anyhow::bail!(
+                    "operation timed out: resolve gaussdb rw url for executing dst sqls"
+                );
+            }
+        }
+
         if let Some(pool) = &self.dst_conn_pool_pg {
             RdbUtil::execute_sqls_pg(pool, sqls).await?;
         }
@@ -636,7 +1127,13 @@ impl RdbTestRunner {
             if filtered_db_tbs.contains(&src_db_tbs[i]) {
                 continue;
             }
-            assert!(self.compare_tb_data(&src_db_tbs[i], &dst_db_tbs[i]).await?)
+            if !self.compare_tb_data(&src_db_tbs[i], &dst_db_tbs[i]).await? {
+                anyhow::bail!(
+                    "compare tb data failed, src_tb: {:?}, dst_tb: {:?}",
+                    src_db_tbs[i],
+                    dst_db_tbs[i]
+                );
+            }
         }
         Ok(true)
     }
@@ -652,10 +1149,16 @@ impl RdbTestRunner {
                 let dst_data = self.fetch_data(&dst_db_tbs[i], DST).await?;
                 if !dst_data.is_empty() {
                     println!("tb: {:?} is filtered but dst is not empty", dst_db_tbs[i]);
-                    panic!()
+                    anyhow::bail!("filtered tb has dst rows, dst_tb: {:?}", dst_db_tbs[i]);
                 }
             } else {
-                assert!(self.compare_tb_data(&src_db_tbs[i], &dst_db_tbs[i]).await?)
+                if !self.compare_tb_data(&src_db_tbs[i], &dst_db_tbs[i]).await? {
+                    anyhow::bail!(
+                        "compare tb data failed, src_tb: {:?}, dst_tb: {:?}",
+                        src_db_tbs[i],
+                        dst_db_tbs[i]
+                    );
+                }
             }
         }
         Ok(true)
@@ -1069,9 +1572,31 @@ impl RdbTestRunner {
         condition: &str,
     ) -> anyhow::Result<Vec<RowData>> {
         let where_sql = self.get_where_sql(&db_tb.0, &db_tb.1, condition);
+        let db_type = self.get_db_type(from);
+
+        if matches!(db_type, DbType::GaussDBPg) {
+            let (base_url, auth) = if from == SRC {
+                (
+                    self.config.extractor_basic.url.as_str(),
+                    &self.config.extractor_basic.connection_auth,
+                )
+            } else {
+                (
+                    self.config.sinker_basic.url.as_str(),
+                    &self.config.sinker_basic.connection_auth,
+                )
+            };
+
+            if let Some((_url, pool)) = Self::maybe_create_gaussdb_rw_pg_pool(base_url, auth).await?
+            {
+                let data = RdbUtil::fetch_data_pg(&pool, None, db_tb, &where_sql).await?;
+                pool.close().await;
+                return Ok(data);
+            }
+        }
+
         let (conn_pool_mysql, conn_pool_pg) = self.get_conn_pool(from);
         let data = if let Some(pool) = conn_pool_mysql {
-            let db_type = self.get_db_type(from);
             RdbUtil::fetch_data_mysql_compatible(pool, None, db_tb, &db_type, &where_sql).await?
         } else if let Some(pool) = conn_pool_pg {
             RdbUtil::fetch_data_pg(pool, None, db_tb, &where_sql).await?

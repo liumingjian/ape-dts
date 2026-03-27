@@ -17,7 +17,6 @@ use tokio::{
     sync::{Mutex, RwLock},
     task::JoinSet,
     time::Duration,
-    try_join,
 };
 
 use super::{
@@ -484,15 +483,38 @@ impl TaskRunner {
         )
         .await?;
 
-        // start threads
+        // start threads (avoid unwrap-panics; propagate errors with context)
+        // If either side errors, flip `shut_down` so the other side can exit and avoid deadlock.
+        let shut_down_for_extractor = shut_down.clone();
         let f1 = tokio::spawn(async move {
-            extractor.extract().await.unwrap();
-            extractor.close().await.unwrap();
+            let extract_res = extractor.extract().await;
+            let close_res = extractor.close().await;
+            if extract_res.is_err() || close_res.is_err() {
+                shut_down_for_extractor.store(true, Ordering::Release);
+            }
+            if let Err(e) = extract_res {
+                bail!("extractor.extract failed: {e:#}");
+            }
+            if let Err(e) = close_res {
+                bail!("extractor.close failed: {e:#}");
+            }
+            Ok::<(), anyhow::Error>(())
         });
 
+        let shut_down_for_pipeline = shut_down.clone();
         let f2 = tokio::spawn(async move {
-            pipeline.start().await.unwrap();
-            pipeline.stop().await.unwrap();
+            let start_res = pipeline.start().await;
+            let stop_res = pipeline.stop().await;
+            if start_res.is_err() || stop_res.is_err() {
+                shut_down_for_pipeline.store(true, Ordering::Release);
+            }
+            if let Err(e) = start_res {
+                bail!("pipeline.start failed: {e:#}");
+            }
+            if let Err(e) = stop_res {
+                bail!("pipeline.stop failed: {e:#}");
+            }
+            Ok::<(), anyhow::Error>(())
         });
 
         let interval_secs = self.config.pipeline.checkpoint_interval_secs;
@@ -510,7 +532,12 @@ impl TaskRunner {
             )
             .await
         });
-        try_join!(f1, f2, f3)?;
+        // JoinHandle<T>::await -> Result<T, JoinError>
+        // Here f1/f2 return anyhow::Result<()>, so we need to unwrap twice.
+        let (r1, r2, r3) = tokio::join!(f1, f2, f3);
+        r1??;
+        r2??;
+        r3?;
 
         // finished log
         let (schema, tb) = match &extractor_config {
@@ -841,7 +868,7 @@ impl TaskRunner {
                         &heartbeat_schema_tb[1],
                         &schema_sql,
                         &tb_sql,
-                        &DbType::Pg,
+                        &self.config.extractor_basic.db_type,
                     )
                     .await?
                 }
@@ -902,7 +929,7 @@ impl TaskRunner {
                         &data_marker.marker_tb,
                         &schema_sql,
                         &tb_sql,
-                        &DbType::Pg,
+                        &self.config.sinker_basic.db_type,
                     )
                     .await?
                 }

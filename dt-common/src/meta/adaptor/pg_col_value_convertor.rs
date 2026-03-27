@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use sqlx::{postgres::PgRow, Row};
+use sqlx::{postgres::PgRow, Row, ValueRef};
 
 use crate::meta::{
     col_value::ColValue,
@@ -123,8 +123,8 @@ impl PgColValueConvertor {
     }
 
     pub fn from_query(row: &PgRow, col: &str, col_type: &PgColType) -> anyhow::Result<ColValue> {
-        let value: Option<Vec<u8>> = row.get_unchecked(col);
-        if value.is_none() {
+        let value = row.try_get_raw(col)?;
+        if value.is_null() {
             return Ok(ColValue::None);
         }
 

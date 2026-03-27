@@ -1,4 +1,5 @@
 use futures::TryStreamExt;
+use sqlx::postgres::types::Oid as PgOid;
 use sqlx::{postgres::PgRow, Pool, Postgres, Row};
 use std::collections::HashMap;
 
@@ -38,7 +39,7 @@ impl TypeRegistry {
             ON (t.oid = e.id)
             WHERE n.nspname != 'pg_toast'";
         let mut rows = sqlx::query(sql).fetch(&self.conn_pool);
-        while let Some(row) = rows.try_next().await.unwrap() {
+        while let Some(row) = rows.try_next().await? {
             let col_type = self.parse_col_meta(&row)?;
             self.oid_to_type.insert(col_type.oid, col_type.clone());
         }
@@ -46,20 +47,15 @@ impl TypeRegistry {
     }
 
     fn parse_col_meta(&mut self, row: &PgRow) -> anyhow::Result<PgColType> {
-        let oid: i32 = row.get_unchecked("oid");
+        let oid: i32 = row.try_get::<PgOid, _>("oid")?.0 as i32;
         let value_type = PgValueType::from_oid(oid);
         let name: String = row.try_get("name")?;
         let alias = Self::name_to_alias(&name);
-        let element_oid: i32 = row.get_unchecked("element");
-        let parent_oid: i32 = row.get_unchecked("parentoid");
-        let category: String = row.get_unchecked("category");
-        let enum_values: Option<Vec<u8>> = row.get_unchecked("enum_values");
-        let enum_values = if enum_values.is_none() {
-            None
-        } else {
-            let enum_values: Vec<String> = row.try_get("enum_values")?;
-            Some(enum_values)
-        };
+        let element_oid: i32 = row.try_get::<PgOid, _>("element")?.0 as i32;
+        let parent_oid: i32 = row.try_get::<PgOid, _>("parentoid")?.0 as i32;
+        let category: i8 = row.try_get("category")?;
+        let category = (category as u8 as char).to_string();
+        let enum_values: Option<Vec<String>> = row.try_get("enum_values")?;
         let schema_name: String = row.try_get("schema_name")?;
 
         Ok(PgColType {

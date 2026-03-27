@@ -68,6 +68,20 @@ CREATE DATABASE postgres_euc_cn
   TEMPLATE template0;
 ```
 
+# GaussDB (PG-compatible)
+
+- Test suites:
+  - `pg_to_gaussdb/*` (snapshot/struct/check)
+  - `gaussdb_to_pg/*` (snapshot/cdc/check)
+- Config:
+  - Use `db_type=gaussdb_pg` in test `task_config.ini`
+  - Override URLs in `dt-tests/tests/.env.local` (recommended):
+    - `gaussdb_pg_extractor_without_auth_url`, `gaussdb_pg_extractor_username`, `gaussdb_pg_extractor_password`
+    - `gaussdb_pg_sinker_without_auth_url`, `gaussdb_pg_sinker_username`, `gaussdb_pg_sinker_password`
+- Notes:
+  - MVP requires GaussDB MD5 auth (e.g. `password_encryption_type=1`)
+  - CDC requires `wal_level=logical` and `mppdb_decoding` availability
+
 # MySQL
 [Prepare MySQL instances](/docs/en/tutorial/mysql_to_mysql.md)
 
