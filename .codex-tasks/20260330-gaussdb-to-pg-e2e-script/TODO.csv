@@ -1,0 +1,6 @@
+id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
+1,创建 taskmaster full 任务落盘（SPEC/TODO/PROGRESS/raw）,DONE,.codex-tasks/20260330-gaussdb-to-pg-e2e-script/ 目录可恢复且包含必要信息,ls -la .codex-tasks/20260330-gaussdb-to-pg-e2e-script,2026-03-30 19:05 +0800,0,"已创建 SPEC/TODO/PROGRESS/raw"
+2,实现无污染 E2E 脚本（启动 PG/建表/跑 dt-main/源端 DML/目标端校验/清理）,DONE,脚本可独立运行且具备 trap 清理逻辑,bash -n scripts/e2e/gaussdb_to_pg_cdc.sh,2026-03-30 19:05 +0800,0,"bash -n 通过；脚本使用 trap 强制清理"
+3,增强 CDC replication slot 名称健壮性（避免 START_REPLICATION 因特殊字符失败）,DONE,slot 名包含 '-' 等字符时不会在 START_REPLICATION 阶段报语法错,cargo test -p dt-connector -q,2026-03-30 19:05 +0800,0,"GaussDB/Pg CDC START_REPLICATION 统一对 slot_name 做 quoted identifier；dt-connector tests 通过"
+4,在文档中补充脚本入口（可选但推荐）,DONE,手动文档顶部包含脚本使用方式且不含敏感信息,rg -n \"scripts/e2e/gaussdb_to_pg_cdc.sh\" docs/zh/cdc/gaussdb_to_pg_manual_test.md,2026-03-30 19:05 +0800,0,"已在手动文档顶部补充脚本模式入口"
+5,用用户环境实际执行脚本并记录结果,DONE,脚本跑通并且清理干净,bash scripts/e2e/gaussdb_to_pg_cdc.sh,2026-03-30 19:06 +0800,0,"run_dir=.local/e2e/gaussdb_to_pg_cdc_20260330_190618；脚本成功且已清理源/目标对象与容器"

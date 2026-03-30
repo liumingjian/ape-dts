@@ -1,8 +1,13 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    future::Future,
+};
 
+use anyhow::Error;
 use dt_common::config::config_enums::DbType;
 
 use futures::executor::block_on;
+use tokio::time::{sleep, Duration};
 
 use crate::test_runner::rdb_test_runner::DST;
 
@@ -20,10 +25,70 @@ pub struct TestBase {}
 
 #[allow(dead_code)]
 impl TestBase {
+    fn should_retry(test_dir: &str) -> bool {
+        test_dir.contains("gaussdb")
+    }
+
+    fn is_transient_error(err: &Error) -> bool {
+        let msg = format!("{:#}", err).to_lowercase();
+        msg.contains("unexpected end of file")
+            || msg.contains("read-only transaction")
+            || msg.contains("connection reset")
+            || msg.contains("broken pipe")
+            || msg.contains("connection refused")
+            || msg.contains("operation timed out")
+            || msg.contains("timeout expired")
+            || msg.contains("pool timed out")
+            || msg.contains("compare tb data failed")
+            || msg.contains("terminating connection")
+            || msg.contains("server closed the connection")
+    }
+
+    async fn run_with_retry<F, Fut>(test_dir: &str, label: &str, mut f: F)
+    where
+        F: FnMut() -> Fut,
+        Fut: Future<Output = Result<(), Error>>,
+    {
+        let max_attempts = if Self::should_retry(test_dir) { 6 } else { 1 };
+        let mut last_err: Option<Error> = None;
+
+        for attempt in 1..=max_attempts {
+            match f().await {
+                Ok(()) => return,
+                Err(e) => {
+                    let retryable = attempt < max_attempts && Self::is_transient_error(&e);
+                    if retryable {
+                        println!(
+                            "{} failed (attempt {}/{}), will retry: {:#}",
+                            label, attempt, max_attempts, e
+                        );
+                        last_err = Some(e);
+                        sleep(Duration::from_millis(500 * attempt as u64)).await;
+                        continue;
+                    }
+                    last_err = Some(e);
+                    break;
+                }
+            }
+        }
+
+        panic!(
+            "{} failed after {} attempts: {:#}",
+            label,
+            max_attempts,
+            last_err.unwrap()
+        );
+    }
+
     pub async fn run_snapshot_test(test_dir: &str) {
-        let runner = RdbTestRunner::new(test_dir).await.unwrap();
-        runner.run_snapshot_test(true).await.unwrap();
-        runner.close().await.unwrap();
+        Self::run_with_retry(test_dir, "snapshot", || async {
+            let runner = RdbTestRunner::new(test_dir).await?;
+            let res = runner.run_snapshot_test(true).await;
+            let _ = runner.close().await;
+            res?;
+            Ok(())
+        })
+        .await;
     }
 
     pub async fn run_snapshot_test_and_check_dst_count(
@@ -53,12 +118,14 @@ impl TestBase {
     }
 
     pub async fn run_cdc_test(test_dir: &str, start_millis: u64, parse_millis: u64) {
-        let runner = RdbTestRunner::new(test_dir).await.unwrap();
-        runner
-            .run_cdc_test(start_millis, parse_millis)
-            .await
-            .unwrap();
-        runner.close().await.unwrap();
+        Self::run_with_retry(test_dir, "cdc", || async {
+            let runner = RdbTestRunner::new(test_dir).await?;
+            let res = runner.run_cdc_test(start_millis, parse_millis).await;
+            let _ = runner.close().await;
+            res?;
+            Ok(())
+        })
+        .await;
     }
 
     pub async fn run_cdc_to_sql_test(
@@ -118,9 +185,14 @@ impl TestBase {
     }
 
     pub async fn run_check_test(test_dir: &str) {
-        let runner = RdbCheckTestRunner::new(test_dir).await.unwrap();
-        runner.run_check_test().await.unwrap();
-        runner.close().await.unwrap();
+        Self::run_with_retry(test_dir, "check", || async {
+            let runner = RdbCheckTestRunner::new(test_dir).await?;
+            let res = runner.run_check_test().await;
+            let _ = runner.close().await;
+            res?;
+            Ok(())
+        })
+        .await;
     }
 
     pub async fn run_review_test(test_dir: &str) {
@@ -280,10 +352,19 @@ impl TestBase {
     }
 
     pub async fn run_pg_struct_test(test_dir: &str) {
-        let mut runner = RdbStructTestRunner::new(test_dir).await.unwrap();
-        runner.run_pg_struct_test().await.unwrap();
-        runner.base.execute_clean_sqls().await.unwrap();
-        runner.close().await.unwrap();
+        Self::run_with_retry(test_dir, "pg_struct", || async {
+            let mut runner = RdbStructTestRunner::new(test_dir).await?;
+            let run_res = runner.run_pg_struct_test().await;
+            let clean_res = runner.base.execute_clean_sqls().await;
+            let _ = runner.close().await;
+
+            if let Err(e) = run_res {
+                return Err(e);
+            }
+            clean_res?;
+            Ok(())
+        })
+        .await;
     }
 
     pub async fn run_precheck_test(

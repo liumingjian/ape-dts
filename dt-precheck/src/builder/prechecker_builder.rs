@@ -67,6 +67,20 @@ impl PrecheckerBuilder {
                 },
             })),
             DbType::Pg => Some(Box::new(PostgresqlPrechecker {
+                db_type: DbType::Pg,
+                filter_config: self.task_config.filter.clone(),
+                precheck_config: self.precheck_config.clone(),
+                is_source,
+                fetcher: PgFetcher {
+                    pool: None,
+                    url,
+                    connection_auth,
+                    is_source,
+                    filter,
+                },
+            })),
+            DbType::GaussDBPg => Some(Box::new(PostgresqlPrechecker {
+                db_type: DbType::GaussDBPg,
                 filter_config: self.task_config.filter.clone(),
                 precheck_config: self.precheck_config.clone(),
                 is_source,

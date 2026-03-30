@@ -4,7 +4,7 @@ use dt_common::{
 };
 use dt_connector::meta_fetcher::{
     mysql::mysql_struct_check_fetcher::MysqlStructCheckFetcher,
-    pg::pg_struct_check_fetcher::PgStructCheckFetcher,
+    pg::pg_struct_check_fetcher::{PgCheckTableInfo, PgStructCheckFetcher},
 };
 use std::collections::{HashMap, HashSet};
 
@@ -15,10 +15,30 @@ pub struct RdbStructTestRunner {
 }
 
 const PG_GET_INDEXDEF: &str = "pg_get_indexdef";
+const CROSS_ENGINE_SUMMARY_KEYS: [&str; 7] = [
+    "relchecks",
+    "relkind",
+    "relhasindex",
+    "relhasrules",
+    "relhastriggers",
+    "relhasoids",
+    "relpersistence",
+];
+const CROSS_ENGINE_INDEX_KEYS: [&str; 9] = [
+    "relname",
+    "indisprimary",
+    "indisunique",
+    "indisclustered",
+    "indisvalid",
+    "pg_get_constraintdef",
+    "contype",
+    "condeferrable",
+    "condeferred",
+];
 
 impl RdbStructTestRunner {
     pub async fn new(relative_test_dir: &str) -> anyhow::Result<Self> {
-        let base = RdbTestRunner::new(relative_test_dir).await.unwrap();
+        let base = RdbTestRunner::new(relative_test_dir).await?;
         Ok(Self { base })
     }
 
@@ -68,8 +88,6 @@ impl RdbStructTestRunner {
 
             println!("dst_ddl_sql: {}\n", dst_ddl_sql);
             println!("expect_ddl_sql: {}\n", expect_ddl_sql);
-            // show create table may return sqls with indexes in different orders during tests,
-            // so here we just compare all lines of the sqls.
             let dst_ddl_sql_lines = get_sql_lines(&dst_ddl_sql);
             let expect_ddl_sql_lines = get_sql_lines(&expect_ddl_sql);
 
@@ -83,7 +101,6 @@ impl RdbStructTestRunner {
             assert_eq!(dst_ddl_sql_lines.len(), expect_ddl_sql_lines.len());
         }
 
-        // show create database
         let mut tested_dbs = HashSet::new();
         for i in 0..src_db_tbs.len() {
             if tested_dbs.contains(&src_db_tbs[i].0) {
@@ -113,11 +130,17 @@ impl RdbStructTestRunner {
         self.base.execute_prepare_sqls().await?;
         self.base.base.start_task().await?;
 
+        let src_db_type = self.base.config.extractor_basic.db_type.clone();
+        let dst_db_type = self.base.config.sinker_basic.db_type.clone();
+        let cross_engine_compare =
+            Self::requires_pg_struct_normalization(&src_db_type, &dst_db_type);
         let src_check_fetcher = PgStructCheckFetcher {
             conn_pool: self.base.src_conn_pool_pg.as_mut().unwrap().clone(),
+            db_type: src_db_type,
         };
         let dst_check_fetcher = PgStructCheckFetcher {
             conn_pool: self.base.dst_conn_pool_pg.as_mut().unwrap().clone(),
+            db_type: dst_db_type,
         };
 
         let (src_db_tbs, dst_db_tbs) = self.base.get_compare_db_tbs().unwrap();
@@ -128,7 +151,7 @@ impl RdbStructTestRunner {
             let src_table = src_check_fetcher
                 .fetch_table(&src_db_tb.0, &src_db_tb.1)
                 .await?;
-            let mut dst_table = dst_check_fetcher
+            let dst_table = dst_check_fetcher
                 .fetch_table(&dst_db_tb.0, &dst_db_tb.1)
                 .await?;
 
@@ -137,60 +160,28 @@ impl RdbStructTestRunner {
                 src_db_tb, dst_db_tb
             );
 
-            if src_db_tb == dst_db_tb {
+            if src_db_tb == dst_db_tb && !cross_engine_compare {
                 println!("src_table: {:?}\n", src_table);
                 println!("dst_table: {:?}\n", dst_table);
                 assert_eq!(src_table, dst_table);
-                return Ok(());
+                continue;
+            }
+
+            if cross_engine_compare {
+                Self::assert_cross_engine_pg_table_eq(&src_table, &dst_table, src_db_tb, dst_db_tb);
+                continue;
             }
 
             assert_eq!(src_table.columns, dst_table.columns);
             assert_eq!(src_table.summary, dst_table.summary);
             assert_eq!(src_table.constraints, dst_table.constraints);
-            assert_eq!(src_table.indexes.len(), dst_table.indexes.len());
-            // when table is routed, the dst pg_get_indexdef is different from src
-            // src pg_get_indexdef: CREATE UNIQUE INDEX full_column_type_pkey ON struct_it_pg2pg_1.full_column_type USING btree (id)
-            // dst pg_get_indexdef: CREATE UNIQUE INDEX full_column_type_pkey ON dst_struct_it_pg2pg_1.full_column_type USING btree (id)
-            let parser = DdlParser::new(DbType::Pg);
-            for (j, src_index) in src_table.indexes.iter().enumerate() {
-                let src_indexdef = src_index.get(PG_GET_INDEXDEF);
-                if src_indexdef.is_none() {
-                    continue;
-                }
-                let dst_index = &mut dst_table.indexes[j];
-
-                let src_indexdef = src_indexdef.unwrap();
-                let dst_indexdef = dst_index.get(PG_GET_INDEXDEF).unwrap();
-                let src_ddl_data = parser.parse(src_indexdef).unwrap().unwrap();
-                let dst_ddl_data = parser.parse(dst_indexdef).unwrap().unwrap();
-
-                if let DdlStatement::PgCreateIndex(src) = src_ddl_data.statement {
-                    assert_eq!(src.schema, src_db_tb.0);
-                    assert_eq!(src.tb, src_db_tb.1);
-
-                    if let DdlStatement::PgCreateIndex(dst) = dst_ddl_data.statement {
-                        assert_eq!(dst.schema, dst_db_tb.0);
-                        assert_eq!(dst.tb, dst_db_tb.1);
-
-                        assert_eq!(src.index_name, dst.index_name);
-                        assert_eq!(src.is_unique, dst.is_unique);
-                        assert_eq!(src.is_concurrently, dst.is_concurrently);
-                        assert_eq!(src.if_not_exists, dst.if_not_exists);
-                        assert_eq!(src.is_only, dst.is_only);
-                        assert_eq!(src.unparsed, dst.unparsed);
-                    }
-                }
-
-                // other properties of src_index and dst_index should be same
-                assert_eq!(src_index.len(), dst_index.len());
-                for key in src_index.keys() {
-                    if key == PG_GET_INDEXDEF {
-                        continue;
-                    }
-                    println!("index property: {}", key);
-                    assert_eq!(src_index.get(key), dst_index.get(key));
-                }
-            }
+            Self::assert_pg_indexes_equal(
+                &src_table.indexes,
+                &dst_table.indexes,
+                src_db_tb,
+                dst_db_tb,
+                false,
+            );
         }
 
         println!(
@@ -198,6 +189,123 @@ impl RdbStructTestRunner {
             src_db_tbs, dst_db_tbs
         );
         Ok(())
+    }
+
+    fn requires_pg_struct_normalization(src_db_type: &DbType, dst_db_type: &DbType) -> bool {
+        matches!(src_db_type, DbType::GaussDBPg) || matches!(dst_db_type, DbType::GaussDBPg)
+    }
+
+    fn assert_cross_engine_pg_table_eq(
+        src_table: &PgCheckTableInfo,
+        dst_table: &PgCheckTableInfo,
+        src_db_tb: &(String, String),
+        dst_db_tb: &(String, String),
+    ) {
+        assert_eq!(src_table.columns, dst_table.columns);
+        assert_eq!(
+            Self::normalize_pg_summary_for_cross_engine(&src_table.summary),
+            Self::normalize_pg_summary_for_cross_engine(&dst_table.summary)
+        );
+        assert_eq!(src_table.constraints, dst_table.constraints);
+        Self::assert_pg_indexes_equal(
+            &src_table.indexes,
+            &dst_table.indexes,
+            src_db_tb,
+            dst_db_tb,
+            true,
+        );
+    }
+
+    fn normalize_pg_summary_for_cross_engine(
+        summary: &[HashMap<String, String>],
+    ) -> Vec<HashMap<String, String>> {
+        summary
+            .iter()
+            .map(|row| {
+                let mut normalized = HashMap::new();
+                for key in CROSS_ENGINE_SUMMARY_KEYS {
+                    if let Some(value) = row.get(key) {
+                        normalized.insert(key.to_string(), value.to_string());
+                    }
+                }
+                normalized
+            })
+            .collect()
+    }
+
+    fn normalize_pg_indexdef(indexdef: &str) -> String {
+        indexdef.replace("USING ubtree", "USING btree")
+    }
+
+    fn assert_pg_indexes_equal(
+        src_indexes: &[HashMap<String, String>],
+        dst_indexes: &[HashMap<String, String>],
+        src_db_tb: &(String, String),
+        dst_db_tb: &(String, String),
+        normalize_access_method: bool,
+    ) {
+        assert_eq!(src_indexes.len(), dst_indexes.len());
+        let parser = DdlParser::new(DbType::Pg);
+        for (j, src_index) in src_indexes.iter().enumerate() {
+            let src_indexdef = match src_index.get(PG_GET_INDEXDEF) {
+                Some(v) => v,
+                None => continue,
+            };
+            let dst_index = &dst_indexes[j];
+
+            let src_indexdef = if normalize_access_method {
+                Self::normalize_pg_indexdef(src_indexdef)
+            } else {
+                src_indexdef.to_string()
+            };
+            let dst_indexdef = if normalize_access_method {
+                Self::normalize_pg_indexdef(dst_index.get(PG_GET_INDEXDEF).unwrap())
+            } else {
+                dst_index.get(PG_GET_INDEXDEF).unwrap().to_string()
+            };
+            let src_ddl_data = parser.parse(&src_indexdef).unwrap().unwrap();
+            let dst_ddl_data = parser.parse(&dst_indexdef).unwrap().unwrap();
+
+            if let DdlStatement::PgCreateIndex(src) = src_ddl_data.statement {
+                if !normalize_access_method || !src.schema.is_empty() {
+                    assert_eq!(src.schema, src_db_tb.0);
+                }
+                assert_eq!(src.tb, src_db_tb.1);
+
+                if let DdlStatement::PgCreateIndex(dst) = dst_ddl_data.statement {
+                    if !normalize_access_method || !dst.schema.is_empty() {
+                        assert_eq!(dst.schema, dst_db_tb.0);
+                    }
+                    assert_eq!(dst.tb, dst_db_tb.1);
+
+                    assert_eq!(src.index_name, dst.index_name);
+                    assert_eq!(src.is_unique, dst.is_unique);
+                    assert_eq!(src.is_concurrently, dst.is_concurrently);
+                    assert_eq!(src.if_not_exists, dst.if_not_exists);
+                    assert_eq!(src.is_only, dst.is_only);
+                    if !normalize_access_method {
+                        assert_eq!(src.unparsed, dst.unparsed);
+                    }
+                }
+            }
+
+            if normalize_access_method {
+                for key in CROSS_ENGINE_INDEX_KEYS {
+                    println!("index property: {}", key);
+                    assert_eq!(src_index.get(key), dst_index.get(key));
+                }
+                continue;
+            }
+
+            assert_eq!(src_index.len(), dst_index.len());
+            for key in src_index.keys() {
+                if key == PG_GET_INDEXDEF {
+                    continue;
+                }
+                println!("index property: {}", key);
+                assert_eq!(src_index.get(key), dst_index.get(key));
+            }
+        }
     }
 
     pub async fn run_struct_test_without_check(&mut self) -> anyhow::Result<()> {
@@ -239,5 +347,41 @@ impl RdbStructTestRunner {
             ddl_sqls.insert(key, sql.trim().to_owned());
         }
         ddl_sqls
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RdbStructTestRunner;
+    use std::collections::HashMap;
+
+    fn row(entries: &[(&str, &str)]) -> HashMap<String, String> {
+        entries
+            .iter()
+            .map(|(key, value)| (key.to_string(), value.to_string()))
+            .collect()
+    }
+
+    #[test]
+    fn normalize_pg_indexdef_maps_ubtree_to_btree() {
+        let sql = "CREATE UNIQUE INDEX foo ON public.bar USING ubtree (id)";
+        assert_eq!(
+            RdbStructTestRunner::normalize_pg_indexdef(sql),
+            "CREATE UNIQUE INDEX foo ON public.bar USING btree (id)"
+        );
+    }
+
+    #[test]
+    fn normalize_pg_summary_for_cross_engine_keeps_logical_keys_only() {
+        let summary = vec![row(&[
+            ("relkind", "r"),
+            ("relhasindex", "t"),
+            ("relreplident", "d"),
+            ("amname", "ubtree"),
+        ])];
+        assert_eq!(
+            RdbStructTestRunner::normalize_pg_summary_for_cross_engine(&summary),
+            vec![row(&[("relkind", "r"), ("relhasindex", "t")])]
+        );
     }
 }

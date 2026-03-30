@@ -186,7 +186,7 @@ impl SinkerUtil {
                 replace,
                 ..
             } => {
-                let router = create_router!(config, Pg);
+                let router = RdbRouter::from_config(&config.router, &config.sinker_basic.db_type)?;
                 let conn_pool = match client {
                     ConnClient::PostgreSQL(conn_pool) => conn_pool,
                     _ => {
@@ -220,8 +220,9 @@ impl SinkerUtil {
                 max_retries,
                 ..
             } => {
-                let reverse_router = create_router!(config, Pg).reverse();
-                let filter = create_filter!(config, Pg);
+                let reverse_router =
+                    RdbRouter::from_config(&config.router, &config.sinker_basic.db_type)?.reverse();
+                let filter = RdbFilter::from_config(&config.filter, &config.sinker_basic.db_type)?;
                 let extractor_meta_manager = ExtractorUtil::get_extractor_meta_manager(config)
                     .await?
                     .unwrap();
@@ -391,8 +392,8 @@ impl SinkerUtil {
             SinkerConfig::PgStruct {
                 conflict_policy, ..
             } => {
-                let filter = create_filter!(config, Pg);
-                let router = create_router!(config, Pg);
+                let filter = RdbFilter::from_config(&config.filter, &config.sinker_basic.db_type)?;
+                let router = RdbRouter::from_config(&config.router, &config.sinker_basic.db_type)?;
 
                 let conn_pool = match client {
                     ConnClient::PostgreSQL(conn_pool) => conn_pool,

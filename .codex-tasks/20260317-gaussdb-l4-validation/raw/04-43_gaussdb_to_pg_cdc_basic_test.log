@@ -1,0 +1,121 @@
+   Compiling dt-tests v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-tests)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.66s
+warning: the following packages contain code that will be rejected by a future version of Rust: snap v0.2.5
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 2`
+     Running tests/integration_test.rs (target/debug/deps/integration_test-65ad912c08554e97)
+
+running 1 test
+executing sql: DROP TABLE IF EXISTS public.gaussdb_cdc_basic
+executing sql: CREATE TABLE public.gaussdb_cdc_basic ( id INTEGER PRIMARY KEY, val TEXT )
+executing sql: DROP TABLE IF EXISTS public.gaussdb_cdc_basic
+executing sql: CREATE TABLE public.gaussdb_cdc_basic ( id INTEGER PRIMARY KEY, val TEXT )
+2026-03-25T11:51:58.781602+08:00 INFO default_logger - start task: [taskID: 6bbc8f9d15a5f316, taskType: Some(Cdc)]
+2026-03-25T11:51:58.781789+08:00 WARN default_logger - recorder unsupported resumer config: Dummy
+2026-03-25T11:51:58.781822+08:00 WARN default_logger - recovery unsupported resumer config: Dummy
+2026-03-25T11:51:58.781898+08:00 INFO default_logger - recovery initialization for task_id: 6bbc8f9d15a5f316 finished in 0 ms
+2026-03-25T11:52:01.000785+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-03-25T11:52:01.000905+08:00 ERROR default_logger - buffer_memory_mb=0 is too large and will be ignored to prevent overflow
+2026-03-25T11:52:01.000931+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-03-25T11:52:01.033532+08:00 INFO default_logger - GaussDBCdcExtractor starts, slot_name: ape_test_gaussdb, start_lsn: , keepalive_interval_secs: 10, heartbeat_interval_secs: 1, heartbeat_tb: heartbeat_db.ape_dts_heartbeat
+2026-03-25T11:52:01.034296+08:00 INFO default_logger - MergeParallelizer starts, parallel_size: 1, checkpoint_interval_secs: 1
+executing sql: INSERT INTO public.gaussdb_cdc_basic (id, val) VALUES (1, 'a'), (2, 'b')
+2026-03-25T11:52:02.034568+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-25T11:52:02.034621+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-25T11:52:02.035708+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-25T11:52:02.035733+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-25T11:52:02.035747+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-25T11:52:03.034760+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-25T11:52:03.034817+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-25T11:52:03.035558+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T11:52:03.035572+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-25T11:52:03.035591+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-25T11:52:03.035601+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T11:52:03.035611+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-25T11:52:04.034947+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-25T11:52:04.034999+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-25T11:52:04.035771+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T11:52:04.035801+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-25T11:52:04.035831+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-25T11:52:04.035847+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T11:52:04.035858+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-25T11:52:05.035147+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-25T11:52:05.035197+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-25T11:52:05.035635+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T11:52:05.035656+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-25T11:52:05.035671+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-25T11:52:05.035682+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T11:52:05.035692+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-25T11:52:06.035326+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-25T11:52:06.035377+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-25T11:52:06.035644+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T11:52:06.035664+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-25T11:52:06.035677+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-25T11:52:06.035689+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T11:52:06.035702+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-25T11:52:07.035506+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-25T11:52:07.035560+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-25T11:52:07.035694+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T11:52:07.035714+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-25T11:52:07.035731+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-25T11:52:07.035760+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T11:52:07.035772+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-25T11:52:08.035725+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T11:52:08.035774+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-25T11:52:08.035787+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-25T11:52:08.035799+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T11:52:08.035809+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-25T11:52:08.035978+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-25T11:52:08.035999+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-25T11:52:09.035749+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T11:52:09.035804+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-25T11:52:09.035817+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-25T11:52:09.035829+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T11:52:09.035857+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-25T11:52:09.036056+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-25T11:52:09.036073+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-25T11:52:10.035783+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T11:52:10.035846+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-25T11:52:10.035858+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-25T11:52:10.035874+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T11:52:10.035884+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-25T11:52:10.036169+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-25T11:52:10.036196+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-25T11:52:11.035792+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T11:52:11.035845+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-25T11:52:11.035860+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-25T11:52:11.035872+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T11:52:11.035884+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-25T11:52:11.036278+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-25T11:52:11.036311+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-25T11:52:12.035804+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T11:52:12.035861+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-25T11:52:12.035874+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-25T11:52:12.035885+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T11:52:12.035896+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-25T11:52:12.036405+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-25T11:52:12.036430+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-25T11:52:13.035844+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T11:52:13.035894+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-25T11:52:13.035907+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-25T11:52:13.035918+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T11:52:13.035928+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-25T11:52:13.036503+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-25T11:52:13.036522+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-25T11:52:13.474104+08:00 WARN sqlx::postgres::notice - Fast path bit num leak.
+comparing row data for src_tb: ("public", "gaussdb_cdc_basic"), dst_tb: ("public", "gaussdb_cdc_basic"), src_data count: 2, dst_data count: 0
+row count mismatch: src=2, dst=0
+compare tb data failed, src_tb: ("public", "gaussdb_cdc_basic"), dst_tb: ("public", "gaussdb_cdc_basic")
+2026-03-25T11:52:13.501042+08:00 ERROR default_logger - panic: panicked at dt-tests/tests/test_runner/rdb_test_runner.rs:815:17:
+assertion failed: self.compare_tb_data(&src_db_tbs[i], &dst_db_tbs[i]).await?
+backtrace:
+disabled backtrace
+test gaussdb_to_pg::cdc_tests::test::cdc_basic_test ... FAILED
+
+failures:
+
+failures:
+    gaussdb_to_pg::cdc_tests::test::cdc_basic_test
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 344 filtered out; finished in 19.28s
+
+error: test failed, to rerun pass `-p dt-tests --test integration_test`

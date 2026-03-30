@@ -1,0 +1,645 @@
+   Compiling dt-tests v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-tests)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.57s
+warning: the following packages contain code that will be rejected by a future version of Rust: snap v0.2.5
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 2`
+     Running tests/integration_test.rs (target/debug/deps/integration_test-65ad912c08554e97)
+
+running 1 test
+executing sql: DROP TABLE IF EXISTS public.gaussdb_cdc_basic
+executing sql: CREATE TABLE public.gaussdb_cdc_basic ( id INTEGER PRIMARY KEY, val TEXT )
+executing sql: DROP TABLE IF EXISTS public.gaussdb_cdc_basic
+executing sql: CREATE TABLE public.gaussdb_cdc_basic ( id INTEGER PRIMARY KEY, val TEXT )
+2026-03-25T15:11:50.704754+08:00 INFO default_logger - start task: [taskID: 47c551b14b7d2510, taskType: Some(Cdc)]
+2026-03-25T15:11:50.704886+08:00 WARN default_logger - recorder unsupported resumer config: Dummy
+2026-03-25T15:11:50.704901+08:00 WARN default_logger - recovery unsupported resumer config: Dummy
+2026-03-25T15:11:50.704913+08:00 INFO default_logger - recovery initialization for task_id: 47c551b14b7d2510 finished in 0 ms
+2026-03-25T15:11:55.059156+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-03-25T15:11:55.059273+08:00 ERROR default_logger - buffer_memory_mb=0 is too large and will be ignored to prevent overflow
+2026-03-25T15:11:55.059323+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-03-25T15:11:55.084181+08:00 INFO default_logger - GaussDBCdcExtractor starts, slot_name: ape_test_gaussdb, start_lsn: , keepalive_interval_secs: 10, heartbeat_interval_secs: 1, heartbeat_tb: heartbeat_db.ape_dts_heartbeat
+2026-03-25T15:11:55.100054+08:00 INFO default_logger - MergeParallelizer starts, parallel_size: 1, checkpoint_interval_secs: 1
+2026-03-25T15:11:55.355138+08:00 INFO default_logger - gaussdb sql connection starts (ssl=on)
+2026-03-25T15:11:55.503943+08:00 INFO default_logger - slot: ape_test_gaussdb exists: true
+2026-03-25T15:11:55.503973+08:00 INFO default_logger - slot confirmed_flush_lsn(confirmed_flush/restart_lsn): 0/2BA8BF20
+2026-03-25T15:11:55.504008+08:00 WARN default_logger - start_lsn is empty, will use confirmed_flush_lsn
+2026-03-25T15:11:55.504021+08:00 INFO default_logger - execute: SELECT pg_drop_replication_slot ('ape_test_gaussdb')
+2026-03-25T15:11:55.557766+08:00 INFO default_logger - execute: SELECT * FROM pg_create_logical_replication_slot('ape_test_gaussdb', 'mppdb_decoding')
+2026-03-25T15:11:55.653255+08:00 INFO default_logger - slot created, returned start_lsn: 0/2C701518
+2026-03-25T15:11:56.100244+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-25T15:11:56.100292+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-25T15:11:56.101242+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-25T15:11:56.101260+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-25T15:11:56.101274+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-25T15:11:57.100378+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-25T15:11:57.100428+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-25T15:11:57.101098+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:11:57.101123+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:11:57.101135+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-25T15:11:57.101145+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-25T15:11:57.101155+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-25T15:11:57.916903+08:00 INFO default_logger - execute: START_REPLICATION SLOT ape_test_gaussdb LOGICAL 0/2C701518
+2026-03-25T15:11:57.917096+08:00 INFO default_logger - gaussdb replication connection starts (ssl=on)
+2026-03-25T15:11:57.965272+08:00 INFO default_logger - try starting heartbeat, heartbeat_interval_secs: 1, heartbeat_tb: heartbeat_db.ape_dts_heartbeat, 
+2026-03-25T15:11:57.965322+08:00 INFO default_logger - heartbeat started
+executing sql: INSERT INTO public.gaussdb_cdc_basic (id, val) VALUES (1, 'a'), (2, 'b')
+2026-03-25T15:11:58.100898+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-25T15:11:58.100945+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-25T15:11:58.101113+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:11:58.101131+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:11:58.101143+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-25T15:11:58.101152+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-25T15:11:58.101163+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-25T15:11:59.067789+08:00 WARN default_logger - gaussdb heartbeat failed: error returned from database: schema "heartbeat_db" does not exist
+2026-03-25T15:11:59.101162+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/2C701A90","timestamp":"2026-03-25 07:11:58.246"}
+2026-03-25T15:11:59.101254+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/2C701A90","timestamp":"2026-03-25 07:11:58.246"}
+2026-03-25T15:11:59.101530+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10
+2026-03-25T15:11:59.101546+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-03-25T15:11:59.101560+08:00 INFO monitor_logger - extractor |  | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-03-25T15:11:59.101576+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10
+2026-03-25T15:11:59.101608+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=3 | avg=3 | max=3
+2026-03-25T15:11:59.101619+08:00 INFO monitor_logger - pipeline |  | record_size | avg=3
+2026-03-25T15:11:59.101662+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:11:59.101672+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:11:59.101681+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-25T15:11:59.101693+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-25T15:11:59.101707+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422718246
+2026-03-25T15:11:59.101729+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=1 | avg=1 | max=1
+2026-03-25T15:11:59.101761+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10
+2026-03-25T15:11:59.101771+08:00 INFO monitor_logger - sinker |  | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-03-25T15:11:59.101780+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=2 | avg=2 | max=2
+2026-03-25T15:12:00.101096+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:00.101123+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:00.101136+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:00.101148+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:00.101182+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-25T15:12:00.101217+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-25T15:12:00.101236+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:12:00.101246+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:12:00.101254+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-25T15:12:00.101264+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-25T15:12:00.101272+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422718246
+2026-03-25T15:12:00.101294+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:00.101304+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:00.101314+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:00.101325+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:00.101537+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/2C701A90","timestamp":"2026-03-25 07:11:58.246"}
+2026-03-25T15:12:00.101558+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/2C701A90","timestamp":"2026-03-25 07:11:58.246"}
+2026-03-25T15:12:00.169702+08:00 WARN default_logger - gaussdb heartbeat failed: error returned from database: schema "heartbeat_db" does not exist
+2026-03-25T15:12:01.101119+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:01.101145+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:01.101159+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:01.101172+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:01.101203+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-25T15:12:01.101231+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-25T15:12:01.101250+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:12:01.101260+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:12:01.101269+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-25T15:12:01.101278+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-25T15:12:01.101286+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422718246
+2026-03-25T15:12:01.101310+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:01.101321+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:01.101345+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:01.101356+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:01.101711+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/2C701A90","timestamp":"2026-03-25 07:11:58.246"}
+2026-03-25T15:12:01.101739+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/2C701A90","timestamp":"2026-03-25 07:11:58.246"}
+2026-03-25T15:12:01.263838+08:00 WARN default_logger - gaussdb heartbeat failed: error returned from database: schema "heartbeat_db" does not exist
+2026-03-25T15:12:02.101099+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:02.101126+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:02.101139+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:02.101152+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:02.101185+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-25T15:12:02.101195+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-25T15:12:02.101214+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:12:02.101247+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:12:02.101258+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-25T15:12:02.101267+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-25T15:12:02.101275+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422718246
+2026-03-25T15:12:02.101294+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:02.101304+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:02.101313+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:02.101324+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:02.101803+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/2C701A90","timestamp":"2026-03-25 07:11:58.246"}
+2026-03-25T15:12:02.101824+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/2C701A90","timestamp":"2026-03-25 07:11:58.246"}
+2026-03-25T15:12:02.360932+08:00 WARN default_logger - gaussdb heartbeat failed: error returned from database: schema "heartbeat_db" does not exist
+2026-03-25T15:12:03.101114+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:03.101142+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:03.101156+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:03.101171+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:03.101210+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-25T15:12:03.101225+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-25T15:12:03.101270+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:12:03.101281+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:12:03.101293+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-25T15:12:03.101306+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-25T15:12:03.101318+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422718246
+2026-03-25T15:12:03.101341+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:03.101353+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:03.101363+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:03.101374+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:03.101886+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/2C701A90","timestamp":"2026-03-25 07:11:58.246"}
+2026-03-25T15:12:03.101907+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/2C701A90","timestamp":"2026-03-25 07:11:58.246"}
+2026-03-25T15:12:03.458293+08:00 WARN default_logger - gaussdb heartbeat failed: error returned from database: schema "heartbeat_db" does not exist
+2026-03-25T15:12:04.101125+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:04.101154+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:04.101168+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:04.101182+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:04.101215+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-25T15:12:04.101232+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-25T15:12:04.101279+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:12:04.101289+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:12:04.101300+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-25T15:12:04.101311+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-25T15:12:04.101320+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422718246
+2026-03-25T15:12:04.101340+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:04.101351+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:04.101361+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:04.101374+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:04.101968+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/2C701A90","timestamp":"2026-03-25 07:11:58.246"}
+2026-03-25T15:12:04.101988+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/2C701A90","timestamp":"2026-03-25 07:11:58.246"}
+2026-03-25T15:12:04.556159+08:00 WARN default_logger - gaussdb heartbeat failed: error returned from database: schema "heartbeat_db" does not exist
+2026-03-25T15:12:05.101114+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:05.101144+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:05.101159+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:05.101179+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:05.101214+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-25T15:12:05.101233+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-25T15:12:05.101276+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:12:05.101288+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:12:05.101299+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-25T15:12:05.101310+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-25T15:12:05.101322+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422718246
+2026-03-25T15:12:05.101343+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:05.101358+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:05.101370+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:05.101386+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:05.102081+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/2C701A90","timestamp":"2026-03-25 07:11:58.246"}
+2026-03-25T15:12:05.102115+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/2C701A90","timestamp":"2026-03-25 07:11:58.246"}
+2026-03-25T15:12:05.654500+08:00 WARN default_logger - gaussdb heartbeat failed: error returned from database: schema "heartbeat_db" does not exist
+2026-03-25T15:12:06.101098+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:06.101128+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:06.101142+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:06.101154+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:06.101184+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-25T15:12:06.101195+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-25T15:12:06.101214+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:12:06.101230+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:12:06.101238+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-25T15:12:06.101270+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-25T15:12:06.101278+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422718246
+2026-03-25T15:12:06.101298+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:06.101308+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:06.101318+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:06.101327+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:06.102192+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/2C701A90","timestamp":"2026-03-25 07:11:58.246"}
+2026-03-25T15:12:06.102214+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/2C701A90","timestamp":"2026-03-25 07:11:58.246"}
+2026-03-25T15:12:06.750788+08:00 WARN default_logger - gaussdb heartbeat failed: error returned from database: schema "heartbeat_db" does not exist
+2026-03-25T15:12:07.101311+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:07.101371+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:07.101390+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:07.101472+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:07.101521+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-25T15:12:07.101536+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-25T15:12:07.101558+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:12:07.101570+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:12:07.101579+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-25T15:12:07.101591+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-25T15:12:07.101601+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422718246
+2026-03-25T15:12:07.101624+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:07.101636+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:07.101649+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:07.101661+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:07.102281+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/2C701A90","timestamp":"2026-03-25 07:11:58.246"}
+2026-03-25T15:12:07.102297+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/2C701A90","timestamp":"2026-03-25 07:11:58.246"}
+2026-03-25T15:12:07.845687+08:00 WARN default_logger - gaussdb heartbeat failed: error returned from database: schema "heartbeat_db" does not exist
+2026-03-25T15:12:08.101093+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:08.101118+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:08.101131+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:08.101144+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:08.101176+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-25T15:12:08.101187+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-25T15:12:08.101206+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:12:08.101217+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:12:08.101225+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-25T15:12:08.101250+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-25T15:12:08.101262+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422718246
+2026-03-25T15:12:08.101283+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:08.101294+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:08.101304+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:08.101314+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:08.102368+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/2C701A90","timestamp":"2026-03-25 07:11:58.246"}
+2026-03-25T15:12:08.102384+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/2C701A90","timestamp":"2026-03-25 07:11:58.246"}
+2026-03-25T15:12:08.922263+08:00 WARN sqlx::postgres::notice - Fast path bit num leak.
+comparing row data for src_tb: ("public", "gaussdb_cdc_basic"), dst_tb: ("public", "gaussdb_cdc_basic"), src_data count: 2, dst_data count: 2
+row index: 0, col: id, src_col_value: Long(1), dst_col_value: Long(1)
+row index: 0, col: val, src_col_value: String("a"), dst_col_value: String("a")
+row index: 1, col: id, src_col_value: Long(2), dst_col_value: Long(2)
+row index: 1, col: val, src_col_value: String("b"), dst_col_value: String("b")
+executing sql: UPDATE public.gaussdb_cdc_basic SET val = 'c' WHERE id = 2
+2026-03-25T15:12:08.949702+08:00 WARN default_logger - gaussdb heartbeat failed: error returned from database: schema "heartbeat_db" does not exist
+2026-03-25T15:12:09.101108+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:09.101134+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:09.101149+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:09.101165+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:09.101199+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-25T15:12:09.101211+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-25T15:12:09.101230+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:12:09.101240+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:12:09.101249+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-25T15:12:09.101260+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-25T15:12:09.101270+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422718246
+2026-03-25T15:12:09.101291+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:09.101301+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:09.101313+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:09.101326+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:09.106650+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:09.106674+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:10.049652+08:00 WARN default_logger - gaussdb heartbeat failed: error returned from database: schema "heartbeat_db" does not exist
+2026-03-25T15:12:10.101103+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=9 | avg_by_sec=9 | max_by_sec=9
+2026-03-25T15:12:10.101126+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-03-25T15:12:10.101139+08:00 INFO monitor_logger - extractor |  | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-03-25T15:12:10.101256+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=9 | avg_by_sec=9 | max_by_sec=9
+2026-03-25T15:12:10.101365+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=2 | avg=2 | max=2
+2026-03-25T15:12:10.101405+08:00 INFO monitor_logger - pipeline |  | record_size | avg=4
+2026-03-25T15:12:10.101430+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:12:10.101441+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:12:10.101452+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-25T15:12:10.101464+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-25T15:12:10.101476+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422729091
+2026-03-25T15:12:10.101500+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=3 | avg=1 | max=2
+2026-03-25T15:12:10.101511+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=9 | avg_by_sec=9 | max_by_sec=9
+2026-03-25T15:12:10.101526+08:00 INFO monitor_logger - sinker |  | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-03-25T15:12:10.101540+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=2 | avg=1 | max=1
+2026-03-25T15:12:10.106756+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:10.106776+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:11.101117+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:11.101145+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:11.101158+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:11.101171+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:11.101202+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-25T15:12:11.101213+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-25T15:12:11.101232+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:12:11.101242+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:12:11.101250+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-25T15:12:11.101259+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-25T15:12:11.101268+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422729091
+2026-03-25T15:12:11.101287+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:11.101297+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:11.101306+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:11.101327+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:11.106853+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:11.106890+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:11.148540+08:00 WARN default_logger - gaussdb heartbeat failed: error returned from database: schema "heartbeat_db" does not exist
+2026-03-25T15:12:12.101101+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:12.101130+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:12.101144+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:12.101157+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:12.101192+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-25T15:12:12.101204+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-25T15:12:12.101223+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:12:12.101233+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:12:12.101242+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-25T15:12:12.101252+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-25T15:12:12.101260+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422729091
+2026-03-25T15:12:12.101281+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:12.101292+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:12.101326+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:12.101346+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:12.106952+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:12.106995+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:12.243822+08:00 WARN default_logger - gaussdb heartbeat failed: error returned from database: schema "heartbeat_db" does not exist
+2026-03-25T15:12:13.101129+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:13.101160+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:13.101174+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:13.101281+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:13.101321+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-25T15:12:13.101335+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-25T15:12:13.101358+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:12:13.101369+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:12:13.101381+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-25T15:12:13.101398+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-25T15:12:13.101408+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422729091
+2026-03-25T15:12:13.101430+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:13.101506+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:13.101531+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:13.101547+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:13.107091+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:13.107136+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:13.343768+08:00 WARN default_logger - gaussdb heartbeat failed: error returned from database: schema "heartbeat_db" does not exist
+2026-03-25T15:12:14.101114+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:14.101139+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:14.101152+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:14.101165+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:14.101198+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-25T15:12:14.101210+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-25T15:12:14.101231+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:12:14.101245+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:12:14.101256+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-25T15:12:14.101264+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-25T15:12:14.101274+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422729091
+2026-03-25T15:12:14.101293+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:14.101306+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:14.101318+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:14.101330+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:14.107205+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:14.107248+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:14.442969+08:00 WARN default_logger - gaussdb heartbeat failed: error returned from database: schema "heartbeat_db" does not exist
+2026-03-25T15:12:15.101108+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:15.101136+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:15.101150+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:15.101164+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:15.101206+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-25T15:12:15.101218+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-25T15:12:15.101238+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:12:15.101306+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:12:15.101328+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-25T15:12:15.101351+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-25T15:12:15.101365+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422729091
+2026-03-25T15:12:15.101397+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:15.101411+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:15.101424+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:15.101437+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:15.107317+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:15.107357+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:15.541641+08:00 WARN default_logger - gaussdb heartbeat failed: error returned from database: schema "heartbeat_db" does not exist
+2026-03-25T15:12:16.101094+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:16.101125+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:16.101139+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:16.101151+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:16.101185+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-25T15:12:16.101198+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-25T15:12:16.101217+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:12:16.101226+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:12:16.101234+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-25T15:12:16.101243+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-25T15:12:16.101252+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422729091
+2026-03-25T15:12:16.101273+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:16.101283+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:16.101292+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:16.101312+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:16.107420+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:16.107465+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:16.637494+08:00 WARN default_logger - gaussdb heartbeat failed: error returned from database: schema "heartbeat_db" does not exist
+2026-03-25T15:12:17.101102+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:17.101128+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:17.101141+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:17.101154+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:17.101186+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-25T15:12:17.101199+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-25T15:12:17.101218+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:12:17.101229+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:12:17.101241+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-25T15:12:17.101250+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-25T15:12:17.101258+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422729091
+2026-03-25T15:12:17.101277+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:17.101288+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:17.101300+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:17.101311+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:17.107544+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:17.107590+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:17.734679+08:00 WARN default_logger - gaussdb heartbeat failed: error returned from database: schema "heartbeat_db" does not exist
+2026-03-25T15:12:18.101126+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:18.101155+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:18.101168+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:18.101198+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:18.101237+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-25T15:12:18.101251+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-25T15:12:18.101272+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:12:18.101285+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:12:18.101295+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-25T15:12:18.101304+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-25T15:12:18.101318+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422729091
+2026-03-25T15:12:18.101338+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:18.101350+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:18.101360+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:18.101370+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:18.107673+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:18.107716+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:18.835744+08:00 WARN default_logger - gaussdb heartbeat failed: error returned from database: schema "heartbeat_db" does not exist
+2026-03-25T15:12:19.101113+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:19.101139+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:19.101153+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:19.101166+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:19.101198+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-25T15:12:19.101210+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-25T15:12:19.101230+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:12:19.101241+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:12:19.101250+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-25T15:12:19.101261+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-25T15:12:19.101275+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422729091
+2026-03-25T15:12:19.101297+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:19.101307+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:19.101316+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:19.101327+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:19.107789+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:19.107837+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:20.101106+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:20.101134+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:20.101147+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:20.101163+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:20.101194+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-25T15:12:20.101206+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-25T15:12:20.101225+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:12:20.101236+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:12:20.101244+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-25T15:12:20.101253+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-25T15:12:20.101262+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422729091
+2026-03-25T15:12:20.101284+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:20.101299+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:20.101312+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:20.101325+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:20.107921+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:20.107968+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:21.101101+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:21.101125+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:21.101138+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:21.101151+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:21.101182+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-25T15:12:21.101193+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-25T15:12:21.101213+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:12:21.101222+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:12:21.101234+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-25T15:12:21.101243+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-25T15:12:21.101251+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422729091
+2026-03-25T15:12:21.101270+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:21.101279+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:21.101289+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:21.101299+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:21.108050+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:21.108084+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:22.101122+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:22.101152+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:22.101165+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:22.101178+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:22.101211+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-25T15:12:22.101224+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-25T15:12:22.101246+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:12:22.101256+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:12:22.101267+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-25T15:12:22.101277+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-25T15:12:22.101287+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422729091
+2026-03-25T15:12:22.101308+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:22.101319+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:22.101331+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:22.101343+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:22.108186+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:22.108248+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:23.101093+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:23.101120+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:23.101133+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:23.101145+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:23.101178+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-25T15:12:23.101190+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-25T15:12:23.101210+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:12:23.101221+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:12:23.101232+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-25T15:12:23.101242+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-25T15:12:23.101251+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422729091
+2026-03-25T15:12:23.101269+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:23.101281+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:23.101292+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:23.101301+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:23.108341+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:23.108382+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:24.101100+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:24.101125+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:24.101138+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:24.101152+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:24.101185+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-25T15:12:24.101196+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-25T15:12:24.101215+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:12:24.101224+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:12:24.101235+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-25T15:12:24.101243+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-25T15:12:24.101266+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422729091
+2026-03-25T15:12:24.101303+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:24.101319+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:24.101331+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:24.101344+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:24.108455+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:24.108497+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:25.101094+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:25.101119+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:25.101133+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:25.101147+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:25.101177+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-25T15:12:25.101201+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-25T15:12:25.101221+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:12:25.101230+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:12:25.101239+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-25T15:12:25.101247+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-25T15:12:25.101257+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422729091
+2026-03-25T15:12:25.101277+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:25.101287+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:25.101296+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:25.101306+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:25.108567+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:25.108611+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:26.101096+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:26.101121+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:26.101135+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:26.101150+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:26.101183+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-25T15:12:26.101194+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-25T15:12:26.101218+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:12:26.101232+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:12:26.101241+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-25T15:12:26.101253+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-25T15:12:26.101278+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422729091
+2026-03-25T15:12:26.101313+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:26.101329+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:26.101343+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:26.101355+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:26.108684+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:26.108715+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:27.101103+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:27.101129+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:27.101143+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:27.101155+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:27.101187+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-25T15:12:27.101198+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-25T15:12:27.101233+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:12:27.101249+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:12:27.101261+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-25T15:12:27.101273+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-25T15:12:27.101286+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422729091
+2026-03-25T15:12:27.101319+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:27.101384+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:27.101402+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:27.101420+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:27.108795+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:27.108836+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:28.101101+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:28.101129+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:28.101142+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:28.101154+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:28.101186+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-25T15:12:28.101199+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-25T15:12:28.101220+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:12:28.101231+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:12:28.101244+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-25T15:12:28.101253+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-25T15:12:28.101261+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422729091
+2026-03-25T15:12:28.101282+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:28.101295+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:28.101309+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:28.101319+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:28.108926+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:28.108971+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:29.045999+08:00 WARN sqlx_core::pool::connection - error occurred while testing the connection on-release: error communicating with database: Broken pipe (os error 32)
+2026-03-25T15:12:29.046103+08:00 WARN default_logger - gaussdb heartbeat failed: error communicating with database: Connection reset by peer (os error 54)
+2026-03-25T15:12:29.046208+08:00 WARN sqlx_core::pool::connection - error occurred while testing the connection on-release: error communicating with database: unexpected end of file
+cdc failed (attempt 1/6), will retry: error communicating with database: unexpected end of file
+2026-03-25T15:12:29.046600+08:00 INFO default_logger - gaussdb replication connection drops (ssl=on), error: connection closed
+2026-03-25T15:12:29.046784+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:29.046805+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/2C701CB0","timestamp":"2026-03-25 07:12:09.091"}
+2026-03-25T15:12:29.102079+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:29.102107+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:29.102120+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:29.102133+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:29.102166+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-25T15:12:29.102178+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-25T15:12:29.102199+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:12:29.102210+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:12:29.102221+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-25T15:12:29.102229+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-25T15:12:29.102240+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422729091
+2026-03-25T15:12:29.102261+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:29.102272+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:29.102281+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:29.102358+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:29.102540+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:29.102553+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:29.102565+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:29.102580+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:29.102615+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-25T15:12:29.102627+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-25T15:12:29.102647+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-25T15:12:29.102658+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-25T15:12:29.102667+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-25T15:12:29.102677+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-25T15:12:29.102688+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774422729091
+2026-03-25T15:12:29.102708+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:29.102718+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:29.102727+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-25T15:12:29.102738+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-25T15:12:29.102910+08:00 ERROR default_logger - panic: panicked at dt-tests/tests/test_runner/base_test_runner.rs:97:77:
+called `Result::unwrap()` on an `Err` value: extractor.extract failed: extractor error: connection closed
+backtrace:
+disabled backtrace
+test gaussdb_to_pg::cdc_tests::test::cdc_basic_test has been running for over 60 seconds
+skip gaussdb candidate (connect failed): postgres://10.250.0.51:8000/postgres?sslmode=require, error: error communicating with database: Operation timed out (os error 60)
+executing sql: DROP TABLE IF EXISTS public.gaussdb_cdc_basic
+2026-03-25T15:13:47.565708+08:00 ERROR default_logger - panic: panicked at dt-tests/tests/test_runner/rdb_util.rs:134:44:
+called `Result::unwrap()` on an `Err` value: Database(PgDatabaseError { severity: Error, code: "25006", message: "cannot execute DROP TABLE in a read-only transaction", detail: None, hint: None, position: None, where: None, schema: None, table: None, column: Some("20037"), data_type: Some("BACKEND"), constraint: None, file: None, line: None, routine: None })
+backtrace:
+disabled backtrace
+test gaussdb_to_pg::cdc_tests::test::cdc_basic_test ... FAILED
+
+failures:
+
+failures:
+    gaussdb_to_pg::cdc_tests::test::cdc_basic_test
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 344 filtered out; finished in 131.01s
+
+error: test failed, to rerun pass `-p dt-tests --test integration_test`

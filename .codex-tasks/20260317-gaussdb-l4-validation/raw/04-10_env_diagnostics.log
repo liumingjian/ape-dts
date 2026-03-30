@@ -1,0 +1,8 @@
+[docker]
+failed to connect to the docker API at unix:///Users/lmj/.docker/run/docker.sock; check if the path is correct and if the daemon is running: dial unix /Users/lmj/.docker/run/docker.sock: connect: no such file or directory
+
+[psql-10.250.0.30]
+psql: error: connection to server at "10.250.0.30", port 8000 failed: none of the server's SASL authentication mechanisms are supported
+
+[psql-10.250.0.51]
+psql: error: connection to server at "10.250.0.51", port 8000 failed: none of the server's SASL authentication mechanisms are supported

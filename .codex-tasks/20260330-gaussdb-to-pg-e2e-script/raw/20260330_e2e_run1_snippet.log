@@ -1,0 +1,10 @@
+2026-03-30T19:06:32.427862+08:00 INFO default_logger - start task: [taskID: a2636ff41cad50e, taskType: Some(Cdc)]
+2026-03-30T19:06:33.038088+08:00 INFO default_logger - GaussDBCdcExtractor starts, slot_name: ape_e2e_gaussdb_to_pg_20260330_190618, start_lsn: , keepalive_interval_secs: 10, heartbeat_interval_secs: 0, heartbeat_tb:
+2026-03-30T19:06:34.239292+08:00 INFO default_logger - gaussdb sql connection starts (ssl=on, host=10.250.0.51, port=8000)
+2026-03-30T19:06:34.451766+08:00 INFO default_logger - slot: ape_e2e_gaussdb_to_pg_20260330_190618 exists: false
+2026-03-30T19:06:34.451817+08:00 INFO default_logger - execute: SELECT * FROM pg_create_logical_replication_slot('ape_e2e_gaussdb_to_pg_20260330_190618', 'mppdb_decoding')
+2026-03-30T19:06:34.549039+08:00 INFO default_logger - slot created, returned start_lsn: 1/91312490
+2026-03-30T19:06:34.719475+08:00 INFO default_logger - execute: START_REPLICATION SLOT "ape_e2e_gaussdb_to_pg_20260330_190618" LOGICAL 1/91312490 ("include-xids" 'false', "skip-empty-xacts" 'true')
+2026-03-30T19:06:34.719758+08:00 INFO default_logger - gaussdb replication connection starts (ssl=off, host=10.250.0.51, port=8001)
+2026-03-30T19:06:38.039070+08:00 INFO monitor_logger - extractor |  | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-03-30T19:06:39.038446+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2

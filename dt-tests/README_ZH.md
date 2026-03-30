@@ -68,6 +68,20 @@ CREATE DATABASE postgres_euc_cn
   TEMPLATE template0;
 ```
 
+# GaussDB（PG 兼容模式）
+
+- 测试用例目录：
+  - `pg_to_gaussdb/*`（snapshot/struct/check）
+  - `gaussdb_to_pg/*`（snapshot/cdc/check）
+- 配置说明：
+  - 测试用例 `task_config.ini` 中使用 `db_type=gaussdb_pg`
+  - 推荐通过 `dt-tests/tests/.env.local` 覆盖 URL（而非直接改仓库内 `.env`）：
+    - `gaussdb_pg_extractor_without_auth_url`、`gaussdb_pg_extractor_username`、`gaussdb_pg_extractor_password`
+    - `gaussdb_pg_sinker_without_auth_url`、`gaussdb_pg_sinker_username`、`gaussdb_pg_sinker_password`
+- 注意事项：
+  - MVP 需要 GaussDB 启用 MD5 认证（例如 `password_encryption_type=1`）
+  - CDC 需要 `wal_level=logical` 且 `mppdb_decoding` 可用
+
 # MySQL 环境搭建
 [创建 MySQL](/docs/en/tutorial/mysql_to_mysql.md)
 

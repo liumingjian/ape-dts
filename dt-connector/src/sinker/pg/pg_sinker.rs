@@ -138,6 +138,10 @@ impl Sinker for PgSinker {
 
 impl PgSinker {
     async fn serial_sink(&mut self, data: &[RowData]) -> anyhow::Result<()> {
+        let (schema, tb) = data
+            .first()
+            .map(|v| (v.schema.as_str(), v.tb.as_str()))
+            .unwrap_or(("", ""));
         let monitor_interval = if self.monitor_interval > 0 {
             self.monitor_interval
         } else {
@@ -147,7 +151,11 @@ impl PgSinker {
         let mut data_len = 0;
         let mut last_monitor_time = Instant::now();
 
-        let mut tx = self.conn_pool.begin().await?;
+        let mut tx = self
+            .conn_pool
+            .begin()
+            .await
+            .with_context(|| format!("failed to begin transaction for {}.{}", schema, tb))?;
         if let Some(sql) = self.get_data_marker_sql().await {
             sqlx::query(&sql)
                 .execute(&mut tx)
@@ -158,7 +166,16 @@ impl PgSinker {
         for row_data in data.iter() {
             data_size += row_data.data_size;
 
-            let tb_meta = self.meta_manager.get_tb_meta_by_row_data(row_data).await?;
+            let tb_meta = self
+                .meta_manager
+                .get_tb_meta_by_row_data(row_data)
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to get table metadata for serial sink: {}.{}",
+                        row_data.schema, row_data.tb
+                    )
+                })?;
             let query_builder = RdbQueryBuilder::new_for_pg(tb_meta, None);
 
             let query_info = query_builder.get_query_info(row_data, self.replace)?;
@@ -181,7 +198,9 @@ impl PgSinker {
                 last_monitor_time = Instant::now();
             }
         }
-        tx.commit().await?;
+        tx.commit()
+            .await
+            .with_context(|| format!("failed to commit transaction for {}.{}", schema, tb))?;
 
         if data_len > 0 || data_size > 0 {
             BaseSinker::update_serial_monitor(&self.monitor, data_len as u64, data_size as u64)
@@ -227,32 +246,66 @@ impl PgSinker {
         start_index: usize,
         batch_size: usize,
     ) -> anyhow::Result<()> {
+        let schema = data[0].schema.clone();
+        let tb = data[0].tb.clone();
         let tb_meta = self
             .meta_manager
             .get_tb_meta_by_row_data(&data[0])
-            .await?
+            .await
+            .with_context(|| {
+                format!(
+                    "failed to get table metadata for batch insert: {}.{}",
+                    schema, tb
+                )
+            })?
             .to_owned();
         let query_builder = RdbQueryBuilder::new_for_pg(&tb_meta, None);
 
         let (query_info, data_size) =
             query_builder.get_batch_insert_query(data, start_index, batch_size, self.replace)?;
-        let query = query_builder.create_pg_query(&query_info)?;
+        let query = query_builder
+            .create_pg_query(&query_info)
+            .with_context(|| {
+                format!(
+                    "failed to create pg query for batch insert: {}.{}",
+                    tb_meta.basic.schema, tb_meta.basic.tb
+                )
+            })?;
 
         let start_time = Instant::now();
         let mut rts = LimitedQueue::new(1);
-        let exec_error = if let Some(sql) = self.get_data_marker_sql().await {
-            let mut tx = self.conn_pool.begin().await?;
-            sqlx::query(&sql).execute(&mut tx).await?;
-            query.execute(&mut tx).await?;
-            tx.commit().await
+        let exec_result: anyhow::Result<()> = if let Some(sql) = self.get_data_marker_sql().await {
+            let mut tx = self.conn_pool.begin().await.with_context(|| {
+                format!("failed to begin tx for batch insert: {}.{}", schema, tb)
+            })?;
+            sqlx::query(&sql)
+                .execute(&mut tx)
+                .await
+                .with_context(|| format!("failed to execute data marker sql: [{}]", sql))?;
+            query.execute(&mut tx).await.with_context(|| {
+                format!(
+                    "batch insert execute failed (with data marker): {}.{} sql=[{}]",
+                    schema, tb, query_info.sql
+                )
+            })?;
+            tx.commit().await.with_context(|| {
+                format!("failed to commit tx for batch insert: {}.{}", schema, tb)
+            })?;
+            Ok(())
         } else {
-            match query.execute(&self.conn_pool).await {
-                Err(e) => Err(e),
-                _ => Ok(()),
-            }
+            query
+                .execute(&self.conn_pool)
+                .await
+                .map(|_| ())
+                .with_context(|| {
+                    format!(
+                        "batch insert execute failed: {}.{} sql=[{}]",
+                        schema, tb, query_info.sql
+                    )
+                })
         };
 
-        if let Err(error) = exec_error {
+        if let Err(error) = exec_result {
             log_error!(
                 "batch insert failed, will insert one by one, schema: {}, tb: {}, error: {}",
                 tb_meta.basic.schema,

@@ -20,6 +20,10 @@ pub struct PgCdcClient {
 }
 
 impl PgCdcClient {
+    fn quote_identifier(ident: &str) -> String {
+        format!("\"{}\"", ident.replace('"', "\"\""))
+    }
+
     pub async fn connect(&mut self) -> anyhow::Result<(LogicalReplicationStream, String)> {
         let url_info = Url::parse(&self.url)?;
         let host = url_info.host_str().unwrap().to_string();
@@ -112,9 +116,10 @@ impl PgCdcClient {
                 client.simple_query(&query).await?;
             }
 
+            let slot_name = Self::quote_identifier(&self.slot_name);
             let query = format!(
                 r#"CREATE_REPLICATION_SLOT {} LOGICAL "{}""#,
-                self.slot_name, "pgoutput"
+                slot_name, "pgoutput"
             );
             log_info!("execute: {}", query);
 
@@ -173,9 +178,10 @@ impl PgCdcClient {
             r#"("proto_version" '{}', "publication_names" '{}')"#,
             "1", pub_name
         );
+        let slot_name = Self::quote_identifier(&self.slot_name);
         let query = format!(
             "START_REPLICATION SLOT {} LOGICAL {} {}",
-            self.slot_name, start_lsn, options
+            slot_name, start_lsn, options
         );
         log_info!("execute: {}", query);
 

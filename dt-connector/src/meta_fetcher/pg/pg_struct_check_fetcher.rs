@@ -1,15 +1,20 @@
+use anyhow::Context;
 use std::collections::HashMap;
 
-use dt_common::meta::{
-    adaptor::pg_col_value_convertor::PgColValueConvertor,
-    col_value::ColValue,
-    pg::{pg_col_type::PgColType, pg_value_type::PgValueType},
+use dt_common::{
+    config::config_enums::DbType,
+    meta::{
+        adaptor::pg_col_value_convertor::PgColValueConvertor,
+        col_value::ColValue,
+        pg::{pg_col_type::PgColType, pg_value_type::PgValueType},
+    },
 };
 use futures::TryStreamExt;
 use sqlx::{postgres::PgRow, Pool, Postgres, Row};
 
 pub struct PgStructCheckFetcher {
     pub conn_pool: Pool<Postgres>,
+    pub db_type: DbType,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -70,65 +75,47 @@ impl PgStructCheckFetcher {
     }
 
     async fn get_table_summary(&self, oid: &str) -> anyhow::Result<Vec<HashMap<String, String>>> {
-        let sql = format!(
-            r#"SELECT c.relchecks, c.relkind, c.relhasindex, c.relhasrules, 
-            c.relhastriggers, c.relrowsecurity, c.relforcerowsecurity, false AS relhasoids, c.relispartition, '', 
-            c.reltablespace::int8, 
-            CASE WHEN c.reloftype = 0 THEN '' ELSE c.reloftype::pg_catalog.regtype::pg_catalog.text END, c.relpersistence, c.relreplident, am.amname
-            FROM pg_catalog.pg_class c
-            LEFT JOIN pg_catalog.pg_class tc ON (c.reltoastrelid = tc.oid)
-            LEFT JOIN pg_catalog.pg_am am ON (c.relam = am.oid)
-            WHERE c.oid = '{}';"#,
-            oid
-        );
-        let col_names = [
-            "relchecks",
-            "relkind",
-            "relhasindex",
-            "relhasrules",
-            "relhastriggers",
-            "relrowsecurity",
-            "relforcerowsecurity",
-            "relhasoids",
-            "relispartition",
-            "reltablespace",
-            "reloftype",
-            "relpersistence",
-            "relreplident",
-            "amname",
-        ];
-
-        let mut col_types = HashMap::new();
-        col_types.insert("relchecks", Self::mock_col_type("int2"));
-        col_types.insert("relhastriggers", Self::mock_col_type("bool"));
-        col_types.insert("relhasoids", Self::mock_col_type("bool"));
-        col_types.insert("relhasrules", Self::mock_col_type("bool"));
-        col_types.insert("relrowsecurity", Self::mock_col_type("bool"));
-        col_types.insert("relhasindex", Self::mock_col_type("bool"));
-        col_types.insert("relforcerowsecurity", Self::mock_col_type("bool"));
-        col_types.insert("relispartition", Self::mock_col_type("bool"));
-        col_types.insert("reltablespace", Self::mock_col_type("oid"));
-
+        let (sql, col_names, col_types) = Self::build_table_summary_query(&self.db_type, oid);
         self.execute_sql(&sql, &col_names, &col_types).await
     }
 
     async fn get_table_columns(&self, oid: &str) -> anyhow::Result<Vec<HashMap<String, String>>> {
-        let sql = format!(
-            r#"SELECT a.attname,
-                pg_catalog.format_type(a.atttypid, a.atttypmod),
-                (SELECT pg_catalog.pg_get_expr(d.adbin, d.adrelid, true)
-                FROM pg_catalog.pg_attrdef d
-                WHERE d.adrelid = a.attrelid AND d.adnum = a.attnum AND a.atthasdef),
-                a.attnotnull,
-                (SELECT c.collname FROM pg_catalog.pg_collation c, pg_catalog.pg_type t
-                WHERE c.oid = a.attcollation AND t.oid = a.atttypid AND a.attcollation <> t.typcollation) AS attcollation,
-                a.attidentity::text,
-                a.attgenerated::text
-            FROM pg_catalog.pg_attribute a
-            WHERE a.attrelid = '{}' AND a.attnum > 0 AND NOT a.attisdropped
-            ORDER BY a.attnum;"#,
-            oid
-        );
+        let sql = if matches!(self.db_type, DbType::GaussDBPg) {
+            // GaussDB PG mode does not expose `pg_attribute.attgenerated`.
+            format!(
+                r#"SELECT a.attname,
+                    pg_catalog.format_type(a.atttypid, a.atttypmod),
+                    (SELECT pg_catalog.pg_get_expr(d.adbin, d.adrelid, true)
+                    FROM pg_catalog.pg_attrdef d
+                    WHERE d.adrelid = a.attrelid AND d.adnum = a.attnum AND a.atthasdef),
+                    a.attnotnull,
+                    (SELECT c.collname FROM pg_catalog.pg_collation c, pg_catalog.pg_type t
+                    WHERE c.oid = a.attcollation AND t.oid = a.atttypid AND a.attcollation <> t.typcollation) AS attcollation,
+                    a.attidentity::text,
+                    '' AS attgenerated
+                FROM pg_catalog.pg_attribute a
+                WHERE a.attrelid = '{}' AND a.attnum > 0 AND NOT a.attisdropped
+                ORDER BY a.attnum;"#,
+                oid
+            )
+        } else {
+            format!(
+                r#"SELECT a.attname,
+                    pg_catalog.format_type(a.atttypid, a.atttypmod),
+                    (SELECT pg_catalog.pg_get_expr(d.adbin, d.adrelid, true)
+                    FROM pg_catalog.pg_attrdef d
+                    WHERE d.adrelid = a.attrelid AND d.adnum = a.attnum AND a.atthasdef),
+                    a.attnotnull,
+                    (SELECT c.collname FROM pg_catalog.pg_collation c, pg_catalog.pg_type t
+                    WHERE c.oid = a.attcollation AND t.oid = a.atttypid AND a.attcollation <> t.typcollation) AS attcollation,
+                    a.attidentity::text,
+                    a.attgenerated::text
+                FROM pg_catalog.pg_attribute a
+                WHERE a.attrelid = '{}' AND a.attnum > 0 AND NOT a.attisdropped
+                ORDER BY a.attnum;"#,
+                oid
+            )
+        };
         let col_names = [
             "attname",
             "format_type",
@@ -145,40 +132,7 @@ impl PgStructCheckFetcher {
     }
 
     async fn get_table_indexes(&self, oid: &str) -> anyhow::Result<Vec<HashMap<String, String>>> {
-        let sql = format!(
-            r#"SELECT c2.relname, i.indisprimary, i.indisunique, i.indisclustered, i.indisvalid, pg_catalog.pg_get_indexdef(i.indexrelid, 0, true),
-                pg_catalog.pg_get_constraintdef(con.oid, true), contype, condeferrable, condeferred, i.indisreplident, 
-                c2.reltablespace::int8
-            FROM pg_catalog.pg_class c, pg_catalog.pg_class c2, pg_catalog.pg_index i
-                LEFT JOIN pg_catalog.pg_constraint con ON (conrelid = i.indrelid AND conindid = i.indexrelid AND contype IN ('p','u','x'))
-            WHERE c.oid = '{}' AND c.oid = i.indrelid AND i.indexrelid = c2.oid
-            ORDER BY i.indisprimary DESC, c2.relname;"#,
-            oid
-        );
-        let col_names = [
-            "relname",
-            "indisprimary",
-            "indisunique",
-            "indisclustered",
-            "indisvalid",
-            "pg_get_indexdef",
-            "pg_get_constraintdef",
-            "contype",
-            "condeferrable",
-            "condeferred",
-            "indisreplident",
-            "reltablespace",
-        ];
-        let mut col_types = HashMap::new();
-        col_types.insert("indisunique", Self::mock_col_type("bool"));
-        col_types.insert("reltablespace", Self::mock_col_type("oid"));
-        col_types.insert("indisclustered", Self::mock_col_type("bool"));
-        col_types.insert("indisvalid", Self::mock_col_type("bool"));
-        col_types.insert("indisprimary", Self::mock_col_type("bool"));
-        col_types.insert("condeferred", Self::mock_col_type("bool"));
-        col_types.insert("condeferrable", Self::mock_col_type("bool"));
-        col_types.insert("indisreplident", Self::mock_col_type("bool"));
-
+        let (sql, col_names, col_types) = Self::build_table_indexes_query(&self.db_type, oid);
         self.execute_sql(&sql, &col_names, &col_types).await
     }
 
@@ -203,16 +157,7 @@ impl PgStructCheckFetcher {
         &self,
         oid: &str,
     ) -> anyhow::Result<Vec<HashMap<String, String>>> {
-        let sql = format!(
-            r#"SELECT conname, conrelid::pg_catalog.regclass::text AS ontable,
-            pg_catalog.pg_get_constraintdef(oid, true) AS condef
-            FROM pg_catalog.pg_constraint c
-            WHERE confrelid IN (SELECT pg_catalog.pg_partition_ancestors('{}')
-                                UNION ALL VALUES ('{}'::pg_catalog.regclass))
-                    AND contype = 'f' AND conparentid = 0
-            ORDER BY conname;"#,
-            oid, oid
-        );
+        let sql = Self::build_table_foreign_key_constraints_query(&self.db_type, oid);
         let col_names = ["conname", "ontable", "condef"];
         let col_types = HashMap::new();
 
@@ -226,8 +171,10 @@ impl PgStructCheckFetcher {
         col_types: &HashMap<&str, PgColType>,
     ) -> anyhow::Result<Vec<HashMap<String, String>>> {
         let mut results = Vec::new();
-        let mut rows = sqlx::query(sql).fetch(&self.conn_pool);
-        while let Some(row) = rows.try_next().await.unwrap() {
+        let mut rows = sqlx::query(sql).disable_arguments().fetch(&self.conn_pool);
+        while let Some(row) = rows.try_next().await.map_err(|e| {
+            anyhow::anyhow!("failed executing pg struct check sql: {sql}, error: {e}")
+        })? {
             let res = Self::parse_row(&row, col_names, col_types)?;
             results.push(res);
         }
@@ -244,7 +191,9 @@ impl PgStructCheckFetcher {
             let col_value = if let Some(col_type) = col_types.get(*col_name) {
                 PgColValueConvertor::from_query(row, col_name, col_type)?
             } else {
-                let value: Option<String> = row.try_get_unchecked(col_name).unwrap();
+                let value: Option<String> = row.try_get_unchecked(col_name).with_context(|| {
+                    format!("failed reading pg struct check column: {col_name}")
+                })?;
                 if let Some(v) = value {
                     ColValue::String(v)
                 } else {
@@ -259,6 +208,174 @@ impl PgStructCheckFetcher {
             }
         }
         Ok(results)
+    }
+
+    fn build_table_summary_query(
+        db_type: &DbType,
+        oid: &str,
+    ) -> (String, Vec<&'static str>, HashMap<&'static str, PgColType>) {
+        if matches!(db_type, DbType::GaussDBPg) {
+            let sql = format!(
+                r#"SELECT c.relchecks, c.relkind, c.relhasindex, c.relhasrules,
+                c.relhastriggers, false AS relhasoids, c.relpersistence
+                FROM pg_catalog.pg_class c
+                WHERE c.oid = '{}';"#,
+                oid
+            );
+            let col_names = vec![
+                "relchecks",
+                "relkind",
+                "relhasindex",
+                "relhasrules",
+                "relhastriggers",
+                "relhasoids",
+                "relpersistence",
+            ];
+            let mut col_types = HashMap::new();
+            col_types.insert("relchecks", Self::mock_col_type("int2"));
+            col_types.insert("relhastriggers", Self::mock_col_type("bool"));
+            col_types.insert("relhasoids", Self::mock_col_type("bool"));
+            col_types.insert("relhasrules", Self::mock_col_type("bool"));
+            col_types.insert("relhasindex", Self::mock_col_type("bool"));
+            return (sql, col_names, col_types);
+        }
+
+        let sql = format!(
+            r#"SELECT c.relchecks, c.relkind, c.relhasindex, c.relhasrules,
+            c.relhastriggers, c.relrowsecurity, c.relforcerowsecurity, false AS relhasoids, c.relispartition, '',
+            c.reltablespace::int8,
+            CASE WHEN c.reloftype = 0 THEN '' ELSE c.reloftype::pg_catalog.regtype::pg_catalog.text END, c.relpersistence, c.relreplident, am.amname
+            FROM pg_catalog.pg_class c
+            LEFT JOIN pg_catalog.pg_class tc ON (c.reltoastrelid = tc.oid)
+            LEFT JOIN pg_catalog.pg_am am ON (c.relam = am.oid)
+            WHERE c.oid = '{}';"#,
+            oid
+        );
+        let col_names = vec![
+            "relchecks",
+            "relkind",
+            "relhasindex",
+            "relhasrules",
+            "relhastriggers",
+            "relrowsecurity",
+            "relforcerowsecurity",
+            "relhasoids",
+            "relispartition",
+            "reltablespace",
+            "reloftype",
+            "relpersistence",
+            "relreplident",
+            "amname",
+        ];
+        let mut col_types = HashMap::new();
+        col_types.insert("relchecks", Self::mock_col_type("int2"));
+        col_types.insert("relhastriggers", Self::mock_col_type("bool"));
+        col_types.insert("relhasoids", Self::mock_col_type("bool"));
+        col_types.insert("relhasrules", Self::mock_col_type("bool"));
+        col_types.insert("relrowsecurity", Self::mock_col_type("bool"));
+        col_types.insert("relhasindex", Self::mock_col_type("bool"));
+        col_types.insert("relforcerowsecurity", Self::mock_col_type("bool"));
+        col_types.insert("relispartition", Self::mock_col_type("bool"));
+        col_types.insert("reltablespace", Self::mock_col_type("oid"));
+        (sql, col_names, col_types)
+    }
+
+    fn build_table_indexes_query(
+        db_type: &DbType,
+        oid: &str,
+    ) -> (String, Vec<&'static str>, HashMap<&'static str, PgColType>) {
+        if matches!(db_type, DbType::GaussDBPg) {
+            let sql = format!(
+                r#"SELECT c2.relname, i.indisprimary, i.indisunique, i.indisclustered, i.indisvalid,
+                    pg_catalog.pg_get_indexdef(i.indexrelid, 0, true),
+                    pg_catalog.pg_get_constraintdef(con.oid, true), contype, condeferrable, condeferred
+                FROM pg_catalog.pg_class c, pg_catalog.pg_class c2, pg_catalog.pg_index i
+                    LEFT JOIN pg_catalog.pg_constraint con ON (conrelid = i.indrelid AND conindid = i.indexrelid AND contype IN ('p','u','x'))
+                WHERE c.oid = '{}' AND c.oid = i.indrelid AND i.indexrelid = c2.oid
+                ORDER BY i.indisprimary DESC, c2.relname;"#,
+                oid
+            );
+            let col_names = vec![
+                "relname",
+                "indisprimary",
+                "indisunique",
+                "indisclustered",
+                "indisvalid",
+                "pg_get_indexdef",
+                "pg_get_constraintdef",
+                "contype",
+                "condeferrable",
+                "condeferred",
+            ];
+            let mut col_types = HashMap::new();
+            col_types.insert("indisunique", Self::mock_col_type("bool"));
+            col_types.insert("indisclustered", Self::mock_col_type("bool"));
+            col_types.insert("indisvalid", Self::mock_col_type("bool"));
+            col_types.insert("indisprimary", Self::mock_col_type("bool"));
+            col_types.insert("condeferred", Self::mock_col_type("bool"));
+            col_types.insert("condeferrable", Self::mock_col_type("bool"));
+            return (sql, col_names, col_types);
+        }
+
+        let sql = format!(
+            r#"SELECT c2.relname, i.indisprimary, i.indisunique, i.indisclustered, i.indisvalid, pg_catalog.pg_get_indexdef(i.indexrelid, 0, true),
+                pg_catalog.pg_get_constraintdef(con.oid, true), contype, condeferrable, condeferred, i.indisreplident,
+                c2.reltablespace::int8
+            FROM pg_catalog.pg_class c, pg_catalog.pg_class c2, pg_catalog.pg_index i
+                LEFT JOIN pg_catalog.pg_constraint con ON (conrelid = i.indrelid AND conindid = i.indexrelid AND contype IN ('p','u','x'))
+            WHERE c.oid = '{}' AND c.oid = i.indrelid AND i.indexrelid = c2.oid
+            ORDER BY i.indisprimary DESC, c2.relname;"#,
+            oid
+        );
+        let col_names = vec![
+            "relname",
+            "indisprimary",
+            "indisunique",
+            "indisclustered",
+            "indisvalid",
+            "pg_get_indexdef",
+            "pg_get_constraintdef",
+            "contype",
+            "condeferrable",
+            "condeferred",
+            "indisreplident",
+            "reltablespace",
+        ];
+        let mut col_types = HashMap::new();
+        col_types.insert("indisunique", Self::mock_col_type("bool"));
+        col_types.insert("reltablespace", Self::mock_col_type("oid"));
+        col_types.insert("indisclustered", Self::mock_col_type("bool"));
+        col_types.insert("indisvalid", Self::mock_col_type("bool"));
+        col_types.insert("indisprimary", Self::mock_col_type("bool"));
+        col_types.insert("condeferred", Self::mock_col_type("bool"));
+        col_types.insert("condeferrable", Self::mock_col_type("bool"));
+        col_types.insert("indisreplident", Self::mock_col_type("bool"));
+        (sql, col_names, col_types)
+    }
+
+    fn build_table_foreign_key_constraints_query(db_type: &DbType, oid: &str) -> String {
+        if matches!(db_type, DbType::GaussDBPg) {
+            return format!(
+                r#"SELECT conname, conrelid::pg_catalog.regclass::text AS ontable,
+                pg_catalog.pg_get_constraintdef(oid, true) AS condef
+                FROM pg_catalog.pg_constraint c
+                WHERE confrelid = {}::pg_catalog.oid
+                        AND contype = 'f'
+                ORDER BY conname;"#,
+                oid
+            );
+        }
+
+        format!(
+            r#"SELECT conname, conrelid::pg_catalog.regclass::text AS ontable,
+            pg_catalog.pg_get_constraintdef(oid, true) AS condef
+            FROM pg_catalog.pg_constraint c
+            WHERE confrelid IN (SELECT pg_catalog.pg_partition_ancestors('{}')
+                                UNION ALL VALUES ('{}'::pg_catalog.regclass))
+                    AND contype = 'f' AND conparentid = 0
+            ORDER BY conname;"#,
+            oid, oid
+        )
     }
 
     fn mock_col_type(alias: &str) -> PgColType {
@@ -279,5 +396,34 @@ impl PgStructCheckFetcher {
             col_type.value_type = PgValueType::from_alias(alias);
         }
         col_type
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use dt_common::config::config_enums::DbType;
+
+    use super::PgStructCheckFetcher;
+
+    #[test]
+    fn gaussdb_summary_query_omits_pg_only_columns() {
+        let (sql, col_names, _) =
+            PgStructCheckFetcher::build_table_summary_query(&DbType::GaussDBPg, "42");
+        assert!(!sql.contains("relrowsecurity"));
+        assert!(!sql.contains("relforcerowsecurity"));
+        assert!(!sql.contains("relreplident"));
+        assert!(!sql.contains("reltablespace"));
+        assert!(!sql.contains("amname"));
+        assert!(!col_names.contains(&"relrowsecurity"));
+    }
+
+    #[test]
+    fn gaussdb_foreign_key_query_avoids_partition_ancestors() {
+        let sql = PgStructCheckFetcher::build_table_foreign_key_constraints_query(
+            &DbType::GaussDBPg,
+            "42",
+        );
+        assert!(!sql.contains("pg_partition_ancestors"));
+        assert!(sql.contains("confrelid = 42::pg_catalog.oid"));
     }
 }

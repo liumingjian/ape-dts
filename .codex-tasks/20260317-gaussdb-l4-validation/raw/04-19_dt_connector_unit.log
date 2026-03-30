@@ -1,0 +1,71 @@
+   Compiling dt-common v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-common)
+   Compiling dt-connector v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-connector)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.41s
+warning: the following packages contain code that will be rejected by a future version of Rust: snap v0.2.5
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 2`
+     Running unittests src/lib.rs (target/debug/deps/dt_connector-b229934be86eaab0)
+
+running 60 tests
+test extractor::foxlake::foxlake_s3_extractor::tests::test_parse_meta_file_name ... ok
+test extractor::gaussdb::gaussdb_json_decoder::tests::test_decode_begin_commit_plain_text ... ok
+test extractor::gaussdb::gaussdb_json_decoder::tests::test_unquote_sql_literal ... ok
+test extractor::foxlake::foxlake_s3_extractor::tests::test_check_continuity ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_limit_zero ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_empty_where_condition ... ok
+test extractor::gaussdb::gaussdb_json_decoder::tests::test_decode_insert ... ok
+test check_log::check_log::tests::skips_row_fields_when_absent ... ok
+test check_log::check_log::tests::serializes_row_fields_when_present ... ok
+test extractor::gaussdb::gaussdb_json_decoder::tests::test_decode_delete ... ok
+test extractor::gaussdb::gaussdb_json_decoder::tests::test_decode_update ... ok
+test check_log::check_log::tests::serializes_target_fields_when_present ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_mysql_is_null_predicate ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_mysql_is_null_predicate_with_where_condition ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_mysql_multiple_order_cols_gt ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_mysql_no_order_cols ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_mysql_multiple_order_cols_range ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_mysql_null_predicate_with_nullable_cols ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_mysql_only_where_condition ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_mysql_predicate_type_none_single_non_nullable_col ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_mysql_predicate_type_none_with_nullable_cols ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_mysql_predicate_type_none_with_where_condition ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_mysql_single_non_nullable_order_col ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_mysql_single_order_col_gt ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_mysql_single_order_col_range ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_mysql_with_ignore_cols ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_mysql_with_ignore_cols_and_order ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_mysql_with_where_condition ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_no_limit ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_pg_is_null_predicate ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_pg_is_null_predicate_with_where_condition ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_pg_no_order_cols ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_pg_multiple_order_cols_range ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_pg_multiple_order_cols_gt ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_pg_only_where_condition ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_pg_null_predicate_with_nullable_cols ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_pg_single_non_nullable_order_col ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_pg_predicate_type_none_with_nullable_cols ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_pg_single_order_col_gt ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_pg_single_order_col_le ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_pg_with_ignore_cols ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_pg_with_ignore_cols_and_order ... ok
+test extractor::rdb_snapshot_extract_statement::tests::test_pg_with_where_condition ... ok
+test extractor::resumer::utils::tests::test_get_full_table_name ... ok
+test meta_fetcher::pg::pg_struct_check_fetcher::tests::gaussdb_foreign_key_query_avoids_partition_ancestors ... ok
+test meta_fetcher::pg::pg_struct_check_fetcher::tests::gaussdb_summary_query_omits_pg_only_columns ... ok
+test rdb_router::tests::test_parse_ignore_cols ... ok
+test meta_fetcher::pg::pg_struct_fetcher::tests::get_sequence_name_by_default_value_test ... ok
+test rdb_router::tests::test_parse_config ... ok
+test rdb_router::tests::test_parse_schema_map ... ok
+test rdb_router::tests::test_parse_tb_col_map ... ok
+test rdb_router::tests::test_parse_tb_map ... ok
+test sinker::foxlake::decimal_util::tests::test_decimal_10_0 ... ok
+test sinker::foxlake::decimal_util::tests::test_decimal_4_0 ... ok
+test sinker::foxlake::decimal_util::tests::test_decimal_10_10 ... ok
+test sinker::foxlake::decimal_util::tests::test_decimal_4_4 ... ok
+test sinker::foxlake::decimal_util::tests::test_decimal_10_4 ... ok
+test sinker::foxlake::decimal_util::tests::test_decimal_18_9 ... ok
+test sinker::foxlake::decimal_util::tests::test_decimal_27_13 ... ok
+test sinker::foxlake::decimal_util::tests::test_decimal_47_25 ... ok
+
+test result: ok. 60 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+

@@ -1,0 +1,103 @@
+warning: value assigned to `should_reconnect` is never read
+   --> dt-connector/src/extractor/gaussdb/gaussdb_cdc_extractor.rs:191:21
+    |
+191 |             let mut should_reconnect = false;
+    |                     ^^^^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `#[warn(unused_assignments)]` on by default
+
+warning: `dt-connector` (lib) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.80s
+warning: the following packages contain code that will be rejected by a future version of Rust: snap v0.2.5
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running tests/integration_test.rs (target/debug/deps/integration_test-65ad912c08554e97)
+
+running 1 test
+selected gaussdb rw url: postgres://10.250.0.51:8000/postgres?sslmode=require (server_addr=192.168.1.51/32)
+executing sql: DROP TABLE IF EXISTS public.gaussdb_check_basic
+executing sql: CREATE TABLE public.gaussdb_check_basic ( id INTEGER PRIMARY KEY, val TEXT )
+skip gaussdb candidate (standby/in_recovery): postgres://10.250.0.30:8000/postgres?sslmode=require
+skip gaussdb candidate (standby/in_recovery): postgres://10.250.0.30:8000/postgres?sslmode=disable
+skip gaussdb candidate (standby/in_recovery): postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (standby/in_recovery): postgres://10.250.0.52:8000/postgres?sslmode=disable
+selected gaussdb rw url: postgres://10.250.0.51:8000/postgres?sslmode=require (server_addr=192.168.1.51/32)
+executing sql: DROP TABLE IF EXISTS public.gaussdb_check_basic
+executing sql: CREATE TABLE public.gaussdb_check_basic ( id INTEGER PRIMARY KEY, val TEXT )
+executing sql: INSERT INTO public.gaussdb_check_basic (id, val) VALUES (1, 'a'), (2, 'b')
+skip gaussdb candidate (standby/in_recovery): postgres://10.250.0.30:8000/postgres?sslmode=require
+skip gaussdb candidate (standby/in_recovery): postgres://10.250.0.30:8000/postgres?sslmode=disable
+skip gaussdb candidate (standby/in_recovery): postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (standby/in_recovery): postgres://10.250.0.52:8000/postgres?sslmode=disable
+selected gaussdb rw url: postgres://10.250.0.51:8000/postgres?sslmode=require (server_addr=192.168.1.51/32)
+executing sql: INSERT INTO public.gaussdb_check_basic (id, val) VALUES (1, 'a'), (2, 'b')
+2026-03-29T17:22:03.687284+08:00 INFO default_logger - start task: [taskID: 52aafa654a343468, taskType: Some(Check)]
+2026-03-29T17:22:03.687475+08:00 WARN default_logger - recorder unsupported resumer config: Dummy
+2026-03-29T17:22:03.687501+08:00 WARN default_logger - recovery unsupported resumer config: Dummy
+2026-03-29T17:22:03.687526+08:00 INFO default_logger - recovery initialization for task_id: 52aafa654a343468 finished in 0 ms
+2026-03-29T17:22:04.239904+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-03-29T17:22:04.239998+08:00 ERROR default_logger - buffer_memory_mb=0 is too large and will be ignored to prevent overflow
+2026-03-29T17:22:04.240058+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-03-29T17:22:04.244930+08:00 INFO default_logger - begin to estimate record count
+2026-03-29T17:22:04.244992+08:00 INFO default_logger - estimate record count: 0
+2026-03-29T17:22:04.250882+08:00 INFO default_logger - schema: public, tb: gaussdb_cdc_basic, insert events filtered
+2026-03-29T17:22:04.252241+08:00 INFO default_logger - schema: public, tb: gaussdb_snapshot_basic, insert events filtered
+2026-03-29T17:22:06.122942+08:00 INFO default_logger - PgSnapshotExtractor starts, schema: "public", tb: "gaussdb_check_basic", batch_size: 4, parallel_size: 1
+2026-03-29T17:22:06.123591+08:00 INFO default_logger - CheckParallelizer starts, parallel_size: 1, checkpoint_interval_secs: 1
+2026-03-29T17:22:06.146350+08:00 INFO default_logger - ["public"."gaussdb_check_basic"] recovery from [{}]
+2026-03-29T17:22:06.149263+08:00 INFO default_logger - end extracting data from "public"."gaussdb_check_basic", all count: 2
+2026-03-29T17:22:06.227805+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-03-29T17:22:06.228690+08:00 INFO monitor_logger - extractor | public.gaussdb_check_basic | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-03-29T17:22:06.228722+08:00 INFO monitor_logger - extractor | public.gaussdb_check_basic | extracted_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10
+2026-03-29T17:22:06.228746+08:00 INFO monitor_logger - extractor | public.gaussdb_check_basic | data_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10
+2026-03-29T17:22:06.228766+08:00 INFO monitor_logger - extractor | public.gaussdb_check_basic | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-03-29T17:22:06.228812+08:00 INFO monitor_logger - pipeline | public.gaussdb_check_basic | record_size | avg=5
+2026-03-29T17:22:06.228836+08:00 INFO monitor_logger - pipeline | public.gaussdb_check_basic | buffer_size | sum=2 | avg=2 | max=2
+2026-03-29T17:22:06.228881+08:00 INFO monitor_logger - pipeline | public.gaussdb_check_basic | sinked_records | latest=0
+2026-03-29T17:22:06.228908+08:00 INFO monitor_logger - pipeline | public.gaussdb_check_basic | sinked_bytes | latest=0
+2026-03-29T17:22:06.255165+08:00 INFO monitor_logger - extractor | global | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2 | min_by_sec=0
+2026-03-29T17:22:06.255204+08:00 INFO monitor_logger - extractor | global | extracted_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10 | min_by_sec=0
+2026-03-29T17:22:06.255230+08:00 INFO monitor_logger - extractor | global | data_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10 | min_by_sec=0
+2026-03-29T17:22:06.255253+08:00 INFO monitor_logger - extractor | global | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2 | min_by_sec=0
+2026-03-29T17:22:06.255363+08:00 INFO monitor_logger - pipeline | global | record_size | avg=5
+2026-03-29T17:22:06.255393+08:00 INFO monitor_logger - pipeline | global | buffer_size | sum=2 | avg=2 | max=2 | min=0
+2026-03-29T17:22:06.255420+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=0
+2026-03-29T17:22:06.255448+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=0
+2026-03-29T17:22:07.255403+08:00 INFO monitor_logger - extractor | global | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-29T17:22:07.256051+08:00 INFO monitor_logger - extractor | global | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-29T17:22:07.256171+08:00 INFO monitor_logger - extractor | global | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-29T17:22:07.256236+08:00 INFO monitor_logger - extractor | global | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-29T17:22:07.256907+08:00 INFO monitor_logger - pipeline | global | record_size | avg=0
+2026-03-29T17:22:07.257065+08:00 INFO monitor_logger - pipeline | global | buffer_size | sum=0 | avg=0 | max=0 | min=0
+2026-03-29T17:22:07.257165+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=0
+2026-03-29T17:22:07.257440+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=0
+2026-03-29T17:22:08.255258+08:00 INFO monitor_logger - extractor | global | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-29T17:22:08.255775+08:00 INFO monitor_logger - extractor | global | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-29T17:22:08.256158+08:00 INFO monitor_logger - extractor | global | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-29T17:22:08.256238+08:00 INFO monitor_logger - extractor | global | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-29T17:22:08.256895+08:00 INFO monitor_logger - pipeline | global | buffer_size | sum=0 | avg=0 | max=0 | min=0
+2026-03-29T17:22:08.257310+08:00 INFO monitor_logger - pipeline | global | record_size | avg=0
+2026-03-29T17:22:08.257416+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=0
+2026-03-29T17:22:08.257486+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=0
+2026-03-29T17:22:08.657607+08:00 WARN sqlx::postgres::notice - Fast path bit num leak.
+2026-03-29T17:22:08.659871+08:00 INFO position_logger - current_position | {"type":"RdbSnapshot","db_type":"pg","schema":"public","tb":"gaussdb_check_basic","order_key":{"single":["id","2"]}}
+2026-03-29T17:22:08.659930+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-29T17:22:08.660097+08:00 INFO position_logger - current_position | {"type":"RdbSnapshot","db_type":"pg","schema":"public","tb":"gaussdb_check_basic","order_key":{"single":["id","2"]}}
+2026-03-29T17:22:08.660150+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-29T17:22:08.661240+08:00 INFO finished_logger - {"type":"RdbSnapshotFinished","db_type":"pg","schema":"public","tb":"gaussdb_check_basic"}
+2026-03-29T17:22:08.669229+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-03-29T17:22:08.669528+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=10
+2026-03-29T17:22:08.669587+08:00 INFO monitor_logger - pipeline | global | timestamp | latest=0
+2026-03-29T17:22:08.669637+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=2
+2026-03-29T17:22:08.670448+08:00 INFO finished_logger - task finished
+skip gaussdb candidate (standby/in_recovery): postgres://10.250.0.30:8000/postgres?sslmode=require
+skip gaussdb candidate (standby/in_recovery): postgres://10.250.0.30:8000/postgres?sslmode=disable
+skip gaussdb candidate (standby/in_recovery): postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (standby/in_recovery): postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (connect failed): postgres://10.250.0.51:8000/postgres?sslmode=require, error: error communicating with database: connection aborted
+skip gaussdb candidate (connect failed): postgres://10.250.0.51:8000/postgres?sslmode=disable, error: error communicating with database: Connection reset by peer (os error 54)
+selected gaussdb rw url: postgres://10.250.0.30:8000/postgres?sslmode=require (server_addr=192.168.1.30/32)
+test pg_to_gaussdb::check_tests::test::check_basic_test ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 344 filtered out; finished in 35.22s
+

@@ -132,7 +132,10 @@ impl TaskUtil {
             conn_options.disable_statement_logging();
         }
 
-        let mut pool_options = PgPoolOptions::new().max_connections(max_connections);
+        let mut pool_options = PgPoolOptions::new()
+            .max_connections(max_connections)
+            .test_before_acquire(true)
+            .acquire_timeout(Duration::from_secs(120));
 
         if disable_foreign_key_checks {
             pool_options = pool_options.after_connect(move |conn, _meta| {
@@ -316,7 +319,7 @@ impl TaskUtil {
     ) -> anyhow::Result<Vec<String>> {
         let mut dbs = match db_type {
             DbType::Mysql => Self::list_mysql_dbs(conn_pool).await?,
-            DbType::Pg => Self::list_pg_schemas(conn_pool).await?,
+            DbType::Pg | DbType::GaussDBPg => Self::list_pg_schemas(conn_pool, db_type).await?,
             DbType::Mongo => Self::list_mongo_dbs(conn_pool).await?,
             _ => Vec::new(),
         };
@@ -331,7 +334,7 @@ impl TaskUtil {
     ) -> anyhow::Result<Vec<String>> {
         let mut tbs = match db_type {
             DbType::Mysql => Self::list_mysql_tbs(conn_client, schema).await?,
-            DbType::Pg => Self::list_pg_tbs(conn_client, schema).await?,
+            DbType::Pg | DbType::GaussDBPg => Self::list_pg_tbs(conn_client, schema).await?,
             DbType::Mongo => Self::list_mongo_tbs(conn_client, schema).await?,
             _ => Vec::new(),
         };
@@ -349,7 +352,9 @@ impl TaskUtil {
         match task_type {
             TaskType::Snapshot => match db_type {
                 DbType::Mysql => Self::estimate_mysql_snapshot(conn_pool, schemas, filter).await,
-                DbType::Pg => Self::estimate_pg_snapshot(conn_pool, schemas, filter).await,
+                DbType::Pg | DbType::GaussDBPg => {
+                    Self::estimate_pg_snapshot(conn_pool, db_type, schemas, filter).await
+                }
                 _ => Ok(0),
             },
             _ => Ok(0),
@@ -400,6 +405,7 @@ impl TaskUtil {
 
     async fn estimate_pg_snapshot(
         conn_pool: &ConnClient,
+        db_type: &DbType,
         schemas: &[String],
         filter: &RdbFilter,
     ) -> anyhow::Result<u64> {
@@ -429,7 +435,7 @@ WHERE
                 sql,
                 schemas
                     .iter()
-                    .filter(|s| !SystemDb::is_system_db(s, &DbType::Pg))
+                    .filter(|s| !SystemDb::is_system_db(s, db_type))
                     .map(|s| format!("'{}'", s))
                     .collect::<Vec<_>>()
                     .join(",")
@@ -502,7 +508,10 @@ WHERE
         Ok(())
     }
 
-    async fn list_pg_schemas(conn_client: &ConnClient) -> anyhow::Result<Vec<String>> {
+    async fn list_pg_schemas(
+        conn_client: &ConnClient,
+        db_type: &DbType,
+    ) -> anyhow::Result<Vec<String>> {
         let mut schemas = Vec::new();
         let conn_pool = match conn_client {
             ConnClient::PostgreSQL(conn_pool) => conn_pool,
@@ -517,7 +526,7 @@ WHERE
         let mut rows = sqlx::query(sql).fetch(conn_pool);
         while let Some(row) = rows.try_next().await.unwrap() {
             let schema: String = row.try_get(0)?;
-            if SystemDb::is_system_db(&schema, &DbType::Pg) {
+            if SystemDb::is_system_db(&schema, db_type) {
                 continue;
             }
             schemas.push(schema);
@@ -754,6 +763,11 @@ impl ConnClient {
                 ..
             }
             | ExtractorConfig::PgCdc {
+                url,
+                connection_auth,
+                ..
+            }
+            | ExtractorConfig::GaussDBCdc {
                 url,
                 connection_auth,
                 ..

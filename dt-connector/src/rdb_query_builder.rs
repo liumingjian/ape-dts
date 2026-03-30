@@ -222,7 +222,7 @@ impl RdbQueryBuilder<'_> {
         placeholder: bool,
     ) -> anyhow::Result<RdbQueryInfo<'a>> {
         let mut query_info = self.get_insert_query(row_data, placeholder)?;
-        if self.db_type == DbType::Pg {
+        if matches!(self.db_type, DbType::Pg | DbType::GaussDBPg) {
             let mut index = query_info.cols.len() + 1;
             let after = row_data.require_after()?;
             let mut set_pairs = Vec::with_capacity(self.rdb_tb_meta.cols.len());

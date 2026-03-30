@@ -1,5 +1,6 @@
 use crate::rdb_filter::RdbFilter;
 
+use crate::config::config_enums::DbType;
 use crate::meta::struct_meta::structure::{schema::Schema, structure_type::StructureType};
 
 #[derive(Debug, Clone)]
@@ -19,7 +20,13 @@ impl PgCreateSchemaStatement {
         }
 
         let key = format!("schema.{}", self.schema.name);
-        let sql = format!(r#"CREATE SCHEMA IF NOT EXISTS "{}""#, self.schema.name);
+        let sql = match filter.db_type {
+            DbType::GaussDBPg => format!(
+                r#"DO $$ BEGIN CREATE SCHEMA "{}"; EXCEPTION WHEN duplicate_schema THEN NULL; END $$;"#,
+                self.schema.name
+            ),
+            _ => format!(r#"CREATE SCHEMA IF NOT EXISTS "{}""#, self.schema.name),
+        };
         sqls.push((key, sql));
         Ok(sqls)
     }

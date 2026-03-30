@@ -59,7 +59,7 @@ impl ResumerUtil {
 
                 Ok(ResumerDbPool::MySql(pool))
             }
-            DbType::Pg => {
+            DbType::Pg | DbType::GaussDBPg => {
                 let conn_options = PgConnectOptions::from_str(&final_url)
                     .context("failed to parse PostgreSQL connection URL")?;
 

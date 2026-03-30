@@ -18,6 +18,7 @@ use super::{basic::BasicPrechecker, traits::Prechecker};
 const PG_SUPPORT_DB_VERSION_NUM_MIN: i32 = 120000;
 
 pub struct PostgresqlPrechecker {
+    pub db_type: DbType,
     pub fetcher: PgFetcher,
     pub filter_config: FilterConfig,
     pub precheck_config: PrecheckConfig,
@@ -37,7 +38,7 @@ impl Prechecker for PostgresqlPrechecker {
         Ok(CheckResult::build_with_err(
             CheckItem::CheckDatabaseConnection,
             self.is_source,
-            DbType::Pg,
+            self.db_type.clone(),
             check_error,
             None,
         ))
@@ -45,6 +46,7 @@ impl Prechecker for PostgresqlPrechecker {
 
     async fn check_database_version(&mut self) -> anyhow::Result<CheckResult> {
         let mut check_error = None;
+        let mut warn_msg = None;
 
         let result = self.fetcher.fetch_version().await;
         match result {
@@ -52,12 +54,39 @@ impl Prechecker for PostgresqlPrechecker {
                 if version.is_empty() {
                     check_error = Some(anyhow::Error::msg("found no version info"));
                 } else {
-                    let version_i32: i32 = version.parse().unwrap();
-                    if version_i32 < PG_SUPPORT_DB_VERSION_NUM_MIN {
-                        check_error = Some(anyhow::Error::msg(format!(
-                            "version:{} is not supported yet",
-                            version_i32
-                        )));
+                    match version.parse::<i32>() {
+                        Ok(version_i32) => {
+                            warn_msg = Some(anyhow::Error::msg(format!(
+                                "server_version_num: {}",
+                                version_i32
+                            )));
+
+                            // For PostgreSQL we keep the existing minimum version gate.
+                            // For GaussDB (PG compatible mode) do not hardcode a PG version gate.
+                            if matches!(self.db_type, DbType::Pg)
+                                && version_i32 < PG_SUPPORT_DB_VERSION_NUM_MIN
+                            {
+                                check_error = Some(anyhow::Error::msg(format!(
+                                    "version:{} is not supported yet",
+                                    version_i32
+                                )));
+                            }
+                        }
+                        Err(_) => {
+                            // server_version_num should be numeric; treat it as hard error for PG,
+                            // but only warn for GaussDB to keep precheck usable.
+                            if matches!(self.db_type, DbType::Pg) {
+                                check_error = Some(anyhow::Error::msg(format!(
+                                    "invalid server_version_num: {}",
+                                    version
+                                )));
+                            } else {
+                                warn_msg = Some(anyhow::Error::msg(format!(
+                                    "server_version_num: {}",
+                                    version
+                                )));
+                            }
+                        }
                     }
                 }
             }
@@ -67,9 +96,9 @@ impl Prechecker for PostgresqlPrechecker {
         Ok(CheckResult::build_with_err(
             CheckItem::CheckDatabaseVersionSupported,
             self.is_source,
-            DbType::Pg,
+            self.db_type.clone(),
             check_error,
-            None,
+            warn_msg,
         ))
     }
 
@@ -88,76 +117,121 @@ impl Prechecker for PostgresqlPrechecker {
             return Ok(CheckResult::build_with_err(
                 CheckItem::CheckIfDatabaseSupportCdc,
                 self.is_source,
-                DbType::Pg,
+                self.db_type.clone(),
                 check_error,
                 None,
             ));
         }
 
-        // check the cdc settings
+        let mut err_msgs: Vec<String> = vec![];
+
+        // GaussDB CDC relies on mppdb_decoding plugin; check its availability first.
+        if matches!(self.db_type, DbType::GaussDBPg) {
+            match self.fetcher.extension_exists("mppdb_decoding").await {
+                Ok(exists) => {
+                    if !exists {
+                        err_msgs.push(r#"could not find plugin "mppdb_decoding""#.to_string());
+                    }
+                }
+                Err(e) => {
+                    err_msgs.push(format!(
+                        "failed to check mppdb_decoding availability: {}",
+                        e
+                    ));
+                }
+            }
+        }
+
+        // check the cdc settings (PostgreSQL-compatible)
         let configs: Vec<String> = ["wal_level", "max_wal_senders", "max_replication_slots"]
             .iter()
             .map(|c| c.to_string())
             .collect();
-        let (mut max_replication_slots_i32, mut err_msgs): (i32, Vec<String>) = (0, vec![]);
-        let result = self.fetcher.fetch_configuration(configs).await;
-        match result {
+        let mut max_replication_slots_i32: Option<i32> = None;
+        match self.fetcher.fetch_configuration(configs).await {
             Ok(rows) => {
                 for (k, v) in rows {
                     match k.as_str() {
                         "wal_level" => {
-                            if v.to_lowercase() != "logical" {
+                            if v.is_empty() {
+                                err_msgs.push("wal_level is empty".to_string());
+                            } else if v.to_lowercase() != "logical" {
                                 err_msgs.push(format!(
                                     "wal_level should not be '{}', need to be 'logical'.",
                                     v
                                 ))
                             }
                         }
-                        "max_replication_slots" => {
-                            max_replication_slots_i32 = v.parse().unwrap();
-                            if max_replication_slots_i32 < 1 {
-                                err_msgs.push(format!(
-                                    "max_replication_slots needs to be greater than 0. current is '{}'",
-                                    max_replication_slots_i32
-                                ))
+                        "max_replication_slots" => match v.parse::<i32>() {
+                            Ok(n) => {
+                                max_replication_slots_i32 = Some(n);
+                                if n < 1 {
+                                    err_msgs.push(format!(
+                                        "max_replication_slots needs to be greater than 0. current is '{}'",
+                                        n
+                                    ))
+                                }
                             }
-                        }
-                        "max_wal_senders" => {
-                            let sender_i32: i32 = v.parse().unwrap();
-                            if sender_i32 < 1 {
+                            Err(_) => {
                                 err_msgs.push(format!(
-                                    "max_wel_senders needs to be greater than 0, current is '{}'",
-                                    sender_i32
-                                ))
+                                    "max_replication_slots is invalid, current is '{}'",
+                                    v
+                                ));
                             }
-                        }
+                        },
+                        "max_wal_senders" => match v.parse::<i32>() {
+                            Ok(sender_i32) => {
+                                if sender_i32 < 1 {
+                                    err_msgs.push(format!(
+                                        "max_wel_senders needs to be greater than 0, current is '{}'",
+                                        sender_i32
+                                    ))
+                                }
+                            }
+                            Err(_) => {
+                                err_msgs.push(format!(
+                                    "max_wal_senders is invalid, current is '{}'",
+                                    v
+                                ));
+                            }
+                        },
                         _ => {}
                     }
                 }
             }
-            Err(e) => bail! {e},
-        }
-        if !err_msgs.is_empty() {
-            check_error = Some(anyhow::Error::msg(err_msgs.join(";")));
+            Err(e) => {
+                check_error = Some(e);
+            }
         }
 
         if check_error.is_none() {
             // check the slot count is less than max_replication_slots or not
-            let slot_result = self.fetcher.fetch_slot_names().await;
-            match slot_result {
-                Ok(slots) => {
-                    if max_replication_slots_i32 == (slots.len() as i32) {
-                        check_error = Some(anyhow::Error::msg(  format!("the current number of slots:[{}] has reached max_replication_slots, and new slots cannot be created", max_replication_slots_i32) ));
+            if err_msgs.is_empty() {
+                if let Some(max_replication_slots_i32) = max_replication_slots_i32 {
+                    let slot_result = self.fetcher.fetch_slot_names().await;
+                    match slot_result {
+                        Ok(slots) => {
+                            if max_replication_slots_i32 == (slots.len() as i32) {
+                                check_error = Some(anyhow::Error::msg(format!(
+                                    "the current number of slots:[{}] has reached max_replication_slots, and new slots cannot be created",
+                                    max_replication_slots_i32
+                                )));
+                            }
+                        }
+                        Err(e) => check_error = Some(e),
                     }
                 }
-                Err(e) => check_error = Some(e),
             }
+        }
+
+        if check_error.is_none() && !err_msgs.is_empty() {
+            check_error = Some(anyhow::Error::msg(err_msgs.join(";")));
         }
 
         Ok(CheckResult::build_with_err(
             CheckItem::CheckIfDatabaseSupportCdc,
             self.is_source,
-            DbType::Pg,
+            self.db_type.clone(),
             check_error,
             None,
         ))
@@ -170,19 +244,19 @@ impl Prechecker for PostgresqlPrechecker {
             return Ok(CheckResult::build_with_err(
                 CheckItem::CheckIfStructExisted,
                 self.is_source,
-                DbType::Pg,
+                self.db_type.clone(),
                 check_error,
                 None,
             ));
         }
 
         let is_filter_pattern =
-            BasicPrechecker::is_filter_pattern(DbType::Pg, &self.fetcher.filter);
+            BasicPrechecker::is_filter_pattern(self.db_type.clone(), &self.fetcher.filter);
         if is_filter_pattern {
             return Ok(CheckResult::build_with_err(
                 CheckItem::CheckIfStructExisted,
                 self.is_source,
-                DbType::Pg,
+                self.db_type.clone(),
                 check_error,
                 Some(anyhow::Error::msg(
                     "CheckIfStructExisted with filter in pattern is not supported.",
@@ -265,7 +339,7 @@ impl Prechecker for PostgresqlPrechecker {
         Ok(CheckResult::build_with_err(
             CheckItem::CheckIfStructExisted,
             self.is_source,
-            DbType::Pg,
+            self.db_type.clone(),
             check_error,
             None,
         ))
@@ -280,19 +354,19 @@ impl Prechecker for PostgresqlPrechecker {
             return Ok(CheckResult::build_with_err(
                 CheckItem::CheckIfTableStructSupported,
                 self.is_source,
-                DbType::Pg,
+                self.db_type.clone(),
                 check_error,
                 None,
             ));
         }
 
         let is_filter_pattern =
-            BasicPrechecker::is_filter_pattern(DbType::Pg, &self.fetcher.filter);
+            BasicPrechecker::is_filter_pattern(self.db_type.clone(), &self.fetcher.filter);
         if is_filter_pattern {
             return Ok(CheckResult::build_with_err(
                 CheckItem::CheckIfTableStructSupported,
                 self.is_source,
-                DbType::Pg,
+                self.db_type.clone(),
                 check_error,
                 Some(anyhow::Error::msg(
                     "CheckIfTableStructSupported with filter in pattern is not supported.",
@@ -389,7 +463,7 @@ impl Prechecker for PostgresqlPrechecker {
         Ok(CheckResult::build_with_err(
             CheckItem::CheckIfTableStructSupported,
             self.is_source,
-            DbType::Pg,
+            self.db_type.clone(),
             check_error,
             warn_error,
         ))

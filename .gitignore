@@ -30,6 +30,10 @@ Session.vim
 ## local env settings
 /**/.env.local
 
+## local scratch (manual runs / secrets)
+.local/
+.cargo-cache/
+
 /**/pkg/*
 
 /release
@@ -38,3 +42,7 @@ Session.vim
 .cursor
 .claude
 context_portal
+
+## cc-connect
+.cc-connect/
+cc-connect.config.toml

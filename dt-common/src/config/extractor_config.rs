@@ -88,6 +88,19 @@ pub enum ExtractorConfig {
         end_time_utc: String,
     },
 
+    GaussDBCdc {
+        url: String,
+        connection_auth: ConnectionAuthConfig,
+        slot_name: String,
+        start_lsn: String,
+        recreate_slot_if_exists: bool,
+        keepalive_interval_secs: u64,
+        heartbeat_interval_secs: u64,
+        heartbeat_tb: String,
+        start_time_utc: String,
+        end_time_utc: String,
+    },
+
     PgCheck {
         url: String,
         connection_auth: ConnectionAuthConfig,

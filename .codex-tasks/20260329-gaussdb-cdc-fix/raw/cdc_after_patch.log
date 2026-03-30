@@ -1,0 +1,42 @@
+   Compiling dt-connector v0.1.0 (/Users/lmj/projects/ai-project/my-projects/ape-dts/dt-connector)
+warning: value assigned to `should_reconnect` is never read
+   --> dt-connector/src/extractor/gaussdb/gaussdb_cdc_extractor.rs:191:21
+    |
+191 |             let mut should_reconnect = false;
+    |                     ^^^^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `#[warn(unused_assignments)]` on by default
+
+   Compiling dt-parallelizer v0.1.0 (/Users/lmj/projects/ai-project/my-projects/ape-dts/dt-parallelizer)
+   Compiling dt-pipeline v0.1.0 (/Users/lmj/projects/ai-project/my-projects/ape-dts/dt-pipeline)
+   Compiling dt-task v0.1.0 (/Users/lmj/projects/ai-project/my-projects/ape-dts/dt-task)
+   Compiling dt-precheck v0.1.0 (/Users/lmj/projects/ai-project/my-projects/ape-dts/dt-precheck)
+warning: `dt-connector` (lib) generated 1 warning
+   Compiling dt-tests v0.1.0 (/Users/lmj/projects/ai-project/my-projects/ape-dts/dt-tests)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 16.82s
+warning: the following packages contain code that will be rejected by a future version of Rust: snap v0.2.5
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running tests/integration_test.rs (target/debug/deps/integration_test-65ad912c08554e97)
+
+running 1 test
+skip gaussdb candidate (connect failed): postgres://10.250.0.51:8000/postgres?sslmode=require, error: error communicating with database: connection aborted
+skip gaussdb candidate (connect failed): postgres://10.250.0.51:8000/postgres?sslmode=disable, error: error communicating with database: connection aborted
+skip gaussdb candidate (connect failed): postgres://10.250.0.52:8000/postgres?sslmode=require, error: error communicating with database: connection aborted
+skip gaussdb candidate (connect failed): postgres://10.250.0.52:8000/postgres?sslmode=disable, error: error communicating with database: connection aborted
+skip gaussdb candidate (connect failed): postgres://10.250.0.30:8000/postgres?sslmode=require, error: error communicating with database: connection aborted
+skip gaussdb candidate (connect failed): postgres://10.250.0.30:8000/postgres?sslmode=disable, error: error communicating with database: connection aborted
+
+thread 'gaussdb_to_pg::cdc_tests::test::cdc_basic_test' panicked at dt-tests/tests/test_runner/test_base.rs:75:9:
+cdc failed after 6 attempts: error communicating with database: connection aborted: connection aborted
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test gaussdb_to_pg::cdc_tests::test::cdc_basic_test ... FAILED
+
+failures:
+
+failures:
+    gaussdb_to_pg::cdc_tests::test::cdc_basic_test
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 344 filtered out; finished in 35.05s
+
+error: test failed, to rerun pass `-p dt-tests --test integration_test`

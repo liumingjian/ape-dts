@@ -20,6 +20,8 @@ pub enum DbType {
     Mysql,
     #[strum(serialize = "pg")]
     Pg,
+    #[strum(serialize = "gaussdb_pg")]
+    GaussDBPg,
     #[strum(serialize = "kafka")]
     Kafka,
     #[strum(serialize = "mongo")]
@@ -36,6 +38,20 @@ pub enum DbType {
     Foxlake,
     #[strum(serialize = "tidb")]
     Tidb,
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::DbType;
+
+    #[test]
+    fn test_db_type_gaussdb_pg_parse_and_display() {
+        let t = DbType::from_str("gaussdb_pg").unwrap();
+        assert_eq!(t, DbType::GaussDBPg);
+        assert_eq!(t.to_string(), "gaussdb_pg");
+    }
 }
 
 #[derive(Display, EnumString, IntoStaticStr, Debug, Clone, Hash)]

@@ -1,0 +1,7 @@
+
+running 2 tests
+test test_runner::rdb_struct_test_runner::tests::normalize_pg_indexdef_maps_ubtree_to_btree ... ok
+test test_runner::rdb_struct_test_runner::tests::normalize_pg_summary_for_cross_engine_keeps_logical_keys_only ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 343 filtered out; finished in 0.00s
+

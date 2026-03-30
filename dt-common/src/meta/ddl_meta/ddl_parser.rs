@@ -275,7 +275,7 @@ impl DdlParser {
     }
 
     fn create_table<'a>(&'a self, i: &'a [u8]) -> IResult<&'a [u8], DdlData> {
-        if self.db_type == DbType::Pg {
+        if matches!(self.db_type, DbType::Pg | DbType::GaussDBPg) {
             self.pg_create_table(i)
         } else {
             self.mysql_create_table(i)
@@ -400,7 +400,7 @@ impl DdlParser {
     }
 
     fn alter_table<'a>(&'a self, i: &'a [u8]) -> IResult<&'a [u8], DdlData> {
-        if self.db_type == DbType::Pg {
+        if matches!(self.db_type, DbType::Pg | DbType::GaussDBPg) {
             self.pg_alter_table(i)
         } else {
             self.mysql_alter_table(i)
@@ -560,7 +560,7 @@ impl DdlParser {
     }
 
     fn truncate_table<'a>(&'a self, i: &'a [u8]) -> IResult<&'a [u8], DdlData> {
-        if self.db_type == DbType::Pg {
+        if matches!(self.db_type, DbType::Pg | DbType::GaussDBPg) {
             self.pg_truncate_table(i)
         } else {
             self.mysql_truncate_table(i)
@@ -654,7 +654,7 @@ impl DdlParser {
     }
 
     fn create_index<'a>(&'a self, i: &'a [u8]) -> IResult<&'a [u8], DdlData> {
-        if self.db_type == DbType::Pg {
+        if matches!(self.db_type, DbType::Pg | DbType::GaussDBPg) {
             self.pg_create_index(i)
         } else {
             self.mysql_create_index(i)
@@ -769,7 +769,7 @@ impl DdlParser {
     }
 
     fn drop_index<'a>(&'a self, i: &'a [u8]) -> IResult<&'a [u8], DdlData> {
-        if self.db_type == DbType::Pg {
+        if matches!(self.db_type, DbType::Pg | DbType::GaussDBPg) {
             self.pg_drop_index(i)
         } else {
             self.mysql_drop_index(i)
@@ -896,7 +896,7 @@ impl DdlParser {
         i: &'a [u8],
         forbidden_keywords: &[&str],
     ) -> IResult<&'a [u8], &'a [u8]> {
-        if self.db_type == DbType::Pg {
+        if matches!(self.db_type, DbType::Pg | DbType::GaussDBPg) {
             return alt((
                 preceded(
                     not(peek(|input| self.check_keywords(input, forbidden_keywords))),
@@ -976,7 +976,7 @@ impl DdlParser {
 
     fn identifier_to_string(&self, i: &[u8]) -> String {
         let identifier = to_string(i);
-        if self.db_type == DbType::Pg {
+        if matches!(self.db_type, DbType::Pg | DbType::GaussDBPg) {
             // In PostgreSQL, Identifiers (including column names) that are not double-quoted are folded to lower case.
             // Identifiers created with double quotes retain upper case letters
             let escape_pair = SqlUtil::get_escape_pairs(&self.db_type)[0];
