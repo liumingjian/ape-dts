@@ -426,17 +426,31 @@ impl RdbTestRunner {
                         }
                     };
 
-                    let probe_res: Result<(bool, String), sqlx::Error> = match tokio::time::timeout(
-                        std::time::Duration::from_secs(10),
-                        sqlx::query_as("SELECT pg_is_in_recovery()::bool, inet_server_addr()::text")
+                    // GaussDB HA promotion can temporarily expose nodes that are not in recovery
+                    // but still reject writes with "read-only transaction". Filter those out so
+                    // DDL/DML in tests runs on a truly writable coordinator.
+                    //
+                    // NOTE: Some GaussDB distributions don't implement `current_setting(text, boolean)`,
+                    // so we probe via `pg_settings` instead.
+                    let probe_res: Result<(bool, String, Option<String>, Option<String>), sqlx::Error> =
+                        match tokio::time::timeout(
+                            std::time::Duration::from_secs(10),
+                            sqlx::query_as(
+                                "SELECT \
+                                    pg_is_in_recovery()::bool, \
+                                    inet_server_addr()::text, \
+                                    (SELECT setting FROM pg_settings WHERE name='transaction_read_only')::text, \
+                                    (SELECT setting FROM pg_settings WHERE name='default_transaction_read_only')::text",
+                            )
                             .fetch_one(&pool),
-                    )
-                    .await
-                    {
-                        Ok(v) => v,
-                        Err(_) => Err(sqlx::Error::PoolTimedOut),
-                    };
-                    let (in_recovery, server_addr) = match probe_res {
+                        )
+                        .await
+                        {
+                            Ok(v) => v,
+                            Err(_) => Err(sqlx::Error::PoolTimedOut),
+                        };
+                    let (in_recovery, server_addr, transaction_ro, default_transaction_ro) =
+                        match probe_res {
                         Ok(v) => v,
                         Err(e) => {
                             println!(
@@ -448,12 +462,90 @@ impl RdbTestRunner {
                             break;
                         }
                     };
-                    pool.close().await;
+                    // `pg_is_in_recovery()` is not a reliable indicator for GaussDB coordinators in
+                    // all deployments (it can be `true` while the node is still writable, or vice
+                    // versa). We still log it for visibility, but rely on the DDL+DML probe below
+                    // as the final truth for write capability.
                     if in_recovery {
-                        println!("skip gaussdb candidate (standby/in_recovery): {}", url);
+                        println!(
+                            "gaussdb candidate reports in_recovery=true, will still probe write: {}",
+                            url
+                        );
+                    }
+                    let is_on = |v: &Option<String>| v.as_deref().is_some_and(|s| s.eq_ignore_ascii_case("on"));
+                    if is_on(&transaction_ro) || is_on(&default_transaction_ro) {
+                        println!(
+                            "skip gaussdb candidate (read-only): {} (transaction_read_only={:?}, default_transaction_read_only={:?})",
+                            url, transaction_ro, default_transaction_ro
+                        );
+                        pool.close().await;
                         all_rw = false;
                         break;
                     }
+
+                    // Final guard: even if the node claims it's not in recovery, it can still be
+                    // temporarily read-only during HA promotion. Verify we can run a small DDL in
+                    // a transaction and roll it back, which is a stronger indicator of true
+                    // write-capability than settings (and more reliable than temp tables).
+                    let probe_tbl = format!(
+                        "ape_dts_rw_probe_{}_{}_{}",
+                        std::process::id(),
+                        probe_idx,
+                        std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_else(|_| std::time::Duration::from_secs(0))
+                            .as_nanos()
+                    );
+                    let create_sql = format!("CREATE TABLE public.{} (id int4)", probe_tbl);
+                    let insert_sql = format!("INSERT INTO public.{} (id) VALUES (1)", probe_tbl);
+
+                    let ddl_probe = async {
+                        sqlx::query("BEGIN").execute(&pool).await?;
+                        let create_res = sqlx::query(&create_sql).execute(&pool).await;
+                        let insert_res = if create_res.is_ok() {
+                            Some(sqlx::query(&insert_sql).execute(&pool).await)
+                        } else {
+                            None
+                        };
+                        let rollback_res = sqlx::query("ROLLBACK").execute(&pool).await;
+                        match create_res {
+                            Ok(_) => match insert_res.expect("insert_res must exist when create_res is Ok") {
+                                Ok(_) => rollback_res.map(|_| ()),
+                                Err(e) => {
+                                    let _ = rollback_res;
+                                    Err(e)
+                                }
+                            },
+                            Err(e) => {
+                                let _ = rollback_res;
+                                Err(e)
+                            }
+                        }
+                    };
+                    match tokio::time::timeout(std::time::Duration::from_secs(10), ddl_probe).await
+                    {
+                        Ok(Ok(())) => {}
+                        Ok(Err(e)) => {
+                            println!(
+                                "skip gaussdb candidate (ddl probe failed#{}) : {}, error: {}",
+                                probe_idx, url, e
+                            );
+                            pool.close().await;
+                            all_rw = false;
+                            break;
+                        }
+                        Err(_) => {
+                            println!(
+                                "skip gaussdb candidate (ddl probe timeout#{}) : {}",
+                                probe_idx, url
+                            );
+                            pool.close().await;
+                            all_rw = false;
+                            break;
+                        }
+                    }
+
+                    pool.close().await;
                     if let Some(prev) = &server_addr_seen {
                         if prev != &server_addr {
                             println!(
@@ -845,6 +937,15 @@ impl RdbTestRunner {
         start_millis: u64,
         parse_millis: u64,
     ) -> anyhow::Result<JoinHandle<()>> {
+        // A previous attempt can leave a long-running GaussDB CDC task behind (replication slot
+        // stays active). Starting a new task would then fail with "replication slot is already
+        // active" and/or make slot-active readiness checks meaningless.
+        let config = TaskConfig::new(&self.base.task_config_file).unwrap();
+        if let ExtractorConfig::GaussDBCdc { ref slot_name, .. } = config.extractor {
+            self.wait_gaussdb_cdc_slot_inactive(slot_name, start_millis)
+                .await?;
+        }
+
         // start task
         let total_parse_millis = self.get_total_parse_millis(parse_millis);
         self.update_cdc_task_config(start_millis, total_parse_millis)
@@ -968,6 +1069,105 @@ impl RdbTestRunner {
         )
     }
 
+    async fn wait_gaussdb_cdc_slot_inactive(
+        &self,
+        slot_name: &str,
+        max_wait_millis: u64,
+    ) -> anyhow::Result<()> {
+        if env::var("gaussdb_pg_candidate_hosts").is_err() {
+            let Some(pool) = &self.src_conn_pool_pg else {
+                return Ok(());
+            };
+
+            let start = std::time::Instant::now();
+            while start.elapsed().as_millis() < max_wait_millis as u128 {
+                match sqlx::query_scalar::<_, bool>(
+                    "SELECT active FROM pg_catalog.pg_replication_slots WHERE slot_name = $1",
+                )
+                .bind(slot_name)
+                .fetch_optional(pool)
+                .await
+                {
+                    Ok(Some(true)) => {}
+                    Ok(_) => return Ok(()),
+                    Err(_) => {}
+                }
+                TimeUtil::sleep_millis(500).await;
+            }
+
+            anyhow::bail!(
+                "operation timed out: gaussdb cdc slot '{}' did not become inactive within {} ms",
+                slot_name,
+                max_wait_millis
+            )
+        }
+
+        let base_url = &self.config.extractor_basic.url;
+        let auth = &self.config.extractor_basic.connection_auth;
+
+        let start = std::time::Instant::now();
+        let mut last_url: Option<String> = None;
+        let mut pool: Option<Pool<Postgres>> = None;
+        let mut last_resolve_at = std::time::Instant::now();
+
+        while start.elapsed().as_millis() < max_wait_millis as u128 {
+            if pool.is_none() {
+                match Self::maybe_create_gaussdb_rw_pg_pool(base_url, auth).await? {
+                    Some((url, p)) => {
+                        last_url = Some(url);
+                        pool = Some(p);
+                        last_resolve_at = std::time::Instant::now();
+                    }
+                    None => {
+                        TimeUtil::sleep_millis(500).await;
+                        continue;
+                    }
+                }
+            }
+
+            let p = pool.as_ref().unwrap();
+            match sqlx::query_scalar::<_, bool>(
+                "SELECT active FROM pg_catalog.pg_replication_slots WHERE slot_name = $1",
+            )
+            .bind(slot_name)
+            .fetch_optional(p)
+            .await
+            {
+                Ok(Some(true)) => {}
+                Ok(_) => {
+                    if let Some(tmp) = pool.take() {
+                        tmp.close().await;
+                    }
+                    return Ok(());
+                }
+                Err(_) => {
+                    if let Some(tmp) = pool.take() {
+                        tmp.close().await;
+                    }
+                }
+            }
+
+            if last_resolve_at.elapsed().as_secs() >= 5 {
+                if let Some(tmp) = pool.take() {
+                    tmp.close().await;
+                }
+            }
+
+            TimeUtil::sleep_millis(500).await;
+        }
+
+        if let Some(tmp) = pool {
+            tmp.close().await;
+        }
+
+        anyhow::bail!(
+            "operation timed out: gaussdb cdc slot '{}' did not become inactive within {} ms (last_url={:?})",
+            slot_name,
+            max_wait_millis,
+            last_url
+        )
+    }
+
     fn get_total_parse_millis(&self, parse_millis: u64) -> u64 {
         let (src_insert_sqls, src_update_sqls, src_delete_sqls) =
             Self::split_dml_sqls(&self.base.src_test_sqls);
@@ -979,6 +1179,40 @@ impl RdbTestRunner {
             * 2
     }
 
+    async fn compare_data_for_tbs_with_retry(
+        &self,
+        stage: &str,
+        src_db_tbs: &[(String, String)],
+        dst_db_tbs: &[(String, String)],
+        max_wait_millis: u64,
+    ) -> anyhow::Result<()> {
+        let started = std::time::Instant::now();
+        let mut backoff_millis: u64 = 500;
+
+        // First compare attempt (gives us an error to report if we time out).
+        let mut last_err = match self.compare_data_for_tbs(src_db_tbs, dst_db_tbs).await {
+            Ok(_) => return Ok(()),
+            Err(e) => e,
+        };
+
+        while started.elapsed().as_millis() < max_wait_millis as u128 {
+            TimeUtil::sleep_millis(backoff_millis).await;
+            backoff_millis = std::cmp::min(backoff_millis.saturating_mul(2), 2000);
+
+            match self.compare_data_for_tbs(src_db_tbs, dst_db_tbs).await {
+                Ok(_) => return Ok(()),
+                Err(e) => last_err = e,
+            }
+        }
+
+        anyhow::bail!(
+            "compare tb data failed after {} ms (stage={}): {:#}",
+            max_wait_millis,
+            stage,
+            last_err
+        );
+    }
+
     pub async fn execute_test_sqls_and_compare(&self, parse_millis: u64) -> anyhow::Result<()> {
         // load dml sqls
         let (src_insert_sqls, src_update_sqls, src_delete_sqls) =
@@ -986,27 +1220,35 @@ impl RdbTestRunner {
 
         let (src_db_tbs, dst_db_tbs) = self.get_compare_db_tbs()?;
 
-        // insert src data
+        // Execute DML as quickly as possible, then do a single final compare. This reduces the
+        // time window between stages (insert -> update -> delete), which helps on flappy GaussDB
+        // HA environments where the primary can switch mid-test.
         if !src_insert_sqls.is_empty() {
             self.execute_src_sqls(&src_insert_sqls).await?;
-            TimeUtil::sleep_millis(parse_millis).await;
-            self.compare_data_for_tbs(&src_db_tbs, &dst_db_tbs).await?;
         }
 
-        // update src data
         if !src_update_sqls.is_empty() {
             self.execute_src_sqls(&src_update_sqls).await?;
-            TimeUtil::sleep_millis(parse_millis).await;
-            self.compare_data_for_tbs(&src_db_tbs, &dst_db_tbs).await?;
         }
 
-        // delete src data
         if !src_delete_sqls.is_empty() {
             self.execute_src_sqls(&src_delete_sqls).await?;
-            TimeUtil::sleep_millis(parse_millis).await;
-            self.compare_data_for_tbs(&src_db_tbs, &dst_db_tbs).await?;
         }
 
+        let stage_count = !src_insert_sqls.is_empty() as u64
+            + !src_update_sqls.is_empty() as u64
+            + !src_delete_sqls.is_empty() as u64;
+        if stage_count == 0 {
+            return Ok(());
+        }
+
+        self.compare_data_for_tbs_with_retry(
+            "dml",
+            &src_db_tbs,
+            &dst_db_tbs,
+            stage_count * parse_millis,
+        )
+        .await?;
         Ok(())
     }
 
@@ -1537,27 +1779,6 @@ impl RdbTestRunner {
     ) -> anyhow::Result<Vec<RowData>> {
         let where_sql = self.get_where_sql(&db_tb.0, &db_tb.1, condition);
         let db_type = self.get_db_type(from);
-
-        if matches!(db_type, DbType::GaussDBPg) {
-            let (base_url, auth) = if from == SRC {
-                (
-                    self.config.extractor_basic.url.as_str(),
-                    &self.config.extractor_basic.connection_auth,
-                )
-            } else {
-                (
-                    self.config.sinker_basic.url.as_str(),
-                    &self.config.sinker_basic.connection_auth,
-                )
-            };
-
-            if let Some((_url, pool)) = Self::maybe_create_gaussdb_rw_pg_pool(base_url, auth).await?
-            {
-                let data = RdbUtil::fetch_data_pg(&pool, None, db_tb, &where_sql).await?;
-                pool.close().await;
-                return Ok(data);
-            }
-        }
 
         let (conn_pool_mysql, conn_pool_pg) = self.get_conn_pool(from);
         let data = if let Some(pool) = conn_pool_mysql {

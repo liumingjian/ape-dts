@@ -188,7 +188,6 @@ impl GaussDBCdcExtractor {
                 continue;
             }
 
-            let mut should_reconnect = false;
             loop {
                 if self.base_extractor.shut_down.load(Ordering::Acquire) {
                     let _ = self
@@ -239,7 +238,6 @@ impl GaussDBCdcExtractor {
                                 server_clock_unit,
                             ).await {
                                 log_warn!("gaussdb keepalive status update failed, will reconnect: {}", e);
-                                should_reconnect = true;
                                 break;
                             }
                             continue;
@@ -351,7 +349,6 @@ impl GaussDBCdcExtractor {
                                         "gaussdb keepalive reply send failed, will reconnect: {}",
                                         e
                                     );
-                                    should_reconnect = true;
                                     break;
                                 }
                             }
@@ -369,33 +366,26 @@ impl GaussDBCdcExtractor {
                             return Ok(());
                         }
                         log_warn!("gaussdb replication stream closed, will reconnect: {}", e);
-                        should_reconnect = true;
                         break;
                     }
                     None => {
                         log_warn!("gaussdb replication stream ended, will reconnect");
-                        should_reconnect = true;
                         break;
                     }
                 }
             }
 
             last_receive_lsn = Some(last_receive_lsn_session);
-            if should_reconnect {
-                reconnect_attempt += 1;
-                log_warn!(
-                    "gaussdb replication disconnected, will reconnect in {} ms (attempt {})",
-                    reconnect_backoff.as_millis(),
-                    reconnect_attempt
-                );
-                TimeUtil::sleep_millis(reconnect_backoff.as_millis() as u64).await;
-                let next_ms =
-                    std::cmp::min(reconnect_backoff.as_millis() as u64 * 2, 10_000);
-                reconnect_backoff = Duration::from_millis(next_ms);
-                continue;
-            }
-
-            return Ok(());
+            reconnect_attempt += 1;
+            log_warn!(
+                "gaussdb replication disconnected, will reconnect in {} ms (attempt {})",
+                reconnect_backoff.as_millis(),
+                reconnect_attempt
+            );
+            TimeUtil::sleep_millis(reconnect_backoff.as_millis() as u64).await;
+            let next_ms = std::cmp::min(reconnect_backoff.as_millis() as u64 * 2, 10_000);
+            reconnect_backoff = Duration::from_millis(next_ms);
+            continue;
         }
     }
 

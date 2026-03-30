@@ -8,10 +8,10 @@
 
 - **Task**: 对照 PRD 评估 GaussDB 实现阶段 + 跑一次真实 e2e（dt-tests）
 - **Shape**: `single-full`
-- **Progress**: 5/6（#5 FAILED）
-- **Current**: #5 运行 e2e: GaussDB->PG snapshot/check/cdc（CDC FAILED）
+- **Progress**: 6/6（#5 DONE）
+- **Current**: 完成（GaussDB->PG snapshot/check/cdc 均已通过）
 - **Artifact**: `.codex-tasks/20260329-gaussdb-prd-e2e/TODO.csv`
-- **Next action**: Boss 决策：是否继续排查/修复 `gaussdb_to_pg::cdc_basic_test`（当前表现像主备切换/连接抖动/slot 活跃冲突导致 CDC 不稳定）。
+- **Next action**: 无
 
 ---
 
@@ -73,8 +73,19 @@
 
 ## Milestone 5: e2e（GaussDB -> PG）
 
-- ✅ `gaussdb_to_pg::snapshot_basic_test` OK（`raw/20260329_gaussdb_to_pg_snapshot_basic_test_run2.log`）
-- ✅ `gaussdb_to_pg::check_basic_test` OK（`raw/20260329_gaussdb_to_pg_check_basic_test_run2.log`）
-- ❌ `gaussdb_to_pg::cdc_basic_test` FAILED（`raw/20260329_gaussdb_to_pg_cdc_basic_test_run3.log`）
-  - 关键证据：attempt 2 对比发现 update 未同步：`src val='c'`、`dst val='b'`（log 行号约 1773-1779）。
-  - 随后多次重试出现：候选节点 `pg_is_in_recovery=true`、`replication slot "ape_test_gaussdb" is already active`、以及 `connection aborted/reset`，最终在 6 次 attempt 后 panic 退出。
+- ✅ `gaussdb_to_pg::snapshot_basic_test` OK（`raw/20260330_gaussdb_to_pg_snapshot_basic_test_run2.log`）
+- ✅ `gaussdb_to_pg::check_basic_test` OK（`raw/20260330_gaussdb_to_pg_check_basic_test_run2.log`）
+- ✅ `gaussdb_to_pg::cdc_basic_test` OK（`raw/20260330_gaussdb_to_pg_cdc_basic_test_run10.log`）
+- History: 2026-03-29 `cdc_basic_test` 曾失败（`raw/20260329_gaussdb_to_pg_cdc_basic_test_run3.log`，表现为 update 未同步 + slot active/连接抖动连锁）
+
+---
+
+## 2026-03-30 Follow-up（本机 PG Docker + CDC 稳定性改进）
+
+- **本机 PG 环境**: 启动 `postgres:15` Docker 容器（host `127.0.0.1:5434`，与 `dt-tests/tests/.env` 默认 `pg_sinker_without_auth_url` 对齐）。
+- **最终结果**:
+  - ✅ `gaussdb_to_pg::cdc_basic_test` 已跑通（`raw/20260330_gaussdb_to_pg_cdc_basic_test_run10.log`）。
+- **已做的稳定性改动（代码层）**:
+  - `dt-task`: 为 `TaskRunner` 增加 abort/drop 保护，避免测试重试时仅 abort 外层 JoinHandle 导致 extractor/pipeline/monitor 内部任务泄漏，从而引发 slot 长时间 active。
+  - `dt-tests`: GaussDB RW endpoint 选择更严格（`transaction_read_only` + 事务内 DDL/DML probe + timeout）；CDC attempt 内避免“每次执行 SQL 重新 resolve”导致的 endpoint 漂移/脏状态；CDC DML 改为尽快执行 insert/update/delete，最后做一次最终 compare（降低 stage 间主备切换窗口）。
+  - `dt-connector`: 清理 GaussDB CDC extractor 中无效的 `should_reconnect` 赋值告警（不改变逻辑语义）。

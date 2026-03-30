@@ -105,6 +105,46 @@ const CHECK_LOG_FILE_SIZE_PLACEHOLDER: &str = "CHECK_LOG_FILE_SIZE_PLACEHOLDER";
 const DEFAULT_CHECK_LOG_DIR_PLACEHOLDER: &str = "LOG_DIR_PLACEHOLDER/check";
 const DEFAULT_STATISTIC_LOG_DIR_PLACEHOLDER: &str = "LOG_DIR_PLACEHOLDER/statistic";
 
+/// Tokio task cancellation only aborts the current future. JoinHandles spawned inside (extractor,
+/// pipeline, monitors, etc.) will keep running unless we explicitly stop them.
+///
+/// This guard ensures that dropping/aborting a `TaskRunner::start_task()` future triggers a best-
+/// effort shutdown of the internal tasks to avoid leaking long-running CDC jobs (replication slot
+/// stays active) across retries in integration tests.
+struct AbortGuard {
+    shut_down: Arc<AtomicBool>,
+    abort_handles: Vec<tokio::task::AbortHandle>,
+    armed: bool,
+}
+
+impl AbortGuard {
+    fn new(shut_down: Arc<AtomicBool>, abort_handles: Vec<tokio::task::AbortHandle>) -> Self {
+        Self {
+            shut_down,
+            abort_handles,
+            armed: true,
+        }
+    }
+
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for AbortGuard {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+
+        // Allow cooperative exit first, then force-abort if the inner tasks are stuck.
+        self.shut_down.store(true, Ordering::Release);
+        for h in &self.abort_handles {
+            h.abort();
+        }
+    }
+}
+
 impl TaskRunner {
     pub fn new(task_config_file: &str) -> anyhow::Result<Self> {
         let config = TaskConfig::new(task_config_file)
@@ -266,6 +306,8 @@ impl TaskRunner {
             )
             .await
         });
+        let mut global_abort_guard =
+            AbortGuard::new(global_shut_down.clone(), vec![global_monitor_task.abort_handle()]);
 
         let task_parallel_size = self.get_task_parallel_size();
         let semaphore = Arc::new(tokio::sync::Semaphore::new(task_parallel_size));
@@ -301,6 +343,7 @@ impl TaskRunner {
 
         global_shut_down.store(true, Ordering::Release);
         global_monitor_task.await?;
+        global_abort_guard.disarm();
         Ok(())
     }
 
@@ -523,18 +566,25 @@ impl TaskRunner {
         } else {
             vec![self.task_monitor.clone()]
         };
+        let shut_down_for_monitors = shut_down.clone();
         let f3 = tokio::spawn(async move {
             Self::flush_monitors_generic::<Monitor, TaskMonitor>(
                 interval_secs,
-                shut_down,
+                shut_down_for_monitors,
                 &[extractor_monitor, pipeline_monitor, sinker_monitor],
                 &tasks,
             )
             .await
         });
+
+        let mut abort_guard = AbortGuard::new(
+            shut_down.clone(),
+            vec![f1.abort_handle(), f2.abort_handle(), f3.abort_handle()],
+        );
         // JoinHandle<T>::await -> Result<T, JoinError>
         // Here f1/f2 return anyhow::Result<()>, so we need to unwrap twice.
         let (r1, r2, r3) = tokio::join!(f1, f2, f3);
+        abort_guard.disarm();
         r1??;
         r2??;
         r3?;
