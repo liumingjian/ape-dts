@@ -61,25 +61,25 @@ export TEST_TABLE="gaussdb_to_pg_cdc_basic"
 export SLOT_NAME="ape_manual_gaussdb_to_pg_$(date +%Y%m%d_%H%M%S)"
 ```
 
+提示：
+
+- 如果密码包含特殊字符，建议不要直接写进 URL，改用 `PGPASSWORD=... psql ...` 或 `.pgpass`。
+
 ### 2.1 清理源端（GaussDB）
 
 1) 清理测试表/Schema：
 
 ```bash
-psql "$SRC_GAUSS_URL" -v ON_ERROR_STOP=1 <<SQL
-DROP TABLE IF EXISTS ${TEST_SCHEMA}.${TEST_TABLE};
-DROP SCHEMA IF EXISTS ${TEST_SCHEMA} CASCADE;
-SQL
+psql "$SRC_GAUSS_URL" -v ON_ERROR_STOP=1 \
+  -c "DROP TABLE IF EXISTS ${TEST_SCHEMA}.${TEST_TABLE};" \
+  -c "DROP SCHEMA IF EXISTS ${TEST_SCHEMA} CASCADE;"
 ```
 
 2) 如果你怀疑之前遗留了同名 slot，先检查并删除（如果不存在会跳过）：
 
 ```bash
-psql "$SRC_GAUSS_URL" -v ON_ERROR_STOP=1 <<SQL
-SELECT slot_name, active, restart_lsn, confirmed_flush_lsn
-  FROM pg_replication_slots
- WHERE slot_name = '${SLOT_NAME}';
-SQL
+psql "$SRC_GAUSS_URL" -v ON_ERROR_STOP=1 \
+  -c "SELECT slot_name, active, restart_lsn, confirmed_flush_lsn FROM pg_replication_slots WHERE slot_name = '${SLOT_NAME}';"
 ```
 
 说明：
@@ -90,10 +90,9 @@ SQL
 ### 2.2 清理目标端（本地 Postgres）
 
 ```bash
-psql "$DST_PG_URL" -v ON_ERROR_STOP=1 <<SQL
-DROP TABLE IF EXISTS ${TEST_SCHEMA}.${TEST_TABLE};
-DROP SCHEMA IF EXISTS ${TEST_SCHEMA} CASCADE;
-SQL
+psql "$DST_PG_URL" -v ON_ERROR_STOP=1 \
+  -c "DROP TABLE IF EXISTS ${TEST_SCHEMA}.${TEST_TABLE};" \
+  -c "DROP SCHEMA IF EXISTS ${TEST_SCHEMA} CASCADE;"
 ```
 
 ## 3. 启动目标端 Postgres 15（本机 Docker）
@@ -119,27 +118,19 @@ psql "$DST_PG_URL" -c "SELECT version();"
 ### 4.1 源端建表（GaussDB）
 
 ```bash
-psql "$SRC_GAUSS_URL" -v ON_ERROR_STOP=1 <<SQL
-CREATE SCHEMA IF NOT EXISTS ${TEST_SCHEMA};
-DROP TABLE IF EXISTS ${TEST_SCHEMA}.${TEST_TABLE};
-CREATE TABLE ${TEST_SCHEMA}.${TEST_TABLE} (
-  id  INTEGER PRIMARY KEY,
-  val TEXT
-);
-SQL
+psql "$SRC_GAUSS_URL" -v ON_ERROR_STOP=1 \
+  -c "CREATE SCHEMA IF NOT EXISTS ${TEST_SCHEMA};" \
+  -c "DROP TABLE IF EXISTS ${TEST_SCHEMA}.${TEST_TABLE};" \
+  -c "CREATE TABLE ${TEST_SCHEMA}.${TEST_TABLE} (id INTEGER PRIMARY KEY, val TEXT);"
 ```
 
 ### 4.2 目标端建表（Postgres）
 
 ```bash
-psql "$DST_PG_URL" -v ON_ERROR_STOP=1 <<SQL
-CREATE SCHEMA IF NOT EXISTS ${TEST_SCHEMA};
-DROP TABLE IF EXISTS ${TEST_SCHEMA}.${TEST_TABLE};
-CREATE TABLE ${TEST_SCHEMA}.${TEST_TABLE} (
-  id  INTEGER PRIMARY KEY,
-  val TEXT
-);
-SQL
+psql "$DST_PG_URL" -v ON_ERROR_STOP=1 \
+  -c "CREATE SCHEMA IF NOT EXISTS ${TEST_SCHEMA};" \
+  -c "DROP TABLE IF EXISTS ${TEST_SCHEMA}.${TEST_TABLE};" \
+  -c "CREATE TABLE ${TEST_SCHEMA}.${TEST_TABLE} (id INTEGER PRIMARY KEY, val TEXT);"
 ```
 
 ## 5. 配置并启动 CDC 任务（ape-dts）
@@ -233,25 +224,22 @@ cargo run -p dt-main -- .local/manual/gaussdb_to_pg_cdc.ini
 ### 6.1 插入（INSERT）
 
 ```bash
-psql "$SRC_GAUSS_URL" -v ON_ERROR_STOP=1 <<SQL
-INSERT INTO ${TEST_SCHEMA}.${TEST_TABLE} (id, val) VALUES (1, 'a'), (2, 'b');
-SQL
+psql "$SRC_GAUSS_URL" -v ON_ERROR_STOP=1 \
+  -c "INSERT INTO ${TEST_SCHEMA}.${TEST_TABLE} (id, val) VALUES (1, 'a'), (2, 'b');"
 ```
 
 ### 6.2 更新（UPDATE）
 
 ```bash
-psql "$SRC_GAUSS_URL" -v ON_ERROR_STOP=1 <<SQL
-UPDATE ${TEST_SCHEMA}.${TEST_TABLE} SET val = 'c' WHERE id = 2;
-SQL
+psql "$SRC_GAUSS_URL" -v ON_ERROR_STOP=1 \
+  -c "UPDATE ${TEST_SCHEMA}.${TEST_TABLE} SET val = 'c' WHERE id = 2;"
 ```
 
 ### 6.3 删除（DELETE）
 
 ```bash
-psql "$SRC_GAUSS_URL" -v ON_ERROR_STOP=1 <<SQL
-DELETE FROM ${TEST_SCHEMA}.${TEST_TABLE} WHERE id = 1;
-SQL
+psql "$SRC_GAUSS_URL" -v ON_ERROR_STOP=1 \
+  -c "DELETE FROM ${TEST_SCHEMA}.${TEST_TABLE} WHERE id = 1;"
 ```
 
 ## 7. 目标端验证（Postgres）
@@ -259,9 +247,8 @@ SQL
 在目标端查询并验证最终结果（允许有轻微延迟，可重试几次）：
 
 ```bash
-psql "$DST_PG_URL" -v ON_ERROR_STOP=1 <<SQL
-SELECT * FROM ${TEST_SCHEMA}.${TEST_TABLE} ORDER BY id;
-SQL
+psql "$DST_PG_URL" -v ON_ERROR_STOP=1 \
+  -c "SELECT * FROM ${TEST_SCHEMA}.${TEST_TABLE} ORDER BY id;"
 ```
 
 期望结果：
@@ -286,30 +273,25 @@ psql "$DST_PG_URL" -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM ${TEST_SCHEMA}.${
 ### 8.2 清理源端（drop table/schema + drop slot）
 
 ```bash
-psql "$SRC_GAUSS_URL" -v ON_ERROR_STOP=1 <<SQL
-DROP TABLE IF EXISTS ${TEST_SCHEMA}.${TEST_TABLE};
-DROP SCHEMA IF EXISTS ${TEST_SCHEMA} CASCADE;
-SELECT pg_drop_replication_slot('${SLOT_NAME}');
-SQL
+psql "$SRC_GAUSS_URL" -v ON_ERROR_STOP=1 \
+  -c "DROP TABLE IF EXISTS ${TEST_SCHEMA}.${TEST_TABLE};" \
+  -c "DROP SCHEMA IF EXISTS ${TEST_SCHEMA} CASCADE;" \
+  -c "SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots WHERE slot_name = '${SLOT_NAME}';"
 ```
 
 验证 slot 不存在：
 
 ```bash
-psql "$SRC_GAUSS_URL" -v ON_ERROR_STOP=1 <<SQL
-SELECT slot_name, active
-  FROM pg_replication_slots
- WHERE slot_name = '${SLOT_NAME}';
-SQL
+psql "$SRC_GAUSS_URL" -v ON_ERROR_STOP=1 \
+  -c "SELECT slot_name, active FROM pg_replication_slots WHERE slot_name = '${SLOT_NAME}';"
 ```
 
 ### 8.3 清理目标端（drop table/schema）
 
 ```bash
-psql "$DST_PG_URL" -v ON_ERROR_STOP=1 <<SQL
-DROP TABLE IF EXISTS ${TEST_SCHEMA}.${TEST_TABLE};
-DROP SCHEMA IF EXISTS ${TEST_SCHEMA} CASCADE;
-SQL
+psql "$DST_PG_URL" -v ON_ERROR_STOP=1 \
+  -c "DROP TABLE IF EXISTS ${TEST_SCHEMA}.${TEST_TABLE};" \
+  -c "DROP SCHEMA IF EXISTS ${TEST_SCHEMA} CASCADE;"
 ```
 
 ### 8.4 清理目标端容器（可选，但推荐保证无污染）
@@ -339,4 +321,3 @@ docker rm -f ape-dts-pg15
 
 - 推荐设置 `gaussdb_pg_candidate_hosts`（见 1.2），让 ape-dts 自动挑选可写主库并优先复制端口
 - 避免频繁 drop/recreate 同一个 slot；本文推荐“一次测试一个新 slot，结束即 drop”
-
