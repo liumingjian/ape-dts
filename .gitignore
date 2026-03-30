@@ -30,6 +30,10 @@ Session.vim
 ## local env settings
 /**/.env.local
 
+## local scratch (manual runs / secrets)
+.local/
+.cargo-cache/
+
 /**/pkg/*
 
 /release

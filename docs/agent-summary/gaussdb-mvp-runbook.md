@@ -66,13 +66,14 @@ CDC（`GaussDB -> PG`）要求：
 如 GaussDB 为主备/集群环境，建议额外设置候选节点（用于自动选择可写主库，避免 VIP/LB 混连导致的 `read-only transaction` / EOF 波动）：
 
 ```bash
-export gaussdb_pg_candidate_hosts="10.250.0.30:8000,10.250.0.51:8000,10.250.0.52:8000"
+export gaussdb_pg_candidate_hosts="10.0.0.1:8000,10.0.0.2:8000,10.0.0.3:8000"
 ```
 
 说明：
 
 - 会对候选逐个探测 `pg_is_in_recovery=false` 并选择 read-write 端点；
-- CDC replication 连接会优先使用 HA 端口（通常为 `port+1`）。
+- CDC replication 连接会使用 HA 端口（通常为 `port+1`），并默认 `sslmode=disable`（NoTLS）；
+  仅当服务端明确要求 SSL 时才回退到 TLS。
 
 ### 3.2 运行用例
 

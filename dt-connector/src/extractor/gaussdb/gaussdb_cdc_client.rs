@@ -212,61 +212,49 @@ impl GaussDBCdcClient {
                 }
             };
 
-            // GaussDB logical replication often requires the HA port (usually base_port + 1). When
-            // connecting to a non-HA port, the server may hang instead of returning an error. So we
-            // always try HA port first, then fall back to base port with a short timeout.
+            // Align with flink-cdc gaussdb connector operational behavior:
+            // - Always use HA port (base_port + 1) for replication streaming
+            // - Allow slower startup (connectTimeout=60)
+            //
+            // IMPORTANT: Do not fall back to base_port. GaussDB may reject or hang on non-HA ports,
+            // leading to noisy retries and standby probes.
             let ha_port = candidate_base_port.saturating_add(1);
-            let ports = if ha_port != candidate_base_port {
-                vec![ha_port, candidate_base_port]
-            } else {
-                vec![candidate_base_port]
+            let connect_and_start = async {
+                let client = Self::connect_replication(
+                    &candidate_host,
+                    ha_port,
+                    dbname,
+                    &username,
+                    &password,
+                    prefer_no_ssl,
+                )
+                .await?;
+                self.start_replication_stream(&client, &start_lsn).await
             };
 
-            for (idx, port) in ports.into_iter().enumerate() {
-                let connect_and_start = async {
-                    let client = Self::connect_replication(
-                        &candidate_host,
-                        port,
-                        dbname,
-                        &username,
-                        &password,
-                        prefer_no_ssl,
-                    )
-                    .await?;
-                    self.start_replication_stream(&client, &start_lsn).await
-                };
-
-                // Align with flink-cdc gaussdb connector operational behavior:
-                // - Prefer HA port and allow slower startup (connectTimeout=60)
-                // - Still keep a short timeout for non-HA fallback to avoid hanging indefinitely
-                let timeout = if idx == 0 && port == ha_port {
-                    Duration::from_secs(60)
-                } else {
-                    Duration::from_secs(8)
-                };
-
-                match tokio::time::timeout(timeout, connect_and_start).await {
-                    Ok(Ok(stream)) => return Ok((stream, start_lsn, wal_sender_timeout)),
-                    Ok(Err(e)) => {
-                        log_warn!(
-                            "gaussdb cdc candidate replication connect/start failed: {}:{}, error: {}",
-                            candidate_host,
-                            port,
-                            e
-                        );
-                        last_err = Some(e);
-                        continue;
-                    }
-                    Err(_) => {
-                        let e = anyhow::anyhow!(
-                            "gaussdb replication connect timed out: {}:{}",
-                            candidate_host,
-                            port
-                        );
-                        log_warn!("{}", e);
-                        last_err = Some(e);
-                        continue;
-                    }
+            match tokio::time::timeout(Duration::from_secs(60), connect_and_start).await {
+                Ok(Ok(stream)) => return Ok((stream, start_lsn, wal_sender_timeout)),
+                Ok(Err(e)) => {
+                    log_warn!(
+                        "gaussdb cdc candidate HA replication connect/start failed: {}:{} (sql_port={}), error: {}",
+                        candidate_host,
+                        ha_port,
+                        candidate_base_port,
+                        e
+                    );
+                    last_err = Some(e);
+                    continue;
+                }
+                Err(_) => {
+                    let e = anyhow::anyhow!(
+                        "gaussdb HA replication connect timed out: {}:{} (sql_port={})",
+                        candidate_host,
+                        ha_port,
+                        candidate_base_port
+                    );
+                    log_warn!("{}", e);
+                    last_err = Some(e);
+                    continue;
                 }
             }
         }
@@ -410,11 +398,11 @@ impl GaussDBCdcClient {
         dbname: &str,
         username: &str,
         password: &str,
-        prefer_no_ssl: bool,
+        _prefer_no_ssl: bool,
     ) -> anyhow::Result<Client> {
         let connect_no_ssl = || async move {
             let conn_info = format!(
-                "host={} port={} dbname={} user={} password={} replication=database sslmode=disable",
+                "host={} port={} dbname={} user={} password={} replication=database application_name=gaussdb-replication sslmode=disable",
                 host, port, dbname, username, password
             );
             let (client, connection) = tokio_postgres::connect(&conn_info, NoTls).await?;
@@ -438,7 +426,7 @@ impl GaussDBCdcClient {
         };
         let connect_ssl = || async move {
             let conn_info = format!(
-                "host={} port={} dbname={} user={} password={} replication=database sslmode=require",
+                "host={} port={} dbname={} user={} password={} replication=database application_name=gaussdb-replication sslmode=require",
                 host, port, dbname, username, password
             );
 
@@ -466,26 +454,20 @@ impl GaussDBCdcClient {
             Ok::<_, anyhow::Error>(client)
         };
 
-        if prefer_no_ssl {
-            match connect_no_ssl().await {
-                Ok(v) => Ok(v),
-                Err(e) => {
-                    if e.to_string().contains("SSL off") {
-                        connect_ssl().await
-                    } else {
-                        Err(e)
-                    }
-                }
-            }
-        } else {
-            match connect_ssl().await {
-                Ok(v) => Ok(v),
-                Err(e) => {
-                    if e.to_string().contains("SSL on") {
-                        connect_no_ssl().await
-                    } else {
-                        Err(e)
-                    }
+        // Replication connections on GaussDB HA ports commonly require SSL to be disabled.
+        // Always try NoTLS first, then fall back to TLS only when the server explicitly requires SSL.
+        match connect_no_ssl().await {
+            Ok(v) => Ok(v),
+            Err(e) => {
+                let msg = e.to_string();
+                let requires_ssl = msg.contains("SSL off")
+                    || msg.contains("ssl off")
+                    || msg.contains("SSL is required")
+                    || msg.contains("ssl is required");
+                if requires_ssl {
+                    connect_ssl().await
+                } else {
+                    Err(e)
                 }
             }
         }

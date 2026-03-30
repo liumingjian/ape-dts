@@ -4,8 +4,11 @@
 > For CDC, ape-dts uses GaussDB logical decoding plugin `mppdb_decoding` (JSON output).
 >
 > For HA clusters, you can set env `gaussdb_pg_candidate_hosts` (comma-separated `host[:port]`) so
-> the CDC client can auto-select a read-write primary (`pg_is_in_recovery=false`) and prefer HA
+> the CDC client can auto-select a read-write primary (`pg_is_in_recovery=false`) and use the HA
 > port (`port+1`) for replication streaming.
+>
+> Note: replication connections default to `sslmode=disable` (NoTLS) to avoid protocol mismatch on
+> some GaussDB HA ports, and fall back to TLS only when the server explicitly requires SSL.
 
 Refer to [config details](/docs/en/config.md) for explanations of common fields.
 

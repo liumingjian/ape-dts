@@ -1,0 +1,6 @@
+2026-03-30T17:07:11.690294+08:00 WARN default_logger - gaussdb cdc candidate replication connect/start failed: 10.250.0.52:8001, error: db error: FATAL: syntax error: unexpected character "-"
+2026-03-30T17:07:12.705009+08:00 WARN default_logger - gaussdb cdc candidate replication connect/start failed: 10.250.0.52:8000, error: db error: ERROR: replication should connect HA port in thread_pool
+2026-03-30T17:07:13.940199+08:00 WARN default_logger - gaussdb cdc candidate precheck failed: 10.250.0.30:8000, error: extractor error: GaussDB is in recovery/standby mode (pg_is_in_recovery=true), logical decoding is not supported
+2026-03-30T17:07:14.772306+08:00 WARN default_logger - gaussdb cdc candidate precheck failed: 10.250.0.51:8000, error: extractor error: GaussDB is in recovery/standby mode (pg_is_in_recovery=true), logical decoding is not supported
+2026-03-30T17:07:14.772346+08:00 WARN default_logger - gaussdb cdc connect failed, will retry (attempt 5): extractor error: GaussDB is in recovery/standby mode (pg_is_in_recovery=true), logical decoding is not supported
+
