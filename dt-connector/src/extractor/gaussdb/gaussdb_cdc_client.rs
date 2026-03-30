@@ -109,6 +109,10 @@ impl GaussDBCdcClient {
         None
     }
 
+    fn quote_identifier(ident: &str) -> String {
+        format!("\"{}\"", ident.replace('"', "\"\""))
+    }
+
     pub async fn connect(
         &mut self,
     ) -> anyhow::Result<(
@@ -593,9 +597,10 @@ impl GaussDBCdcClient {
         // Slot options align with the reference flink-cdc gaussdb connector:
         // - include-xids=false: omit transaction ids
         // - skip-empty-xacts=true: skip empty transactions
+        let slot_name = Self::quote_identifier(&self.slot_name);
         let query = format!(
             "START_REPLICATION SLOT {} LOGICAL {} (\"include-xids\" 'false', \"skip-empty-xacts\" 'true')",
-            self.slot_name, start_lsn
+            slot_name, start_lsn
         );
         log_info!("execute: {}", query);
 

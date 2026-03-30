@@ -19,6 +19,33 @@
 - `task_config.ini` 里的 `slot_name` 和 `do_tbs`
 - 源端/目标端建表 SQL
 
+## 快速开始（推荐脚本模式）
+
+如果你希望“一键跑通 + 自动清理（无污染）”，可直接使用仓库内置脚本：
+
+```bash
+# 1) GaussDB HA 候选（SQL 端口列表，如 8000）
+export gaussdb_pg_candidate_hosts="10.0.0.1:8000,10.0.0.2:8000,10.0.0.3:8000"
+
+# 2) 明确主库（脚本会优先使用该地址作为 extractor.url 的 base endpoint）
+export SRC_GAUSS_PRIMARY_HOSTPORT="10.0.0.3:8000"
+
+# 3) GaussDB 账号信息（只用于本机运行，不要提交到仓库）
+export SRC_GAUSS_USERNAME="<gauss_user>"
+export SRC_GAUSS_PASSWORD="<gauss_pwd>"
+
+# 4) 目标端 PG（默认用本机 Docker Postgres15:5434，可按需覆盖）
+export DST_PG_URL="postgres://127.0.0.1:5434/postgres?options[statement_timeout]=10s"
+
+# 5) 运行（成功/失败都会清理测试 schema/table/slot；日志输出到 .local/e2e/）
+bash scripts/e2e/gaussdb_to_pg_cdc.sh
+```
+
+说明：
+
+- 如果你已经自行启动了 `127.0.0.1:5434` 的 Postgres，可设置 `SKIP_DOCKER_PG=1` 跳过容器管理。
+- 脚本会 drop `TEST_SCHEMA/TEST_TABLE/SLOT_NAME`（默认沿用本文命名），请勿指向生产库。
+
 ## 1. 前置条件
 
 ### 1.1 本地工具
