@@ -1063,24 +1063,6 @@ impl RdbTestRunner {
         if let Some(pool) = &self.src_conn_pool_mysql {
             RdbUtil::execute_sqls_mysql(pool, sqls).await?;
         }
-        if matches!(self.config.extractor_basic.db_type, DbType::GaussDBPg) {
-            if let Some(pool) = Self::create_gaussdb_rw_pg_pool_with_wait(
-                &self.config.extractor_basic.url,
-                &self.config.extractor_basic.connection_auth,
-                20_000,
-            )
-            .await?
-            {
-                let (_url, pool) = pool;
-                let res = RdbUtil::execute_sqls_pg(&pool, sqls).await;
-                pool.close().await;
-                return res;
-            } else if env::var("gaussdb_pg_candidate_hosts").is_ok() {
-                anyhow::bail!(
-                    "operation timed out: resolve gaussdb rw url for executing src sqls"
-                );
-            }
-        }
 
         if let Some(pool) = &self.src_conn_pool_pg {
             RdbUtil::execute_sqls_pg(pool, sqls).await?;
@@ -1091,24 +1073,6 @@ impl RdbTestRunner {
     pub async fn execute_dst_sqls(&self, sqls: &Vec<String>) -> anyhow::Result<()> {
         if let Some(pool) = &self.dst_conn_pool_mysql {
             RdbUtil::execute_sqls_mysql(pool, sqls).await?;
-        }
-        if matches!(self.config.sinker_basic.db_type, DbType::GaussDBPg) {
-            if let Some(pool) = Self::create_gaussdb_rw_pg_pool_with_wait(
-                &self.config.sinker_basic.url,
-                &self.config.sinker_basic.connection_auth,
-                20_000,
-            )
-            .await?
-            {
-                let (_url, pool) = pool;
-                let res = RdbUtil::execute_sqls_pg(&pool, sqls).await;
-                pool.close().await;
-                return res;
-            } else if env::var("gaussdb_pg_candidate_hosts").is_ok() {
-                anyhow::bail!(
-                    "operation timed out: resolve gaussdb rw url for executing dst sqls"
-                );
-            }
         }
 
         if let Some(pool) = &self.dst_conn_pool_pg {

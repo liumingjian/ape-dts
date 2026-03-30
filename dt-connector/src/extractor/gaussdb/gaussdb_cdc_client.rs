@@ -28,6 +28,14 @@ impl GaussDBCdcClient {
         let mut endpoints = Vec::new();
         let mut seen = HashSet::<String>::new();
 
+        // Prefer the base endpoint first (sticky). In tests, the runner rewrites the extractor URL
+        // to the current read-write primary. Treat candidate hosts as failover options, not the
+        // default choice, otherwise DML and replication may drift across nodes mid-test.
+        let base_key = format!("{}:{}", base_host, base_port);
+        if seen.insert(base_key) {
+            endpoints.push((base_host.to_string(), base_port));
+        }
+
         if let Ok(raw) = std::env::var("gaussdb_pg_candidate_hosts") {
             for candidate in raw.split(',').map(|s| s.trim()) {
                 if candidate.is_empty() {
@@ -48,11 +56,6 @@ impl GaussDBCdcClient {
                     endpoints.push((host.to_string(), port));
                 }
             }
-        }
-
-        let base_key = format!("{}:{}", base_host, base_port);
-        if seen.insert(base_key) {
-            endpoints.push((base_host.to_string(), base_port));
         }
 
         endpoints
