@@ -46,6 +46,10 @@ bash scripts/e2e/gaussdb_to_pg_cdc.sh
 - 如果你已经自行启动了 `127.0.0.1:5434` 的 Postgres，可设置 `SKIP_DOCKER_PG=1` 跳过容器管理。
 - 脚本会 drop `TEST_SCHEMA/TEST_TABLE/SLOT_NAME`（默认沿用本文命名），请勿指向生产库。
 
+## 验证记录
+
+- 2026-03-30：已完成手动验证通过（GaussDB 源端 + 本地 Docker Postgres15 目标端）。
+
 ## 1. 前置条件
 
 ### 1.1 本地工具
@@ -77,7 +81,10 @@ export gaussdb_pg_candidate_hosts="10.0.0.1:8000,10.0.0.2:8000"
 
 ```bash
 # 目标端（本地 Postgres 15）
-export DST_PG_URL="postgres://postgres:postgres@127.0.0.1:5434/postgres"
+# - DST_PG_URL: 用于 dt-main sinker（可包含 options[...] 等 URL query）
+# - DST_PG_PSQL_URL: 用于 psql（建议不要带 URL query，避免部分客户端不识别）
+export DST_PG_URL="postgres://127.0.0.1:5434/postgres?options[statement_timeout]=10s"
+export DST_PG_PSQL_URL="postgres://postgres:postgres@127.0.0.1:5434/postgres"
 
 # 源端（GaussDB PG 兼容模式）
 # 注意：这里用示例占位，按你的真实环境替换
@@ -117,7 +124,7 @@ psql "$SRC_GAUSS_URL" -v ON_ERROR_STOP=1 \
 ### 2.2 清理目标端（本地 Postgres）
 
 ```bash
-psql "$DST_PG_URL" -v ON_ERROR_STOP=1 \
+psql "$DST_PG_PSQL_URL" -v ON_ERROR_STOP=1 \
   -c "DROP TABLE IF EXISTS ${TEST_SCHEMA}.${TEST_TABLE};" \
   -c "DROP SCHEMA IF EXISTS ${TEST_SCHEMA} CASCADE;"
 ```
@@ -137,7 +144,7 @@ docker run -d --name ape-dts-pg15 \
 等待数据库就绪后做一次连通性验证：
 
 ```bash
-psql "$DST_PG_URL" -c "SELECT version();"
+psql "$DST_PG_PSQL_URL" -c "SELECT version();"
 ```
 
 ## 4. 准备测试表（源端/目标端）
@@ -154,7 +161,7 @@ psql "$SRC_GAUSS_URL" -v ON_ERROR_STOP=1 \
 ### 4.2 目标端建表（Postgres）
 
 ```bash
-psql "$DST_PG_URL" -v ON_ERROR_STOP=1 \
+psql "$DST_PG_PSQL_URL" -v ON_ERROR_STOP=1 \
   -c "DROP SCHEMA IF EXISTS ${TEST_SCHEMA} CASCADE;" \
   -c "CREATE SCHEMA ${TEST_SCHEMA};" \
   -c "CREATE TABLE ${TEST_SCHEMA}.${TEST_TABLE} (id INTEGER PRIMARY KEY, val TEXT);"
@@ -274,7 +281,7 @@ psql "$SRC_GAUSS_URL" -v ON_ERROR_STOP=1 \
 在目标端查询并验证最终结果（允许有轻微延迟，可重试几次）：
 
 ```bash
-psql "$DST_PG_URL" -v ON_ERROR_STOP=1 \
+psql "$DST_PG_PSQL_URL" -v ON_ERROR_STOP=1 \
   -c "SELECT * FROM ${TEST_SCHEMA}.${TEST_TABLE} ORDER BY id;"
 ```
 
@@ -286,7 +293,7 @@ psql "$DST_PG_URL" -v ON_ERROR_STOP=1 \
 你也可以额外验证行数：
 
 ```bash
-psql "$DST_PG_URL" -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM ${TEST_SCHEMA}.${TEST_TABLE};"
+psql "$DST_PG_PSQL_URL" -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM ${TEST_SCHEMA}.${TEST_TABLE};"
 ```
 
 ## 8. 测试后清理（确保无污染终点）
@@ -316,7 +323,7 @@ psql "$SRC_GAUSS_URL" -v ON_ERROR_STOP=1 \
 ### 8.3 清理目标端（drop table/schema）
 
 ```bash
-psql "$DST_PG_URL" -v ON_ERROR_STOP=1 \
+psql "$DST_PG_PSQL_URL" -v ON_ERROR_STOP=1 \
   -c "DROP TABLE IF EXISTS ${TEST_SCHEMA}.${TEST_TABLE};" \
   -c "DROP SCHEMA IF EXISTS ${TEST_SCHEMA} CASCADE;"
 ```
@@ -348,3 +355,12 @@ docker rm -f ape-dts-pg15
 
 - 推荐设置 `gaussdb_pg_candidate_hosts`（见 1.2），让 ape-dts 自动挑选可写主库并优先复制端口
 - 避免频繁 drop/recreate 同一个 slot；本文推荐“一次测试一个新 slot，结束即 drop”
+
+### 9.4 replication 报错 `unexpected character '-'`
+
+通常出现在 `START_REPLICATION SLOT <slot_name>` 阶段：当 `slot_name` 包含 `-` 等特殊字符且未被正确 quoting 时，会被服务端解析为语法错误。
+
+建议：
+
+- 优先使用仅包含字母/数字/下划线的 `slot_name`（例如 `ape_manual_gaussdb_to_pg_20260330_153000`）。
+- 如果你在使用较新的 ape-dts 版本：slot_name 已在 `START_REPLICATION` 中进行 quoting，通常不会再触发该问题。

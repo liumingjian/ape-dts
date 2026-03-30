@@ -40,3 +40,8 @@
 - Result: ✅ passed (2026-03-30 19:06 +0800)
 - Run dir (local, gitignored): `.local/e2e/gaussdb_to_pg_cdc_20260330_190618/`
 - Evidence: `raw/20260330_e2e_run1_snippet.log`
+
+### Manual Verification (User)
+
+- User reported manual verification succeeded after following the updated doc/script guidance (2026-03-30).
+- Doc polish: clarified `DST_PG_URL` (dt-main) vs `DST_PG_PSQL_URL` (psql), and added troubleshooting for `unexpected character '-'`.
