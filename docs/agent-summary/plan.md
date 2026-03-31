@@ -1,4 +1,51 @@
-# GaussDB MVP 实施计划
+# GaussDB PRD 驱动迭代计划
+
+> **日期**：2026-03-31  
+> **需求真相源**：`docs/agent-summary/gaussdb-prd.md`  
+> **执行真表（Epic）**：`.codex-tasks/20260331-gaussdb-prd-align/SUBTASKS.csv`
+
+本文件从 2026-03-31 起演进为“PRD 驱动的迭代计划”。2026-03 的 MVP 收敛计划已完成，保留在文末附录用于溯源。
+
+## 1. 当前状态（已完成）
+
+MVP（`DbType::GaussDBPg`）已在真实环境闭环验证：
+
+- `PG → GaussDBPg`：snapshot / struct / check ✅
+- `PG → GaussDBPg`：cdc ✅
+- `GaussDBPg → PG`：snapshot / cdc / check ✅
+- Struct 扩展（view/matview/routine/routine grants，双向）✅
+- CDC P0 稳定性增强：candidate-first + sticky + HA 端口 `sql_port+1` + replication NoTLS-first + fail-fast 诊断 ✅
+
+证据入口（示例）：
+
+- `.codex-tasks/20260316-gaussdb-mvp/SUBTASKS.csv`
+- `.codex-tasks/20260329-gaussdb-prd-e2e/PROGRESS.md`
+- `.codex-tasks/20260331-gaussdb-p0-stability/PROGRESS.md`
+
+## 2. 下一阶段（按优先级）
+
+### 2.1 P1：SHA256 认证（BLOCKED）
+
+对齐 PRD 的“MD5 + SHA256”认证要求，但当前依赖联调环境可用性：
+
+- 在 `apecloud/rust-postgres` 侧实现 GaussDB 非标准 SHA256 握手
+- 主仓切依赖并回归不影响 PG/MD5
+
+状态：在 epic 中先标记 `BLOCKED`，环境到位再开工（见 #6）。
+
+### 2.2 P1：CDC 恢复/故障演练与负例套件
+
+在主链路功能补齐后推进：
+
+- resume（进程重启/位点恢复）
+- failover（切主/主不可用）
+- 负例 fail-fast（权限不足/插件不可用/HA 端口不可达等）
+
+### 2.3 P1/P2：类型矩阵、性能与可观测、完整版（MySQL/Oracle 模式）
+
+---
+
+## 附录A：GaussDB MVP 实施计划（历史，已完成）
 
 ## 1. 计划摘要
 
@@ -325,4 +372,3 @@ MVP 完成的定义如下：
 - 当前已有或可快速抓取 `mppdb_decoding` 原始样本。
 - 本期真实认证主路径为 `MD5`。
 - 真实 GaussDB 联调作为人工门禁，不纳入公共 CI。
-

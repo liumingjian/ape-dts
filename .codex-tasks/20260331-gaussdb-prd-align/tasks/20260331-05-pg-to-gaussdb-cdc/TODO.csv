@@ -1,0 +1,6 @@
+id,task,status,completed_at,notes
+1,Create taskmaster artifacts (SPEC/TODO/PROGRESS/raw),DONE,2026-03-31,
+2,Add dt-tests directory pg_to_gaussdb/cdc/basic_test (config+sql),DONE,2026-03-31,
+3,Wire pg_to_gaussdb::cdc_tests entrypoint and mod exports,DONE,2026-03-31,cargo test -p dt-tests --test integration_test --no-run
+4,Run dt-tests cdc_basic_test and record evidence (local terminal required for DB tests),DONE,2026-03-31 21:52 +0800,cargo test ... pg_to_gaussdb::cdc_basic_test PASS
+5,Update tracker + epic status,DONE,2026-03-31 21:53 +0800,

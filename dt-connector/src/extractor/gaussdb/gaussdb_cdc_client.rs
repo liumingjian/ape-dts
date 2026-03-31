@@ -7,9 +7,7 @@ use anyhow::bail;
 use openssl::ssl::{SslConnector, SslMethod, SslVerifyMode};
 use postgres_openssl::MakeTlsConnector;
 use postgres_types::PgLsn;
-use tokio_postgres::{
-    Client, NoTls, SimpleQueryMessage::Row, SimpleQueryRow,
-};
+use tokio_postgres::{Client, NoTls, SimpleQueryMessage::Row, SimpleQueryRow};
 
 use dt_common::{
     config::connection_auth_config::ConnectionAuthConfig, error::Error, log_info, log_warn,
@@ -324,7 +322,12 @@ impl GaussDBCdcClient {
                         ha_port,
                         candidate_base_port
                     );
-                    return Ok((stream, start_lsn, wal_sender_timeout, (candidate_host, candidate_base_port)));
+                    return Ok((
+                        stream,
+                        start_lsn,
+                        wal_sender_timeout,
+                        (candidate_host, candidate_base_port),
+                    ));
                 }
                 Ok(Err(e)) => {
                     log_warn!(
@@ -705,14 +708,10 @@ mod tests {
     fn endpoints_prefer_candidates_when_configured() {
         let base_host = "vip";
         let base_port = 8000;
-        let candidates = GaussDBCdcClient::parse_candidate_hosts("10.0.0.1:8000,10.0.0.2:8000", base_port);
-        let endpoints = GaussDBCdcClient::candidate_endpoints(
-            base_host,
-            base_port,
-            &candidates,
-            true,
-            None,
-        );
+        let candidates =
+            GaussDBCdcClient::parse_candidate_hosts("10.0.0.1:8000,10.0.0.2:8000", base_port);
+        let endpoints =
+            GaussDBCdcClient::candidate_endpoints(base_host, base_port, &candidates, true, None);
         assert_eq!(
             endpoints,
             vec![
@@ -727,7 +726,8 @@ mod tests {
     fn endpoints_sticky_first_then_candidates() {
         let base_host = "vip";
         let base_port = 8000;
-        let candidates = GaussDBCdcClient::parse_candidate_hosts("10.0.0.1:8000,10.0.0.2:8000", base_port);
+        let candidates =
+            GaussDBCdcClient::parse_candidate_hosts("10.0.0.1:8000,10.0.0.2:8000", base_port);
         let sticky = ("10.0.0.2".to_string(), 8000);
         let endpoints = GaussDBCdcClient::candidate_endpoints(
             base_host,
@@ -751,20 +751,16 @@ mod tests {
         let base_host = "vip";
         let base_port = 8000;
         let candidates = vec![];
-        let endpoints = GaussDBCdcClient::candidate_endpoints(
-            base_host,
-            base_port,
-            &candidates,
-            false,
-            None,
-        );
+        let endpoints =
+            GaussDBCdcClient::candidate_endpoints(base_host, base_port, &candidates, false, None);
         assert_eq!(endpoints, vec![("vip".to_string(), 8000)]);
     }
 
     #[test]
     fn parse_candidate_hosts_supports_missing_port() {
         let base_port = 8000;
-        let candidates = GaussDBCdcClient::parse_candidate_hosts("10.0.0.1,10.0.0.2:8002", base_port);
+        let candidates =
+            GaussDBCdcClient::parse_candidate_hosts("10.0.0.1,10.0.0.2:8002", base_port);
         assert_eq!(
             candidates,
             vec![

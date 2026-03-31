@@ -211,6 +211,18 @@ impl RdbRouter {
                 s.route(&dst_schema)
             }
 
+            StructStatement::PgCreateView(s) => {
+                let (schema, tb) = (s.schema_name.clone(), s.view_name.clone());
+                let (dst_schema, dst_tb) = self.get_tb_map(&schema, &tb);
+                s.route(dst_schema, dst_tb)
+            }
+
+            StructStatement::PgCreateRoutine(s) => {
+                let (schema, tb) = (s.schema_name.clone(), s.routine_name.clone());
+                let (dst_schema, dst_tb) = self.get_tb_map(&schema, &tb);
+                s.route(dst_schema, dst_tb)
+            }
+
             _ => {}
         }
 

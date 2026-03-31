@@ -15,6 +15,10 @@ pub enum StructureType {
     Comment,
     #[strum(serialize = "index")]
     Index,
+    #[strum(serialize = "view")]
+    View,
+    #[strum(serialize = "routine")]
+    Routine,
     // RBAC migration requires superuser privileges in the source PostgreSQL database
     // to properly extract and migrate role-based access control settings to the target database
     #[strum(serialize = "rbac")]

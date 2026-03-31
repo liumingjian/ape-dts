@@ -120,21 +120,21 @@ impl GaussDBCdcExtractor {
 
             let (stream, actual_start_lsn, wal_sender_timeout, selected_endpoint) =
                 match cdc_client.connect().await {
-                Ok(v) => v,
-                Err(e) => {
-                    reconnect_attempt += 1;
-                    log_warn!(
-                        "gaussdb cdc connect failed, will retry (attempt {}): {}",
-                        reconnect_attempt,
-                        e
-                    );
-                    TimeUtil::sleep_millis(reconnect_backoff.as_millis() as u64).await;
-                    let next_ms =
-                        std::cmp::min(reconnect_backoff.as_millis() as u64 * 2, 10_000);
-                    reconnect_backoff = Duration::from_millis(next_ms);
-                    continue;
-                }
-            };
+                    Ok(v) => v,
+                    Err(e) => {
+                        reconnect_attempt += 1;
+                        log_warn!(
+                            "gaussdb cdc connect failed, will retry (attempt {}): {}",
+                            reconnect_attempt,
+                            e
+                        );
+                        TimeUtil::sleep_millis(reconnect_backoff.as_millis() as u64).await;
+                        let next_ms =
+                            std::cmp::min(reconnect_backoff.as_millis() as u64 * 2, 10_000);
+                        reconnect_backoff = Duration::from_millis(next_ms);
+                        continue;
+                    }
+                };
 
             self.last_success_endpoint = Some(selected_endpoint);
             reconnect_attempt = 0;
@@ -169,7 +169,8 @@ impl GaussDBCdcExtractor {
             }
 
             let mut keepalive_ticker = if keepalive_interval_secs > 0 {
-                let mut ticker = tokio::time::interval(Duration::from_secs(keepalive_interval_secs));
+                let mut ticker =
+                    tokio::time::interval(Duration::from_secs(keepalive_interval_secs));
                 ticker.tick().await;
                 Some(ticker)
             } else {
@@ -189,7 +190,10 @@ impl GaussDBCdcExtractor {
                 )
                 .await;
             if let Err(e) = send_res {
-                log_warn!("gaussdb keepalive status update send failed, will reconnect: {}", e);
+                log_warn!(
+                    "gaussdb keepalive status update send failed, will reconnect: {}",
+                    e
+                );
                 last_receive_lsn = Some(last_receive_lsn_session);
                 continue;
             }
@@ -277,8 +281,9 @@ impl GaussDBCdcExtractor {
                                 &position,
                             );
 
-                            let data = std::str::from_utf8(data.as_ref())
-                                .with_context(|| format!("invalid utf8 wal data at lsn: {}", lsn))?;
+                            let data = std::str::from_utf8(data.as_ref()).with_context(|| {
+                                format!("invalid utf8 wal data at lsn: {}", lsn)
+                            })?;
 
                             for line in data.lines() {
                                 if line.trim().is_empty() {
@@ -291,10 +296,11 @@ impl GaussDBCdcExtractor {
                                                 DtData::Begin { .. } => {}
                                                 DtData::Dml { row_data } => {
                                                     if self.filter_row(&row_data) {
-                                                        self.base_extractor.record_extracted_metrics(
-                                                            1,
-                                                            row_data.data_size as u64,
-                                                        );
+                                                        self.base_extractor
+                                                            .record_extracted_metrics(
+                                                                1,
+                                                                row_data.data_size as u64,
+                                                            );
                                                         continue;
                                                     }
                                                     self.base_extractor
@@ -350,14 +356,16 @@ impl GaussDBCdcExtractor {
                                     "gaussdb keepalive reply requested: server_lsn={}",
                                     server_lsn
                                 );
-                                if let Err(e) = self.send_keepalive_status_update(
-                                    &mut stream,
-                                    start_lsn,
-                                    last_receive_lsn_session,
-                                    false,
-                                    server_clock_unit,
-                                )
-                                .await {
+                                if let Err(e) = self
+                                    .send_keepalive_status_update(
+                                        &mut stream,
+                                        start_lsn,
+                                        last_receive_lsn_session,
+                                        false,
+                                        server_clock_unit,
+                                    )
+                                    .await
+                                {
                                     log_warn!(
                                         "gaussdb keepalive reply send failed, will reconnect: {}",
                                         e
@@ -367,11 +375,7 @@ impl GaussDBCdcExtractor {
                             }
                         }
                         GaussDBReplicationMessage::Unknown { tag, len } => {
-                            log_info!(
-                                "received unknown replication data: tag={} len={}",
-                                tag,
-                                len
-                            );
+                            log_info!("received unknown replication data: tag={} len={}", tag, len);
                         }
                     },
                     Some(Err(e)) => {
@@ -450,7 +454,10 @@ impl GaussDBCdcExtractor {
             Position::PgCdc { lsn, .. } if !lsn.is_empty() => match lsn.parse::<PgLsn>() {
                 Ok(v) => v,
                 Err(_) => {
-                    log_warn!("invalid committed lsn in syncer: {}, will use start_lsn", lsn);
+                    log_warn!(
+                        "invalid committed lsn in syncer: {}, will use start_lsn",
+                        lsn
+                    );
                     start_lsn
                 }
             },

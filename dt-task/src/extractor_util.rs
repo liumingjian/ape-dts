@@ -460,6 +460,7 @@ impl ExtractorUtil {
                     PgStructExtractor::validate_db_batch_size(db_batch_size)?;
                 let extractor = PgStructExtractor {
                     conn_pool,
+                    db_type: config.extractor_basic.db_type.clone(),
                     schemas,
                     do_global_structs,
                     filter,

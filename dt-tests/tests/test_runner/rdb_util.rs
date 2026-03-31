@@ -107,9 +107,9 @@ impl RdbUtil {
             let res = timeout(Duration::from_secs(15), async {
                 let tb_meta = Self::get_tb_meta_pg(conn_pool, db_tb).await?;
                 let query_builder = RdbQueryBuilder::new_for_pg(&tb_meta, ignore_cols);
-                let cols_str = query_builder
-                    .build_extract_cols_str()
-                    .with_context(|| format!("build_extract_cols_str failed for tb: {:?}", db_tb))?;
+                let cols_str = query_builder.build_extract_cols_str().with_context(|| {
+                    format!("build_extract_cols_str failed for tb: {:?}", db_tb)
+                })?;
                 let sql = format!(
                     r#"SELECT {} FROM "{}"."{}" {} ORDER BY "{}" ASC"#,
                     cols_str, &db_tb.0, &db_tb.1, where_sql, &tb_meta.basic.cols[0],
@@ -130,10 +130,12 @@ impl RdbUtil {
             match res {
                 Ok(Ok(v)) => return Ok(v),
                 Ok(Err(e)) => last_err = Some(e),
-                Err(_) => last_err = Some(anyhow::anyhow!(
-                    "fetch_data_pg timed out for tb: {:?}",
-                    db_tb
-                )),
+                Err(_) => {
+                    last_err = Some(anyhow::anyhow!(
+                        "fetch_data_pg timed out for tb: {:?}",
+                        db_tb
+                    ))
+                }
             }
 
             let retryable = attempt < 3
@@ -148,8 +150,14 @@ impl RdbUtil {
             break;
         }
 
-        Err(last_err.unwrap_or_else(|| anyhow::anyhow!("fetch_data_pg failed")))
-            .with_context(|| format!("fetch_data_pg failed for tb: {:?}, where_sql: {}", db_tb, where_sql))
+        Err(last_err.unwrap_or_else(|| anyhow::anyhow!("fetch_data_pg failed"))).with_context(
+            || {
+                format!(
+                    "fetch_data_pg failed for tb: {:?}, where_sql: {}",
+                    db_tb, where_sql
+                )
+            },
+        )
     }
 
     pub async fn get_tb_meta_mysql(
@@ -195,10 +203,12 @@ impl RdbUtil {
             match res {
                 Ok(Ok(v)) => return Ok(v),
                 Ok(Err(e)) => last_err = Some(e),
-                Err(_) => last_err = Some(anyhow::anyhow!(
-                    "get_tb_meta_pg timed out for tb: {:?}",
-                    db_tb
-                )),
+                Err(_) => {
+                    last_err = Some(anyhow::anyhow!(
+                        "get_tb_meta_pg timed out for tb: {:?}",
+                        db_tb
+                    ))
+                }
             }
 
             let retryable = attempt < 3

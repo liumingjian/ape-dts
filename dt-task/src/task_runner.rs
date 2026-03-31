@@ -306,8 +306,10 @@ impl TaskRunner {
             )
             .await
         });
-        let mut global_abort_guard =
-            AbortGuard::new(global_shut_down.clone(), vec![global_monitor_task.abort_handle()]);
+        let mut global_abort_guard = AbortGuard::new(
+            global_shut_down.clone(),
+            vec![global_monitor_task.abort_handle()],
+        );
 
         let task_parallel_size = self.get_task_parallel_size();
         let semaphore = Arc::new(tokio::sync::Semaphore::new(task_parallel_size));

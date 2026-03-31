@@ -79,10 +79,54 @@ impl BaseStructSinker {
                 Ok(_) => Ok(()),
                 Err(error) => bail! {Error::SqlxError(error)},
             },
-            DBConnPool::PostgreSQL(pool) => match query(sql).execute(pool).await {
-                Ok(_) => Ok(()),
-                Err(error) => bail! {Error::SqlxError(error)},
-            },
+            DBConnPool::PostgreSQL(pool) => {
+                let normalized = Self::normalize_pg_ddl(sql);
+                match query(&normalized).execute(pool).await {
+                    Ok(_) => Ok(()),
+                    Err(error) => bail! {Error::SqlxError(error)},
+                }
+            }
         }
+    }
+
+    /// Normalize a few GaussDB-specific Postgres-compatible DDL variants so they can run on
+    /// upstream PostgreSQL as-is.
+    ///
+    /// Example: GaussDB `pg_indexes.indexdef` can include `USING ubtree ... WITH (storage_type=USTORE)`,
+    /// which PostgreSQL doesn't support. For cross-engine struct sync (GaussDB -> PG), convert them
+    /// into compatible forms.
+    fn normalize_pg_ddl(sql: &str) -> String {
+        // Fast path: only touch statements that look like GaussDB-only variants.
+        if !sql.contains("ubtree") && !sql.contains("USTORE") && !sql.contains("ustore") {
+            return sql.to_string();
+        }
+
+        let mut out = sql.to_string();
+
+        // `ubtree` is a GaussDB access method; map it to `btree` for upstream Postgres.
+        for pat in [
+            "USING ubtree",
+            "USING UBTREE",
+            "using ubtree",
+            "using UBTREE",
+        ] {
+            if out.contains(pat) {
+                out = out.replace(pat, "USING btree");
+            }
+        }
+
+        // Remove GaussDB ustore index parameters that upstream Postgres does not recognize.
+        for pat in [
+            "WITH (storage_type=USTORE)",
+            "WITH (storage_type=ustore)",
+            "with (storage_type=USTORE)",
+            "with (storage_type=ustore)",
+        ] {
+            if out.contains(pat) {
+                out = out.replace(pat, "");
+            }
+        }
+
+        out
     }
 }

@@ -6,8 +6,10 @@ use dt_connector::meta_fetcher::{
     mysql::mysql_struct_check_fetcher::MysqlStructCheckFetcher,
     pg::pg_struct_check_fetcher::{PgCheckTableInfo, PgStructCheckFetcher},
 };
+use regex::Regex;
 use std::collections::{HashMap, HashSet};
 
+use super::rdb_test_runner::PUBLIC;
 use super::{base_test_runner::BaseTestRunner, rdb_test_runner::RdbTestRunner};
 
 pub struct RdbStructTestRunner {
@@ -136,7 +138,7 @@ impl RdbStructTestRunner {
             Self::requires_pg_struct_normalization(&src_db_type, &dst_db_type);
         let src_check_fetcher = PgStructCheckFetcher {
             conn_pool: self.base.src_conn_pool_pg.as_mut().unwrap().clone(),
-            db_type: src_db_type,
+            db_type: src_db_type.clone(),
         };
         let dst_check_fetcher = PgStructCheckFetcher {
             conn_pool: self.base.dst_conn_pool_pg.as_mut().unwrap().clone(),
@@ -184,11 +186,151 @@ impl RdbStructTestRunner {
             );
         }
 
+        // Smoke-check: ensure the migrated objects are queryable on the destination side.
+        //
+        // 1) Tables are covered by `get_compare_db_tbs()` (CREATE TABLE in src_prepare/src_test).
+        // 2) Views/materialized views are not part of `\d` output, so we parse CREATE VIEW DDL
+        //    from src sqls and verify they are queryable on dst.
+        let mut dst_smoke_objects: HashSet<(String, String)> = HashSet::new();
+        for (schema, tb) in dst_db_tbs.iter() {
+            dst_smoke_objects.insert((schema.clone(), tb.clone()));
+        }
+        let src_views = Self::get_compare_pg_views_from_sqls(
+            &src_db_type,
+            &self.base.base.src_prepare_sqls,
+            &self.base.base.src_test_sqls,
+        );
+        for (schema, view) in src_views.iter() {
+            let (dst_schema, dst_view) = self.base.router.get_tb_map(schema, view);
+            dst_smoke_objects.insert((dst_schema.to_string(), dst_view.to_string()));
+        }
+
+        for (schema, tb) in dst_smoke_objects.iter() {
+            let schema_escaped = schema.replace('"', "\"\"");
+            let tb_escaped = tb.replace('"', "\"\"");
+            let sql = format!(
+                "SELECT 1 FROM \"{}\".\"{}\" LIMIT 1",
+                schema_escaped, tb_escaped
+            );
+            sqlx::query(&sql)
+                .execute(self.base.dst_conn_pool_pg.as_ref().unwrap())
+                .await?;
+        }
+
+        // Smoke-check routines (functions/procedures): ensure they exist and can be invoked.
+        let src_routines = Self::get_compare_pg_routines_from_sqls(
+            &src_db_type,
+            &self.base.base.src_prepare_sqls,
+            &self.base.base.src_test_sqls,
+        );
+        for (schema, routine, is_procedure) in src_routines.iter() {
+            let (dst_schema, dst_routine) = self.base.router.get_tb_map(schema, routine);
+            let schema_escaped = dst_schema.replace('"', "\"\"");
+            let routine_escaped = dst_routine.replace('"', "\"\"");
+            let sql = if *is_procedure {
+                format!("CALL \"{}\".\"{}\"()", schema_escaped, routine_escaped)
+            } else {
+                format!("SELECT \"{}\".\"{}\"()", schema_escaped, routine_escaped)
+            };
+            sqlx::query(&sql)
+                .execute(self.base.dst_conn_pool_pg.as_ref().unwrap())
+                .await?;
+        }
+
         println!(
             "summary: src tables: {:?}, dst tables: {:?}",
             src_db_tbs, dst_db_tbs
         );
         Ok(())
+    }
+
+    fn get_compare_pg_views_from_sqls(
+        db_type: &DbType,
+        src_prepare_sqls: &[String],
+        src_test_sqls: &[String],
+    ) -> Vec<(String, String)> {
+        let view_re = Regex::new(r"(?is)^\s*CREATE\s+(?:OR\s+REPLACE\s+)?VIEW\s+").unwrap();
+        let matview_re = Regex::new(r"(?is)^\s*CREATE\s+MATERIALIZED\s+VIEW\s+").unwrap();
+
+        let mut results = Vec::new();
+        for sql in src_prepare_sqls.iter().chain(src_test_sqls.iter()) {
+            let sql_trimmed = sql.trim();
+            if let Some(m) = view_re.find(sql_trimmed) {
+                let name = sql_trimmed[m.end()..]
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or("");
+                if name.is_empty() {
+                    continue;
+                }
+                let (mut schema, view) = RdbTestRunner::parse_full_tb_name(name, db_type);
+                if schema.is_empty() {
+                    schema = PUBLIC.to_string();
+                }
+                results.push((schema, view));
+                continue;
+            }
+            if let Some(m) = matview_re.find(sql_trimmed) {
+                let name = sql_trimmed[m.end()..]
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or("");
+                if name.is_empty() {
+                    continue;
+                }
+                let (mut schema, view) = RdbTestRunner::parse_full_tb_name(name, db_type);
+                if schema.is_empty() {
+                    schema = PUBLIC.to_string();
+                }
+                results.push((schema, view));
+                continue;
+            }
+        }
+
+        results
+    }
+
+    fn get_compare_pg_routines_from_sqls(
+        db_type: &DbType,
+        src_prepare_sqls: &[String],
+        src_test_sqls: &[String],
+    ) -> Vec<(String, String, bool)> {
+        let func_re =
+            Regex::new(r"(?is)^\s*CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+([^\s(]+)\s*\(").unwrap();
+        let proc_re =
+            Regex::new(r"(?is)^\s*CREATE\s+(?:OR\s+REPLACE\s+)?PROCEDURE\s+([^\s(]+)\s*\(")
+                .unwrap();
+
+        let mut results = Vec::new();
+        for sql in src_prepare_sqls.iter().chain(src_test_sqls.iter()) {
+            let sql_trimmed = sql.trim();
+            if let Some(cap) = func_re.captures(sql_trimmed) {
+                let name = cap.get(1).map(|m| m.as_str()).unwrap_or("");
+                if name.is_empty() {
+                    continue;
+                }
+                let (mut schema, routine) = RdbTestRunner::parse_full_tb_name(name, db_type);
+                if schema.is_empty() {
+                    schema = PUBLIC.to_string();
+                }
+                results.push((schema, routine, false));
+                continue;
+            }
+            if let Some(cap) = proc_re.captures(sql_trimmed) {
+                let name = cap.get(1).map(|m| m.as_str()).unwrap_or("");
+                if name.is_empty() {
+                    continue;
+                }
+                let (mut schema, routine) = RdbTestRunner::parse_full_tb_name(name, db_type);
+                if schema.is_empty() {
+                    schema = PUBLIC.to_string();
+                }
+                results.push((schema, routine, true));
+                continue;
+            }
+        }
+
+        results
     }
 
     fn requires_pg_struct_normalization(src_db_type: &DbType, dst_db_type: &DbType) -> bool {

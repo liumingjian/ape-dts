@@ -1,0 +1,5 @@
+id,task,status,completed_at,notes
+1,Confirm SHA256-only GaussDB environment + credentials,TODO,,BLOCKED
+2,Implement SHA256 handshake in rust-postgres fork,TODO,,BLOCKED
+3,Integrate fork + add tests + run full regression,TODO,,BLOCKED
+

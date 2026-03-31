@@ -71,28 +71,33 @@ impl GaussDBJsonDecoder {
         };
 
         let before = match row_type {
-            RowType::Update => match Self::build_col_map(&v, "old_keys_name", "old_keys_type", "old_keys_val") {
-                Ok(map) => Some(map),
-                Err(old_keys_err) => {
-                    // Some GaussDB output plugins may omit `old_keys_*` for UPDATE. Fall back to
-                    // using the `after` row as the WHERE key (works when primary keys do not change).
-                    if let Some(after) = after.as_ref() {
-                        Some(after.clone())
-                    } else {
-                        return Err(old_keys_err);
+            RowType::Update => {
+                match Self::build_col_map(&v, "old_keys_name", "old_keys_type", "old_keys_val") {
+                    Ok(map) => Some(map),
+                    Err(old_keys_err) => {
+                        // Some GaussDB output plugins may omit `old_keys_*` for UPDATE. Fall back to
+                        // using the `after` row as the WHERE key (works when primary keys do not change).
+                        if let Some(after) = after.as_ref() {
+                            Some(after.clone())
+                        } else {
+                            return Err(old_keys_err);
+                        }
                     }
                 }
-            },
-            RowType::Delete => match Self::build_col_map(&v, "old_keys_name", "old_keys_type", "old_keys_val") {
-                Ok(map) => Some(map),
-                Err(old_keys_err) => {
-                    // For DELETE, prefer old_keys_*, but fall back to columns_* if needed.
-                    match Self::build_col_map(&v, "columns_name", "columns_type", "columns_val") {
-                        Ok(map) => Some(map),
-                        Err(_) => return Err(old_keys_err),
+            }
+            RowType::Delete => {
+                match Self::build_col_map(&v, "old_keys_name", "old_keys_type", "old_keys_val") {
+                    Ok(map) => Some(map),
+                    Err(old_keys_err) => {
+                        // For DELETE, prefer old_keys_*, but fall back to columns_* if needed.
+                        match Self::build_col_map(&v, "columns_name", "columns_type", "columns_val")
+                        {
+                            Ok(map) => Some(map),
+                            Err(_) => return Err(old_keys_err),
+                        }
                     }
                 }
-            },
+            }
             RowType::Insert => None,
         };
 
@@ -106,7 +111,14 @@ impl GaussDBJsonDecoder {
             return true;
         }
         // Some plugins emit DDL/query payload in these fields.
-        let ddlish_keys = ["sql", "query", "ddl", "statement", "object_type", "objectType"];
+        let ddlish_keys = [
+            "sql",
+            "query",
+            "ddl",
+            "statement",
+            "object_type",
+            "objectType",
+        ];
         ddlish_keys.iter().any(|k| v.get(*k).is_some())
     }
 

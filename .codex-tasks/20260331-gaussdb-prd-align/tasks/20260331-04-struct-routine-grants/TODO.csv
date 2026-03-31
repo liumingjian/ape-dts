@@ -1,0 +1,7 @@
+id,task,status,completed_at,notes
+1,Create taskmaster artifacts (SPEC/TODO/PROGRESS/raw),DONE,2026-03-31,
+2,Extend PgStructFetcher privileges to include routine grants (pg_proc.proacl + aclexplode),DONE,2026-03-31,
+3,Generate GRANT SQL for function/procedure with identity args + grant option,DONE,2026-03-31,
+4,Add unit tests for routine grants SQL generation,DONE,2026-03-31,
+5,Run validations and record evidence,DONE,2026-03-31,cargo test -p dt-common -p dt-connector
+6,Update tracker + epic status,DONE,2026-03-31 21:53 +0800,

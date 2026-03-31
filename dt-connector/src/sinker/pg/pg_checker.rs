@@ -80,6 +80,7 @@ impl Checker for PgChecker {
 
         let mut struct_fetcher = PgStructFetcher {
             conn_pool: self.conn_pool.to_owned(),
+            db_type: dt_common::config::config_enums::DbType::Pg,
             schemas: HashSet::from([schema.clone()]),
             filter: None,
         };

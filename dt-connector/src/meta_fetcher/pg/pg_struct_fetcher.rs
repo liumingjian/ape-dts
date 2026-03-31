@@ -4,8 +4,10 @@ use anyhow::bail;
 use dt_common::meta::struct_meta::{
     statement::{
         pg_create_rbac_statement::PgCreateRbacStatement,
+        pg_create_routine_statement::{PgCreateRoutineStatement, PgRoutineKind},
         pg_create_schema_statement::PgCreateSchemaStatement,
         pg_create_table_statement::PgCreateTableStatement,
+        pg_create_view_statement::{PgCreateViewStatement, PgViewKind},
     },
     structure::{
         column::{Column, ColumnDefault},
@@ -33,6 +35,7 @@ use super::pg_struct_check_fetcher::PgStructCheckFetcher;
 
 pub struct PgStructFetcher {
     pub conn_pool: Pool<Postgres>,
+    pub db_type: DbType,
     pub schemas: HashSet<String>,
     pub filter: Option<RdbFilter>,
 }
@@ -82,6 +85,256 @@ impl PgStructFetcher {
             };
             results.push(statement);
         }
+        Ok(results)
+    }
+
+    pub async fn get_create_routine_statements(
+        &mut self,
+        sch: &str,
+        routine: &str,
+    ) -> anyhow::Result<Vec<PgCreateRoutineStatement>> {
+        let mut results = Vec::new();
+
+        let filter = if !sch.is_empty() {
+            if !self.schemas.contains(sch) {
+                return Ok(results);
+            }
+            if !routine.is_empty() {
+                format!("n.nspname='{}' AND p.proname = '{}'", sch, routine)
+            } else {
+                format!("n.nspname = '{}'", sch)
+            }
+        } else if !self.schemas.is_empty() {
+            format!("n.nspname IN ({})", self.get_schemas_str())
+        } else {
+            return Ok(results);
+        };
+
+        // GaussDB returns `pg_get_functiondef(oid)` as a record:
+        // (headerlines int, definition text). Use `.definition` to get the text definition.
+        let create_sql_expr = if matches!(self.db_type, DbType::GaussDBPg) {
+            "(pg_get_functiondef(p.oid)).definition"
+        } else {
+            "pg_get_functiondef(p.oid)"
+        };
+
+        let base_sql = format!(
+            "SELECT n.nspname AS schema_name,
+                    p.proname AS routine_name,
+                    l.lanname AS language,
+                    {} AS create_sql
+             FROM pg_proc p
+             JOIN pg_namespace n ON n.oid = p.pronamespace
+             JOIN pg_language l ON l.oid = p.prolang
+             WHERE {}",
+            create_sql_expr, filter
+        );
+
+        // Prefer `prokind` (PG >= 11) to distinguish function vs procedure. Fallback when missing.
+        let sql_with_prokind = format!(
+            "SELECT n.nspname AS schema_name,
+                    p.proname AS routine_name,
+                    l.lanname AS language,
+                    p.prokind::text AS prokind,
+                    {} AS create_sql
+             FROM pg_proc p
+             JOIN pg_namespace n ON n.oid = p.pronamespace
+             JOIN pg_language l ON l.oid = p.prolang
+             WHERE {}",
+            create_sql_expr, filter
+        );
+
+        let with_prokind_res: anyhow::Result<()> = async {
+            let mut rows = sqlx::query(&sql_with_prokind).fetch(&self.conn_pool);
+            while let Some(row) = rows.try_next().await? {
+                let schema_name = Self::get_str_with_null(&row, "schema_name")?;
+                let routine_name = Self::get_str_with_null(&row, "routine_name")?;
+                let language = Self::get_str_with_null(&row, "language")?;
+                let prokind = Self::get_str_with_null(&row, "prokind")?;
+                let create_sql = Self::get_str_with_null(&row, "create_sql")?;
+
+                if self.filter_tb(&schema_name, &routine_name) {
+                    continue;
+                }
+
+                let lang_lower = language.to_lowercase();
+                if lang_lower != "plpgsql" && lang_lower != "sql" {
+                    log_warn!(
+                        "skip routine (unsupported language): {}.{}, language={}",
+                        schema_name,
+                        routine_name,
+                        language
+                    );
+                    continue;
+                }
+
+                let kind = match prokind.as_str() {
+                    "p" => PgRoutineKind::Procedure,
+                    "f" => PgRoutineKind::Function,
+                    // skip aggregates/window/other kinds
+                    _ => {
+                        log_warn!(
+                            "skip routine (unsupported prokind): {}.{}, prokind={}",
+                            schema_name,
+                            routine_name,
+                            prokind
+                        );
+                        continue;
+                    }
+                };
+
+                results.push(PgCreateRoutineStatement {
+                    schema_name,
+                    routine_name,
+                    kind,
+                    create_sql,
+                });
+            }
+            Ok(())
+        }
+        .await;
+
+        match with_prokind_res {
+            Ok(()) => Ok(results),
+            Err(e) => {
+                let err_str = e.to_string().to_lowercase();
+                if err_str.contains("prokind") {
+                    log_warn!(
+                        "routine extraction fallback (pg_proc.prokind unavailable), error: {}",
+                        e
+                    );
+                    results.clear();
+                    let mut rows = sqlx::query(&base_sql).fetch(&self.conn_pool);
+                    while let Some(row) = rows.try_next().await? {
+                        let schema_name = Self::get_str_with_null(&row, "schema_name")?;
+                        let routine_name = Self::get_str_with_null(&row, "routine_name")?;
+                        let language = Self::get_str_with_null(&row, "language")?;
+                        let create_sql = Self::get_str_with_null(&row, "create_sql")?;
+
+                        if self.filter_tb(&schema_name, &routine_name) {
+                            continue;
+                        }
+
+                        let lang_lower = language.to_lowercase();
+                        if lang_lower != "plpgsql" && lang_lower != "sql" {
+                            log_warn!(
+                                "skip routine (unsupported language): {}.{}, language={}",
+                                schema_name,
+                                routine_name,
+                                language
+                            );
+                            continue;
+                        }
+
+                        // If `prokind` is unavailable, infer routine kind from the CREATE header.
+                        let header = create_sql.trim_start().to_uppercase();
+                        let kind = if header.starts_with("CREATE OR REPLACE PROCEDURE")
+                            || header.starts_with("CREATE PROCEDURE")
+                        {
+                            PgRoutineKind::Procedure
+                        } else {
+                            PgRoutineKind::Function
+                        };
+
+                        results.push(PgCreateRoutineStatement {
+                            schema_name,
+                            routine_name,
+                            kind,
+                            create_sql,
+                        });
+                    }
+                    Ok(results)
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    }
+
+    pub async fn get_create_view_statements(
+        &mut self,
+        sch: &str,
+        view: &str,
+    ) -> anyhow::Result<Vec<PgCreateViewStatement>> {
+        let mut results = Vec::new();
+
+        let filter = if !sch.is_empty() {
+            if !self.schemas.contains(sch) {
+                return Ok(results);
+            }
+            if !view.is_empty() {
+                format!("schemaname='{}' AND viewname = '{}'", sch, view)
+            } else {
+                format!("schemaname = '{}'", sch)
+            }
+        } else if !self.schemas.is_empty() {
+            format!("schemaname IN ({})", self.get_schemas_str())
+        } else {
+            return Ok(results);
+        };
+
+        // ordinary views
+        let sql = format!(
+            "SELECT schemaname, viewname, definition
+             FROM pg_views
+             WHERE {}",
+            filter
+        );
+        let mut rows = sqlx::query(&sql).fetch(&self.conn_pool);
+        while let Some(row) = rows.try_next().await? {
+            let schema_name = Self::get_str_with_null(&row, "schemaname")?;
+            let view_name = Self::get_str_with_null(&row, "viewname")?;
+            let definition = Self::get_str_with_null(&row, "definition")?;
+            if self.filter_tb(&schema_name, &view_name) {
+                continue;
+            }
+            results.push(PgCreateViewStatement {
+                schema_name,
+                view_name,
+                kind: PgViewKind::View,
+                definition,
+            });
+        }
+
+        // materialized views
+        let sql = format!(
+            "SELECT schemaname, matviewname AS viewname, definition
+             FROM pg_matviews
+             WHERE {}",
+            filter
+        );
+        let matview_res: anyhow::Result<()> = async {
+            let mut rows = sqlx::query(&sql).fetch(&self.conn_pool);
+            while let Some(row) = rows.try_next().await? {
+                let schema_name = Self::get_str_with_null(&row, "schemaname")?;
+                let view_name = Self::get_str_with_null(&row, "viewname")?;
+                let definition = Self::get_str_with_null(&row, "definition")?;
+                if self.filter_tb(&schema_name, &view_name) {
+                    continue;
+                }
+                results.push(PgCreateViewStatement {
+                    schema_name,
+                    view_name,
+                    kind: PgViewKind::MaterializedView,
+                    definition,
+                });
+            }
+            Ok(())
+        }
+        .await;
+
+        if let Err(e) = matview_res {
+            let err_str = e.to_string().to_lowercase();
+            if err_str.contains("pg_matviews") && err_str.contains("does not exist") {
+                // Some GaussDB deployments (ustore enabled) do not support materialized views and
+                // don't expose `pg_matviews`. Treat as "no matviews" instead of failing the whole
+                // struct extraction.
+                log_warn!("skip materialized views (pg_matviews missing): {}", e);
+            } else {
+                return Err(e);
+            }
+        }
+
         Ok(results)
     }
 
@@ -858,8 +1111,172 @@ impl PgStructFetcher {
         results.extend(self.get_schema_privilege().await?);
         results.extend(self.get_table_privilege().await?);
         results.extend(self.get_column_privilege().await?);
+        results.extend(self.get_routine_privilege().await?);
         results.extend(self.get_sequence_privilege().await?);
         Ok(results)
+    }
+
+    async fn get_routine_privilege(&mut self) -> anyhow::Result<Vec<PgPrivilege>> {
+        // Prefer `prokind` (PG >= 11) to distinguish function vs procedure. Fallback when missing.
+        let sql_with_prokind = "SELECT
+                n.nspname AS schema_name,
+                p.proname AS routine_name,
+                p.prokind::text AS prokind,
+                pg_get_function_identity_arguments(p.oid) AS identity_args,
+                acl.grantee::regrole::text AS grantee,
+                string_agg(acl.privilege_type, ',') AS privileges,
+                bool_or(acl.is_grantable) AS is_grantable
+            FROM
+                pg_proc p
+                JOIN pg_namespace n ON n.oid = p.pronamespace
+                JOIN LATERAL aclexplode(p.proacl) AS acl ON true
+            WHERE
+                p.proacl IS NOT NULL AND
+                acl.grantee != 0 AND
+                acl.grantee::regrole::text NOT LIKE 'pg_%' AND
+                acl.grantee::regrole::text NOT IN ('postgres', 'PUBLIC')
+            GROUP BY
+                n.nspname,
+                p.proname,
+                p.prokind,
+                pg_get_function_identity_arguments(p.oid),
+                acl.grantee::regrole::text";
+
+        let sql_without_prokind = "SELECT
+                n.nspname AS schema_name,
+                p.proname AS routine_name,
+                pg_get_function_identity_arguments(p.oid) AS identity_args,
+                acl.grantee::regrole::text AS grantee,
+                string_agg(acl.privilege_type, ',') AS privileges,
+                bool_or(acl.is_grantable) AS is_grantable,
+                pg_get_functiondef(p.oid) AS create_sql
+            FROM
+                pg_proc p
+                JOIN pg_namespace n ON n.oid = p.pronamespace
+                JOIN LATERAL aclexplode(p.proacl) AS acl ON true
+            WHERE
+                p.proacl IS NOT NULL AND
+                acl.grantee != 0 AND
+                acl.grantee::regrole::text NOT LIKE 'pg_%' AND
+                acl.grantee::regrole::text NOT IN ('postgres', 'PUBLIC')
+            GROUP BY
+                n.nspname,
+                p.proname,
+                pg_get_function_identity_arguments(p.oid),
+                acl.grantee::regrole::text,
+                pg_get_functiondef(p.oid)";
+
+        let mut results = Vec::new();
+        let with_prokind_res: anyhow::Result<()> = async {
+            let mut rows = sqlx::query(sql_with_prokind).fetch(&self.conn_pool);
+            while let Some(row) = rows.try_next().await? {
+                let schema_name = Self::get_str_with_null(&row, "schema_name")?;
+                let routine_name = Self::get_str_with_null(&row, "routine_name")?;
+                let prokind = Self::get_str_with_null(&row, "prokind")?;
+                let identity_args = Self::get_str_with_null(&row, "identity_args")?;
+                let grantee = Self::get_str_with_null(&row, "grantee")?;
+                let privileges = Self::get_str_with_null(&row, "privileges")?;
+                let is_grantable = row.try_get::<bool, _>("is_grantable").unwrap_or(false);
+
+                if self.filter_tb(&schema_name, &routine_name) {
+                    continue;
+                }
+
+                let obj_kind = match prokind.as_str() {
+                    "p" => "PROCEDURE",
+                    _ => "FUNCTION",
+                };
+                let grant_command = Self::build_routine_grant_sql(
+                    &privileges,
+                    obj_kind,
+                    &schema_name,
+                    &routine_name,
+                    &identity_args,
+                    &grantee,
+                    is_grantable,
+                );
+                results.push(PgPrivilege {
+                    origin: grant_command,
+                });
+            }
+            Ok(())
+        }
+        .await;
+
+        match with_prokind_res {
+            Ok(()) => Ok(results),
+            Err(e) => {
+                let err_str = e.to_string().to_lowercase();
+                if err_str.contains("prokind") {
+                    log_warn!(
+                        "routine grants fallback (pg_proc.prokind unavailable), error: {}",
+                        e
+                    );
+                    results.clear();
+                    let mut rows = sqlx::query(sql_without_prokind).fetch(&self.conn_pool);
+                    while let Some(row) = rows.try_next().await? {
+                        let schema_name = Self::get_str_with_null(&row, "schema_name")?;
+                        let routine_name = Self::get_str_with_null(&row, "routine_name")?;
+                        let identity_args = Self::get_str_with_null(&row, "identity_args")?;
+                        let grantee = Self::get_str_with_null(&row, "grantee")?;
+                        let privileges = Self::get_str_with_null(&row, "privileges")?;
+                        let is_grantable = row.try_get::<bool, _>("is_grantable").unwrap_or(false);
+                        let create_sql = Self::get_str_with_null(&row, "create_sql")?;
+
+                        if self.filter_tb(&schema_name, &routine_name) {
+                            continue;
+                        }
+
+                        let obj_kind = Self::infer_routine_obj_kind_from_create_sql(&create_sql);
+                        let grant_command = Self::build_routine_grant_sql(
+                            &privileges,
+                            obj_kind,
+                            &schema_name,
+                            &routine_name,
+                            &identity_args,
+                            &grantee,
+                            is_grantable,
+                        );
+                        results.push(PgPrivilege {
+                            origin: grant_command,
+                        });
+                    }
+                    Ok(results)
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    }
+
+    fn infer_routine_obj_kind_from_create_sql(create_sql: &str) -> &'static str {
+        let header = create_sql.trim_start().to_uppercase();
+        if header.starts_with("CREATE OR REPLACE PROCEDURE")
+            || header.starts_with("CREATE PROCEDURE")
+        {
+            return "PROCEDURE";
+        }
+        "FUNCTION"
+    }
+
+    fn build_routine_grant_sql(
+        privileges: &str,
+        obj_kind: &str,
+        schema_name: &str,
+        routine_name: &str,
+        identity_args: &str,
+        grantee: &str,
+        is_grantable: bool,
+    ) -> String {
+        let grant_option = if is_grantable {
+            " WITH GRANT OPTION"
+        } else {
+            ""
+        };
+        format!(
+            "GRANT {} ON {} \"{}\".\"{}\"({}) TO \"{}\"{}",
+            privileges, obj_kind, schema_name, routine_name, identity_args, grantee, grant_option
+        )
     }
 
     async fn get_schema_privilege(&mut self) -> anyhow::Result<Vec<PgPrivilege>> {
@@ -1189,15 +1606,15 @@ impl PgStructFetcher {
         (String::new(), String::new())
     }
 
-    fn filter_tb(&mut self, schema: &str, tb: &str) -> bool {
-        if let Some(filter) = &mut self.filter {
+    fn filter_tb(&self, schema: &str, tb: &str) -> bool {
+        if let Some(filter) = &self.filter {
             return filter.filter_tb(schema, tb);
         }
         false
     }
 
-    fn filter_schema(&mut self, schema: &str) -> bool {
-        if let Some(filter) = &mut self.filter {
+    fn filter_schema(&self, schema: &str) -> bool {
+        if let Some(filter) = &self.filter {
             return filter.filter_schema(schema);
         }
         false
@@ -1274,5 +1691,49 @@ mod tests {
                 PgStructFetcher::get_sequence_name_by_default_value(default_values[i]);
             assert_eq!((schema.as_str(), sequence.as_str()), expect_sequences[i]);
         }
+    }
+
+    #[test]
+    fn build_routine_grant_sql_handles_empty_args() {
+        let sql = PgStructFetcher::build_routine_grant_sql(
+            "EXECUTE", "FUNCTION", "public", "f1", "", "role1", false,
+        );
+        assert_eq!(
+            sql,
+            "GRANT EXECUTE ON FUNCTION \"public\".\"f1\"() TO \"role1\""
+        );
+    }
+
+    #[test]
+    fn build_routine_grant_sql_appends_grant_option() {
+        let sql = PgStructFetcher::build_routine_grant_sql(
+            "EXECUTE",
+            "PROCEDURE",
+            "public",
+            "p1",
+            "integer, text",
+            "role1",
+            true,
+        );
+        assert_eq!(
+            sql,
+            "GRANT EXECUTE ON PROCEDURE \"public\".\"p1\"(integer, text) TO \"role1\" WITH GRANT OPTION"
+        );
+    }
+
+    #[test]
+    fn infer_routine_obj_kind_from_create_sql_works() {
+        assert_eq!(
+            PgStructFetcher::infer_routine_obj_kind_from_create_sql(
+                "CREATE OR REPLACE PROCEDURE public.p1() LANGUAGE plpgsql AS $$ BEGIN END; $$;"
+            ),
+            "PROCEDURE"
+        );
+        assert_eq!(
+            PgStructFetcher::infer_routine_obj_kind_from_create_sql(
+                "CREATE OR REPLACE FUNCTION public.f1() RETURNS int LANGUAGE sql AS $$ SELECT 1 $$;"
+            ),
+            "FUNCTION"
+        );
     }
 }

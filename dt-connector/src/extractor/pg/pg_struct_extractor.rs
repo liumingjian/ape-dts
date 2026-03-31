@@ -20,6 +20,7 @@ use dt_common::{
 pub struct PgStructExtractor {
     pub base_extractor: BaseExtractor,
     pub conn_pool: Pool<Postgres>,
+    pub db_type: dt_common::config::config_enums::DbType,
     pub schemas: Vec<String>,
     pub do_global_structs: bool,
     pub filter: RdbFilter,
@@ -61,6 +62,7 @@ impl PgStructExtractor {
     ) -> anyhow::Result<()> {
         let mut pg_fetcher = PgStructFetcher {
             conn_pool: self.conn_pool.to_owned(),
+            db_type: self.db_type.clone(),
             schemas,
             filter: Some(self.filter.to_owned()),
         };
@@ -74,6 +76,18 @@ impl PgStructExtractor {
         // tables
         for table_statement in pg_fetcher.get_create_table_statements("", "").await? {
             self.push_dt_data(StructStatement::PgCreateTable(table_statement))
+                .await?;
+        }
+
+        // routines (functions/procedures)
+        for routine_statement in pg_fetcher.get_create_routine_statements("", "").await? {
+            self.push_dt_data(StructStatement::PgCreateRoutine(routine_statement))
+                .await?;
+        }
+
+        // views (including materialized views)
+        for view_statement in pg_fetcher.get_create_view_statements("", "").await? {
+            self.push_dt_data(StructStatement::PgCreateView(view_statement))
                 .await?;
         }
 

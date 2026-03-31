@@ -375,10 +375,7 @@ impl RdbTestRunner {
             }
 
             let mut candidate_urls = vec![u.to_string()];
-            if !candidate_urls[0]
-                .to_lowercase()
-                .contains("sslmode=disable")
-            {
+            if !candidate_urls[0].to_lowercase().contains("sslmode=disable") {
                 let mut no_ssl = u.clone();
                 let other_pairs: Vec<(String, String)> = no_ssl
                     .query_pairs()
@@ -451,17 +448,17 @@ impl RdbTestRunner {
                         };
                     let (in_recovery, server_addr, transaction_ro, default_transaction_ro) =
                         match probe_res {
-                        Ok(v) => v,
-                        Err(e) => {
-                            println!(
-                                "skip gaussdb candidate (probe failed#{}) : {}, error: {}",
-                                probe_idx, url, e
-                            );
-                            pool.close().await;
-                            all_rw = false;
-                            break;
-                        }
-                    };
+                            Ok(v) => v,
+                            Err(e) => {
+                                println!(
+                                    "skip gaussdb candidate (probe failed#{}) : {}, error: {}",
+                                    probe_idx, url, e
+                                );
+                                pool.close().await;
+                                all_rw = false;
+                                break;
+                            }
+                        };
                     // `pg_is_in_recovery()` is not a reliable indicator for GaussDB coordinators in
                     // all deployments (it can be `true` while the node is still writable, or vice
                     // versa). We still log it for visibility, but rely on the DDL+DML probe below
@@ -472,7 +469,9 @@ impl RdbTestRunner {
                             url
                         );
                     }
-                    let is_on = |v: &Option<String>| v.as_deref().is_some_and(|s| s.eq_ignore_ascii_case("on"));
+                    let is_on = |v: &Option<String>| {
+                        v.as_deref().is_some_and(|s| s.eq_ignore_ascii_case("on"))
+                    };
                     if is_on(&transaction_ro) || is_on(&default_transaction_ro) {
                         println!(
                             "skip gaussdb candidate (read-only): {} (transaction_read_only={:?}, default_transaction_read_only={:?})",
@@ -509,7 +508,9 @@ impl RdbTestRunner {
                         };
                         let rollback_res = sqlx::query("ROLLBACK").execute(&pool).await;
                         match create_res {
-                            Ok(_) => match insert_res.expect("insert_res must exist when create_res is Ok") {
+                            Ok(_) => match insert_res
+                                .expect("insert_res must exist when create_res is Ok")
+                            {
                                 Ok(_) => rollback_res.map(|_| ()),
                                 Err(e) => {
                                     let _ = rollback_res;

@@ -99,23 +99,15 @@ impl Parallelizer for RedisParallelizer {
             node_data_items[sinker_index].push(dt_item);
         }
 
-        let mut futures = Vec::new();
+        let mut join_set = tokio::task::JoinSet::new();
         for sinker in sinkers.iter().take(node_data_items.len()) {
             let node_data = node_data_items.remove(0);
             let sinker = sinker.clone();
-            let future = tokio::spawn(async move {
-                sinker
-                    .lock()
-                    .await
-                    .sink_raw(node_data, false)
-                    .await
-                    .unwrap()
-            });
-            futures.push(future);
+            join_set.spawn(async move { sinker.lock().await.sink_raw(node_data, false).await });
         }
 
-        for future in futures {
-            future.await.unwrap();
+        while let Some(result) = join_set.join_next().await {
+            result??;
         }
 
         Ok(data_size)
