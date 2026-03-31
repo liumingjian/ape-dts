@@ -61,6 +61,61 @@ parse_ini_value() {
   grep -E "^[[:space:]]*${key}[[:space:]]*=" "$file" 2>/dev/null | head -n 1 | sed -E "s/^[^=]*=[[:space:]]*//"
 }
 
+parse_pg_url_parts() {
+  local url="$1"
+  python3 - "$url" <<'PY'
+import sys
+from urllib.parse import urlparse, unquote
+
+u = sys.argv[1]
+p = urlparse(u)
+user = unquote(p.username or "")
+pwd = unquote(p.password or "")
+host = p.hostname or ""
+port = p.port or 5432
+db = (p.path or "").lstrip("/") or "postgres"
+print("\t".join([user, pwd, host, str(port), db]))
+PY
+}
+
+wait_for_log() {
+  local file="$1"
+  local pattern="$2"
+  local timeout_secs="${3:-60}"
+  for _ in $(seq 1 "$timeout_secs"); do
+    if [[ -f "$file" ]] && grep -Fq "$pattern" "$file" 2>/dev/null; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+wait_for_replication_backend_pid() {
+  local timeout_secs="${1:-60}"
+  local pid=""
+  for _ in $(seq 1 "$timeout_secs"); do
+    pid="$(psql_src -tA -c "SELECT pid FROM pg_stat_activity WHERE application_name = 'gaussdb-replication' ORDER BY backend_start DESC LIMIT 1;" 2>/dev/null | tr -d '[:space:]' || true)"
+    if [[ -n "$pid" ]]; then
+      echo -n "$pid"
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+terminate_replication_backend() {
+  local pid="$1"
+  log "terminate gaussdb replication backend to force reconnect (pid=$pid)"
+  # best-effort: may require elevated privileges on some environments.
+  if ! psql_src -c "SELECT pg_terminate_backend(${pid});" >/dev/null 2>&1; then
+    log "WARN: failed to terminate replication backend (pid=$pid); sticky reconnect test will be skipped"
+    return 1
+  fi
+  return 0
+}
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO_ROOT"
 
@@ -68,6 +123,9 @@ cd "$REPO_ROOT"
 : "${TEST_SCHEMA:=ape_dts_manual}"
 : "${TEST_TABLE:=gaussdb_to_pg_cdc_basic}"
 
+: "${TEST_STICKY_RECONNECT:=0}"
+
+: "${SRC_GAUSS_URL:=}"
 : "${SRC_GAUSS_PRIMARY_HOSTPORT:=10.250.0.51:8000}"
 : "${SRC_GAUSS_DB:=postgres}"
 
@@ -108,6 +166,22 @@ DST_PG_PSQL_URL="${DST_PG_PSQL_URL:-${DST_PG_URL%%\?*}}"
 SRC_GAUSS_PSQL_URL="${SRC_GAUSS_PSQL_URL:-postgres://${SRC_GAUSS_PRIMARY_HOSTPORT}/${SRC_GAUSS_DB}}"
 
 # Credentials: prefer explicit env, then fall back to .local/manual/gaussdb_to_pg_cdc.ini (local-only).
+if [[ ( -z "${SRC_GAUSS_USERNAME:-}" || -z "${SRC_GAUSS_PASSWORD:-}" ) && -n "${SRC_GAUSS_URL:-}" ]]; then
+  require_cmd python3
+  parsed="$(parse_pg_url_parts "$SRC_GAUSS_URL")"
+  IFS=$'\t' read -r parsed_user parsed_pwd parsed_host parsed_port parsed_db <<<"$parsed"
+
+  SRC_GAUSS_USERNAME="${SRC_GAUSS_USERNAME:-$parsed_user}"
+  SRC_GAUSS_PASSWORD="${SRC_GAUSS_PASSWORD:-$parsed_pwd}"
+  parsed_hostport="${parsed_host}:${parsed_port}"
+  # If the caller didn't override the hostport/db explicitly, prefer parsing them from SRC_GAUSS_URL.
+  if [[ -z "${SRC_GAUSS_PRIMARY_HOSTPORT:-}" || "${SRC_GAUSS_PRIMARY_HOSTPORT}" == "10.250.0.51:8000" ]]; then
+    SRC_GAUSS_PRIMARY_HOSTPORT="$parsed_hostport"
+  fi
+  if [[ -z "${SRC_GAUSS_DB:-}" || "${SRC_GAUSS_DB}" == "postgres" ]]; then
+    SRC_GAUSS_DB="$parsed_db"
+  fi
+fi
 if [[ -z "${SRC_GAUSS_USERNAME:-}" || -z "${SRC_GAUSS_PASSWORD:-}" ]]; then
   local_ini="$REPO_ROOT/.local/manual/gaussdb_to_pg_cdc.ini"
   if [[ -f "$local_ini" ]]; then
@@ -328,6 +402,45 @@ assert_destination() {
   die "destination did not reach expected state within timeout"
 }
 
+assert_e2e_logs() {
+  local default_log="$LOG_DIR/default.log"
+  if [[ ! -f "$default_log" ]]; then
+    log "WARN: default.log not found under ${LOG_DIR}, skip log assertions"
+    return 0
+  fi
+
+  log "assert dt-main logs (candidate-first + HA port + NoTLS)"
+  grep -Fq "gaussdb cdc endpoint selection: prefer_candidates=true" "$default_log" \
+    || die "missing evidence: prefer_candidates=true (candidate-first selection)"
+  grep -Fq "gaussdb replication connection starts (ssl=off" "$default_log" \
+    || die "missing evidence: replication NoTLS (ssl=off)"
+
+  # Heuristic: HA port is usually sql_port+1 (e.g. 8001). This is the key behavior.
+  grep -Fq "port=8001" "$default_log" \
+    || log "WARN: did not find port=8001 in default.log (verify HA port manually if sql_port is not 8000)"
+}
+
+assert_sticky_reconnect_logs() {
+  local default_log="$LOG_DIR/default.log"
+  if [[ ! -f "$default_log" ]]; then
+    log "WARN: default.log not found under ${LOG_DIR}, skip sticky reconnect log assertions"
+    return 0
+  fi
+
+  log "waiting for reconnect evidence (sticky last_success + probe order)"
+  for _ in $(seq 1 60); do
+    local last_success
+    last_success="$(grep -F "gaussdb cdc endpoint selection:" "$default_log" | tail -n 1 | sed -E 's/.*last_success=([^ ]+).*/\1/' || true)"
+    if [[ -n "$last_success" && "$last_success" != "none" ]]; then
+      grep -Fq "gaussdb cdc probe order: ${last_success}," "$default_log" \
+        || die "sticky reconnect: probe order does not start with last_success=${last_success}"
+      return 0
+    fi
+    sleep 1
+  done
+  die "sticky reconnect: expected last_success to be set after reconnect, but it stayed 'none'"
+}
+
 main() {
   require_cmd psql
 
@@ -353,9 +466,29 @@ main() {
   start_dt_main "$config_path"
   wait_for_slot
 
+  # Optional: terminate replication backend to ensure reconnect uses sticky endpoint selection.
+  if [[ "$TEST_STICKY_RECONNECT" == "1" ]]; then
+    local default_log="$LOG_DIR/default.log"
+    log "sticky reconnect enabled: waiting for replication to start..."
+    if ! wait_for_log "$default_log" "gaussdb cdc replication streaming started:" 90; then
+      log "WARN: could not confirm streaming start in default.log within 90s; will still try to find replication backend pid"
+    fi
+
+    local pid=""
+    if pid="$(wait_for_replication_backend_pid 60)"; then
+      if terminate_replication_backend "$pid"; then
+        # Wait for reconnect to happen and then verify logs reflect sticky endpoint.
+        assert_sticky_reconnect_logs
+      fi
+    else
+      log "WARN: could not find replication backend pid; sticky reconnect test will be skipped"
+    fi
+  fi
+
   run_source_dml
   assert_destination
 
+  assert_e2e_logs
   log "e2e succeeded"
 }
 

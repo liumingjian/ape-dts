@@ -1,0 +1,14 @@
+2026-03-31 08:00:12 - gaussdb cdc endpoint selection: prefer_candidates=true candidates=3 base=10.250.0.51:8000 last_success=none
+2026-03-31 08:00:12 - gaussdb cdc probe order: 10.250.0.52:8000,10.250.0.30:8000,10.250.0.51:8000
+...
+2026-03-31 08:00:15 - gaussdb replication connection starts (ssl=off, host=10.250.0.51, port=8001)
+2026-03-31 08:00:15 - gaussdb cdc replication streaming started: 10.250.0.51:8001 (sql_port=8000)
+...
+2026-03-31 08:00:19 - gaussdb replication stream closed, will reconnect: ... terminating connection due to administrator command
+...
+2026-03-31 08:00:19 - gaussdb cdc endpoint selection: prefer_candidates=true candidates=3 base=10.250.0.51:8000 last_success=10.250.0.51:8000
+2026-03-31 08:00:19 - gaussdb cdc probe order: 10.250.0.51:8000,10.250.0.52:8000,10.250.0.30:8000
+...
+2026-03-31 08:00:21 - gaussdb replication connection starts (ssl=off, host=10.250.0.51, port=8001)
+2026-03-31 08:00:21 - gaussdb cdc replication streaming started: 10.250.0.51:8001 (sql_port=8000)
+
