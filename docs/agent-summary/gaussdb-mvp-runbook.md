@@ -71,9 +71,16 @@ export gaussdb_pg_candidate_hosts="10.0.0.1:8000,10.0.0.2:8000,10.0.0.3:8000"
 
 说明：
 
-- 会对候选逐个探测 `pg_is_in_recovery=false` 并选择 read-write 端点；
+- 一旦设置候选列表，将**优先使用候选**逐个探测 `pg_is_in_recovery=false` 并选择 read-write 主库端点；
+  extractor URL 中的 base host/port 仅作为“全部候选失败”的最后兜底，避免 VIP/LB 漂移导致 SQL/replication 跨节点抖动。
+- 连接成功后会记录“上次成功端点（host, sql_port）”，后续重连优先尝试该端点以减少反复探测与 standby 噪音。
 - CDC replication 连接会使用 HA 端口（通常为 `port+1`），并默认 `sslmode=disable`（NoTLS）；
   仅当服务端明确要求 SSL 时才回退到 TLS。
+
+CDC 解码与失败策略（MVP）：
+
+- CDC MVP 只支持 DML（`INSERT/UPDATE/DELETE`）事件；若遇到 DDL/对象事件或未知 `op_type`，会 **fail fast** 并在错误信息中提示可能原因与建议动作（先做 struct 同步/避免在线 DDL/提供 raw 样本扩展 decoder）。
+- JSON 解析失败/字段缺失等错误会在日志中打印 `LSN + category + raw_snippet(<=200)` 便于定位，但不会无限制输出整行原始内容。
 
 ### 3.2 运行用例
 

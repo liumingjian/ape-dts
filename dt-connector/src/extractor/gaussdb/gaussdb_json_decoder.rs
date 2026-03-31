@@ -36,18 +36,29 @@ impl GaussDBJsonDecoder {
             return Ok(vec![DtData::Commit { xid: String::new() }]);
         }
 
+        let row_type = match op_upper.as_str() {
+            "INSERT" => RowType::Insert,
+            "UPDATE" => RowType::Update,
+            "DELETE" => RowType::Delete,
+            _ => {
+                if Self::is_ddl_like(&op_upper, &v) {
+                    bail!(
+                        "unsupported op_type: {} (likely DDL/object event). MVP supports only DML events (INSERT/UPDATE/DELETE). Suggested: run struct sync for DDL objects, avoid online DDL during CDC, or provide raw sample to extend decoder compatibility.",
+                        op_type
+                    );
+                }
+                bail!(
+                    "unsupported op_type: {}. MVP supports only DML events (INSERT/UPDATE/DELETE). Please provide raw sample to extend decoder compatibility.",
+                    op_type
+                )
+            }
+        };
+
         let table = Self::get_str(&v, &["table", "table_name", "relation", "rel"])
             .context("missing field 'table'/'table_name'")?;
         let (schema, tb) = table
             .split_once('.')
             .with_context(|| format!("invalid table format: {}", table))?;
-
-        let row_type = match op_upper.as_str() {
-            "INSERT" => RowType::Insert,
-            "UPDATE" => RowType::Update,
-            "DELETE" => RowType::Delete,
-            _ => bail!("unsupported op_type: {}", op_type),
-        };
 
         let after = match row_type {
             RowType::Insert | RowType::Update => Some(Self::build_col_map(
@@ -88,6 +99,15 @@ impl GaussDBJsonDecoder {
         Ok(vec![DtData::Dml {
             row_data: RowData::new(schema.to_string(), tb.to_string(), row_type, before, after),
         }])
+    }
+
+    fn is_ddl_like(op_upper: &str, v: &Value) -> bool {
+        if op_upper.contains("DDL") || op_upper == "QUERY" {
+            return true;
+        }
+        // Some plugins emit DDL/query payload in these fields.
+        let ddlish_keys = ["sql", "query", "ddl", "statement", "object_type", "objectType"];
+        ddlish_keys.iter().any(|k| v.get(*k).is_some())
     }
 
     fn get_str<'a>(v: &'a Value, keys: &[&str]) -> Option<&'a str> {
@@ -420,5 +440,15 @@ mod tests {
             GaussDBJsonDecoder::parse_col_value(Some("bytea"), Some("'\\\\\\\\x0102'")),
             ColValue::Blob(vec![1, 2])
         );
+    }
+
+    #[test]
+    fn test_decode_unsupported_op_type_ddl_like() {
+        let d = GaussDBJsonDecoder::default();
+        let err = d
+            .decode_message(r#"{"op_type":"DDL","sql":"CREATE TABLE t1(id int)"}"#)
+            .unwrap_err();
+        assert!(err.to_string().contains("likely DDL"));
+        assert!(err.to_string().contains("MVP supports only DML"));
     }
 }

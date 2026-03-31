@@ -21,40 +21,64 @@ pub struct GaussDBCdcClient {
     pub slot_name: String,
     pub start_lsn: String,
     pub recreate_slot_if_exists: bool,
+    pub last_success_endpoint: Option<(String, u16)>,
 }
 
 impl GaussDBCdcClient {
-    fn candidate_endpoints(base_host: &str, base_port: u16) -> Vec<(String, u16)> {
+    fn parse_candidate_hosts(raw: &str, default_port: u16) -> Vec<(String, u16)> {
+        let mut out = Vec::new();
+        for candidate in raw.split(',').map(|s| s.trim()) {
+            if candidate.is_empty() {
+                continue;
+            }
+
+            let (host, port) = match candidate.rsplit_once(':') {
+                Some((h, p))
+                    if !h.is_empty() && !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()) =>
+                {
+                    (h.trim(), p.parse::<u16>().unwrap_or(default_port))
+                }
+                _ => (candidate, default_port),
+            };
+            out.push((host.to_string(), port));
+        }
+        out
+    }
+
+    fn candidate_endpoints(
+        base_host: &str,
+        base_port: u16,
+        candidates: &[(String, u16)],
+        prefer_candidates: bool,
+        last_success_endpoint: Option<&(String, u16)>,
+    ) -> Vec<(String, u16)> {
         let mut endpoints = Vec::new();
         let mut seen = HashSet::<String>::new();
 
-        // Prefer the base endpoint first (sticky). In tests, the runner rewrites the extractor URL
-        // to the current read-write primary. Treat candidate hosts as failover options, not the
-        // default choice, otherwise DML and replication may drift across nodes mid-test.
-        let base_key = format!("{}:{}", base_host, base_port);
-        if seen.insert(base_key) {
-            endpoints.push((base_host.to_string(), base_port));
+        let mut push = |host: &str, port: u16| {
+            let key = format!("{}:{}", host, port);
+            if seen.insert(key) {
+                endpoints.push((host.to_string(), port));
+            }
+        };
+
+        // Sticky endpoint first to reduce standby probe noise on reconnect.
+        if let Some((host, port)) = last_success_endpoint {
+            push(host, *port);
         }
 
-        if let Ok(raw) = std::env::var("gaussdb_pg_candidate_hosts") {
-            for candidate in raw.split(',').map(|s| s.trim()) {
-                if candidate.is_empty() {
-                    continue;
-                }
-
-                let (host, port) = match candidate.rsplit_once(':') {
-                    Some((h, p))
-                        if !h.is_empty() && !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()) =>
-                    {
-                        (h.trim(), p.parse::<u16>().unwrap_or(base_port))
-                    }
-                    _ => (candidate, base_port),
-                };
-
-                let key = format!("{}:{}", host, port);
-                if seen.insert(key) {
-                    endpoints.push((host.to_string(), port));
-                }
+        if prefer_candidates {
+            // When candidate hosts are configured, prioritize them to avoid VIP/LB drift.
+            for (host, port) in candidates {
+                push(host, *port);
+            }
+            // Base URL is only a final fallback when all candidates fail.
+            push(base_host, base_port);
+        } else {
+            // Default path: base URL first, then any extra candidates (if provided).
+            push(base_host, base_port);
+            for (host, port) in candidates {
+                push(host, *port);
             }
         }
 
@@ -120,6 +144,7 @@ impl GaussDBCdcClient {
             + Sink<bytes::Bytes, Error = tokio_postgres::Error>,
         String,
         Option<Duration>,
+        (String, u16),
     )> {
         let url_info = Url::parse(&self.url)?;
         let base_host = url_info.host_str().unwrap().to_string();
@@ -145,11 +170,50 @@ impl GaussDBCdcClient {
             .query_pairs()
             .any(|(k, v)| k == "sslmode" && v.eq_ignore_ascii_case("disable"));
 
-        // If `gaussdb_pg_candidate_hosts` is provided (typically in tests), treat it as an HA set
-        // and connect to whichever endpoint is currently read-write (pg_is_in_recovery=false).
-        let candidates = Self::candidate_endpoints(&base_host, base_port);
+        let raw_candidates = std::env::var("gaussdb_pg_candidate_hosts").unwrap_or_default();
+        let parsed_candidates = Self::parse_candidate_hosts(&raw_candidates, base_port);
+        let prefer_candidates = !parsed_candidates.is_empty();
+
+        let endpoints = Self::candidate_endpoints(
+            &base_host,
+            base_port,
+            &parsed_candidates,
+            prefer_candidates,
+            self.last_success_endpoint.as_ref(),
+        );
+        log_info!(
+            "gaussdb cdc endpoint selection: prefer_candidates={} candidates={} base={}:{} last_success={}",
+            prefer_candidates,
+            parsed_candidates.len(),
+            base_host,
+            base_port,
+            self.last_success_endpoint
+                .as_ref()
+                .map(|(h, p)| format!("{}:{}", h, p))
+                .unwrap_or_else(|| "none".to_string())
+        );
+        if prefer_candidates {
+            log_info!("gaussdb cdc candidates (sql ports): {}", raw_candidates);
+        }
+        log_info!(
+            "gaussdb cdc probe order: {}",
+            endpoints
+                .iter()
+                .map(|(h, p)| format!("{}:{}", h, p))
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+
         let mut last_err: Option<anyhow::Error> = None;
-        for (candidate_host, candidate_base_port) in candidates {
+        let endpoints_len = endpoints.len();
+        for (idx, (candidate_host, candidate_base_port)) in endpoints.into_iter().enumerate() {
+            log_info!(
+                "gaussdb cdc probing candidate {}/{}: {}:{}",
+                idx + 1,
+                endpoints_len,
+                candidate_host,
+                candidate_base_port
+            );
             // GaussDB uses a replication connection (replication=database) for streaming,
             // but may reject running regular SQL on that connection. So we:
             // 1) use a normal SQL connection to manage slot and determine start_lsn
@@ -176,6 +240,11 @@ impl GaussDBCdcClient {
                     continue;
                 }
             };
+            log_info!(
+                "gaussdb cdc candidate sql connect ok: {}:{}",
+                candidate_host,
+                candidate_base_port
+            );
 
             let wal_sender_timeout = match self.fetch_wal_sender_timeout(&sql_client).await {
                 Ok(v) => v,
@@ -201,6 +270,11 @@ impl GaussDBCdcClient {
                 last_err = Some(e);
                 continue;
             }
+            log_info!(
+                "gaussdb cdc candidate precheck ok: {}:{}",
+                candidate_host,
+                candidate_base_port
+            );
 
             let start_lsn = match self.prepare_slot(&sql_client).await {
                 Ok(v) => v,
@@ -215,6 +289,12 @@ impl GaussDBCdcClient {
                     continue;
                 }
             };
+            log_info!(
+                "gaussdb cdc candidate slot ok: {}:{} start_lsn={}",
+                candidate_host,
+                candidate_base_port,
+                start_lsn
+            );
 
             // Align with flink-cdc gaussdb connector operational behavior:
             // - Always use HA port (base_port + 1) for replication streaming
@@ -237,7 +317,15 @@ impl GaussDBCdcClient {
             };
 
             match tokio::time::timeout(Duration::from_secs(60), connect_and_start).await {
-                Ok(Ok(stream)) => return Ok((stream, start_lsn, wal_sender_timeout)),
+                Ok(Ok(stream)) => {
+                    log_info!(
+                        "gaussdb cdc replication streaming started: {}:{} (sql_port={})",
+                        candidate_host,
+                        ha_port,
+                        candidate_base_port
+                    );
+                    return Ok((stream, start_lsn, wal_sender_timeout, (candidate_host, candidate_base_port)));
+                }
                 Ok(Err(e)) => {
                     log_warn!(
                         "gaussdb cdc candidate HA replication connect/start failed: {}:{} (sql_port={}), error: {}",
@@ -606,5 +694,83 @@ impl GaussDBCdcClient {
 
         let copy_stream = client.copy_both_simple::<bytes::Bytes>(&query).await?;
         Ok(copy_stream)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn endpoints_prefer_candidates_when_configured() {
+        let base_host = "vip";
+        let base_port = 8000;
+        let candidates = GaussDBCdcClient::parse_candidate_hosts("10.0.0.1:8000,10.0.0.2:8000", base_port);
+        let endpoints = GaussDBCdcClient::candidate_endpoints(
+            base_host,
+            base_port,
+            &candidates,
+            true,
+            None,
+        );
+        assert_eq!(
+            endpoints,
+            vec![
+                ("10.0.0.1".to_string(), 8000),
+                ("10.0.0.2".to_string(), 8000),
+                ("vip".to_string(), 8000),
+            ]
+        );
+    }
+
+    #[test]
+    fn endpoints_sticky_first_then_candidates() {
+        let base_host = "vip";
+        let base_port = 8000;
+        let candidates = GaussDBCdcClient::parse_candidate_hosts("10.0.0.1:8000,10.0.0.2:8000", base_port);
+        let sticky = ("10.0.0.2".to_string(), 8000);
+        let endpoints = GaussDBCdcClient::candidate_endpoints(
+            base_host,
+            base_port,
+            &candidates,
+            true,
+            Some(&sticky),
+        );
+        assert_eq!(
+            endpoints,
+            vec![
+                ("10.0.0.2".to_string(), 8000),
+                ("10.0.0.1".to_string(), 8000),
+                ("vip".to_string(), 8000),
+            ]
+        );
+    }
+
+    #[test]
+    fn endpoints_default_base_first_when_no_candidates() {
+        let base_host = "vip";
+        let base_port = 8000;
+        let candidates = vec![];
+        let endpoints = GaussDBCdcClient::candidate_endpoints(
+            base_host,
+            base_port,
+            &candidates,
+            false,
+            None,
+        );
+        assert_eq!(endpoints, vec![("vip".to_string(), 8000)]);
+    }
+
+    #[test]
+    fn parse_candidate_hosts_supports_missing_port() {
+        let base_port = 8000;
+        let candidates = GaussDBCdcClient::parse_candidate_hosts("10.0.0.1,10.0.0.2:8002", base_port);
+        assert_eq!(
+            candidates,
+            vec![
+                ("10.0.0.1".to_string(), 8000),
+                ("10.0.0.2".to_string(), 8002),
+            ]
+        );
     }
 }

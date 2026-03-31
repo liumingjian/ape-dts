@@ -356,6 +356,7 @@ impl ExtractorUtil {
                     heartbeat_tb,
                     base_extractor,
                     recovery,
+                    last_success_endpoint: None,
                 };
                 Box::new(extractor)
             }

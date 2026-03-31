@@ -55,6 +55,9 @@ pub struct GaussDBCdcExtractor {
     pub heartbeat_tb: String,
     pub syncer: Arc<Mutex<Syncer>>,
     pub recovery: Option<Arc<dyn Recovery + Send + Sync>>,
+    // Sticky endpoint to reduce standby probe noise on reconnect.
+    // Records the last successful (host, sql_port) endpoint.
+    pub last_success_endpoint: Option<(String, u16)>,
 }
 
 #[async_trait]
@@ -112,9 +115,11 @@ impl GaussDBCdcExtractor {
                 slot_name: self.slot_name.clone(),
                 start_lsn: self.start_lsn.clone(),
                 recreate_slot_if_exists: self.recreate_slot_if_exists,
+                last_success_endpoint: self.last_success_endpoint.clone(),
             };
 
-            let (stream, actual_start_lsn, wal_sender_timeout) = match cdc_client.connect().await {
+            let (stream, actual_start_lsn, wal_sender_timeout, selected_endpoint) =
+                match cdc_client.connect().await {
                 Ok(v) => v,
                 Err(e) => {
                     reconnect_attempt += 1;
@@ -131,6 +136,7 @@ impl GaussDBCdcExtractor {
                 }
             };
 
+            self.last_success_endpoint = Some(selected_endpoint);
             reconnect_attempt = 0;
             reconnect_backoff = Duration::from_millis(500);
 
@@ -304,13 +310,20 @@ impl GaussDBCdcExtractor {
                                         }
                                     }
                                     Err(e) => {
+                                        let category = Self::classify_decode_error(&e);
+                                        let raw_snippet = Self::truncate_for_log(line, 200);
                                         log_error!(
-                                            "Failed to decode mppdb_decoding message at lsn {}: {}, raw: {}",
+                                            "Failed to decode mppdb_decoding message at lsn {}: category={} error={} raw_snippet={}",
                                             lsn,
+                                            category,
                                             e,
-                                            line
+                                            raw_snippet
                                         );
-                                        bail! {Error::ExtractorError(format!("mppdb_decoding json decode failed: {}", e))};
+                                        bail! {Error::ExtractorError(format!(
+                                            "mppdb_decoding json decode failed (category={}): {}",
+                                            category,
+                                            e
+                                        ))};
                                     }
                                 }
                             }
@@ -666,6 +679,35 @@ impl GaussDBCdcExtractor {
                 .await?;
         }
         Ok(())
+    }
+
+    fn classify_decode_error(err: &anyhow::Error) -> &'static str {
+        let msg = err.to_string();
+        if msg.contains("unsupported op_type") {
+            return "unsupported_op_type";
+        }
+        if msg.contains("missing field") {
+            return "missing_field";
+        }
+        if msg.contains("failed to parse mppdb_decoding json") || msg.contains("invalid escape") {
+            return "json_parse";
+        }
+        "unknown"
+    }
+
+    fn truncate_for_log(s: &str, max_bytes: usize) -> String {
+        if s.len() <= max_bytes {
+            return s.to_string();
+        }
+
+        let mut end = 0;
+        for (idx, ch) in s.char_indices() {
+            if idx + ch.len_utf8() > max_bytes {
+                break;
+            }
+            end = idx + ch.len_utf8();
+        }
+        format!("{}...(truncated,len={})", &s[..end], s.len())
     }
 }
 
