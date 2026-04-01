@@ -1,8 +1,15 @@
 use std::collections::HashSet;
+use std::time::Duration;
 
 use anyhow::bail;
 use async_trait::async_trait;
-use dt_common::config::{config_enums::DbType, filter_config::FilterConfig};
+use dt_common::config::{
+    config_enums::DbType, connection_auth_config::ConnectionAuthConfig, filter_config::FilterConfig,
+};
+use dt_task::task_util::TaskUtil;
+use sqlx::Row;
+use tokio::net::TcpStream;
+use url::Url;
 
 use crate::{
     config::precheck_config::PrecheckConfig,
@@ -23,16 +30,31 @@ pub struct PostgresqlPrechecker {
     pub filter_config: FilterConfig,
     pub precheck_config: PrecheckConfig,
     pub is_source: bool,
+    pub slot_name: Option<String>,
+    pub selected_endpoint: Option<(String, u16)>,
 }
 
 #[async_trait]
 impl Prechecker for PostgresqlPrechecker {
     async fn build_connection(&mut self) -> anyhow::Result<CheckResult> {
         let mut check_error = None;
-        let result = self.fetcher.build_connection().await;
-        match result {
-            Ok(_) => {}
-            Err(e) => check_error = Some(e),
+
+        // For GaussDBPg CDC source, bind the precheck connection to a RW primary endpoint
+        // (prefer candidate list if configured). This avoids "connected but in recovery" cases.
+        if matches!(self.db_type, DbType::GaussDBPg)
+            && self.is_source
+            && self.precheck_config.do_cdc
+        {
+            if let Err(e) = self.bind_to_gaussdb_primary_endpoint().await {
+                check_error = Some(e);
+            }
+        }
+
+        if check_error.is_none() {
+            let result = self.fetcher.build_connection().await;
+            if let Err(e) = result {
+                check_error = Some(e);
+            }
         }
 
         Ok(CheckResult::build_with_err(
@@ -125,23 +147,6 @@ impl Prechecker for PostgresqlPrechecker {
 
         let mut err_msgs: Vec<String> = vec![];
 
-        // GaussDB CDC relies on mppdb_decoding plugin; check its availability first.
-        if matches!(self.db_type, DbType::GaussDBPg) {
-            match self.fetcher.extension_exists("mppdb_decoding").await {
-                Ok(exists) => {
-                    if !exists {
-                        err_msgs.push(r#"could not find plugin "mppdb_decoding""#.to_string());
-                    }
-                }
-                Err(e) => {
-                    err_msgs.push(format!(
-                        "failed to check mppdb_decoding availability: {}",
-                        e
-                    ));
-                }
-            }
-        }
-
         // check the cdc settings (PostgreSQL-compatible)
         let configs: Vec<String> = ["wal_level", "max_wal_senders", "max_replication_slots"]
             .iter()
@@ -221,6 +226,106 @@ impl Prechecker for PostgresqlPrechecker {
                         Err(e) => check_error = Some(e),
                     }
                 }
+            }
+        }
+
+        // Additional fail-fast checks for GaussDBPg CDC source.
+        if check_error.is_none() && matches!(self.db_type, DbType::GaussDBPg) {
+            if let Some(pool) = &self.fetcher.pool {
+                // Standby/recovery mode cannot do logical decoding.
+                match sqlx::query("SELECT pg_is_in_recovery() AS in_recovery")
+                    .fetch_one(pool)
+                    .await
+                {
+                    Ok(row) => match row.try_get::<bool, _>("in_recovery") {
+                        Ok(true) => err_msgs.push(
+                            "GaussDB is in recovery/standby mode (pg_is_in_recovery=true), logical decoding is not supported"
+                                .to_string(),
+                        ),
+                        Ok(false) => {}
+                        Err(e) => err_msgs.push(format!(
+                            "failed to parse pg_is_in_recovery() result: {}",
+                            e
+                        )),
+                    },
+                    Err(e) => err_msgs.push(format!(
+                        "failed to query pg_is_in_recovery() for GaussDB primary check: {}",
+                        e
+                    )),
+                }
+
+                // Permission gate: need superuser or replication role.
+                let perm_sql =
+                    "SELECT current_user::text AS current_user, r.rolsuper, r.rolreplication \
+                                FROM pg_roles r WHERE r.rolname = current_user";
+                match sqlx::query(perm_sql).fetch_one(pool).await {
+                    Ok(row) => {
+                        let current_user: String = row
+                            .try_get("current_user")
+                            .unwrap_or_else(|_| "<unknown>".to_string());
+                        let rolsuper: bool = row.try_get("rolsuper").unwrap_or(false);
+                        let rolreplication: bool = row.try_get("rolreplication").unwrap_or(false);
+                        if !rolsuper && !rolreplication {
+                            err_msgs.push(format!(
+                                "insufficient permission for CDC: current_user={} rolsuper=false rolreplication=false (need superuser or replication role)",
+                                current_user
+                            ));
+                        }
+                    }
+                    Err(e) => err_msgs.push(format!(
+                        "failed to query current user permissions (rolsuper/rolreplication): {}",
+                        e
+                    )),
+                }
+
+                // Slot-active check (no creation side effects).
+                if let Some(slot_name) = self.slot_name.as_ref().filter(|s| !s.trim().is_empty()) {
+                    let slot_sql =
+                        "SELECT active FROM pg_catalog.pg_replication_slots WHERE slot_name = $1";
+                    match sqlx::query_scalar::<_, bool>(slot_sql)
+                        .bind(slot_name)
+                        .fetch_optional(pool)
+                        .await
+                    {
+                        Ok(Some(true)) => err_msgs.push(format!(
+                            "replication slot '{}' is active; stop the old task or use a different slot_name",
+                            slot_name
+                        )),
+                        Ok(Some(false)) => {}
+                        Ok(None) => {}
+                        Err(e) => err_msgs.push(format!(
+                            "failed to check replication slot '{}' active status: {}",
+                            slot_name, e
+                        )),
+                    }
+                }
+            } else {
+                err_msgs.push("internal error: pg connection pool is not initialized".to_string());
+            }
+
+            // HA port reachability (sql_port + 1) for replication.
+            match self.selected_sql_endpoint() {
+                Ok((host, sql_port)) => {
+                    let ha_port = sql_port.saturating_add(1);
+                    let addr = format!("{}:{}", host, ha_port);
+                    match tokio::time::timeout(Duration::from_secs(2), TcpStream::connect(&addr))
+                        .await
+                    {
+                        Ok(Ok(_)) => {}
+                        Ok(Err(e)) => err_msgs.push(format!(
+                            "GaussDB HA replication port is not reachable: {} (sql_port={}, ha_port={}), error: {}",
+                            addr, sql_port, ha_port, e
+                        )),
+                        Err(_) => err_msgs.push(format!(
+                            "GaussDB HA replication port connect timed out: {} (sql_port={}, ha_port={})",
+                            addr, sql_port, ha_port
+                        )),
+                    }
+                }
+                Err(e) => err_msgs.push(format!(
+                    "failed to resolve selected sql endpoint for HA port check: {}",
+                    e
+                )),
             }
         }
 
@@ -467,5 +572,196 @@ impl Prechecker for PostgresqlPrechecker {
             check_error,
             warn_error,
         ))
+    }
+}
+
+impl PostgresqlPrechecker {
+    fn parse_candidate_hosts(raw: &str, default_port: u16) -> Vec<(String, u16)> {
+        let mut out = Vec::new();
+        for candidate in raw.split(',').map(|s| s.trim()) {
+            if candidate.is_empty() {
+                continue;
+            }
+
+            let (host, port) = match candidate.rsplit_once(':') {
+                Some((h, p))
+                    if !h.is_empty() && !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()) =>
+                {
+                    (h.trim(), p.parse::<u16>().unwrap_or(default_port))
+                }
+                _ => (candidate, default_port),
+            };
+            out.push((host.to_string(), port));
+        }
+        out
+    }
+
+    fn rewrite_url_host_port(original_url: &str, host: &str, port: u16) -> anyhow::Result<String> {
+        let mut u = Url::parse(original_url)?;
+        u.set_host(Some(host))?;
+        u.set_port(Some(port))
+            .map_err(|()| anyhow::anyhow!("invalid port in url rewrite: {}", port))?;
+        Ok(u.to_string())
+    }
+
+    async fn probe_pg_is_in_recovery(
+        url: &str,
+        connection_auth: &ConnectionAuthConfig,
+    ) -> anyhow::Result<bool> {
+        // Fail fast on unreachable candidates to avoid long stalls when some nodes are down.
+        let timeout = Duration::from_secs(
+            std::env::var("GAUSSDB_PRECHECK_CONNECT_TIMEOUT_SECS")
+                .ok()
+                .and_then(|v| v.parse::<u64>().ok())
+                .unwrap_or(10),
+        );
+
+        let pool = tokio::time::timeout(
+            timeout,
+            TaskUtil::create_pg_conn_pool(url, connection_auth, 1, true, false),
+        )
+        .await
+        .map_err(|_| {
+            anyhow::anyhow!(
+                "gaussdb precheck connect timeout after {:?} (url={})",
+                timeout,
+                url
+            )
+        })??;
+
+        let row = tokio::time::timeout(
+            timeout,
+            sqlx::query("SELECT pg_is_in_recovery() AS in_recovery").fetch_one(&pool),
+        )
+        .await
+        .map_err(|_| {
+            anyhow::anyhow!(
+                "gaussdb precheck query timeout after {:?} (url={})",
+                timeout,
+                url
+            )
+        })??;
+
+        // Prefer bool, fall back to string parsing for compatibility.
+        let in_recovery = if let Ok(v) = row.try_get::<bool, _>("in_recovery") {
+            v
+        } else if let Ok(s) = row.try_get::<String, _>("in_recovery") {
+            let s = s.trim().to_ascii_lowercase();
+            s == "t" || s == "true" || s == "1"
+        } else {
+            false
+        };
+        pool.close().await;
+        Ok(in_recovery)
+    }
+
+    fn selected_sql_endpoint(&self) -> anyhow::Result<(String, u16)> {
+        if let Some((host, port)) = self.selected_endpoint.as_ref() {
+            return Ok((host.clone(), *port));
+        }
+        let u = Url::parse(&self.fetcher.url)?;
+        let host = u
+            .host_str()
+            .ok_or_else(|| anyhow::anyhow!("missing host in url: {}", self.fetcher.url))?
+            .to_string();
+        let port = u
+            .port()
+            .ok_or_else(|| anyhow::anyhow!("missing port in url: {}", self.fetcher.url))?;
+        Ok((host, port))
+    }
+
+    async fn bind_to_gaussdb_primary_endpoint(&mut self) -> anyhow::Result<()> {
+        let base = Url::parse(&self.fetcher.url)?;
+        let base_host = base
+            .host_str()
+            .ok_or_else(|| anyhow::anyhow!("missing host in gaussdb url: {}", self.fetcher.url))?
+            .to_string();
+        let base_port = base
+            .port()
+            .ok_or_else(|| anyhow::anyhow!("missing port in gaussdb url: {}", self.fetcher.url))?;
+
+        let raw_candidates = std::env::var("gaussdb_pg_candidate_hosts").unwrap_or_default();
+        let parsed_candidates = Self::parse_candidate_hosts(&raw_candidates, base_port);
+
+        let mut endpoints = Vec::<(String, u16)>::new();
+        let mut seen = HashSet::<String>::new();
+        let mut push = |host: &str, port: u16| {
+            let key = format!("{}:{}", host, port);
+            if seen.insert(key) {
+                endpoints.push((host.to_string(), port));
+            }
+        };
+
+        if !parsed_candidates.is_empty() {
+            println!(
+                "gaussdb precheck: gaussdb_pg_candidate_hosts (sql ports) = {}",
+                raw_candidates
+            );
+            for (h, p) in &parsed_candidates {
+                push(h, *p);
+            }
+            // Base URL is only a final fallback when all candidates fail.
+            push(&base_host, base_port);
+        } else {
+            push(&base_host, base_port);
+        }
+
+        let mut probe_results: Vec<String> = Vec::new();
+        for (host, port) in endpoints.iter() {
+            let candidate_url = Self::rewrite_url_host_port(&self.fetcher.url, host, *port)?;
+            match Self::probe_pg_is_in_recovery(&candidate_url, &self.fetcher.connection_auth).await
+            {
+                Ok(true) => {
+                    probe_results
+                        .push(format!("{}:{} standby(pg_is_in_recovery=true)", host, port));
+                    continue;
+                }
+                Ok(false) => {
+                    println!(
+                        "gaussdb precheck: selected RW primary endpoint: {}:{}",
+                        host, port
+                    );
+                    self.fetcher.url = candidate_url;
+                    self.selected_endpoint = Some((host.clone(), *port));
+                    return Ok(());
+                }
+                Err(e) => {
+                    probe_results.push(format!("{}:{} connect_failed({})", host, port, e));
+                    continue;
+                }
+            }
+        }
+
+        bail!(
+            "no RW primary found for GaussDBPg CDC. probe_results=[{}]",
+            probe_results.join("; ")
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_candidate_hosts_supports_missing_port_and_spaces() {
+        let out = PostgresqlPrechecker::parse_candidate_hosts(" 10.0.0.1:8000,10.0.0.2  ,", 8000);
+        assert_eq!(
+            out,
+            vec![
+                ("10.0.0.1".to_string(), 8000),
+                ("10.0.0.2".to_string(), 8000)
+            ]
+        );
+    }
+
+    #[test]
+    fn rewrite_url_host_port_preserves_path_and_query() {
+        let original = "postgres://10.0.0.1:8000/postgres?options[statement_timeout]=10s";
+        let rewritten =
+            PostgresqlPrechecker::rewrite_url_host_port(original, "10.0.0.2", 8001).unwrap();
+        assert!(rewritten.contains("10.0.0.2:8001"));
+        assert!(rewritten.contains("/postgres"));
+        assert!(rewritten.contains("statement_timeout"));
     }
 }

@@ -1,6 +1,6 @@
 # GaussDB 全局进度跟踪清单（PRD 真相源）
 
-> 最后更新：**2026-03-31**
+> 最后更新：**2026-04-01**
 >
 > 目标：每完成一次 spec 任务后，都能立刻知道“当前已交付什么、证据在哪、下一步做什么”。
 
@@ -41,6 +41,10 @@
   - `EPIC.md`
   - `SUBTASKS.csv`（执行真表）
   - `PROGRESS.md`
+- Epic：`.codex-tasks/20260331-gaussdb-cdc-resilience/`
+  - `EPIC.md`
+  - `SUBTASKS.csv`
+  - `PROGRESS.md`
 
 ## 4. Master Checklist（面向 PRD 的主清单）
 
@@ -55,6 +59,7 @@
 | `GaussDBPg → PG` snapshot/check/cdc（基础） | ✅ | `.codex-tasks/20260329-gaussdb-prd-e2e/PROGRESS.md` |
 | `GaussDBPg → PG` CDC：HA 端口 + NoTLS + candidate-first + sticky + 诊断增强 | ✅ | `.codex-tasks/20260331-gaussdb-p0-stability/PROGRESS.md` |
 | 无污染 e2e：`scripts/e2e/gaussdb_to_pg_cdc.sh` | ✅ | `.codex-tasks/20260331-gaussdb-p0-stability-e2e/PROGRESS.md` |
+| `GaussDBPg → PG` CDC P1：resume + failover + 负例套件 | IN_PROGRESS | `.codex-tasks/20260331-gaussdb-cdc-resilience/PROGRESS.md` |
 
 ### 4.2 本 Epic 状态（20260331-gaussdb-prd-align）
 

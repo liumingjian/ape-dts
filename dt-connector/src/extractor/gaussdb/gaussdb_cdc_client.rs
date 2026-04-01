@@ -135,6 +135,17 @@ impl GaussDBCdcClient {
         format!("\"{}\"", ident.replace('"', "\"\""))
     }
 
+    fn connect_timeout() -> Duration {
+        // Candidate endpoint probing should fail fast on unreachable nodes to avoid
+        // long stalls when some candidates are down (e.g. during HA maintenance).
+        // Keep it configurable for real environments without introducing new public config.
+        let secs = std::env::var("GAUSSDB_CDC_CONNECT_TIMEOUT_SECS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(10);
+        Duration::from_secs(secs)
+    }
+
     pub async fn connect(
         &mut self,
     ) -> anyhow::Result<(
@@ -408,12 +419,23 @@ impl GaussDBCdcClient {
         password: &str,
         prefer_no_ssl: bool,
     ) -> anyhow::Result<Client> {
+        let timeout = Self::connect_timeout();
         let connect_no_ssl = || async move {
             let conn_info = format!(
                 "host={} port={} dbname={} user={} password={} sslmode=disable",
                 host, port, dbname, username, password
             );
-            let (client, connection) = tokio_postgres::connect(&conn_info, NoTls).await?;
+            let (client, connection) =
+                tokio::time::timeout(timeout, tokio_postgres::connect(&conn_info, NoTls))
+                    .await
+                    .map_err(|_| {
+                        anyhow::anyhow!(
+                            "gaussdb sql connect timeout (ssl=off, host={}, port={}) after {:?}",
+                            host,
+                            port,
+                            timeout
+                        )
+                    })??;
             let host = host.to_string();
             tokio::spawn(async move {
                 log_info!(
@@ -442,7 +464,17 @@ impl GaussDBCdcClient {
             builder.set_verify(SslVerifyMode::NONE);
             let connector = MakeTlsConnector::new(builder.build());
 
-            let (client, connection) = tokio_postgres::connect(&conn_info, connector).await?;
+            let (client, connection) =
+                tokio::time::timeout(timeout, tokio_postgres::connect(&conn_info, connector))
+                    .await
+                    .map_err(|_| {
+                        anyhow::anyhow!(
+                            "gaussdb sql connect timeout (ssl=on, host={}, port={}) after {:?}",
+                            host,
+                            port,
+                            timeout
+                        )
+                    })??;
             let host = host.to_string();
             tokio::spawn(async move {
                 log_info!(
@@ -495,12 +527,23 @@ impl GaussDBCdcClient {
         password: &str,
         _prefer_no_ssl: bool,
     ) -> anyhow::Result<Client> {
+        let timeout = Self::connect_timeout();
         let connect_no_ssl = || async move {
             let conn_info = format!(
                 "host={} port={} dbname={} user={} password={} replication=database application_name=gaussdb-replication sslmode=disable",
                 host, port, dbname, username, password
             );
-            let (client, connection) = tokio_postgres::connect(&conn_info, NoTls).await?;
+            let (client, connection) =
+                tokio::time::timeout(timeout, tokio_postgres::connect(&conn_info, NoTls))
+                    .await
+                    .map_err(|_| {
+                        anyhow::anyhow!(
+                    "gaussdb replication connect timeout (ssl=off, host={}, port={}) after {:?}",
+                    host,
+                    port,
+                    timeout
+                )
+                    })??;
             let host = host.to_string();
             tokio::spawn(async move {
                 log_info!(
@@ -529,7 +572,17 @@ impl GaussDBCdcClient {
             builder.set_verify(SslVerifyMode::NONE);
             let connector = MakeTlsConnector::new(builder.build());
 
-            let (client, connection) = tokio_postgres::connect(&conn_info, connector).await?;
+            let (client, connection) =
+                tokio::time::timeout(timeout, tokio_postgres::connect(&conn_info, connector))
+                    .await
+                    .map_err(|_| {
+                        anyhow::anyhow!(
+                    "gaussdb replication connect timeout (ssl=on, host={}, port={}) after {:?}",
+                    host,
+                    port,
+                    timeout
+                )
+                    })??;
             let host = host.to_string();
             tokio::spawn(async move {
                 log_info!(

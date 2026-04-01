@@ -1,0 +1,4 @@
+id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
+1,新增 resume_test 测试目录与 SQL,DONE,resume_test 目录与 ini/sql 文件存在,"test -d dt-tests/tests/gaussdb_to_pg/cdc/resume_test && ls dt-tests/tests/gaussdb_to_pg/cdc/resume_test",2026-03-31 23:36 +0800,0,
+2,扩展 runner 支持 run_cdc_resume_test,DONE,编译通过且代码可读,"cargo test -p dt-tests --no-run",2026-03-31 23:40 +0800,0,
+3,新增测试入口并跑通,DONE,cdc_resume_test 通过,"cargo test -p dt-tests --test integration_test -- gaussdb_to_pg::cdc_tests::test::cdc_resume_test --nocapture",2026-03-31 23:45 +0800,0,

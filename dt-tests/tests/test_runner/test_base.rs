@@ -128,6 +128,61 @@ impl TestBase {
         .await;
     }
 
+    pub async fn run_cdc_resume_test(test_dir: &str, start_millis: u64, parse_millis: u64) {
+        Self::run_with_retry(test_dir, "cdc_resume", || async {
+            let runner = RdbTestRunner::new(test_dir).await?;
+            let res = runner.run_cdc_resume_test(start_millis, parse_millis).await;
+            let _ = runner.close().await;
+            res?;
+            Ok(())
+        })
+        .await;
+    }
+
+    pub async fn run_cdc_failover_test(test_dir: &str, start_millis: u64, parse_millis: u64) {
+        // Failover tests should not be retried automatically because each attempt can change
+        // the primary node in a shared HA environment. Keep it single-attempt and rely on
+        // the test's own best-effort restore logic.
+        // However, in shared HA environments, initial pool creation can transiently fail due to
+        // candidate probing timeouts / network hiccups. Retrying runner initialization is safe
+        // (it does not run any switchover), and reduces flakes significantly.
+        let runner = {
+            let mut last_err: Option<Error> = None;
+            let mut out: Option<RdbTestRunner> = None;
+            let max_attempts: u32 = 3;
+            for attempt in 1..=max_attempts {
+                match RdbTestRunner::new(test_dir).await {
+                    Ok(r) => {
+                        out = Some(r);
+                        break;
+                    }
+                    Err(e) => {
+                        let retryable = attempt < max_attempts && Self::is_transient_error(&e);
+                        if retryable {
+                            println!(
+                                "cdc_failover runner init failed (attempt {}/{}), will retry: {:#}",
+                                attempt, max_attempts, e
+                            );
+                            last_err = Some(e);
+                            sleep(Duration::from_millis(500 * attempt as u64)).await;
+                            continue;
+                        }
+                        last_err = Some(e);
+                        break;
+                    }
+                }
+            }
+            out.unwrap_or_else(|| {
+                panic!("cdc_failover runner init failed: {:#}", last_err.unwrap())
+            })
+        };
+        let res = runner
+            .run_cdc_failover_test(start_millis, parse_millis)
+            .await;
+        let _ = runner.close().await;
+        res.unwrap();
+    }
+
     pub async fn run_cdc_to_sql_test(
         test_dir: &str,
         reverse: bool,

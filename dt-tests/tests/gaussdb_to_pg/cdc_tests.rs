@@ -12,4 +12,16 @@ mod test {
         // Give it enough headroom to avoid missing early DML and to tolerate transient HA hiccups.
         TestBase::run_cdc_test("gaussdb_to_pg/cdc/basic_test", 60000, 30000).await;
     }
+
+    #[tokio::test]
+    #[serial]
+    async fn cdc_resume_test() {
+        TestBase::run_cdc_resume_test("gaussdb_to_pg/cdc/resume_test", 60000, 30000).await;
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn cdc_failover_test() {
+        TestBase::run_cdc_failover_test("gaussdb_to_pg/cdc/failover_test", 60000, 30000).await;
+    }
 }

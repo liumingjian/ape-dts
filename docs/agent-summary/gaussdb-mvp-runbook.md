@@ -97,6 +97,69 @@ cargo test -p dt-tests --test integration_test -- pg_to_gaussdb::snapshot_tests:
 cargo test -p dt-tests --test integration_test -- gaussdb_to_pg::cdc_tests::test::cdc_basic_test --nocapture
 ```
 
+### 3.3 CDC P1 演练（Resume + Failover + 负例，真实环境）
+
+为验证“切主不应破坏实时同步任务，可允许短暂异常但需自愈”的稳定性目标，我们提供脚本化演练入口：
+
+- `scripts/e2e/gaussdb_to_pg_cdc.sh`（无污染：结束自动清理 slot/schema/table，并 best-effort 切回原主）
+
+建议通过本地 gitignored 环境文件提供参数：
+
+- `.local/e2e/.env`（严禁提交到 git）
+  - `gaussdb_pg_candidate_hosts`：GaussDB SQL 端口候选（例：`host:8000,...`）
+  - `SRC_GAUSS_URL`：源端连接串（可含 userinfo；脚本会自动解析）
+  - `DST_PG_URL`：目标 PG（建议使用本机 docker 5434）
+  - `GAUSSDB_CM_SSH_PASSWORD`：failover 需要（仅本地环境变量；不要写入任何可提交文件）
+
+可选开关：
+
+- `GAUSSDB_CM_REQUIRE_HEALTHY=1`：要求集群完全健康（否则默认只要存在健康 standby 就允许演练）
+- `GAUSSDB_CM_ENV_FILE=~/gauss_env_file`（默认如此）
+- `GAUSSDB_CM_RUBY_USER=Ruby`（默认如此）
+
+运行方式（每次只开一个开关，避免多阶段歧义）：
+
+```bash
+# basic
+bash scripts/e2e/gaussdb_to_pg_cdc.sh
+
+# resume (kill + restart from checkpoint LSN)
+TEST_RESUME=1 bash scripts/e2e/gaussdb_to_pg_cdc.sh
+
+# negative: slot active (2nd dt-main + precheck)
+TEST_NEG_SLOT_ACTIVE=1 bash scripts/e2e/gaussdb_to_pg_cdc.sh
+
+# negative: no replication privilege user (precheck fail-fast)
+TEST_NEG_NO_REPL_USER=1 bash scripts/e2e/gaussdb_to_pg_cdc.sh
+
+# failover: cm_ctl switchover + dt-main 自愈
+TEST_FAILOVER=1 bash scripts/e2e/gaussdb_to_pg_cdc.sh
+```
+
+Failover 执行细节（CM，供脚本/人工对照）：
+
+- switchover **必须在当前主 DN 的主机上执行**（否则可能失败）。
+- 远端执行环境（示例）：
+  - `ssh root@<primary_host>`
+  - `su - Ruby && source ~/gauss_env_file`
+- 切换命令（以 dn instance 为准）：
+  - 切换到 n1：`cm_ctl switchover -n 1 -D/data/cluster/var/lib/engine/data1/data/dn_6001`
+  - 切换到 n2：`cm_ctl switchover -n 2 -D/data/cluster/var/lib/engine/data1/data/dn_6002`
+  - 切换到 n3：`cm_ctl switchover -n 3 -D/data/cluster/var/lib/engine/data1/data/dn_6003`
+- 验证（推荐与脚本一致做法）：
+  - `cm_ctl query -Cv | grep -A5 "Datanode State"`
+  - 输出中包含 `"Primary Normal"` 的节点即为当前主节点。
+- 常见阻断（环境问题）：
+  - `cluster_state: Degraded` 或存在 `Down` 节点时，switchover 可能失败（如 “candidate to be promoted timeout” / “another command ... is running”）。
+  - 建议先恢复集群到 `Normal` 再执行 `TEST_FAILOVER=1`。
+
+证据位置（本地，不提交）：
+
+- `.local/e2e/gaussdb_to_pg_cdc_<timestamp>/`
+  - `logs/default.log`：候选选主、HA 端口、NoTLS、切主后重连证据
+  - `logs/position.log`：checkpoint_position LSN（resume）
+  - `precheck_*.log`：负例的 fail-fast 报错证据
+
 ## 4. 手工联调建议（证据归档）
 
 建议对 MVP 的 4 组联调证据分别归档（日志/样本/对比结果）：

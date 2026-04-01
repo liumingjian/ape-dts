@@ -166,17 +166,22 @@ impl Fetcher for PgFetcher {
 
     async fn fetch_constraints(&mut self) -> anyhow::Result<Vec<Constraint>> {
         let mut constraints: Vec<Constraint> = vec![];
+        // Avoid regnamespace casts for better compatibility with GaussDB (PG-compatible mode).
         let sql = "SELECT
           con.conname,
           con.contype::varchar as contype,
-          con.connamespace::regnamespace::text AS schema_name,
+          n.nspname::text AS schema_name,
           ct.relname::text AS table_name,
           rt.relname::text AS ref_table_name,
-          cs.relnamespace::regnamespace::text as ref_schema_name
+          rn.nspname::text as ref_schema_name
         FROM
              pg_constraint con
-        LEFT JOIN pg_class cs 
+        LEFT JOIN pg_namespace n
+        ON   con.connamespace = n.oid
+        LEFT JOIN pg_class cs
         ON   con.confrelid = cs.oid
+        LEFT JOIN pg_namespace rn
+        ON   cs.relnamespace = rn.oid
         LEFT JOIN pg_class ct
         ON   con.conrelid = ct.oid
         LEFT JOIN pg_class rt
@@ -185,7 +190,7 @@ impl Fetcher for PgFetcher {
         let rows_result = self.fetch_row(sql, "pg query constraint sql");
         match rows_result {
             Ok(mut rows) => {
-                while let Some(row) = rows.try_next().await.unwrap() {
+                while let Some(row) = rows.try_next().await? {
                     let (
                         schema_name,
                         table_name,

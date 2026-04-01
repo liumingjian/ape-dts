@@ -2,7 +2,7 @@ use std::vec;
 
 use anyhow::bail;
 use dt_common::{
-    config::{config_enums::DbType, task_config::TaskConfig},
+    config::{config_enums::DbType, extractor_config::ExtractorConfig, task_config::TaskConfig},
     rdb_filter::RdbFilter,
 };
 
@@ -52,6 +52,16 @@ impl PrecheckerBuilder {
             )
         };
 
+        let slot_name = if is_source {
+            match &self.task_config.extractor {
+                ExtractorConfig::PgCdc { slot_name, .. } => Some(slot_name.clone()),
+                ExtractorConfig::GaussDBCdc { slot_name, .. } => Some(slot_name.clone()),
+                _ => None,
+            }
+        } else {
+            None
+        };
+
         let filter = RdbFilter::from_config(&self.task_config.filter, &db_type).unwrap();
         let checker: Option<Box<dyn Prechecker + Send>> = match db_type {
             DbType::Mysql => Some(Box::new(MySqlPrechecker {
@@ -71,6 +81,8 @@ impl PrecheckerBuilder {
                 filter_config: self.task_config.filter.clone(),
                 precheck_config: self.precheck_config.clone(),
                 is_source,
+                slot_name,
+                selected_endpoint: None,
                 fetcher: PgFetcher {
                     pool: None,
                     url,
@@ -84,6 +96,8 @@ impl PrecheckerBuilder {
                 filter_config: self.task_config.filter.clone(),
                 precheck_config: self.precheck_config.clone(),
                 is_source,
+                slot_name,
+                selected_endpoint: None,
                 fetcher: PgFetcher {
                     pool: None,
                     url,
