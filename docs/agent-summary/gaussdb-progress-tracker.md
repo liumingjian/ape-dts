@@ -1,6 +1,6 @@
 # GaussDB 全局进度跟踪清单（PRD 真相源）
 
-> 最后更新：**2026-04-01**
+> 最后更新：**2026-04-02**
 >
 > 目标：每完成一次 spec 任务后，都能立刻知道“当前已交付什么、证据在哪、下一步做什么”。
 
@@ -59,7 +59,7 @@
 | `GaussDBPg → PG` snapshot/check/cdc（基础） | ✅ | `.codex-tasks/20260329-gaussdb-prd-e2e/PROGRESS.md` |
 | `GaussDBPg → PG` CDC：HA 端口 + NoTLS + candidate-first + sticky + 诊断增强 | ✅ | `.codex-tasks/20260331-gaussdb-p0-stability/PROGRESS.md` |
 | 无污染 e2e：`scripts/e2e/gaussdb_to_pg_cdc.sh` | ✅ | `.codex-tasks/20260331-gaussdb-p0-stability-e2e/PROGRESS.md` |
-| `GaussDBPg → PG` CDC P1：resume + failover + 负例套件 | IN_PROGRESS | `.codex-tasks/20260331-gaussdb-cdc-resilience/PROGRESS.md` |
+| `GaussDBPg → PG` CDC P1：resume + failover + 负例套件 | ✅ | `.codex-tasks/20260331-gaussdb-cdc-resilience/PROGRESS.md` |
 
 ### 4.2 本 Epic 状态（20260331-gaussdb-prd-align）
 
@@ -80,6 +80,9 @@
   - matview 已存在默认跳过（不自动重建）。
   - PG→GaussDB CDC 已补齐并有 dt-tests 覆盖；并修复 parallelizer 对 sinker I/O 的 panic 以提升稳定性。
   - SHA256 先纳入 epic，但等待联调环境后再启动（BLOCKED）。
+- 2026-04-02：
+  - `GaussDBPg -> PG` CDC P1 resilience 已完成真实环境闭环验证：basic/resume/negative/failover e2e 与 `dt-tests cdc_resume_test/cdc_failover_test` 均有证据归档。
+  - failover 测试链路补强为“切主期间允许短暂抖动，但任务需自动重连并继续同步”，并将 `cm_ctl switchover` 流程固化到集成测试中。
 
 ## 6. 更新流程（每完成一个 spec 后怎么做）
 

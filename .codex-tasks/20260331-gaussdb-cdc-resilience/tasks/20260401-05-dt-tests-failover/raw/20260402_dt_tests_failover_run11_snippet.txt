@@ -1,0 +1,10 @@
+# dt-tests failover evidence snippet
+# source: raw/20260402_dt_tests_failover_run11.stdout.log
+
+83:2026-04-02T08:05:48.037368+08:00 INFO default_logger - gaussdb cdc replication streaming started: 10.250.0.51:8001 (sql_port=8000)
+609:2026-04-02T08:06:22.637341+08:00 INFO default_logger - gaussdb cdc replication streaming started: 10.250.0.30:8001 (sql_port=8000)
+896:executing sql: UPDATE public.gaussdb_cdc_failover SET val = 'c' WHERE id = 2;
+914:executing sql: DELETE FROM public.gaussdb_cdc_failover WHERE id = 1;
+990:comparing row data for src_tb: ("public", "gaussdb_cdc_failover"), dst_tb: ("public", "gaussdb_cdc_failover"), src_data count: 1, dst_data count: 1
+1010:test gaussdb_to_pg::cdc_tests::test::cdc_failover_test ... ok
+1012:test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 349 filtered out; finished in 121.70s

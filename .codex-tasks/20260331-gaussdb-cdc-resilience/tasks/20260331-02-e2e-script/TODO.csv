@@ -1,4 +1,4 @@
 id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
 1,扩展脚本开关与实现,DONE,resume/failover/负例逻辑完成,rg -n \"TEST_FAILOVER|TEST_RESUME|TEST_NEG_\" scripts/e2e/gaussdb_to_pg_cdc.sh,2026-04-01 15:13 +0800,0,
-2,真实环境跑一轮 failover e2e,IN_PROGRESS,default.log 含切主后 streaming started 证据,TEST_FAILOVER=1 bash scripts/e2e/gaussdb_to_pg_cdc.sh,,0,blocked by CM cluster_state=Degraded (switchover fails); needs cluster restored to Normal
+2,真实环境跑一轮 failover e2e,DONE,default.log 含切主后 streaming started 证据,TEST_FAILOVER=1 bash scripts/e2e/gaussdb_to_pg_cdc.sh,2026-04-02 08:10 +0800,0,validated by failover default/stdout snippets
 3,归档脱敏证据到 raw/,DONE,raw 中仅含必要片段且无口令,test -d .codex-tasks/20260331-gaussdb-cdc-resilience/tasks/20260331-02-e2e-script/raw,2026-04-01 21:48 +0800,0,see raw/*.txt + raw/*stdout.log

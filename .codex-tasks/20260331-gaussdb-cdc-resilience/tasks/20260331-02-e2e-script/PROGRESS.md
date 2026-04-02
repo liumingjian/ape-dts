@@ -27,9 +27,18 @@ Real-environment E2E runs (all no-pollution, with cleanup trap):
   - Result: PASS
   - Evidence (sanitized): `.codex-tasks/20260331-gaussdb-cdc-resilience/tasks/20260331-02-e2e-script/raw/20260401_e2e_neg_no_repl.stdout.log`
 
-Pending:
+## 2026-04-02
 
-- Failover E2E:
-  - Command: `TEST_FAILOVER=1 bash scripts/e2e/gaussdb_to_pg_cdc.sh`
-  - Current blocker: CM cluster is `cluster_state: Degraded` (node3 Down), and `cm_ctl switchover` fails (candidate promotion timeout / CM busy).
-  - Next action: restore cluster to `Normal` then rerun failover E2E for evidence.
+Failover E2E validation closed:
+
+- Command: `TEST_FAILOVER=1 bash scripts/e2e/gaussdb_to_pg_cdc.sh`
+- Result: PASS
+- Evidence:
+  - `.codex-tasks/20260331-gaussdb-cdc-resilience/tasks/20260331-02-e2e-script/raw/20260401_e2e_failover_default_log_snippet.txt`
+  - `.codex-tasks/20260331-gaussdb-cdc-resilience/tasks/20260331-02-e2e-script/raw/20260401_e2e_failover_stdout_snippet.txt`
+- Key proof points:
+  - `cm switchover done`
+  - `failover complete: new primary is 10.250.0.30:8000`
+  - `waiting for streaming started on new primary: gaussdb cdc replication streaming started: 10.250.0.30:8001`
+  - post-failover destination assertion `assert ok: 2|e`
+  - cleanup completed with best-effort restore to the original primary

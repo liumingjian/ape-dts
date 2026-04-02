@@ -1,4 +1,4 @@
 id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
 1,更新 runbook,DONE,runbook 包含 resume/failover/负例演练入口与证据位置,rg -n \"resume|failover|slot\" docs/agent-summary/gaussdb-mvp-runbook.md,2026-04-01 15:13 +0800,0,
 2,更新 progress tracker,DONE,tracker 增加 resilience epic 入口与状态,test -f docs/agent-summary/gaussdb-progress-tracker.md,2026-04-01 15:13 +0800,0,
-3,提交变更,IN_PROGRESS,git status clean（除本地 raw/不提交项外）,git status --porcelain,,0,wait until failover validations are finished
+3,提交变更,DONE,git status clean（除本地 raw/不提交项外）,git status --porcelain,2026-04-02 08:10 +0800,0,selected code/docs/taskmaster files committed; full raw logs remain local only

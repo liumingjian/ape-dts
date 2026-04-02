@@ -16,6 +16,14 @@ Updates:
 - Global tracker includes resilience epic entry:
   - `docs/agent-summary/gaussdb-progress-tracker.md`
 
-Pending:
+## 2026-04-02
 
-- Final commit after failover validations are finished.
+Closure:
+
+- Failover validations finished:
+  - `TEST_FAILOVER=1 bash scripts/e2e/gaussdb_to_pg_cdc.sh` PASS
+  - `ENABLE_GAUSSDB_FAILOVER_TEST=1 cargo test -p dt-tests --test integration_test -- gaussdb_to_pg::cdc_tests::test::cdc_failover_test --nocapture` PASS
+- This docs child now closes with:
+  - runbook/tracker refreshed to reference resilience evidence
+  - only sanitized snippet files are intended for git
+  - full stdout/raw logs stay local and untracked by design

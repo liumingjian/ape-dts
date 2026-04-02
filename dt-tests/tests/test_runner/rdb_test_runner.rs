@@ -965,7 +965,39 @@ impl RdbTestRunner {
         // switchover attempts + convergence waits). If end_time_utc is too small, the CDC task can
         // finish before we actually perform failover, making the test meaningless. Keep the task
         // alive for much longer but still abort it at the end of the test.
-        let task_parse_millis = parse_millis.saturating_mul(8);
+        let max_attempts: u64 = env::var("GAUSSDB_CM_SWITCHOVER_MAX_ATTEMPTS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(3);
+        let switchover_secs: u64 = env::var("GAUSSDB_CM_SWITCHOVER_TIMEOUT_SECS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(600);
+        let converge_secs: u64 = env::var("GAUSSDB_CM_SWITCHOVER_CONVERGE_TIMEOUT_SECS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(240);
+        let streaming_wait_millis: u64 = env::var("GAUSSDB_CDC_FAILOVER_STREAMING_WAIT_MILLIS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(900_000);
+
+        // Worst-case estimate so the CDC task doesn't auto-finish before failover completes.
+        // This test is gated by ENABLE_GAUSSDB_FAILOVER_TEST=1 and will always abort the task at
+        // the end, so keeping the end_time_utc far enough is safer than flaky premature shutdowns.
+        let worst_case_secs: u64 = max_attempts
+            .saturating_mul(
+                switchover_secs
+                    .saturating_add(converge_secs)
+                    .saturating_add(30),
+            )
+            .saturating_add(300)
+            .saturating_add(streaming_wait_millis / 1_000)
+            .saturating_add(120);
+        let task_parse_millis = std::cmp::max(
+            parse_millis.saturating_mul(8),
+            worst_case_secs.saturating_mul(1_000),
+        );
         let task = self.spawn_cdc_task(start_millis, task_parse_millis).await?;
 
         // Determine current RW endpoint (10.250.* candidate) so we can execute `cm_ctl switchover`
@@ -1071,6 +1103,16 @@ impl RdbTestRunner {
             )
             .await?;
 
+            if matches!(self.config.extractor_basic.db_type, DbType::GaussDBPg) {
+                if let Some(pool) = &self.src_conn_pool_pg {
+                    // The source-side comparison pool can stay idle on the current primary after
+                    // phase1 verification. Close it before `cm_ctl switchover` so the test itself
+                    // does not keep an extra SQL session pinned to the old primary during HA
+                    // promotion; later reads/writes re-resolve the current RW endpoint on demand.
+                    pool.close().await;
+                }
+            }
+
             // Perform CM switchover to the target node. Must execute on the current primary host.
             // In some environments, `cm_ctl switchover` may return non-zero due to timeout even
             // if the switchover eventually succeeds. Treat it as "best-effort", then verify via
@@ -1078,92 +1120,15 @@ impl RdbTestRunner {
             // Wait for CM to converge to the new primary. Retry switchover when it fails or the
             // state doesn't converge fast enough. This reduces flakes in shared HA envs.
             let cm_hosts = Self::cm_collect_ssh_hosts(&cm_primary_host);
-            let max_attempts: u32 = env::var("GAUSSDB_CM_SWITCHOVER_MAX_ATTEMPTS")
-                .ok()
-                .and_then(|v| v.parse::<u32>().ok())
-                .unwrap_or(3);
-            let converge_timeout_secs: u64 = env::var("GAUSSDB_CM_SWITCHOVER_CONVERGE_TIMEOUT_SECS")
-                .ok()
-                .and_then(|v| v.parse::<u64>().ok())
-                .unwrap_or(240);
-            let mut converged = false;
-            for attempt in 1..=max_attempts {
-                // Always initiate switchover on the CURRENT primary DN host.
-                let curr_rw_url = self.resolve_current_gaussdb_rw_url().await?;
-                let (curr_host, _curr_sql_port) =
-                    Self::parse_host_port_from_url(&curr_rw_url)?;
-
-                println!(
-                    "cm switchover attempt {}/{}: target_node={} dn_instance={} (on current_primary_host={})",
-                    attempt, max_attempts, target_node, target_instance, curr_host
-                );
-                let switchover_res = self
-                    .cm_switchover_to_node_instance_on(&curr_host, target_node, target_instance)
-                    .await;
-                let mut attempt_converge_timeout_secs = converge_timeout_secs;
-                if let Err(e) = &switchover_res {
-                    println!(
-                        "WARN: cm switchover attempt {}/{} returned error, will still verify: {:#}",
-                        attempt, max_attempts, e
-                    );
-                    let msg = format!("{:#}", e).to_lowercase();
-                    // CM can reject switchover when another CM command is still running. This is
-                    // not recoverable by waiting for primary convergence, so fail fast with a
-                    // clear diagnostic to avoid hanging tests for minutes.
-                    if msg.contains("another command") && msg.contains("is running") {
-                        anyhow::bail!(
-                            "cm_ctl is busy (another command is running). Please wait for it to finish and retry the failover test. last_error={:#}",
-                            e
-                        );
-                    }
-                    // When CM reports explicit promotion/switchover timeouts, convergence is very
-                    // unlikely. Use a shorter converge wait per attempt so the test fails faster
-                    // and provides actionable logs.
-                    if msg.contains("failed to do switch-over")
-                        || msg.contains("failed to do switch-over")
-                        || msg.contains("candidate to be promoted timeout")
-                        || msg.contains("can not do switchover")
-                    {
-                        attempt_converge_timeout_secs = std::cmp::min(attempt_converge_timeout_secs, 60);
-                    }
-                }
-
-                // Prefer polling on the switchover host, then fall back to probing other hosts.
-                let wait_res = match self
-                    .cm_wait_primary_node_on(&curr_host, target_node, attempt_converge_timeout_secs)
-                    .await
-                {
-                    Ok(()) => Ok(()),
-                    Err(_) => {
-                        self.cm_wait_primary_node_any(&cm_hosts, target_node, attempt_converge_timeout_secs)
-                            .await
-                    }
-                };
-
-                match wait_res {
-                    Ok(()) => {
-                        converged = true;
-                        break;
-                    }
-                    Err(e) => {
-                        println!(
-                            "WARN: cm primary did not converge to node {} after switchover attempt {}/{}: {:#}",
-                            target_node, attempt, max_attempts, e
-                        );
-                        if attempt < max_attempts {
-                            TimeUtil::sleep_millis(2_000).await;
-                        }
-                    }
-                }
-            }
-            if !converged {
-                anyhow::bail!(
-                    "cm primary did not converge to node {} after {} switchover attempts (hosts={:?})",
-                    target_node,
-                    max_attempts,
-                    cm_hosts
-                );
-            }
+            self.cm_switchover_until_primary_node(
+                "switchover",
+                target_node,
+                target_instance,
+                max_attempts,
+                converge_secs,
+                &cm_hosts,
+            )
+            .await?;
 
             if let Ok(snippet) = self
                 .cm_run_as_ruby_on(
@@ -1187,7 +1152,7 @@ impl RdbTestRunner {
             }
             let (new_host, new_sql_port) = Self::parse_host_port_from_url(&new_rw_url)?;
             let new_ha_port = new_sql_port.saturating_add(1);
-            self.wait_for_streaming_started_on(&new_host, new_ha_port, 240_000)
+            self.wait_for_streaming_started_on(&new_host, new_ha_port, streaming_wait_millis)
                 .await?;
 
             // Phase B: DML after failover should still be captured.
@@ -1223,37 +1188,45 @@ impl RdbTestRunner {
                     .unwrap_or_else(|| cm_primary_host.clone());
 
                 let cm_hosts = Self::cm_collect_ssh_hosts(&prefer_host);
-                let mut restore_ok = false;
+
+                // If we never actually switched away (or the cluster already converged back),
+                // avoid issuing extra CM switchover commands that can further destabilize the
+                // shared HA environment.
+                let mut curr_primary_node: Option<u32> = None;
                 for h in &cm_hosts {
                     if h.trim().is_empty() {
                         continue;
                     }
-                    match self
-                        .cm_switchover_to_node_instance_on(h, node, instance)
-                        .await
-                    {
-                        Ok(()) => {
-                            restore_ok = true;
+                    if let Ok(cv) = self.cm_run_as_ruby_on(h, "cm_ctl query -Cv").await {
+                        if let Ok((pn, _pi, _map)) = Self::cm_parse_primary_and_instances(&cv) {
+                            curr_primary_node = Some(pn);
                             break;
-                        }
-                        Err(e) => {
-                            println!(
-                                "WARN: cm restore command failed on host {} (best-effort), will try next: {:#}",
-                                h, e
-                            );
                         }
                     }
                 }
-
-                if restore_ok {
-                    if let Err(e) = self.cm_wait_primary_node_any(&cm_hosts, node, 240).await {
-                        println!("WARN: cm restore wait timed out, will still verify via final cm query: {:#}", e);
-                    }
-                } else {
+                if curr_primary_node == Some(node) {
                     println!(
-                        "WARN: cm restore command failed on all hosts (best-effort), will still verify via final cm query: hosts={:?}",
-                        cm_hosts
+                        "cm restore skipped: primary already on original node {}",
+                        node
                     );
+                    // Continue to final safety check.
+                } else {
+                    if let Err(e) = self
+                        .cm_switchover_until_primary_node(
+                            "restore",
+                            node,
+                            instance,
+                            max_attempts,
+                            converge_secs,
+                            &cm_hosts,
+                        )
+                        .await
+                    {
+                        println!(
+                        "WARN: cm restore did not converge to original primary (best-effort), will still verify via final cm query: {:#}",
+                        e
+                    );
+                    }
                 }
             }
         }
@@ -1826,22 +1799,218 @@ impl RdbTestRunner {
         )
     }
 
+    async fn cm_switchover_until_primary_node(
+        &self,
+        action: &str,
+        target_node: u32,
+        target_instance: u32,
+        max_attempts: u64,
+        converge_timeout_secs: u64,
+        cm_hosts: &[String],
+    ) -> anyhow::Result<()> {
+        for attempt in 1..=max_attempts {
+            // `cm_ctl switchover` must be initiated on the CURRENT primary DN host.
+            let curr_rw_url = self
+                .resolve_current_gaussdb_rw_url_with_wait(30_000)
+                .await?;
+            let (curr_host, _curr_sql_port) = Self::parse_host_port_from_url(&curr_rw_url)?;
+
+            println!(
+                "cm {} attempt {}/{}: target_node={} dn_instance={} (on current_primary_host={})",
+                action, attempt, max_attempts, target_node, target_instance, curr_host
+            );
+            let env_fast = env::var("GAUSSDB_CM_SWITCHOVER_FAST")
+                .ok()
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false);
+
+            let mut switchover_res = self
+                .cm_switchover_to_node_instance_on_retry_busy(
+                    &curr_host,
+                    target_node,
+                    target_instance,
+                    env_fast,
+                )
+                .await;
+            if let Err(e) = &switchover_res {
+                // Match the runtime behavior: prefer normal switchover, then retry once with
+                // fast mode only when CM explicitly times out.
+                let msg = format!("{:#}", e).to_lowercase();
+                if !env_fast
+                    && (msg.contains("switchover command timeout")
+                        || msg.contains("command timeout"))
+                {
+                    println!(
+                        "WARN: cm {} attempt {}/{} failed; retrying once with fast mode (-f)",
+                        action, attempt, max_attempts
+                    );
+                    switchover_res = self
+                        .cm_switchover_to_node_instance_on_retry_busy(
+                            &curr_host,
+                            target_node,
+                            target_instance,
+                            true,
+                        )
+                        .await;
+                }
+            }
+
+            let mut attempt_converge_timeout_secs = converge_timeout_secs;
+            if let Err(e) = &switchover_res {
+                println!(
+                    "WARN: cm {} attempt {}/{} returned error, will still verify: {:#}",
+                    action, attempt, max_attempts, e
+                );
+                let msg = format!("{:#}", e).to_lowercase();
+                if msg.contains("another command") && msg.contains("is running") {
+                    attempt_converge_timeout_secs =
+                        std::cmp::min(attempt_converge_timeout_secs, 30);
+                }
+                if msg.contains("failed to do switch-over")
+                    || msg.contains("candidate to be promoted timeout")
+                    || msg.contains("can not do switchover")
+                {
+                    attempt_converge_timeout_secs =
+                        std::cmp::min(attempt_converge_timeout_secs, 60);
+                }
+                if msg.contains("ssh:")
+                    || msg.contains("operation timed out")
+                    || msg.contains("connection refused")
+                    || msg.contains("no route to host")
+                {
+                    attempt_converge_timeout_secs =
+                        std::cmp::min(attempt_converge_timeout_secs, 30);
+                }
+            }
+
+            let wait_res = match self
+                .cm_wait_primary_node_on(&curr_host, target_node, attempt_converge_timeout_secs)
+                .await
+            {
+                Ok(()) => Ok(()),
+                Err(_) => {
+                    self.cm_wait_primary_node_any(
+                        cm_hosts,
+                        target_node,
+                        attempt_converge_timeout_secs,
+                    )
+                    .await
+                }
+            };
+
+            match wait_res {
+                Ok(()) => return Ok(()),
+                Err(e) => {
+                    println!(
+                        "WARN: cm primary did not converge to node {} after {} attempt {}/{}: {:#}",
+                        target_node, action, attempt, max_attempts, e
+                    );
+                    if attempt < max_attempts {
+                        TimeUtil::sleep_millis(2_000).await;
+                    }
+                }
+            }
+        }
+
+        anyhow::bail!(
+            "cm primary did not converge to node {} after {} {} attempts (hosts={:?})",
+            target_node,
+            max_attempts,
+            action,
+            cm_hosts
+        )
+    }
+
     async fn cm_switchover_to_node_instance_on(
         &self,
         ssh_host: &str,
         node: u32,
         instance: u32,
     ) -> anyhow::Result<()> {
-        let timeout_secs: u64 = env::var("GAUSSDB_CM_SWITCHOVER_TIMEOUT_SECS")
-            .ok()
-            .and_then(|v| v.parse::<u64>().ok())
-            .unwrap_or(600);
-        // Default to non-fast switchover to match the operational runbook. Callers can opt in to
-        // fast mode via GAUSSDB_CM_SWITCHOVER_FAST=1/true when normal mode is too slow/hangs.
         let fast = env::var("GAUSSDB_CM_SWITCHOVER_FAST")
             .ok()
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
             .unwrap_or(false);
+        self.cm_switchover_to_node_instance_on_retry_busy(ssh_host, node, instance, fast)
+            .await
+    }
+
+    async fn cm_switchover_to_node_instance_on_retry_busy(
+        &self,
+        ssh_host: &str,
+        node: u32,
+        instance: u32,
+        fast: bool,
+    ) -> anyhow::Result<()> {
+        let max_busy_retries: u32 = env::var("GAUSSDB_CM_BUSY_RETRY_MAX")
+            .ok()
+            .and_then(|v| v.parse::<u32>().ok())
+            .unwrap_or(8);
+        for busy_try in 1..=max_busy_retries {
+            match self
+                .cm_switchover_to_node_instance_on_with_fast(ssh_host, node, instance, fast)
+                .await
+            {
+                Ok(()) => return Ok(()),
+                Err(e) => {
+                    let msg = format!("{:#}", e).to_lowercase();
+                    let is_busy = msg.contains("another command") && msg.contains("is running");
+                    if is_busy {
+                        if self
+                            .cm_has_matching_switchover_inflight_on(ssh_host, node, instance)
+                            .await
+                            .unwrap_or(false)
+                        {
+                            println!(
+                                "INFO: detected inflight cm_ctl switchover on host {} for node={} instance={}; stop busy retries and wait for convergence",
+                                ssh_host, node, instance
+                            );
+                            return Ok(());
+                        }
+                    }
+                    if is_busy && busy_try < max_busy_retries {
+                        let sleep_secs = std::cmp::min(20, 2 * busy_try) as u64;
+                        println!(
+                            "WARN: cm_ctl is busy (another command running), will retry switchover in {}s (busy_try {}/{})",
+                            sleep_secs, busy_try, max_busy_retries
+                        );
+                        TimeUtil::sleep_millis(sleep_secs.saturating_mul(1_000)).await;
+                        continue;
+                    }
+                    return Err(e);
+                }
+            }
+        }
+        unreachable!("busy_try loop should return on last attempt")
+    }
+
+    async fn cm_has_matching_switchover_inflight_on(
+        &self,
+        ssh_host: &str,
+        node: u32,
+        instance: u32,
+    ) -> anyhow::Result<bool> {
+        let cmd = format!(
+            "ps -ef | grep \"[c]m_ctl switchover\" | grep \" -n {} \" | grep \"dn_{}\"",
+            node, instance
+        );
+        match self.cm_run_as_ruby_on(ssh_host, &cmd).await {
+            Ok(out) => Ok(!out.trim().is_empty()),
+            Err(_e) => Ok(false),
+        }
+    }
+
+    async fn cm_switchover_to_node_instance_on_with_fast(
+        &self,
+        ssh_host: &str,
+        node: u32,
+        instance: u32,
+        fast: bool,
+    ) -> anyhow::Result<()> {
+        let timeout_secs: u64 = env::var("GAUSSDB_CM_SWITCHOVER_TIMEOUT_SECS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(600);
 
         let inner = if fast {
             format!(
@@ -2804,7 +2973,26 @@ impl RdbTestRunner {
         let data = if let Some(pool) = conn_pool_mysql {
             RdbUtil::fetch_data_mysql_compatible(pool, None, db_tb, &db_type, &where_sql).await?
         } else if let Some(pool) = conn_pool_pg {
-            RdbUtil::fetch_data_pg(pool, None, db_tb, &where_sql).await?
+            if from == SRC
+                && matches!(self.config.extractor_basic.db_type, DbType::GaussDBPg)
+                && env::var("gaussdb_pg_candidate_hosts").is_ok()
+            {
+                if let Some((_, rw_pool)) = Self::create_gaussdb_rw_pg_pool_with_wait(
+                    &self.config.extractor_basic.url,
+                    &self.config.extractor_basic.connection_auth,
+                    20_000,
+                )
+                .await?
+                {
+                    let res = RdbUtil::fetch_data_pg(&rw_pool, None, db_tb, &where_sql).await;
+                    rw_pool.close().await;
+                    res?
+                } else {
+                    RdbUtil::fetch_data_pg(pool, None, db_tb, &where_sql).await?
+                }
+            } else {
+                RdbUtil::fetch_data_pg(pool, None, db_tb, &where_sql).await?
+            }
         } else {
             Vec::new()
         };

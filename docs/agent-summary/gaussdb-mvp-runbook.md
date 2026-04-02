@@ -95,7 +95,13 @@ CDC 解码与失败策略（MVP）：
 # 仅示例：需要真实可连通的 GaussDB/PG 实例
 cargo test -p dt-tests --test integration_test -- pg_to_gaussdb::snapshot_tests::test::snapshot_basic_test --nocapture
 cargo test -p dt-tests --test integration_test -- gaussdb_to_pg::cdc_tests::test::cdc_basic_test --nocapture
+ENABLE_GAUSSDB_FAILOVER_TEST=1 cargo test -p dt-tests --test integration_test -- gaussdb_to_pg::cdc_tests::test::cdc_failover_test --nocapture
 ```
+
+说明：
+
+- `cdc_failover_test` 会在测试内部完成 `cm_ctl switchover`、等待 CDC 自动重连到新主 HA 端口，并在结束时 best-effort 恢复原主。
+- 若 GaussDB 使用 `gaussdb_pg_candidate_hosts`，测试侧源端读写会按候选解析当前 RW 主库，避免比较连接在切主后卡在旧主导致误报。
 
 ### 3.3 CDC P1 演练（Resume + Failover + 负例，真实环境）
 
