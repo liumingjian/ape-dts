@@ -65,6 +65,20 @@ impl PrecheckerBuilder {
         let filter = RdbFilter::from_config(&self.task_config.filter, &db_type).unwrap();
         let checker: Option<Box<dyn Prechecker + Send>> = match db_type {
             DbType::Mysql => Some(Box::new(MySqlPrechecker {
+                db_type: DbType::Mysql,
+                filter_config: self.task_config.filter.clone(),
+                precheck_config: self.precheck_config.clone(),
+                is_source,
+                fetcher: MysqlFetcher {
+                    pool: None,
+                    url,
+                    connection_auth,
+                    is_source,
+                    filter,
+                },
+            })),
+            DbType::GaussDBMySQL => Some(Box::new(MySqlPrechecker {
+                db_type: DbType::GaussDBMySQL,
                 filter_config: self.task_config.filter.clone(),
                 precheck_config: self.precheck_config.clone(),
                 is_source,

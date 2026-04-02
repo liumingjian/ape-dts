@@ -5,17 +5,26 @@ use std::{
 };
 
 use anyhow::Context;
-use dt_common::config::config_enums::DbType;
+use dt_common::config::{
+    config_enums::DbType, connection_auth_config::ConnectionAuthConfig,
+};
 use dt_common::meta::{
+    adaptor::pg_col_value_convertor::PgColValueConvertor,
+    col_value::ColValue,
     mysql::{mysql_meta_manager::MysqlMetaManager, mysql_tb_meta::MysqlTbMeta},
     pg::{pg_meta_manager::PgMetaManager, pg_tb_meta::PgTbMeta},
     row_data::RowData,
 };
+use dt_common::utils::sql_util::SqlUtil;
 use dt_connector::rdb_query_builder::RdbQueryBuilder;
 use futures::TryStreamExt;
+use openssl::ssl::{SslConnector, SslMethod, SslVerifyMode};
+use postgres_openssl::MakeTlsConnector;
 use sqlx::{MySql, Pool, Postgres};
 use tokio::sync::Mutex;
 use tokio::time::{sleep, timeout};
+use tokio_postgres::{Client, NoTls, SimpleQueryMessage};
+use url::Url;
 
 pub struct RdbUtil {}
 
@@ -102,17 +111,33 @@ impl RdbUtil {
         db_tb: &(String, String),
         where_sql: &str,
     ) -> anyhow::Result<Vec<RowData>> {
+        Self::fetch_data_pg_compatible(conn_pool, ignore_cols, db_tb, &DbType::Pg, where_sql)
+            .await
+    }
+
+    pub async fn fetch_data_pg_compatible(
+        conn_pool: &Pool<Postgres>,
+        ignore_cols: Option<&HashSet<String>>,
+        db_tb: &(String, String),
+        db_type: &DbType,
+        where_sql: &str,
+    ) -> anyhow::Result<Vec<RowData>> {
         let mut last_err: Option<anyhow::Error> = None;
         for attempt in 1..=3 {
             let res = timeout(Duration::from_secs(15), async {
                 let tb_meta = Self::get_tb_meta_pg(conn_pool, db_tb).await?;
-                let query_builder = RdbQueryBuilder::new_for_pg(&tb_meta, ignore_cols);
+                let query_builder =
+                    RdbQueryBuilder::new_for_pg_compatible(&tb_meta, ignore_cols, db_type.clone());
                 let cols_str = query_builder.build_extract_cols_str().with_context(|| {
                     format!("build_extract_cols_str failed for tb: {:?}", db_tb)
                 })?;
                 let sql = format!(
-                    r#"SELECT {} FROM "{}"."{}" {} ORDER BY "{}" ASC"#,
-                    cols_str, &db_tb.0, &db_tb.1, where_sql, &tb_meta.basic.cols[0],
+                    "SELECT {} FROM {}.{} {} ORDER BY {} ASC",
+                    cols_str,
+                    SqlUtil::escape_by_db_type(&db_tb.0, db_type),
+                    SqlUtil::escape_by_db_type(&db_tb.1, db_type),
+                    where_sql,
+                    SqlUtil::escape_by_db_type(&tb_meta.basic.cols[0], db_type),
                 );
                 let query = sqlx::query(&sql);
                 let mut rows = query.fetch(conn_pool);
@@ -153,11 +178,72 @@ impl RdbUtil {
         Err(last_err.unwrap_or_else(|| anyhow::anyhow!("fetch_data_pg failed"))).with_context(
             || {
                 format!(
-                    "fetch_data_pg failed for tb: {:?}, where_sql: {}",
-                    db_tb, where_sql
+                    "fetch_data_pg_compatible failed for tb: {:?}, db_type: {:?}, where_sql: {}",
+                    db_tb, db_type, where_sql
                 )
             },
         )
+    }
+
+    pub async fn fetch_data_gaussdb_mysql_simple_query(
+        conn_pool: &Pool<Postgres>,
+        url: &str,
+        connection_auth: &ConnectionAuthConfig,
+        ignore_cols: Option<&HashSet<String>>,
+        db_tb: &(String, String),
+        where_sql: &str,
+    ) -> anyhow::Result<Vec<RowData>> {
+        let handle = Self::get_or_create_pg_meta_manager(conn_pool).await?;
+        let mut meta_manager = handle.lock().await;
+        let tb_meta = meta_manager.get_tb_meta(&db_tb.0, &db_tb.1).await?.to_owned();
+        let cols: Vec<String> = tb_meta
+            .basic
+            .cols
+            .iter()
+            .filter(|col| !ignore_cols.is_some_and(|cols| cols.contains(*col)))
+            .cloned()
+            .collect();
+        let order_col = tb_meta
+            .basic
+            .cols
+            .first()
+            .cloned()
+            .context("gaussdb mysql simple query requires at least one column")?;
+        let sql = format!(
+            "SELECT {} FROM {}.{} {} ORDER BY {} ASC",
+            cols.join(","),
+            tb_meta.basic.schema,
+            tb_meta.basic.tb,
+            where_sql,
+            order_col,
+        );
+
+        let client = Self::connect_pg_simple_client(url, connection_auth).await?;
+        let messages = client.simple_query(&sql).await.with_context(|| {
+            format!(
+                "gaussdb mysql simple_query failed for tb: {:?}, sql: {}",
+                db_tb, sql
+            )
+        })?;
+
+        let mut result = Vec::new();
+        for message in messages {
+            if let SimpleQueryMessage::Row(row) = message {
+                let mut after = HashMap::new();
+                for col in cols.iter() {
+                    let col_type = tb_meta.get_col_type(col)?;
+                    let col_value = match row.get(col.as_str()) {
+                        Some(value) => {
+                            PgColValueConvertor::from_str(col_type, value, &mut meta_manager)?
+                        }
+                        None => ColValue::None,
+                    };
+                    after.insert(col.clone(), col_value);
+                }
+                result.push(RowData::build_insert_row_data(after, &tb_meta.basic));
+            }
+        }
+        Ok(result)
     }
 
     pub async fn get_tb_meta_mysql(
@@ -240,6 +326,87 @@ impl RdbUtil {
                 .with_context(|| format!("execute_sqls_mysql failed, sql: {}", sql))?;
         }
         Ok(())
+    }
+
+    fn set_sslmode(url: &str, sslmode: &str) -> anyhow::Result<String> {
+        let mut parsed = Url::parse(url)?;
+        let mut query_pairs: Vec<(String, String)> = parsed
+            .query_pairs()
+            .filter(|(k, _)| k != "sslmode")
+            .map(|(k, v)| (k.into_owned(), v.into_owned()))
+            .collect();
+        query_pairs.push(("sslmode".to_string(), sslmode.to_string()));
+        parsed.set_query(None);
+        {
+            let mut pairs = parsed.query_pairs_mut();
+            for (k, v) in query_pairs {
+                pairs.append_pair(&k, &v);
+            }
+        }
+        Ok(parsed.to_string())
+    }
+
+    async fn connect_pg_simple_client(
+        url: &str,
+        connection_auth: &ConnectionAuthConfig,
+    ) -> anyhow::Result<Client> {
+        let final_url = ConnectionAuthConfig::merge_url_with_auth(url, connection_auth)?;
+        let prefer_ssl = Url::parse(&final_url)
+            .ok()
+            .and_then(|parsed| {
+                parsed
+                    .query_pairs()
+                    .find(|(k, _)| k == "sslmode")
+                    .map(|(_, v)| v.into_owned())
+            })
+            .map_or(true, |sslmode| sslmode != "disable");
+
+        let connect_no_ssl = || async {
+            let conn_info = Self::set_sslmode(&final_url, "disable")?;
+            let (client, connection) = tokio_postgres::connect(&conn_info, NoTls).await?;
+            tokio::spawn(async move {
+                let _ = connection.await;
+            });
+            Ok::<_, anyhow::Error>(client)
+        };
+
+        let connect_ssl = || async {
+            let conn_info = Self::set_sslmode(&final_url, "require")?;
+            let mut builder = SslConnector::builder(SslMethod::tls())?;
+            builder.set_verify(SslVerifyMode::NONE);
+            let connector = MakeTlsConnector::new(builder.build());
+            let (client, connection) = tokio_postgres::connect(&conn_info, connector).await?;
+            tokio::spawn(async move {
+                let _ = connection.await;
+            });
+            Ok::<_, anyhow::Error>(client)
+        };
+
+        if prefer_ssl {
+            match connect_ssl().await {
+                Ok(client) => Ok(client),
+                Err(error) => {
+                    let msg = error.to_string();
+                    if msg.contains("SSL on") {
+                        connect_no_ssl().await
+                    } else {
+                        Err(error)
+                    }
+                }
+            }
+        } else {
+            match connect_no_ssl().await {
+                Ok(client) => Ok(client),
+                Err(error) => {
+                    let msg = error.to_string();
+                    if msg.contains("SSL off") {
+                        connect_ssl().await
+                    } else {
+                        Err(error)
+                    }
+                }
+            }
+        }
     }
 
     pub async fn execute_sqls_pg(

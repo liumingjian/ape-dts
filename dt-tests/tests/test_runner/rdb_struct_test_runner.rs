@@ -1,13 +1,21 @@
+use anyhow::Context;
 use dt_common::{
-    config::{config_enums::DbType, task_config::TaskConfig},
+    config::{
+        config_enums::DbType, connection_auth_config::ConnectionAuthConfig,
+        task_config::TaskConfig,
+    },
     meta::ddl_meta::{ddl_parser::DdlParser, ddl_statement::DdlStatement},
 };
 use dt_connector::meta_fetcher::{
     mysql::mysql_struct_check_fetcher::MysqlStructCheckFetcher,
     pg::pg_struct_check_fetcher::{PgCheckTableInfo, PgStructCheckFetcher},
 };
+use openssl::ssl::{SslConnector, SslMethod, SslVerifyMode};
+use postgres_openssl::MakeTlsConnector;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
+use tokio_postgres::{Client, NoTls, SimpleQueryMessage};
+use url::Url;
 
 use super::rdb_test_runner::PUBLIC;
 use super::{base_test_runner::BaseTestRunner, rdb_test_runner::RdbTestRunner};
@@ -60,10 +68,6 @@ impl RdbStructTestRunner {
                 .map(|conn_pool| MysqlStructCheckFetcher {
                     conn_pool: conn_pool.clone(),
                 });
-        let dst_check_fetcher = MysqlStructCheckFetcher {
-            conn_pool: self.base.dst_conn_pool_mysql.as_mut().unwrap().clone(),
-        };
-
         let get_sql_lines = |sql: &str| -> HashSet<String> {
             let mut line_set = HashSet::new();
             let lines: Vec<&str> = sql.split("\n").collect();
@@ -82,9 +86,9 @@ impl RdbStructTestRunner {
                 println!("src_ddl_sql: {}\n", src_ddl_sql);
             }
 
-            let dst_ddl_sql = dst_check_fetcher
-                .fetch_table(&dst_db_tbs[i].0, &dst_db_tbs[i].1)
-                .await;
+            let dst_ddl_sql = self
+                .fetch_mysql_compatible_table_ddl(&dst_db_tbs[i].0, &dst_db_tbs[i].1)
+                .await?;
             let key = format!("{}.{}", &dst_db_tbs[i].0, &dst_db_tbs[i].1);
             let expect_ddl_sql = expect_ddl_sqls.get(&key).unwrap().to_owned();
 
@@ -114,7 +118,7 @@ impl RdbStructTestRunner {
                 println!("src_ddl_sql: {}\n", src_ddl_sql);
             }
 
-            let dst_ddl_sql = dst_check_fetcher.fetch_database(&dst_db_tbs[i].0).await;
+            let dst_ddl_sql = self.fetch_mysql_compatible_database_ddl(&dst_db_tbs[i].0).await?;
             let key = dst_db_tbs[i].0.to_string();
             let expect_ddl_sql = expect_ddl_sqls.get(&key).unwrap().to_owned();
 
@@ -126,6 +130,140 @@ impl RdbStructTestRunner {
         }
 
         Ok(())
+    }
+
+    async fn fetch_mysql_compatible_table_ddl(&self, db: &str, tb: &str) -> anyhow::Result<String> {
+        if let Some(conn_pool) = &self.base.dst_conn_pool_mysql {
+            let fetcher = MysqlStructCheckFetcher {
+                conn_pool: conn_pool.clone(),
+            };
+            return Ok(fetcher.fetch_table(db, tb).await);
+        }
+
+        if matches!(self.base.config.sinker_basic.db_type, DbType::GaussDBMySQL)
+            && self.base.dst_conn_pool_pg.is_some()
+        {
+            let sql = format!("SHOW CREATE TABLE `{}`.`{}`", db, tb);
+            return self.fetch_gaussdb_mysql_show_create(&sql).await;
+        }
+
+        anyhow::bail!("mysql-compatible destination struct fetcher is not available")
+    }
+
+    async fn fetch_mysql_compatible_database_ddl(&self, db: &str) -> anyhow::Result<String> {
+        if let Some(conn_pool) = &self.base.dst_conn_pool_mysql {
+            let fetcher = MysqlStructCheckFetcher {
+                conn_pool: conn_pool.clone(),
+            };
+            return Ok(fetcher.fetch_database(db).await);
+        }
+
+        if matches!(self.base.config.sinker_basic.db_type, DbType::GaussDBMySQL)
+            && self.base.dst_conn_pool_pg.is_some()
+        {
+            let sql = format!("SHOW CREATE DATABASE `{}`", db);
+            return self.fetch_gaussdb_mysql_show_create(&sql).await;
+        }
+
+        anyhow::bail!("mysql-compatible destination database fetcher is not available")
+    }
+
+    async fn fetch_gaussdb_mysql_show_create(&self, sql: &str) -> anyhow::Result<String> {
+        let client = Self::connect_pg_simple_client(
+            &self.base.config.sinker_basic.url,
+            &self.base.config.sinker_basic.connection_auth,
+        )
+        .await?;
+        let messages = client.simple_query(sql).await.with_context(|| {
+            format!("gaussdb mysql show create failed, sql: {}", sql)
+        })?;
+        for message in messages {
+            if let SimpleQueryMessage::Row(row) = message {
+                if let Some(value) = row.get(1) {
+                    return Ok(value.to_string());
+                }
+            }
+        }
+        Ok(String::new())
+    }
+
+    fn set_sslmode(url: &str, sslmode: &str) -> anyhow::Result<String> {
+        let mut parsed = Url::parse(url)?;
+        let mut query_pairs: Vec<(String, String)> = parsed
+            .query_pairs()
+            .filter(|(k, _)| k != "sslmode")
+            .map(|(k, v)| (k.into_owned(), v.into_owned()))
+            .collect();
+        query_pairs.push(("sslmode".to_string(), sslmode.to_string()));
+        parsed.set_query(None);
+        {
+            let mut pairs = parsed.query_pairs_mut();
+            for (k, v) in query_pairs {
+                pairs.append_pair(&k, &v);
+            }
+        }
+        Ok(parsed.to_string())
+    }
+
+    async fn connect_pg_simple_client(
+        url: &str,
+        connection_auth: &ConnectionAuthConfig,
+    ) -> anyhow::Result<Client> {
+        let final_url = ConnectionAuthConfig::merge_url_with_auth(url, connection_auth)?;
+        let prefer_ssl = Url::parse(&final_url)
+            .ok()
+            .and_then(|parsed| {
+                parsed
+                    .query_pairs()
+                    .find(|(k, _)| k == "sslmode")
+                    .map(|(_, v)| v.into_owned())
+            })
+            .map_or(true, |sslmode| sslmode != "disable");
+
+        let connect_no_ssl = || async {
+            let conn_info = Self::set_sslmode(&final_url, "disable")?;
+            let (client, connection) = tokio_postgres::connect(&conn_info, NoTls).await?;
+            tokio::spawn(async move {
+                let _ = connection.await;
+            });
+            Ok::<_, anyhow::Error>(client)
+        };
+
+        let connect_ssl = || async {
+            let conn_info = Self::set_sslmode(&final_url, "require")?;
+            let mut builder = SslConnector::builder(SslMethod::tls())?;
+            builder.set_verify(SslVerifyMode::NONE);
+            let connector = MakeTlsConnector::new(builder.build());
+            let (client, connection) = tokio_postgres::connect(&conn_info, connector).await?;
+            tokio::spawn(async move {
+                let _ = connection.await;
+            });
+            Ok::<_, anyhow::Error>(client)
+        };
+
+        if prefer_ssl {
+            match connect_ssl().await {
+                Ok(client) => Ok(client),
+                Err(error) => {
+                    if error.to_string().contains("SSL on") {
+                        connect_no_ssl().await
+                    } else {
+                        Err(error)
+                    }
+                }
+            }
+        } else {
+            match connect_no_ssl().await {
+                Ok(client) => Ok(client),
+                Err(error) => {
+                    if error.to_string().contains("SSL off") {
+                        connect_ssl().await
+                    } else {
+                        Err(error)
+                    }
+                }
+            }
+        }
     }
 
     pub async fn run_pg_struct_test(&mut self) -> anyhow::Result<()> {

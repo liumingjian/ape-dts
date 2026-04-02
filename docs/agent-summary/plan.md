@@ -1,6 +1,6 @@
 # GaussDB PRD 驱动迭代计划
 
-> **日期**：2026-03-31  
+> **日期**：2026-04-02  
 > **需求真相源**：`docs/agent-summary/gaussdb-prd.md`  
 > **执行真表（Epic）**：`.codex-tasks/20260331-gaussdb-prd-align/SUBTASKS.csv`
 
@@ -15,33 +15,83 @@ MVP（`DbType::GaussDBPg`）已在真实环境闭环验证：
 - `GaussDBPg → PG`：snapshot / cdc / check ✅
 - Struct 扩展（view/matview/routine/routine grants，双向）✅
 - CDC P0 稳定性增强：candidate-first + sticky + HA 端口 `sql_port+1` + replication NoTLS-first + fail-fast 诊断 ✅
+- CDC P1 resilience：resume / failover / negatives / e2e ✅
 
 证据入口（示例）：
 
 - `.codex-tasks/20260316-gaussdb-mvp/SUBTASKS.csv`
 - `.codex-tasks/20260329-gaussdb-prd-e2e/PROGRESS.md`
 - `.codex-tasks/20260331-gaussdb-p0-stability/PROGRESS.md`
+- `.codex-tasks/20260331-gaussdb-cdc-resilience/PROGRESS.md`
 
-## 2. 下一阶段（按优先级）
+## 2. 下一阶段（双 Epic 并行）
 
-### 2.1 P1：SHA256 认证（BLOCKED）
+### 2.1 Active Epic A：`GaussDBMySQL Bootstrap`
 
-对齐 PRD 的“MD5 + SHA256”认证要求，但当前依赖联调环境可用性：
+目标：以 **`MySQL -> GaussDBMySQL` 目标端优先** 的方式，启动 `DbType::GaussDBMySQL` 的首波落地。
 
-- 在 `apecloud/rust-postgres` 侧实现 GaussDB 非标准 SHA256 握手
-- 主仓切依赖并回归不影响 PG/MD5
+本轮范围锁定：
 
-状态：在 epic 中先标记 `BLOCKED`，环境到位再开工（见 #6）。
+- 已完成“连接协议 vs 数据库兼容模式”的模型校正
+- 已完成 `snapshot basic`
+- 已完成 `struct + check basic`
+- 已完成 `runbook/template/tracker` 收口
+- 只做 `MySQL -> GaussDBMySQL`
+- 首波 bootstrap 已交付到 `snapshot + struct + check + docs`
+- **不做 CDC**
+- **不做 `GaussDBMySQL -> MySQL` 源端抽取**
 
-### 2.2 P1：CDC 恢复/故障演练与负例套件
+环境约束：
 
-在主链路功能补齐后推进：
+- `mysql` 源端统一使用本机 Docker
+- `gaussdb` 目标端使用现有可写的 **MySQL 兼容模式**实例
+- 新发现的环境事实：
+  - GaussDB 兼容模式是在**建库时**指定的，属于数据库级属性
+  - 当前已验证示例：`postgres://root@10.250.0.51:8000/jyp_test_m?sslmode=require`
+  - 连接到该库后 `SHOW sql_compatibility;` 返回 `M`
+  - 这说明 `GaussDBMySQL` 不能简单等同于 “MySQL wire protocol”；后续实现需要拆分“连接协议”和“SQL 兼容模式”
+- 当前已验证能力：
+  - `MySQL -> GaussDBMySQL snapshot basic` 已通过真实环境验证
+  - `MySQL -> GaussDBMySQL struct basic` 已通过真实环境验证
+  - `MySQL -> GaussDBMySQL check basic` 已通过真实环境验证
+  - 关键适配包括 pg-wire MySQL-mode 写入、目标 simple-query 对账、以及候选主库 RW 重写
+- 推荐通过 `dt-tests/tests/.env.local` 提供：
+  - `gaussdb_mysql_sinker_without_auth_url`
+  - `gaussdb_mysql_sinker_username`
+  - `gaussdb_mysql_sinker_password`
+  - 这些变量名仍是测试框架里的历史角色命名，但其值在真实环境中可以是 `postgres://.../<mysql-compatible-db>` 形式
 
-- resume（进程重启/位点恢复）
-- failover（切主/主不可用）
-- 负例 fail-fast（权限不足/插件不可用/HA 端口不可达等）
+执行真表：
 
-### 2.3 P1/P2：类型矩阵、性能与可观测、完整版（MySQL/Oracle 模式）
+- `.codex-tasks/20260402-gaussdb-mysql-bootstrap/SUBTASKS.csv`
+
+### 2.2 Active Epic B：`GaussDBPg Quality Coverage`
+
+目标：继续围绕 `DbType::GaussDBPg` 收口 PRD 中尚未形成执行真表的质量项。
+
+本轮优先级锁定：
+
+- 真相源归一（去掉已过时的“CDC resilience 仍属下一阶段”的表述）
+- 已完成首批 `gaussdb_pg` 特有类型 alias/codec 契约（`smalldatetime/tinyint/nvarchar2/clob/blob`）
+- 类型矩阵 / codec / compare 兼容
+- 非 CDC 类型矩阵 e2e
+- CDC 类型矩阵 + fail-fast 证据
+- 性能 / 可观测 / check 边界深化
+
+执行真表：
+
+- `.codex-tasks/20260402-gaussdbpg-quality-coverage/SUBTASKS.csv`
+
+### 2.3 Blocked Backlog
+
+- `SHA256`
+  - 继续单独阻塞管理，不进入本轮 active Epic
+  - 依赖 `apecloud/rust-postgres` 与专用联调环境
+  - 参考：`docs/agent-summary/gaussdb-sha256-roadmap.md`
+- `GaussDBOracle`
+  - 本轮只保留 roadmap / blocked 条目
+  - 不与 `GaussDBMySQL` 首波骨架混做
+  - 参考：`docs/agent-summary/gaussdb-oracle-roadmap.md`
 
 ---
 
@@ -74,7 +124,7 @@ MVP（`DbType::GaussDBPg`）已在真实环境闭环验证：
 - 完成自动化测试与真实 GaussDB 手工联调证据归档。
 - 形成 GaussDB 配置模板、联调 runbook、故障排查说明。
 
-### 2.2 本期明确不做
+### 2.2 本期明确不做（历史 MVP 边界）
 
 - 不做 `GaussDBMySQL`、`GaussDBOracle`。
 - 不做 `SHA256` 认证正式交付。

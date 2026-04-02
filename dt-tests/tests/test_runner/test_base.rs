@@ -83,9 +83,14 @@ impl TestBase {
     pub async fn run_snapshot_test(test_dir: &str) {
         Self::run_with_retry(test_dir, "snapshot", || async {
             let runner = RdbTestRunner::new(test_dir).await?;
-            let res = runner.run_snapshot_test(true).await;
+            let run_res = runner.run_snapshot_test(true).await;
+            // Best-effort cleanup to reduce shared-environment pollution. No-op if clean SQLs are absent.
+            let clean_res = runner.execute_clean_sqls().await;
             let _ = runner.close().await;
-            res?;
+            if let Err(e) = run_res {
+                return Err(e);
+            }
+            clean_res?;
             Ok(())
         })
         .await;
@@ -114,15 +119,21 @@ impl TestBase {
             let db_tb = RdbTestRunner::parse_full_tb_name(db_tb, db_type);
             assert_dst_count(&db_tb, count);
         }
+        runner.execute_clean_sqls().await.unwrap();
         runner.close().await.unwrap();
     }
 
     pub async fn run_cdc_test(test_dir: &str, start_millis: u64, parse_millis: u64) {
         Self::run_with_retry(test_dir, "cdc", || async {
             let runner = RdbTestRunner::new(test_dir).await?;
-            let res = runner.run_cdc_test(start_millis, parse_millis).await;
+            let run_res = runner.run_cdc_test(start_millis, parse_millis).await;
+            // Best-effort cleanup to reduce shared-environment pollution. No-op if clean SQLs are absent.
+            let clean_res = runner.execute_clean_sqls().await;
             let _ = runner.close().await;
-            res?;
+            if let Err(e) = run_res {
+                return Err(e);
+            }
+            clean_res?;
             Ok(())
         })
         .await;
@@ -131,9 +142,14 @@ impl TestBase {
     pub async fn run_cdc_resume_test(test_dir: &str, start_millis: u64, parse_millis: u64) {
         Self::run_with_retry(test_dir, "cdc_resume", || async {
             let runner = RdbTestRunner::new(test_dir).await?;
-            let res = runner.run_cdc_resume_test(start_millis, parse_millis).await;
+            let run_res = runner.run_cdc_resume_test(start_millis, parse_millis).await;
+            // Best-effort cleanup to reduce shared-environment pollution. No-op if clean SQLs are absent.
+            let clean_res = runner.execute_clean_sqls().await;
             let _ = runner.close().await;
-            res?;
+            if let Err(e) = run_res {
+                return Err(e);
+            }
+            clean_res?;
             Ok(())
         })
         .await;
@@ -176,11 +192,14 @@ impl TestBase {
                 panic!("cdc_failover runner init failed: {:#}", last_err.unwrap())
             })
         };
-        let res = runner
+        let run_res = runner
             .run_cdc_failover_test(start_millis, parse_millis)
             .await;
+        // Best-effort cleanup to reduce shared-environment pollution. No-op if clean SQLs are absent.
+        let clean_res = runner.execute_clean_sqls().await;
         let _ = runner.close().await;
-        res.unwrap();
+        run_res.unwrap();
+        clean_res.unwrap();
     }
 
     pub async fn run_cdc_to_sql_test(

@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString, IntoStaticStr};
+use url::Url;
 
 #[derive(
     Clone,
@@ -22,6 +23,8 @@ pub enum DbType {
     Pg,
     #[strum(serialize = "gaussdb_pg")]
     GaussDBPg,
+    #[strum(serialize = "gaussdb_mysql")]
+    GaussDBMySQL,
     #[strum(serialize = "kafka")]
     Kafka,
     #[strum(serialize = "mongo")]
@@ -40,17 +43,116 @@ pub enum DbType {
     Tidb,
 }
 
+#[derive(
+    Clone,
+    Display,
+    EnumString,
+    IntoStaticStr,
+    Debug,
+    PartialEq,
+    Eq,
+    Default,
+    Serialize,
+    Deserialize,
+    Hash,
+)]
+pub enum WireProtocol {
+    #[strum(serialize = "mysql")]
+    Mysql,
+    #[default]
+    #[strum(serialize = "postgresql", serialize = "postgres", serialize = "pg")]
+    PostgreSQL,
+}
+
+impl WireProtocol {
+    pub fn from_url(url: &str) -> Option<Self> {
+        let parsed = Url::parse(url).ok()?;
+        match parsed.scheme() {
+            "mysql" => Some(Self::Mysql),
+            "postgres" | "postgresql" => Some(Self::PostgreSQL),
+            _ => None,
+        }
+    }
+}
+
+#[derive(
+    Clone,
+    Display,
+    EnumString,
+    IntoStaticStr,
+    Debug,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    Hash,
+)]
+pub enum GaussDBSqlCompatibility {
+    #[strum(serialize = "P")]
+    PostgreSQL,
+    #[strum(serialize = "M")]
+    MySQL,
+    #[strum(serialize = "A")]
+    Oracle,
+}
+
+impl GaussDBSqlCompatibility {
+    pub fn from_show_value(value: &str) -> Option<Self> {
+        match value.trim() {
+            "P" => Some(Self::PostgreSQL),
+            "M" => Some(Self::MySQL),
+            "A" => Some(Self::Oracle),
+            _ => None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
 
-    use super::DbType;
+    use super::{DbType, GaussDBSqlCompatibility, WireProtocol};
 
     #[test]
     fn test_db_type_gaussdb_pg_parse_and_display() {
         let t = DbType::from_str("gaussdb_pg").unwrap();
         assert_eq!(t, DbType::GaussDBPg);
         assert_eq!(t.to_string(), "gaussdb_pg");
+    }
+
+    #[test]
+    fn test_db_type_gaussdb_mysql_parse_and_display() {
+        let t = DbType::from_str("gaussdb_mysql").unwrap();
+        assert_eq!(t, DbType::GaussDBMySQL);
+        assert_eq!(t.to_string(), "gaussdb_mysql");
+    }
+
+    #[test]
+    fn test_gaussdb_protocol_from_postgres_url_for_mysql_mode_db() {
+        let url = "postgres://root@10.250.0.51:8000/jyp_test_m?sslmode=require";
+        assert_eq!(WireProtocol::from_url(url), Some(WireProtocol::PostgreSQL));
+    }
+
+    #[test]
+    fn test_gaussdb_protocol_from_mysql_url() {
+        let url = "mysql://127.0.0.1:3311?ssl-mode=disabled";
+        assert_eq!(WireProtocol::from_url(url), Some(WireProtocol::Mysql));
+    }
+
+    #[test]
+    fn test_gaussdb_sql_compatibility_from_show_value() {
+        assert_eq!(
+            GaussDBSqlCompatibility::from_show_value("M"),
+            Some(GaussDBSqlCompatibility::MySQL)
+        );
+        assert_eq!(
+            GaussDBSqlCompatibility::from_show_value("P"),
+            Some(GaussDBSqlCompatibility::PostgreSQL)
+        );
+        assert_eq!(
+            GaussDBSqlCompatibility::from_show_value("A"),
+            Some(GaussDBSqlCompatibility::Oracle)
+        );
     }
 }
 

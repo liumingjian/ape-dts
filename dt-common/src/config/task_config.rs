@@ -200,7 +200,7 @@ impl TaskConfig {
             Error::ConfigError(format!("extract type: {} not supported", extract_type));
 
         let extractor = match db_type {
-            DbType::Mysql => match extract_type {
+            DbType::Mysql | DbType::GaussDBMySQL => match extract_type {
                 ExtractType::Snapshot => ExtractorConfig::MysqlSnapshot {
                     url,
                     connection_auth,
@@ -534,7 +534,7 @@ impl TaskConfig {
             Error::ConfigError(format!("sinker db type: {} not supported", db_type));
 
         let sinker = match db_type {
-            DbType::Mysql | DbType::Tidb => match sink_type {
+            DbType::Mysql | DbType::GaussDBMySQL | DbType::Tidb => match sink_type {
                 SinkType::Write => SinkerConfig::Mysql {
                     url,
                     connection_auth,

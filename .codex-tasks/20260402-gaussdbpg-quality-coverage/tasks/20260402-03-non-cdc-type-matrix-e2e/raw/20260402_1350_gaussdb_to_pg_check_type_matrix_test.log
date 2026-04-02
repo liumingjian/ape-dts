@@ -1,0 +1,77 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.87s
+warning: the following packages contain code that will be rejected by a future version of Rust: snap v0.2.5
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 2`
+     Running tests/integration_test.rs (target/debug/deps/integration_test-9b60f916ab830360)
+
+running 1 test
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+selected gaussdb rw url: postgres://10.250.0.30:8000/postgres?sslmode=require (server_addr=192.168.1.30/32)
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.51:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.51:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.51:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.51:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+selected gaussdb rw url: postgres://10.250.0.30:8000/postgres?sslmode=require (server_addr=192.168.1.30/32)
+executing sql: DROP TABLE IF EXISTS public.gaussdb_type_matrix_check
+executing sql: CREATE TABLE public.gaussdb_type_matrix_check ( id INTEGER PRIMARY KEY, ts_col smalldatetime, tiny_col tinyint, nvarchar_col nvarchar2(32), clob_col clob, blob_col blob )
+executing sql: DROP TABLE IF EXISTS public.gaussdb_type_matrix_check
+executing sql: CREATE TABLE public.gaussdb_type_matrix_check ( id INTEGER PRIMARY KEY, ts_col TIMESTAMP, tiny_col SMALLINT, nvarchar_col VARCHAR(32), clob_col TEXT, blob_col BYTEA )
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.51:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.51:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.51:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.51:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+selected gaussdb rw url: postgres://10.250.0.30:8000/postgres?sslmode=require (server_addr=192.168.1.30/32)
+executing sql: INSERT INTO public.gaussdb_type_matrix_check ( id, ts_col, tiny_col, nvarchar_col, clob_col, blob_col ) VALUES (1, '2026-04-02 13:20:00', 7, 'alpha', 'first clob text', decode('0001ff', 'hex')), (2, NULL, NULL, 'beta', NULL, NULL)
+executing sql: INSERT INTO public.gaussdb_type_matrix_check ( id, ts_col, tiny_col, nvarchar_col, clob_col, blob_col ) VALUES (1, '2026-04-02 13:20:00', 7, 'alpha', 'first clob text', decode('0001ff', 'hex')), (2, NULL, NULL, 'beta', NULL, NULL)
+2026-04-02T15:26:20.215017+08:00 INFO default_logger - start task: [taskID: 2fbb97a5db14595e, taskType: Some(Check)]
+2026-04-02T15:26:20.215512+08:00 WARN default_logger - recorder unsupported resumer config: Dummy
+2026-04-02T15:26:20.215543+08:00 WARN default_logger - recovery unsupported resumer config: Dummy
+2026-04-02T15:26:20.215565+08:00 INFO default_logger - recovery initialization for task_id: 2fbb97a5db14595e finished in 0 ms
+2026-04-02T15:26:20.640098+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-02T15:26:20.640960+08:00 ERROR default_logger - buffer_memory_mb=0 is too large and will be ignored to prevent overflow
+2026-04-02T15:26:20.640998+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-02T15:26:20.817979+08:00 INFO default_logger - begin to estimate record count
+2026-04-02T15:26:20.818013+08:00 INFO default_logger - estimate record count: 0
+2026-04-02T15:26:21.364784+08:00 INFO default_logger - schema: public, tb: __ape_dts_mv_base, insert events filtered
+2026-04-02T15:26:21.365098+08:00 INFO default_logger - schema: public, tb: gaussdb_cdc_basic, insert events filtered
+2026-04-02T15:26:21.365282+08:00 INFO default_logger - schema: public, tb: gaussdb_cdc_failover, insert events filtered
+2026-04-02T15:26:21.365436+08:00 INFO default_logger - schema: public, tb: gaussdb_cdc_resume, insert events filtered
+2026-04-02T15:26:21.365579+08:00 INFO default_logger - schema: public, tb: gaussdb_check_basic, insert events filtered
+2026-04-02T15:26:21.365719+08:00 INFO default_logger - schema: public, tb: gaussdb_snapshot_basic, insert events filtered
+2026-04-02T15:26:21.365897+08:00 INFO default_logger - schema: public, tb: gaussdb_to_pg_check_basic, insert events filtered
+2026-04-02T15:26:21.366045+08:00 INFO default_logger - schema: public, tb: gaussdb_to_pg_snapshot_basic, insert events filtered
+2026-04-02T15:26:21.366392+08:00 INFO default_logger - schema: public, tb: gaussdb_type_matrix_snapshot, insert events filtered
+2026-04-02T15:26:21.366537+08:00 INFO default_logger - schema: public, tb: pg_to_gaussdb_cdc_basic, insert events filtered
+2026-04-02T15:26:22.609409+08:00 INFO default_logger - PgSnapshotExtractor starts, schema: "public", tb: "gaussdb_type_matrix_check", batch_size: 4, parallel_size: 1
+2026-04-02T15:26:22.610688+08:00 INFO default_logger - CheckParallelizer starts, parallel_size: 1, checkpoint_interval_secs: 1
+2026-04-02T15:26:23.095300+08:00 INFO default_logger - ["public"."gaussdb_type_matrix_check"] recovery from [{}]
+2026-04-02T15:26:23.290325+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-04-02T15:26:23.290367+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-04-02T15:26:23.321367+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-04-02T15:26:23.321851+08:00 INFO monitor_logger - pipeline | public.gaussdb_type_matrix_check | timestamp | latest=0
+2026-04-02T15:26:23.321915+08:00 INFO monitor_logger - pipeline | public.gaussdb_type_matrix_check | sinked_bytes | latest=0
+2026-04-02T15:26:23.321936+08:00 INFO monitor_logger - pipeline | public.gaussdb_type_matrix_check | sinked_records | latest=0
+2026-04-02T15:26:23.322409+08:00 ERROR default_logger - panic: panicked at dt-tests/tests/test_runner/test_base.rs:75:9:
+check failed after 6 attempts: single task: [public.gaussdb_type_matrix_check] failed, error: extractor.extract failed: error returned from database: cannot cast type blob to bytea: cannot cast type blob to bytea
+backtrace:
+disabled backtrace
+test gaussdb_to_pg::check_tests::test::type_matrix_test ... FAILED
+
+failures:
+
+failures:
+    gaussdb_to_pg::check_tests::test::type_matrix_test
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 355 filtered out; finished in 19.76s
+
+error: test failed, to rerun pass `-p dt-tests --test integration_test`

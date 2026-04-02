@@ -8,7 +8,7 @@ use std::{
 use chrono::{Duration, Utc};
 use dt_common::{
     config::{
-        config_enums::DbType,
+        config_enums::{DbType, WireProtocol},
         config_token_parser::{ConfigTokenParser, TokenEscapePair},
         extractor_config::ExtractorConfig,
         meta_center_config::MetaCenterConfig,
@@ -181,6 +181,29 @@ impl RdbTestRunner {
                         .await?,
                     );
                 }
+                DbType::GaussDBMySQL
+                    if matches!(WireProtocol::from_url(dst_url), Some(WireProtocol::PostgreSQL)) =>
+                {
+                    dst_conn_pool_pg = Some(
+                        tokio::time::timeout(
+                            std::time::Duration::from_secs(30),
+                            TaskUtil::create_pg_conn_pool(
+                                dst_url,
+                                dst_connection_auth,
+                                5,
+                                false,
+                                false,
+                            ),
+                        )
+                        .await
+                        .map_err(|_| {
+                            anyhow::anyhow!(
+                                "operation timed out: create_pg_conn_pool(dst gaussdb_mysql) url={}",
+                                dst_url
+                            )
+                        })??,
+                    );
+                }
                 DbType::Pg | DbType::GaussDBPg => {
                     let disable_fk_checks = matches!(dst_db_type, DbType::Pg);
                     let max_connections = if matches!(dst_db_type, DbType::GaussDBPg) {
@@ -263,12 +286,18 @@ impl RdbTestRunner {
             Err(_) => return Ok(()),
         };
 
-        let (base_url, auth) = if config.extractor_basic.db_type == DbType::GaussDBPg {
+        let is_pg_wire_gaussdb = |db_type: &DbType, url: &str| {
+            matches!(db_type, DbType::GaussDBPg)
+                || (matches!(db_type, DbType::GaussDBMySQL)
+                    && matches!(WireProtocol::from_url(url), Some(WireProtocol::PostgreSQL)))
+        };
+
+        let (base_url, auth) = if is_pg_wire_gaussdb(&config.extractor_basic.db_type, &config.extractor_basic.url) {
             (
                 config.extractor_basic.url.clone(),
                 config.extractor_basic.connection_auth.clone(),
             )
-        } else if config.sinker_basic.db_type == DbType::GaussDBPg {
+        } else if is_pg_wire_gaussdb(&config.sinker_basic.db_type, &config.sinker_basic.url) {
             (
                 config.sinker_basic.url.clone(),
                 config.sinker_basic.connection_auth.clone(),
@@ -283,14 +312,14 @@ impl RdbTestRunner {
         };
 
         let mut updates = Vec::new();
-        if config.extractor_basic.db_type == DbType::GaussDBPg {
+        if is_pg_wire_gaussdb(&config.extractor_basic.db_type, &config.extractor_basic.url) {
             updates.push((
                 "extractor".to_string(),
                 "url".to_string(),
                 primary_url.clone(),
             ));
         }
-        if config.sinker_basic.db_type == DbType::GaussDBPg {
+        if is_pg_wire_gaussdb(&config.sinker_basic.db_type, &config.sinker_basic.url) {
             updates.push(("sinker".to_string(), "url".to_string(), primary_url.clone()));
         }
         if !updates.is_empty() {
@@ -300,14 +329,20 @@ impl RdbTestRunner {
         if !struct_task_config_file.is_empty() {
             let struct_config = TaskConfig::new(struct_task_config_file)?;
             let mut struct_updates = Vec::new();
-            if struct_config.extractor_basic.db_type == DbType::GaussDBPg {
+            if is_pg_wire_gaussdb(
+                &struct_config.extractor_basic.db_type,
+                &struct_config.extractor_basic.url,
+            ) {
                 struct_updates.push((
                     "extractor".to_string(),
                     "url".to_string(),
                     primary_url.clone(),
                 ));
             }
-            if struct_config.sinker_basic.db_type == DbType::GaussDBPg {
+            if is_pg_wire_gaussdb(
+                &struct_config.sinker_basic.db_type,
+                &struct_config.sinker_basic.url,
+            ) {
                 struct_updates.push(("sinker".to_string(), "url".to_string(), primary_url.clone()));
             }
             if !struct_updates.is_empty() {
@@ -2507,6 +2542,26 @@ impl RdbTestRunner {
         }
 
         if let Some(pool) = &self.dst_conn_pool_pg {
+            // GaussDB HA primary can switch mid-test, making a previously RW connection suddenly
+            // read-only. When candidate hosts are configured, always resolve a fresh RW endpoint
+            // for write SQLs to reduce flakiness (mirror execute_src_sqls behavior).
+            if matches!(self.config.sinker_basic.db_type, DbType::GaussDBPg)
+                && env::var("gaussdb_pg_candidate_hosts").is_ok()
+            {
+                if let Some((_, rw_pool)) = Self::create_gaussdb_rw_pg_pool_with_wait(
+                    &self.config.sinker_basic.url,
+                    &self.config.sinker_basic.connection_auth,
+                    20_000,
+                )
+                .await?
+                {
+                    let res = RdbUtil::execute_sqls_pg(&rw_pool, sqls).await;
+                    rw_pool.close().await;
+                    res?;
+                    return Ok(());
+                }
+            }
+
             RdbUtil::execute_sqls_pg(pool, sqls).await?;
         }
         Ok(())
@@ -2973,7 +3028,28 @@ impl RdbTestRunner {
         let data = if let Some(pool) = conn_pool_mysql {
             RdbUtil::fetch_data_mysql_compatible(pool, None, db_tb, &db_type, &where_sql).await?
         } else if let Some(pool) = conn_pool_pg {
-            if from == SRC
+            if matches!(db_type, DbType::GaussDBMySQL) {
+                let (url, connection_auth) = if from == SRC {
+                    (
+                        &self.config.extractor_basic.url,
+                        &self.config.extractor_basic.connection_auth,
+                    )
+                } else {
+                    (
+                        &self.config.sinker_basic.url,
+                        &self.config.sinker_basic.connection_auth,
+                    )
+                };
+                RdbUtil::fetch_data_gaussdb_mysql_simple_query(
+                    pool,
+                    url,
+                    connection_auth,
+                    None,
+                    db_tb,
+                    &where_sql,
+                )
+                .await?
+            } else if from == SRC
                 && matches!(self.config.extractor_basic.db_type, DbType::GaussDBPg)
                 && env::var("gaussdb_pg_candidate_hosts").is_ok()
             {

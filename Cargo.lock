@@ -1615,6 +1615,8 @@ dependencies = [
  "log",
  "log4rs",
  "mongodb",
+ "openssl",
+ "postgres-openssl",
  "project-root",
  "rand 0.9.2",
  "rdkafka",
@@ -1627,6 +1629,7 @@ dependencies = [
  "sqlx",
  "time",
  "tokio",
+ "tokio-postgres",
  "url",
  "uuid",
 ]

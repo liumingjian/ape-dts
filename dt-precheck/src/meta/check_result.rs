@@ -51,7 +51,7 @@ impl CheckResult {
                     source_or_sink
                 );
                 match db_type {
-                    DbType::Mysql => advise_msg = "(1)open 'log_bin' configuration. (2)set 'binlog_format' configuration to 'row'. (3)set 'binlog_row_image' configuration to 'full'.".to_string(),
+                    DbType::Mysql | DbType::GaussDBMySQL => advise_msg = "(1)open 'log_bin' configuration. (2)set 'binlog_format' configuration to 'row'. (3)set 'binlog_row_image' configuration to 'full'.".to_string(),
                     DbType::Pg => advise_msg = "(1)set 'wal_level' configuration to 'logical'. (2)make sure that the number of 'max_replication_slots' configured is sufficient. (3)make sure that the number of 'max_wal_senders' configured is sufficient.".to_string(),
                     DbType::GaussDBPg => advise_msg = "(1)install/enable 'mppdb_decoding' plugin. (2)set 'wal_level' to 'logical'. (3)make sure that 'max_replication_slots' and 'max_wal_senders' are sufficient.".to_string(),
                     DbType::Mongo => advise_msg = "make sure that the configured link address is the master node under a replica set architecture.".to_string(),
@@ -81,7 +81,7 @@ impl CheckResult {
                 check_desc = format!("check if the {} database version supports.", source_or_sink);
                 let mut advise_version = String::new();
                 match db_type {
-                    DbType::Mysql => {
+                    DbType::Mysql | DbType::GaussDBMySQL => {
                         advise_version = "currently supports version '8.*'.".to_string()
                     }
                     DbType::Pg => advise_version = "currently supports version '14.*'.".to_string(),

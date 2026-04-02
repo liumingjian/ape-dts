@@ -1,0 +1,3 @@
+pub mod snapshot_tests;
+pub mod struct_tests;
+pub mod check_tests;

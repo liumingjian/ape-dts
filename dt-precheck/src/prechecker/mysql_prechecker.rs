@@ -17,6 +17,7 @@ use super::traits::Prechecker;
 const MYSQL_SUPPORT_DB_VERSION_REGEX: &str = r"5\..*|8\..*";
 
 pub struct MySqlPrechecker {
+    pub db_type: DbType,
     pub fetcher: MysqlFetcher,
     pub filter_config: FilterConfig,
     pub precheck_config: PrecheckConfig,
@@ -30,7 +31,7 @@ impl Prechecker for MySqlPrechecker {
         Ok(CheckResult::build_with_err(
             CheckItem::CheckDatabaseConnection,
             self.is_source,
-            DbType::Mysql,
+            self.db_type.clone(),
             None,
             None,
         ))
@@ -61,7 +62,7 @@ impl Prechecker for MySqlPrechecker {
         Ok(CheckResult::build_with_err(
             CheckItem::CheckDatabaseVersionSupported,
             self.is_source,
-            DbType::Mysql,
+            self.db_type.clone(),
             check_error,
             None,
         ))
@@ -82,7 +83,7 @@ impl Prechecker for MySqlPrechecker {
             return Ok(CheckResult::build_with_err(
                 CheckItem::CheckIfDatabaseSupportCdc,
                 self.is_source,
-                DbType::Mysql,
+                self.db_type.clone(),
                 check_error,
                 None,
             ));
@@ -138,7 +139,7 @@ impl Prechecker for MySqlPrechecker {
         Ok(CheckResult::build_with_err(
             CheckItem::CheckIfDatabaseSupportCdc,
             self.is_source,
-            DbType::Mysql,
+            self.db_type.clone(),
             check_error,
             None,
         ))
@@ -159,12 +160,12 @@ impl Prechecker for MySqlPrechecker {
         }
 
         let is_filter_pattern =
-            BasicPrechecker::is_filter_pattern(DbType::Mysql, &self.fetcher.filter);
+            BasicPrechecker::is_filter_pattern(self.db_type.clone(), &self.fetcher.filter);
         if is_filter_pattern {
             return Ok(CheckResult::build_with_err(
                 CheckItem::CheckIfStructExisted,
                 self.is_source,
-                DbType::Mysql,
+                self.db_type.clone(),
                 check_error,
                 Some(anyhow::Error::msg(
                     "CheckIfStructExisted with filter in pattern is not supported.",
@@ -247,7 +248,7 @@ impl Prechecker for MySqlPrechecker {
         Ok(CheckResult::build_with_err(
             CheckItem::CheckIfStructExisted,
             self.is_source,
-            DbType::Mysql,
+            self.db_type.clone(),
             check_error,
             None,
         ))
@@ -268,12 +269,12 @@ impl Prechecker for MySqlPrechecker {
         }
 
         let is_filter_pattern =
-            BasicPrechecker::is_filter_pattern(DbType::Mysql, &self.fetcher.filter);
+            BasicPrechecker::is_filter_pattern(self.db_type.clone(), &self.fetcher.filter);
         if is_filter_pattern {
             return Ok(CheckResult::build_with_err(
                 CheckItem::CheckIfTableStructSupported,
                 self.is_source,
-                DbType::Mysql,
+                self.db_type.clone(),
                 check_error,
                 Some(anyhow::Error::msg(
                     "CheckIfTableStructSupported with filter in pattern is not supported.",
@@ -389,7 +390,7 @@ impl Prechecker for MySqlPrechecker {
         Ok(CheckResult::build_with_err(
             CheckItem::CheckIfTableStructSupported,
             self.is_source,
-            DbType::Mysql,
+            self.db_type.clone(),
             check_error,
             warn_error,
         ))

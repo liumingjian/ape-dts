@@ -643,11 +643,15 @@ impl ExtractorUtil {
         let connection_auth = &task_config.extractor_basic.connection_auth;
 
         let meta_manager = match task_config.extractor_basic.db_type {
-            DbType::Mysql => {
+            DbType::Mysql | DbType::GaussDBMySQL => {
                 let conn_pool =
                     TaskUtil::create_mysql_conn_pool(extractor_url, connection_auth, 1, true, None)
                         .await?;
-                let meta_manager = MysqlMetaManager::new(conn_pool.clone()).await?;
+                let meta_manager = MysqlMetaManager::new_mysql_compatible(
+                    conn_pool.clone(),
+                    task_config.extractor_basic.db_type.clone(),
+                )
+                .await?;
                 Some(RdbMetaManager::from_mysql(meta_manager))
             }
             DbType::Pg | DbType::GaussDBPg => {

@@ -48,9 +48,9 @@ impl TypeRegistry {
 
     fn parse_col_meta(&mut self, row: &PgRow) -> anyhow::Result<PgColType> {
         let oid: i32 = row.try_get::<PgOid, _>("oid")?.0 as i32;
-        let value_type = PgValueType::from_oid(oid);
         let name: String = row.try_get("name")?;
         let alias = Self::name_to_alias(&name);
+        let value_type = Self::resolve_value_type(oid, &alias);
         let element_oid: i32 = row.try_get::<PgOid, _>("element")?.0 as i32;
         let parent_oid: i32 = row.try_get::<PgOid, _>("parentoid")?.0 as i32;
         let category: i8 = row.try_get("category")?;
@@ -71,6 +71,15 @@ impl TypeRegistry {
         })
     }
 
+    fn resolve_value_type(oid: i32, alias: &str) -> PgValueType {
+        let value_type = PgValueType::from_oid(oid);
+        if value_type == PgValueType::String {
+            PgValueType::from_alias(alias)
+        } else {
+            value_type
+        }
+    }
+
     fn name_to_alias(name: &str) -> String {
         // refer to: https://www.postgresql.org/docs/17/datatype.html
         match name {
@@ -84,17 +93,60 @@ impl TypeRegistry {
             "character varying" => "varchar",
             "double precision" => "float8",
             "int" | "integer" => "int4",
+            "int1" => "int2",
             "decimal" => "numeric",
             "real" => "float4",
             "smallint" => "int2",
             "smallserial" => "serial2",
             "serial" => "serial4",
+            "smalldatetime" => "timestamp",
             "timestamp with time zone" => "timestamptz",
             "timestamp without time zone" => "timestamp",
+            "tinyint" => "int2",
             "time without time zone" => "time",
             "time with time zone" => "timetz",
+            "nvarchar2" => "varchar",
+            "clob" => "text",
+            "blob" => "bytea",
             _ => name,
         }
         .to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TypeRegistry;
+    use crate::meta::pg::pg_value_type::PgValueType;
+
+    #[test]
+    fn gaussdb_type_matrix_name_to_alias_maps_prd_specific_names() {
+        assert_eq!(TypeRegistry::name_to_alias("smalldatetime"), "timestamp");
+        assert_eq!(TypeRegistry::name_to_alias("int1"), "int2");
+        assert_eq!(TypeRegistry::name_to_alias("tinyint"), "int2");
+        assert_eq!(TypeRegistry::name_to_alias("nvarchar2"), "varchar");
+        assert_eq!(TypeRegistry::name_to_alias("clob"), "text");
+        assert_eq!(TypeRegistry::name_to_alias("blob"), "bytea");
+    }
+
+    #[test]
+    fn gaussdb_type_matrix_resolve_value_type_falls_back_to_alias_when_oid_unknown() {
+        let unknown_oid = 999999;
+        assert_eq!(
+            TypeRegistry::resolve_value_type(unknown_oid, "timestamp"),
+            PgValueType::Timestamp
+        );
+        assert_eq!(
+            TypeRegistry::resolve_value_type(unknown_oid, "int2"),
+            PgValueType::Int16
+        );
+        assert_eq!(
+            TypeRegistry::resolve_value_type(unknown_oid, "bytea"),
+            PgValueType::Bytes
+        );
+        assert_eq!(
+            TypeRegistry::resolve_value_type(unknown_oid, "varchar"),
+            PgValueType::String
+        );
     }
 }

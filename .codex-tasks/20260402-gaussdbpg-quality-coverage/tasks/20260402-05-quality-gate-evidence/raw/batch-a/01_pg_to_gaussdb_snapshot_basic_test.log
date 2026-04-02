@@ -1,0 +1,284 @@
+   Compiling dt-tests v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-tests)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.47s
+warning: the following packages contain code that will be rejected by a future version of Rust: snap v0.2.5
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 2`
+     Running tests/integration_test.rs (target/debug/deps/integration_test-9b60f916ab830360)
+
+running 1 test
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+selected gaussdb rw url: postgres://10.250.0.30:8000/postgres?sslmode=require (server_addr=192.168.1.30/32)
+executing sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic
+executing sql: CREATE TABLE public.gaussdb_snapshot_basic ( id INTEGER PRIMARY KEY, val TEXT )
+executing sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic
+executing sql: CREATE TABLE public.gaussdb_snapshot_basic ( id INTEGER PRIMARY KEY, val TEXT )
+executing sql: INSERT INTO public.gaussdb_snapshot_basic (id, val) VALUES (1, 'a'), (2, 'b')
+2026-04-02T18:53:48.330242+08:00 INFO default_logger - start task: [taskID: d7634b026e8a539f, taskType: Some(Snapshot)]
+2026-04-02T18:53:48.330457+08:00 WARN default_logger - recorder unsupported resumer config: Dummy
+2026-04-02T18:53:48.330476+08:00 WARN default_logger - recovery unsupported resumer config: Dummy
+2026-04-02T18:53:48.330491+08:00 INFO default_logger - recovery initialization for task_id: d7634b026e8a539f finished in 0 ms
+2026-04-02T18:53:48.879055+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-02T18:53:48.879151+08:00 ERROR default_logger - buffer_memory_mb=0 is too large and will be ignored to prevent overflow
+2026-04-02T18:53:48.879183+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-02T18:53:48.886174+08:00 INFO default_logger - begin to estimate record count
+2026-04-02T18:53:48.891764+08:00 INFO default_logger - estimate record count: 0
+2026-04-02T18:53:48.966203+08:00 INFO default_logger - schema: public, tb: gaussdb_cdc_basic, insert events filtered
+2026-04-02T18:53:48.966236+08:00 INFO default_logger - schema: public, tb: gaussdb_cdc_failover, insert events filtered
+2026-04-02T18:53:48.966252+08:00 INFO default_logger - schema: public, tb: gaussdb_cdc_type_matrix, insert events filtered
+2026-04-02T18:53:48.966268+08:00 INFO default_logger - schema: public, tb: gaussdb_check_basic, insert events filtered
+2026-04-02T18:53:48.966292+08:00 INFO default_logger - schema: public, tb: gaussdb_to_pg_check_basic, insert events filtered
+2026-04-02T18:53:48.966328+08:00 INFO default_logger - schema: public, tb: gaussdb_to_pg_snapshot_basic, insert events filtered
+2026-04-02T18:53:48.966344+08:00 INFO default_logger - schema: public, tb: gaussdb_type_matrix_check, insert events filtered
+2026-04-02T18:53:48.966357+08:00 INFO default_logger - schema: public, tb: gaussdb_type_matrix_snapshot, insert events filtered
+2026-04-02T18:53:49.387309+08:00 INFO default_logger - PgSnapshotExtractor starts, schema: "public", tb: "gaussdb_snapshot_basic", batch_size: 4, parallel_size: 1
+2026-04-02T18:53:49.387676+08:00 INFO default_logger - SnapshotParallelizer starts, parallel_size: 1, checkpoint_interval_secs: 1
+2026-04-02T18:53:49.401646+08:00 INFO default_logger - ["public"."gaussdb_snapshot_basic"] recovery from [{}]
+2026-04-02T18:53:49.404612+08:00 INFO default_logger - end extracting data from "public"."gaussdb_snapshot_basic", all count: 2
+2026-04-02T18:53:49.492603+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-04-02T18:53:49.493922+08:00 INFO monitor_logger - extractor | public.gaussdb_snapshot_basic | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-04-02T18:53:49.493974+08:00 INFO monitor_logger - extractor | public.gaussdb_snapshot_basic | data_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10
+2026-04-02T18:53:49.493991+08:00 INFO monitor_logger - extractor | public.gaussdb_snapshot_basic | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-04-02T18:53:49.494006+08:00 INFO monitor_logger - extractor | public.gaussdb_snapshot_basic | extracted_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10
+2026-04-02T18:53:49.494047+08:00 INFO monitor_logger - pipeline | public.gaussdb_snapshot_basic | record_size | avg=5
+2026-04-02T18:53:49.494061+08:00 INFO monitor_logger - pipeline | public.gaussdb_snapshot_basic | buffer_size | sum=2 | avg=2 | max=2
+2026-04-02T18:53:49.494083+08:00 INFO monitor_logger - pipeline | public.gaussdb_snapshot_basic | sinked_records | latest=0
+2026-04-02T18:53:49.494096+08:00 INFO monitor_logger - pipeline | public.gaussdb_snapshot_basic | sinked_bytes | latest=0
+2026-04-02T18:53:49.968771+08:00 INFO monitor_logger - extractor | global | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2 | min_by_sec=0
+2026-04-02T18:53:49.968837+08:00 INFO monitor_logger - extractor | global | data_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10 | min_by_sec=0
+2026-04-02T18:53:49.968878+08:00 INFO monitor_logger - extractor | global | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2 | min_by_sec=0
+2026-04-02T18:53:49.968914+08:00 INFO monitor_logger - extractor | global | extracted_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10 | min_by_sec=0
+2026-04-02T18:53:49.969106+08:00 INFO monitor_logger - pipeline | global | buffer_size | sum=2 | avg=2 | max=2 | min=0
+2026-04-02T18:53:49.969143+08:00 INFO monitor_logger - pipeline | global | record_size | avg=5
+2026-04-02T18:53:49.969198+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=0
+2026-04-02T18:53:49.969304+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=0
+2026-04-02T18:53:50.453895+08:00 INFO position_logger - current_position | {"type":"RdbSnapshot","db_type":"pg","schema":"public","tb":"gaussdb_snapshot_basic","order_key":{"single":["id","2"]}}
+2026-04-02T18:53:50.453978+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-04-02T18:53:50.454053+08:00 INFO position_logger - current_position | {"type":"RdbSnapshot","db_type":"pg","schema":"public","tb":"gaussdb_snapshot_basic","order_key":{"single":["id","2"]}}
+2026-04-02T18:53:50.454068+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-04-02T18:53:50.454438+08:00 INFO finished_logger - {"type":"RdbSnapshotFinished","db_type":"pg","schema":"public","tb":"gaussdb_snapshot_basic"}
+2026-04-02T18:53:50.484664+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-04-02T18:53:50.484813+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=10
+2026-04-02T18:53:50.484829+08:00 INFO monitor_logger - pipeline | global | timestamp | latest=0
+2026-04-02T18:53:50.484844+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=2
+2026-04-02T18:53:50.485549+08:00 INFO finished_logger - task finished
+2026-04-02T18:53:51.865445+08:00 WARN sqlx::postgres::notice - Fast path bit num leak.
+comparing row data for src_tb: ("public", "gaussdb_snapshot_basic"), dst_tb: ("public", "gaussdb_snapshot_basic"), src_data count: 2, dst_data count: 2
+row index: 0, col: id, src_col_value: Long(1), dst_col_value: Long(1)
+row index: 0, col: val, src_col_value: String("a"), dst_col_value: String("a")
+row index: 1, col: id, src_col_value: Long(2), dst_col_value: Long(2)
+row index: 1, col: val, src_col_value: String("b"), dst_col_value: String("b")
+executing sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic
+executing sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic
+2026-04-02T18:54:01.923462+08:00 WARN sqlx_core::pool::connection - error occurred while testing the connection on-release: error communicating with database: unexpected end of file
+snapshot failed (attempt 1/6), will retry: execute_sqls_pg failed, sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic: error communicating with database: unexpected end of file: unexpected end of file
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+skip gaussdb candidate (connect failed): postgres://10.250.0.30:8000/postgres?sslmode=require, error: error communicating with database: Connection reset by peer (os error 54)
+skip gaussdb candidate (connect failed): postgres://10.250.0.30:8000/postgres?sslmode=disable, error: error communicating with database: Connection reset by peer (os error 54)
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.51:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.51:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.51:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.51:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+executing sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic
+2026-04-02T18:54:06.652470+08:00 INFO sqlx::postgres::notice - table "gaussdb_snapshot_basic" does not exist, skipping
+executing sql: CREATE TABLE public.gaussdb_snapshot_basic ( id INTEGER PRIMARY KEY, val TEXT )
+executing sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic
+executing sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic
+executing sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic
+snapshot failed (attempt 2/6), will retry: execute_sqls_pg failed, sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic: error returned from database: cannot execute DROP TABLE in a read-only transaction: cannot execute DROP TABLE in a read-only transaction
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.30:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.30:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.30:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.30:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+selected gaussdb rw url: postgres://10.250.0.51:8000/postgres?sslmode=require (server_addr=192.168.1.51/32)
+executing sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic
+2026-04-02T18:54:17.086898+08:00 INFO sqlx::postgres::notice - table "gaussdb_snapshot_basic" does not exist, skipping
+executing sql: CREATE TABLE public.gaussdb_snapshot_basic ( id INTEGER PRIMARY KEY, val TEXT )
+executing sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic
+2026-04-02T18:54:17.327233+08:00 INFO sqlx::postgres::notice - table "gaussdb_snapshot_basic" does not exist, skipping
+executing sql: CREATE TABLE public.gaussdb_snapshot_basic ( id INTEGER PRIMARY KEY, val TEXT )
+2026-04-02T18:54:17.610587+08:00 INFO sqlx::postgres::notice - CREATE TABLE / PRIMARY KEY will create implicit index "gaussdb_snapshot_basic_pkey" for table "gaussdb_snapshot_basic"
+executing sql: INSERT INTO public.gaussdb_snapshot_basic (id, val) VALUES (1, 'a'), (2, 'b')
+2026-04-02T18:54:17.635184+08:00 INFO default_logger - start task: [taskID: 7f698290e8c7d790, taskType: Some(Snapshot)]
+2026-04-02T18:54:17.635231+08:00 WARN default_logger - recorder unsupported resumer config: Dummy
+2026-04-02T18:54:17.635250+08:00 WARN default_logger - recovery unsupported resumer config: Dummy
+2026-04-02T18:54:17.635266+08:00 INFO default_logger - recovery initialization for task_id: 7f698290e8c7d790 finished in 0 ms
+2026-04-02T18:54:18.185964+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-02T18:54:18.186059+08:00 ERROR default_logger - buffer_memory_mb=0 is too large and will be ignored to prevent overflow
+2026-04-02T18:54:18.186093+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-02T18:54:18.190994+08:00 INFO default_logger - begin to estimate record count
+2026-04-02T18:54:18.195944+08:00 INFO default_logger - estimate record count: 0
+2026-04-02T18:54:18.273784+08:00 INFO default_logger - schema: public, tb: gaussdb_cdc_basic, insert events filtered
+2026-04-02T18:54:18.273830+08:00 INFO default_logger - schema: public, tb: gaussdb_cdc_failover, insert events filtered
+2026-04-02T18:54:18.273845+08:00 INFO default_logger - schema: public, tb: gaussdb_cdc_type_matrix, insert events filtered
+2026-04-02T18:54:18.273858+08:00 INFO default_logger - schema: public, tb: gaussdb_check_basic, insert events filtered
+2026-04-02T18:54:18.273880+08:00 INFO default_logger - schema: public, tb: gaussdb_to_pg_check_basic, insert events filtered
+2026-04-02T18:54:18.273892+08:00 INFO default_logger - schema: public, tb: gaussdb_to_pg_snapshot_basic, insert events filtered
+2026-04-02T18:54:18.273903+08:00 INFO default_logger - schema: public, tb: gaussdb_type_matrix_check, insert events filtered
+2026-04-02T18:54:18.273943+08:00 INFO default_logger - schema: public, tb: gaussdb_type_matrix_snapshot, insert events filtered
+2026-04-02T18:54:18.701723+08:00 INFO default_logger - PgSnapshotExtractor starts, schema: "public", tb: "gaussdb_snapshot_basic", batch_size: 4, parallel_size: 1
+2026-04-02T18:54:18.701843+08:00 INFO default_logger - SnapshotParallelizer starts, parallel_size: 1, checkpoint_interval_secs: 1
+2026-04-02T18:54:18.715574+08:00 INFO default_logger - ["public"."gaussdb_snapshot_basic"] recovery from [{}]
+2026-04-02T18:54:18.717549+08:00 INFO default_logger - end extracting data from "public"."gaussdb_snapshot_basic", all count: 2
+2026-04-02T18:54:18.804729+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-04-02T18:54:18.804824+08:00 INFO monitor_logger - extractor | public.gaussdb_snapshot_basic | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-04-02T18:54:18.804845+08:00 INFO monitor_logger - extractor | public.gaussdb_snapshot_basic | data_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10
+2026-04-02T18:54:18.804861+08:00 INFO monitor_logger - extractor | public.gaussdb_snapshot_basic | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-04-02T18:54:18.804878+08:00 INFO monitor_logger - extractor | public.gaussdb_snapshot_basic | extracted_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10
+2026-04-02T18:54:18.804918+08:00 INFO monitor_logger - pipeline | public.gaussdb_snapshot_basic | buffer_size | sum=2 | avg=2 | max=2
+2026-04-02T18:54:18.804932+08:00 INFO monitor_logger - pipeline | public.gaussdb_snapshot_basic | record_size | avg=5
+2026-04-02T18:54:18.804953+08:00 INFO monitor_logger - pipeline | public.gaussdb_snapshot_basic | sinked_bytes | latest=0
+2026-04-02T18:54:18.804969+08:00 INFO monitor_logger - pipeline | public.gaussdb_snapshot_basic | sinked_records | latest=0
+2026-04-02T18:54:19.276179+08:00 INFO monitor_logger - extractor | global | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2 | min_by_sec=0
+2026-04-02T18:54:19.276305+08:00 INFO monitor_logger - extractor | global | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2 | min_by_sec=0
+2026-04-02T18:54:19.276347+08:00 INFO monitor_logger - extractor | global | extracted_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10 | min_by_sec=0
+2026-04-02T18:54:19.276383+08:00 INFO monitor_logger - extractor | global | data_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10 | min_by_sec=0
+2026-04-02T18:54:19.276639+08:00 INFO monitor_logger - pipeline | global | record_size | avg=5
+2026-04-02T18:54:19.276680+08:00 INFO monitor_logger - pipeline | global | buffer_size | sum=2 | avg=2 | max=2 | min=0
+2026-04-02T18:54:19.276766+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=0
+2026-04-02T18:54:19.276812+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=0
+2026-04-02T18:54:19.811415+08:00 INFO position_logger - current_position | {"type":"RdbSnapshot","db_type":"pg","schema":"public","tb":"gaussdb_snapshot_basic","order_key":{"single":["id","2"]}}
+2026-04-02T18:54:19.811475+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-04-02T18:54:19.811642+08:00 INFO position_logger - current_position | {"type":"RdbSnapshot","db_type":"pg","schema":"public","tb":"gaussdb_snapshot_basic","order_key":{"single":["id","2"]}}
+2026-04-02T18:54:19.811679+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-04-02T18:54:19.813717+08:00 INFO finished_logger - {"type":"RdbSnapshotFinished","db_type":"pg","schema":"public","tb":"gaussdb_snapshot_basic"}
+2026-04-02T18:54:19.890713+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-04-02T18:54:19.891226+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=2
+2026-04-02T18:54:19.891288+08:00 INFO monitor_logger - pipeline | global | timestamp | latest=0
+2026-04-02T18:54:19.891346+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=10
+2026-04-02T18:54:19.892048+08:00 INFO finished_logger - task finished
+2026-04-02T18:54:20.045142+08:00 WARN sqlx::postgres::notice - Fast path bit num leak.
+comparing row data for src_tb: ("public", "gaussdb_snapshot_basic"), dst_tb: ("public", "gaussdb_snapshot_basic"), src_data count: 2, dst_data count: 2
+row index: 0, col: val, src_col_value: String("a"), dst_col_value: String("a")
+row index: 0, col: id, src_col_value: Long(1), dst_col_value: Long(1)
+row index: 1, col: id, src_col_value: Long(2), dst_col_value: Long(2)
+row index: 1, col: val, src_col_value: String("b"), dst_col_value: String("b")
+executing sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic
+executing sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic
+2026-04-02T18:54:27.384836+08:00 WARN sqlx_core::pool::connection - error occurred while testing the connection on-release: error communicating with database: unexpected end of file
+snapshot failed (attempt 3/6), will retry: execute_sqls_pg failed, sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic: error communicating with database: unexpected end of file: unexpected end of file
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.30:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.30:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.30:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.30:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+skip gaussdb candidate (connect failed): postgres://10.250.0.51:8000/postgres?sslmode=require, error: error communicating with database: Connection reset by peer (os error 54)
+skip gaussdb candidate (connect failed): postgres://10.250.0.51:8000/postgres?sslmode=disable, error: error communicating with database: Connection reset by peer (os error 54)
+executing sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic
+2026-04-02T18:54:32.353140+08:00 INFO sqlx::postgres::notice - table "gaussdb_snapshot_basic" does not exist, skipping
+executing sql: CREATE TABLE public.gaussdb_snapshot_basic ( id INTEGER PRIMARY KEY, val TEXT )
+executing sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic
+executing sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic
+executing sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic
+snapshot failed (attempt 4/6), will retry: execute_sqls_pg failed, sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic: error returned from database: cannot execute DROP TABLE in a read-only transaction: cannot execute DROP TABLE in a read-only transaction
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+test pg_to_gaussdb::snapshot_tests::test::snapshot_basic_test has been running for over 60 seconds
+selected gaussdb rw url: postgres://10.250.0.30:8000/postgres?sslmode=require (server_addr=192.168.1.30/32)
+executing sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic
+2026-04-02T18:54:44.116337+08:00 INFO sqlx::postgres::notice - table "gaussdb_snapshot_basic" does not exist, skipping
+executing sql: CREATE TABLE public.gaussdb_snapshot_basic ( id INTEGER PRIMARY KEY, val TEXT )
+executing sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic
+executing sql: CREATE TABLE public.gaussdb_snapshot_basic ( id INTEGER PRIMARY KEY, val TEXT )
+2026-04-02T18:54:44.659381+08:00 INFO sqlx::postgres::notice - CREATE TABLE / PRIMARY KEY will create implicit index "gaussdb_snapshot_basic_pkey" for table "gaussdb_snapshot_basic"
+executing sql: INSERT INTO public.gaussdb_snapshot_basic (id, val) VALUES (1, 'a'), (2, 'b')
+2026-04-02T18:54:44.697009+08:00 INFO default_logger - start task: [taskID: d7634b026e8a539f, taskType: Some(Snapshot)]
+2026-04-02T18:54:44.697051+08:00 WARN default_logger - recorder unsupported resumer config: Dummy
+2026-04-02T18:54:44.697069+08:00 WARN default_logger - recovery unsupported resumer config: Dummy
+2026-04-02T18:54:44.697086+08:00 INFO default_logger - recovery initialization for task_id: d7634b026e8a539f finished in 0 ms
+2026-04-02T18:54:45.225196+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-02T18:54:45.225328+08:00 ERROR default_logger - buffer_memory_mb=0 is too large and will be ignored to prevent overflow
+2026-04-02T18:54:45.225367+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-02T18:54:45.231157+08:00 INFO default_logger - begin to estimate record count
+2026-04-02T18:54:45.304866+08:00 INFO default_logger - estimate record count: 0
+2026-04-02T18:54:45.309232+08:00 INFO default_logger - schema: public, tb: gaussdb_cdc_basic, insert events filtered
+2026-04-02T18:54:45.309259+08:00 INFO default_logger - schema: public, tb: gaussdb_cdc_failover, insert events filtered
+2026-04-02T18:54:45.309281+08:00 INFO default_logger - schema: public, tb: gaussdb_cdc_type_matrix, insert events filtered
+2026-04-02T18:54:45.309295+08:00 INFO default_logger - schema: public, tb: gaussdb_check_basic, insert events filtered
+2026-04-02T18:54:45.309313+08:00 INFO default_logger - schema: public, tb: gaussdb_to_pg_check_basic, insert events filtered
+2026-04-02T18:54:45.309369+08:00 INFO default_logger - schema: public, tb: gaussdb_to_pg_snapshot_basic, insert events filtered
+2026-04-02T18:54:45.309389+08:00 INFO default_logger - schema: public, tb: gaussdb_type_matrix_check, insert events filtered
+2026-04-02T18:54:45.309404+08:00 INFO default_logger - schema: public, tb: gaussdb_type_matrix_snapshot, insert events filtered
+2026-04-02T18:54:45.661143+08:00 INFO default_logger - PgSnapshotExtractor starts, schema: "public", tb: "gaussdb_snapshot_basic", batch_size: 4, parallel_size: 1
+2026-04-02T18:54:45.661259+08:00 INFO default_logger - SnapshotParallelizer starts, parallel_size: 1, checkpoint_interval_secs: 1
+2026-04-02T18:54:45.670514+08:00 INFO default_logger - ["public"."gaussdb_snapshot_basic"] recovery from [{}]
+2026-04-02T18:54:45.671941+08:00 INFO default_logger - end extracting data from "public"."gaussdb_snapshot_basic", all count: 2
+2026-04-02T18:54:45.765490+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-04-02T18:54:45.765613+08:00 INFO monitor_logger - extractor | public.gaussdb_snapshot_basic | data_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10
+2026-04-02T18:54:45.765638+08:00 INFO monitor_logger - extractor | public.gaussdb_snapshot_basic | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-04-02T18:54:45.765656+08:00 INFO monitor_logger - extractor | public.gaussdb_snapshot_basic | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-04-02T18:54:45.765676+08:00 INFO monitor_logger - extractor | public.gaussdb_snapshot_basic | extracted_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10
+2026-04-02T18:54:45.765714+08:00 INFO monitor_logger - pipeline | public.gaussdb_snapshot_basic | record_size | avg=5
+2026-04-02T18:54:45.765731+08:00 INFO monitor_logger - pipeline | public.gaussdb_snapshot_basic | buffer_size | sum=2 | avg=2 | max=2
+2026-04-02T18:54:45.765755+08:00 INFO monitor_logger - pipeline | public.gaussdb_snapshot_basic | sinked_bytes | latest=0
+2026-04-02T18:54:45.765768+08:00 INFO monitor_logger - pipeline | public.gaussdb_snapshot_basic | sinked_records | latest=0
+2026-04-02T18:54:46.313489+08:00 INFO monitor_logger - extractor | global | extracted_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10 | min_by_sec=0
+2026-04-02T18:54:46.313574+08:00 INFO monitor_logger - extractor | global | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2 | min_by_sec=0
+2026-04-02T18:54:46.313658+08:00 INFO monitor_logger - extractor | global | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2 | min_by_sec=0
+2026-04-02T18:54:46.313699+08:00 INFO monitor_logger - extractor | global | data_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10 | min_by_sec=0
+2026-04-02T18:54:46.314028+08:00 INFO monitor_logger - pipeline | global | record_size | avg=5
+2026-04-02T18:54:46.314122+08:00 INFO monitor_logger - pipeline | global | buffer_size | sum=2 | avg=2 | max=2 | min=0
+2026-04-02T18:54:46.314182+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=0
+2026-04-02T18:54:46.314234+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=0
+2026-04-02T18:54:46.769594+08:00 INFO position_logger - current_position | {"type":"RdbSnapshot","db_type":"pg","schema":"public","tb":"gaussdb_snapshot_basic","order_key":{"single":["id","2"]}}
+2026-04-02T18:54:46.769623+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-04-02T18:54:46.769695+08:00 INFO position_logger - current_position | {"type":"RdbSnapshot","db_type":"pg","schema":"public","tb":"gaussdb_snapshot_basic","order_key":{"single":["id","2"]}}
+2026-04-02T18:54:46.769715+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-04-02T18:54:46.769915+08:00 INFO finished_logger - {"type":"RdbSnapshotFinished","db_type":"pg","schema":"public","tb":"gaussdb_snapshot_basic"}
+2026-04-02T18:54:46.826773+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-04-02T18:54:46.827065+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=10
+2026-04-02T18:54:46.827117+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=2
+2026-04-02T18:54:46.827151+08:00 INFO monitor_logger - pipeline | global | timestamp | latest=0
+2026-04-02T18:54:46.827904+08:00 INFO finished_logger - task finished
+2026-04-02T18:54:47.061793+08:00 WARN sqlx::postgres::notice - Fast path bit num leak.
+comparing row data for src_tb: ("public", "gaussdb_snapshot_basic"), dst_tb: ("public", "gaussdb_snapshot_basic"), src_data count: 2, dst_data count: 2
+row index: 0, col: id, src_col_value: Long(1), dst_col_value: Long(1)
+row index: 0, col: val, src_col_value: String("a"), dst_col_value: String("a")
+row index: 1, col: val, src_col_value: String("b"), dst_col_value: String("b")
+row index: 1, col: id, src_col_value: Long(2), dst_col_value: Long(2)
+executing sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic
+executing sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic
+snapshot failed (attempt 5/6), will retry: execute_sqls_pg failed, sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic: error communicating with database: unexpected end of file: unexpected end of file
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+skip gaussdb candidate (connect failed): postgres://10.250.0.30:8000/postgres?sslmode=require, error: error communicating with database: Connection reset by peer (os error 54)
+skip gaussdb candidate (connect failed): postgres://10.250.0.30:8000/postgres?sslmode=disable, error: error communicating with database: Connection reset by peer (os error 54)
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.51:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.51:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.51:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.51:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+executing sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic
+2026-04-02T18:54:59.292148+08:00 INFO sqlx::postgres::notice - table "gaussdb_snapshot_basic" does not exist, skipping
+executing sql: CREATE TABLE public.gaussdb_snapshot_basic ( id INTEGER PRIMARY KEY, val TEXT )
+executing sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic
+executing sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic
+executing sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic
+2026-04-02T18:55:02.388727+08:00 ERROR default_logger - panic: panicked at dt-tests/tests/test_runner/test_base.rs:75:9:
+snapshot failed after 6 attempts: execute_sqls_pg failed, sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic: error returned from database: cannot execute DROP TABLE in a read-only transaction: cannot execute DROP TABLE in a read-only transaction
+backtrace:
+disabled backtrace
+test pg_to_gaussdb::snapshot_tests::test::snapshot_basic_test ... FAILED
+
+failures:
+
+failures:
+    pg_to_gaussdb::snapshot_tests::test::snapshot_basic_test
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 356 filtered out; finished in 79.20s
+
+error: test failed, to rerun pass `-p dt-tests --test integration_test`

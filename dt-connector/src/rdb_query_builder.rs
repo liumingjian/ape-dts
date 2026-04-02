@@ -50,11 +50,20 @@ impl RdbQueryBuilder<'_> {
         tb_meta: &'a PgTbMeta,
         ignore_cols: Option<&'a HashSet<String>>,
     ) -> RdbQueryBuilder<'a> {
+        Self::new_for_pg_compatible(tb_meta, ignore_cols, DbType::Pg)
+    }
+
+    #[inline(always)]
+    pub fn new_for_pg_compatible<'a>(
+        tb_meta: &'a PgTbMeta,
+        ignore_cols: Option<&'a HashSet<String>>,
+        db_type: DbType,
+    ) -> RdbQueryBuilder<'a> {
         RdbQueryBuilder {
             rdb_tb_meta: &tb_meta.basic,
             pg_tb_meta: Some(tb_meta),
             mysql_tb_meta: None,
-            db_type: DbType::Pg,
+            db_type,
             ignore_cols,
         }
     }
@@ -365,8 +374,20 @@ impl RdbQueryBuilder<'_> {
     }
 
     pub fn get_select_query<'a>(&self, row_data: &'a RowData) -> anyhow::Result<RdbQueryInfo<'a>> {
+        self.get_select_query_internal(row_data, true)
+    }
+
+    pub fn get_select_query_sql(&self, row_data: &RowData) -> anyhow::Result<String> {
+        Ok(self.get_select_query_internal(row_data, false)?.sql + ";")
+    }
+
+    fn get_select_query_internal<'a>(
+        &self,
+        row_data: &'a RowData,
+        placeholder: bool,
+    ) -> anyhow::Result<RdbQueryInfo<'a>> {
         let after = row_data.require_after()?;
-        let (where_sql, not_null_cols) = self.get_where_info(1, after, true)?;
+        let (where_sql, not_null_cols) = self.get_where_info(1, after, placeholder)?;
         let mut sql = format!(
             "SELECT {} FROM {}.{} WHERE {}",
             self.build_extract_cols_str()?,
@@ -394,7 +415,29 @@ impl RdbQueryBuilder<'_> {
         start_index: usize,
         batch_size: usize,
     ) -> anyhow::Result<RdbQueryInfo<'a>> {
-        let where_sql = self.get_where_in_info(batch_size)?;
+        self.get_batch_select_query_internal(data, start_index, batch_size, true)
+    }
+
+    pub fn get_batch_select_query_sql(
+        &self,
+        data: &[&RowData],
+        start_index: usize,
+        batch_size: usize,
+    ) -> anyhow::Result<String> {
+        Ok(self
+            .get_batch_select_query_internal(data, start_index, batch_size, false)?
+            .sql
+            + ";")
+    }
+
+    fn get_batch_select_query_internal<'a>(
+        &self,
+        data: &[&'a RowData],
+        start_index: usize,
+        batch_size: usize,
+        placeholder: bool,
+    ) -> anyhow::Result<RdbQueryInfo<'a>> {
+        let where_sql = self.get_where_in_info(data, start_index, batch_size, placeholder)?;
         let sql = format!(
             "SELECT {} FROM {}.{} WHERE {}",
             self.build_extract_cols_str()?,
@@ -432,6 +475,10 @@ impl RdbQueryBuilder<'_> {
             }
 
             if let Some(tb_meta) = self.pg_tb_meta {
+                if matches!(self.db_type, DbType::GaussDBMySQL) {
+                    extract_cols.push(self.escape(col));
+                    continue;
+                }
                 let col_type = tb_meta.get_col_type(col)?;
                 let extract_type = PgColValueConvertor::get_extract_type(col_type);
                 let extract_col = if extract_type.is_empty() {
@@ -481,13 +528,25 @@ impl RdbQueryBuilder<'_> {
         Ok((where_sql.trim_start().into(), not_null_cols))
     }
 
-    fn get_where_in_info(&self, batch_size: usize) -> anyhow::Result<String> {
+    fn get_where_in_info(
+        &self,
+        data: &[&RowData],
+        start_index: usize,
+        batch_size: usize,
+        placeholder: bool,
+    ) -> anyhow::Result<String> {
         let mut all_placeholders = Vec::with_capacity(batch_size);
         let mut placeholder_index = 1;
-        for _ in 0..batch_size {
+        for row_data in data.iter().skip(start_index).take(batch_size) {
+            let after = row_data.require_after()?;
             let mut placeholders = Vec::with_capacity(self.rdb_tb_meta.id_cols.len());
             for col in self.rdb_tb_meta.id_cols.iter() {
-                placeholders.push(self.get_placeholder(placeholder_index, col)?);
+                let sql_value = if placeholder {
+                    self.get_placeholder(placeholder_index, col)?
+                } else {
+                    self.get_sql_value(placeholder_index, col, &after.get(col), false)?
+                };
+                placeholders.push(sql_value);
                 placeholder_index += 1;
             }
             all_placeholders.push(format!("({})", placeholders.join(",")));
@@ -601,6 +660,9 @@ impl RdbQueryBuilder<'_> {
 
     fn get_placeholder(&self, index: usize, col: &str) -> anyhow::Result<String> {
         if let Some(tb_meta) = self.pg_tb_meta {
+            if matches!(self.db_type, DbType::GaussDBMySQL) {
+                return Ok(format!("${}", index));
+            }
             let col_type = tb_meta.get_col_type(col)?;
             if col_type.schema_name != "pg_catalog" {
                 // for user-defined types, we need to add schema name as prefix, otherwise it will cause error

@@ -24,4 +24,10 @@ mod test {
     async fn cdc_failover_test() {
         TestBase::run_cdc_failover_test("gaussdb_to_pg/cdc/failover_test", 60000, 30000).await;
     }
+
+    #[tokio::test]
+    #[serial]
+    async fn cdc_type_matrix_test() {
+        TestBase::run_cdc_test("gaussdb_to_pg/cdc/type_matrix_test", 60000, 30000).await;
+    }
 }

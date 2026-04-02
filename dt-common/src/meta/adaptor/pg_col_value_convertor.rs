@@ -12,6 +12,8 @@ impl PgColValueConvertor {
     pub fn get_extract_type(col_type: &PgColType) -> String {
         if col_type.alias == "oid" {
             "int8".to_string()
+        } else if col_type.name == "blob" {
+            "text".to_string()
         } else {
             match col_type.value_type {
                 PgValueType::Bytes
@@ -165,8 +167,13 @@ impl PgColValueConvertor {
             }
 
             PgValueType::Bytes => {
-                let value: Vec<u8> = row.try_get(col)?;
-                ColValue::Blob(value)
+                if col_type.name == "blob" {
+                    let value: String = row.try_get(col)?;
+                    ColValue::Blob(hex::decode(value)?)
+                } else {
+                    let value: Vec<u8> = row.try_get(col)?;
+                    ColValue::Blob(value)
+                }
             }
 
             PgValueType::Numeric => {
@@ -210,5 +217,97 @@ impl PgColValueConvertor {
             }
         };
         Ok(col_value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PgColValueConvertor;
+    use crate::meta::{
+        adaptor::pg_col_value_convertor::PgColValueConvertor as Convertor,
+        col_value::ColValue,
+        pg::{
+            pg_col_type::PgColType, pg_meta_manager::PgMetaManager, pg_value_type::PgValueType,
+            type_registry::TypeRegistry,
+        },
+    };
+    use sqlx::postgres::PgPoolOptions;
+    use std::collections::HashMap;
+
+    fn dummy_meta_manager() -> PgMetaManager {
+        let conn_pool = PgPoolOptions::new()
+            .connect_lazy("postgres://localhost/dummy")
+            .expect("lazy pg pool");
+        PgMetaManager {
+            conn_pool: conn_pool.clone(),
+            type_registry: TypeRegistry::new(conn_pool),
+            name_to_tb_meta: HashMap::new(),
+            oid_to_tb_meta: HashMap::new(),
+        }
+    }
+
+    fn make_col_type(name: &str, alias: &str, value_type: PgValueType) -> PgColType {
+        PgColType {
+            value_type,
+            name: name.to_string(),
+            alias: alias.to_string(),
+            oid: 0,
+            parent_oid: 0,
+            element_oid: 0,
+            category: String::new(),
+            enum_values: None,
+            schema_name: "public".to_string(),
+        }
+    }
+
+    #[test]
+    fn gaussdb_type_matrix_convertor_maps_datetime_and_integer_aliases() {
+        let mut meta_manager = dummy_meta_manager();
+
+        let smalldatetime =
+            make_col_type("smalldatetime", "timestamp", PgValueType::Timestamp);
+        let tinyint = make_col_type("tinyint", "int2", PgValueType::Int16);
+
+        assert_eq!(
+            PgColValueConvertor::from_str(
+                &smalldatetime,
+                "2026-04-02 13:20:00",
+                &mut meta_manager
+            )
+            .unwrap(),
+            ColValue::DateTime("2026-04-02 13:20:00".to_string())
+        );
+        assert_eq!(
+            Convertor::from_str(&tinyint, "7", &mut meta_manager).unwrap(),
+            ColValue::Short(7)
+        );
+    }
+
+    #[test]
+    fn gaussdb_type_matrix_convertor_maps_string_and_blob_aliases() {
+        let mut meta_manager = dummy_meta_manager();
+
+        let nvarchar2 = make_col_type("nvarchar2", "varchar", PgValueType::String);
+        let clob = make_col_type("clob", "text", PgValueType::String);
+        let blob = make_col_type("blob", "bytea", PgValueType::Bytes);
+
+        assert_eq!(
+            Convertor::from_str(&nvarchar2, "hello", &mut meta_manager).unwrap(),
+            ColValue::String("hello".to_string())
+        );
+        assert_eq!(
+            Convertor::from_str(&clob, "long text", &mut meta_manager).unwrap(),
+            ColValue::String("long text".to_string())
+        );
+        assert_eq!(
+            Convertor::from_str(&blob, r"\x0001ff", &mut meta_manager).unwrap(),
+            ColValue::Blob(vec![0x00, 0x01, 0xff])
+        );
+    }
+
+    #[test]
+    fn gaussdb_type_matrix_extract_type_uses_text_for_blob() {
+        let blob = make_col_type("blob", "bytea", PgValueType::Bytes);
+        assert_eq!(PgColValueConvertor::get_extract_type(&blob), "text");
     }
 }

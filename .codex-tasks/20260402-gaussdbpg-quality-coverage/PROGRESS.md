@@ -1,0 +1,102 @@
+# Progress Log
+
+## Context Recovery Block
+
+- **Epic**: `20260402-gaussdbpg-quality-coverage`
+- **Truth file**: `.codex-tasks/20260402-gaussdbpg-quality-coverage/SUBTASKS.csv`
+
+## 2026-04-02
+
+- Epic created for `GaussDBPg` post-MVP quality coverage.
+- Child 1 closed by normalizing `plan.md` / `gaussdb-progress-tracker.md`.
+- Remaining work stays focused on type matrix, CDC fail-fast evidence, and quality gates.
+- Child 2 is now open:
+  - scope starts from the PRD-listed GaussDB-specific type aliases for `gaussdb_pg`
+  - first target set: `smalldatetime`, `tinyint`, `nvarchar2`, `clob`, `blob`
+  - implementation hypothesis:
+    - normalize type aliases in `type_registry`
+    - resolve unknown/custom OIDs through alias fallback
+    - add focused unit tests for `PgValueType` and `PgColValueConvertor` before broader e2e work
+- Child 2 is now closed:
+  - the first PRD-listed `gaussdb_pg` alias set is now normalized in the PG type layer
+  - unknown/custom OIDs can fall back through alias resolution for:
+    - `smalldatetime`
+    - `tinyint`
+    - `nvarchar2`
+    - `clob`
+    - `blob`
+  - validation:
+    - `cargo test -p dt-common -p dt-connector gaussdb_type_matrix -- --nocapture` PASS
+  - evidence:
+    - `tasks/20260402-02-type-contract-codecs/raw/20260402_gaussdb_type_matrix.log`
+- Next executable child is `3, 非 CDC 类型矩阵 e2e`.
+- Child 3 is now open:
+  - first decision: split the non-CDC matrix by direction
+    - `PG -> GaussDBPg snapshot` uses canonical PG types to validate target compatibility
+    - `GaussDBPg -> PG check` uses GaussDB-specific aliases to validate source-side codec and compare behavior
+  - next action: scaffold the two dt-tests entry points and fixture directories before attempting real-env validation
+- Child 3 current status:
+  - snapshot/check type-matrix entry points and fixture skeleton are now in place
+  - `cargo test -p dt-tests --test integration_test --no-run` PASS
+  - first real-env runtime attempt reached the new test entry and failed because the current sandbox denies remote GaussDB connections:
+    - `Operation not permitted (os error 1)`
+  - keep child 3 `IN_PROGRESS` until it can be rerun in a network-capable execution surface
+- Child 3 is now closed:
+  - network access was restored and both directional tests passed in the real environment
+  - key fixes and findings:
+    - the current GaussDB environment treats `''` as `NULL`, so the matrix fixture now uses `NULL` explicitly for the nullable `clob_col` row
+    - GaussDB `tinyint` resolves to `pg_type.typname = int1`, so the PG type layer now maps `int1 -> int2 -> PgValueType::Int16`
+    - `blob` keeps the previously validated `text` extraction + hex decode path
+  - validation:
+    - `cargo test -p dt-common gaussdb_type_matrix -- --nocapture` PASS
+    - `cargo test -p dt-tests --test integration_test -- pg_to_gaussdb::snapshot_tests::test::type_matrix_test --nocapture` PASS
+    - `cargo test -p dt-tests --test integration_test -- gaussdb_to_pg::check_tests::test::type_matrix_test --nocapture` PASS
+  - evidence:
+    - `tasks/20260402-03-non-cdc-type-matrix-e2e/raw/20260402_tinyint_probe.log`
+    - `tasks/20260402-03-non-cdc-type-matrix-e2e/raw/20260402_1610_pg_to_gaussdb_snapshot_type_matrix_test.log`
+    - `tasks/20260402-03-non-cdc-type-matrix-e2e/raw/20260402_1605_gaussdb_to_pg_check_type_matrix_test.log`
+  - next executable child is `4, CDC 类型矩阵 + fail-fast 证据`
+- Child 4 is now open:
+  - focus starts with the same first-wave alias set already validated in child 2/3:
+    - `smalldatetime`
+    - `tinyint`
+    - `nvarchar2`
+    - `clob`
+    - `blob`
+  - implementation plan:
+    - add a real `gaussdb_to_pg cdc_type_matrix_test`
+    - add decoder-level fail-fast tests for DDL/object-like and unknown `op_type`
+- Child 4 is now closed:
+  - added `gaussdb_to_pg::cdc_tests::test::cdc_type_matrix_test`
+  - added decoder fail-fast unit coverage for:
+    - DDL/object-like `op_type`
+    - unknown `op_type`
+  - first runtime exposed a real CDC compatibility gap:
+    - `blob` was being emitted through GaussDB alias typing and decoded as hex text bytes instead of binary bytes
+  - fix generalized the CDC decoder for the first alias set:
+    - `blob`
+    - `tinyint` / `int1`
+    - `smalldatetime`
+    - `nvarchar2`
+    - `clob`
+  - validation:
+    - `cargo test -p dt-connector gaussdb_json_decoder -- --nocapture` PASS
+    - `cargo test -p dt-tests --test integration_test -- gaussdb_to_pg::cdc_tests::test::cdc_type_matrix_test --nocapture` PASS
+  - evidence:
+    - `tasks/20260402-04-cdc-type-matrix-e2e/raw/20260402_1625_gaussdb_to_pg_cdc_type_matrix_test.log`
+    - `tasks/20260402-04-cdc-type-matrix-e2e/raw/20260402_1635_gaussdb_to_pg_cdc_type_matrix_test.log`
+  - next executable child is `5, 性能/可观测/check 深化`
+- Child 5 is now open:
+  - immediate goal is to stop treating e2e verification as scattered commands and define one unified regression matrix
+  - current sub-scope:
+    - quick gate
+    - full functional gate
+    - resilience gate
+  - docs-side entry:
+    - `docs/agent-summary/gaussdb-e2e-test-plan.md`
+
+- Child 5 is now closed:
+  - unified `GaussDB` e2e regression matrix is documented and runnable
+  - Batch A mainline regression executed and PASS
+  - evidence:
+    - `.codex-tasks/20260402-gaussdbpg-quality-coverage/tasks/20260402-05-quality-gate-evidence/raw/batch-a/summary.tsv`

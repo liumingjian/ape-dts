@@ -12,7 +12,7 @@ use sqlx::{
 
 use dt_common::{
     config::{
-        config_enums::{DbType, RdbTransactionIsolation, TaskType},
+        config_enums::{DbType, RdbTransactionIsolation, TaskType, WireProtocol},
         connection_auth_config::ConnectionAuthConfig,
         extractor_config::ExtractorConfig,
         global_config::GlobalConfig,
@@ -171,16 +171,24 @@ impl TaskUtil {
                 connection_auth,
                 ..
             } => {
-                let mysql_meta_manager = Self::create_mysql_meta_manager(
-                    url,
-                    connection_auth,
-                    log_level,
-                    DbType::Mysql,
-                    None,
-                    None,
-                )
-                .await?;
-                RdbMetaManager::from_mysql(mysql_meta_manager)
+                if matches!(config.sinker_basic.db_type, DbType::GaussDBMySQL)
+                    && matches!(WireProtocol::from_url(url), Some(WireProtocol::PostgreSQL))
+                {
+                    let pg_meta_manager =
+                        Self::create_pg_meta_manager(url, connection_auth, log_level).await?;
+                    RdbMetaManager::from_pg(pg_meta_manager)
+                } else {
+                    let mysql_meta_manager = Self::create_mysql_meta_manager(
+                        url,
+                        connection_auth,
+                        log_level,
+                        config.sinker_basic.db_type.clone(),
+                        None,
+                        None,
+                    )
+                    .await?;
+                    RdbMetaManager::from_mysql(mysql_meta_manager)
+                }
             }
 
             // In Doris/Starrocks, you can NOT get UNIQUE KEY by "SHOW INDEXES" or from "information_schema.STATISTICS",
@@ -196,7 +204,7 @@ impl TaskUtil {
                             url,
                             connection_auth,
                             log_level,
-                            DbType::Mysql,
+                            config.extractor_basic.db_type.clone(),
                             None,
                             None,
                         )
@@ -318,7 +326,7 @@ impl TaskUtil {
         db_type: &DbType,
     ) -> anyhow::Result<Vec<String>> {
         let mut dbs = match db_type {
-            DbType::Mysql => Self::list_mysql_dbs(conn_pool).await?,
+            DbType::Mysql | DbType::GaussDBMySQL => Self::list_mysql_dbs(conn_pool, db_type).await?,
             DbType::Pg | DbType::GaussDBPg => Self::list_pg_schemas(conn_pool, db_type).await?,
             DbType::Mongo => Self::list_mongo_dbs(conn_pool).await?,
             _ => Vec::new(),
@@ -333,7 +341,9 @@ impl TaskUtil {
         db_type: &DbType,
     ) -> anyhow::Result<Vec<String>> {
         let mut tbs = match db_type {
-            DbType::Mysql => Self::list_mysql_tbs(conn_client, schema).await?,
+            DbType::Mysql | DbType::GaussDBMySQL => {
+                Self::list_mysql_tbs(conn_client, schema).await?
+            }
             DbType::Pg | DbType::GaussDBPg => Self::list_pg_tbs(conn_client, schema).await?,
             DbType::Mongo => Self::list_mongo_tbs(conn_client, schema).await?,
             _ => Vec::new(),
@@ -351,7 +361,9 @@ impl TaskUtil {
     ) -> anyhow::Result<u64> {
         match task_type {
             TaskType::Snapshot => match db_type {
-                DbType::Mysql => Self::estimate_mysql_snapshot(conn_pool, schemas, filter).await,
+                DbType::Mysql | DbType::GaussDBMySQL => {
+                    Self::estimate_mysql_snapshot(conn_pool, db_type, schemas, filter).await
+                }
                 DbType::Pg | DbType::GaussDBPg => {
                     Self::estimate_pg_snapshot(conn_pool, db_type, schemas, filter).await
                 }
@@ -363,6 +375,7 @@ impl TaskUtil {
 
     async fn estimate_mysql_snapshot(
         conn_pool: &ConnClient,
+        db_type: &DbType,
         schemas: &[String],
         filter: &RdbFilter,
     ) -> anyhow::Result<u64> {
@@ -380,7 +393,7 @@ impl TaskUtil {
                 sql,
                 schemas
                     .iter()
-                    .filter(|s| !SystemDb::is_system_db(s, &DbType::Mysql))
+                    .filter(|s| !SystemDb::is_system_db(s, db_type))
                     .map(|s| format!("'{}'", s))
                     .collect::<Vec<_>>()
                     .join(",")
@@ -561,7 +574,10 @@ WHERE
         Ok(tbs)
     }
 
-    async fn list_mysql_dbs(conn_client: &ConnClient) -> anyhow::Result<Vec<String>> {
+    async fn list_mysql_dbs(
+        conn_client: &ConnClient,
+        db_type: &DbType,
+    ) -> anyhow::Result<Vec<String>> {
         let mut dbs = Vec::new();
         let conn_pool = match conn_client {
             ConnClient::MySQL(conn_pool) => conn_pool,
@@ -574,7 +590,7 @@ WHERE
         let mut rows = sqlx::query(sql).fetch(conn_pool);
         while let Some(row) = rows.try_next().await.unwrap() {
             let db: String = row.try_get(0)?;
-            if SystemDb::is_system_db(&db, &DbType::Mysql) {
+            if SystemDb::is_system_db(&db, db_type) {
                 continue;
             }
             dbs.push(db);
@@ -817,20 +833,35 @@ impl ConnClient {
                 transaction_isolation,
                 ..
             } => {
-                let conn_settings = TaskUtil::build_mysql_conn_settings(
-                    *disable_foreign_key_checks,
-                    transaction_isolation,
-                );
-                ConnClient::MySQL(
-                    TaskUtil::create_mysql_conn_pool(
-                        url,
-                        connection_auth,
-                        sinker_max_connections,
-                        enable_sqlx_log,
-                        conn_settings,
+                if matches!(task_config.sinker_basic.db_type, DbType::GaussDBMySQL)
+                    && matches!(WireProtocol::from_url(url), Some(WireProtocol::PostgreSQL))
+                {
+                    ConnClient::PostgreSQL(
+                        TaskUtil::create_pg_conn_pool(
+                            url,
+                            connection_auth,
+                            sinker_max_connections,
+                            enable_sqlx_log,
+                            false,
+                        )
+                        .await?,
                     )
-                    .await?,
-                )
+                } else {
+                    let conn_settings = TaskUtil::build_mysql_conn_settings(
+                        *disable_foreign_key_checks,
+                        transaction_isolation,
+                    );
+                    ConnClient::MySQL(
+                        TaskUtil::create_mysql_conn_pool(
+                            url,
+                            connection_auth,
+                            sinker_max_connections,
+                            enable_sqlx_log,
+                            conn_settings,
+                        )
+                        .await?,
+                    )
+                }
             }
             SinkerConfig::MysqlStruct {
                 url,
@@ -841,16 +872,33 @@ impl ConnClient {
                 url,
                 connection_auth,
                 ..
-            } => ConnClient::MySQL(
-                TaskUtil::create_mysql_conn_pool(
-                    url,
-                    connection_auth,
-                    sinker_max_connections,
-                    enable_sqlx_log,
-                    None,
-                )
-                .await?,
-            ),
+            } => {
+                if matches!(task_config.sinker_basic.db_type, DbType::GaussDBMySQL)
+                    && matches!(WireProtocol::from_url(url), Some(WireProtocol::PostgreSQL))
+                {
+                    ConnClient::PostgreSQL(
+                        TaskUtil::create_pg_conn_pool(
+                            url,
+                            connection_auth,
+                            sinker_max_connections,
+                            enable_sqlx_log,
+                            false,
+                        )
+                        .await?,
+                    )
+                } else {
+                    ConnClient::MySQL(
+                        TaskUtil::create_mysql_conn_pool(
+                            url,
+                            connection_auth,
+                            sinker_max_connections,
+                            enable_sqlx_log,
+                            None,
+                        )
+                        .await?,
+                    )
+                }
+            }
             SinkerConfig::Pg {
                 url,
                 connection_auth,

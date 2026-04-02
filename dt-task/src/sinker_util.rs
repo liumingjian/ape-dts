@@ -104,34 +104,57 @@ impl SinkerUtil {
                 batch_size,
                 replace,
                 ..
-            } => {
-                let router = create_router!(config, Mysql);
+            } => match client {
+                ConnClient::MySQL(conn_pool) => {
+                    let router = create_router!(config, Mysql);
+                    let meta_manager = MysqlMetaManager::new(conn_pool.clone()).await?;
 
-                let conn_pool = match client {
-                    ConnClient::MySQL(conn_pool) => conn_pool,
-                    _ => {
-                        bail!("connection pool not found");
+                    for _ in 0..parallel_size {
+                        let sinker = MysqlSinker {
+                            url: url.to_string(),
+                            conn_pool: conn_pool.clone(),
+                            meta_manager: meta_manager.clone(),
+                            router: router.clone(),
+                            batch_size,
+                            monitor: monitor.clone(),
+                            data_marker: data_marker.clone(),
+                            replace,
+                            monitor_interval,
+                        };
+                        sub_sinkers.push(Arc::new(async_mutex::Mutex::new(Box::new(sinker))));
                     }
-                };
-                let meta_manager = MysqlMetaManager::new(conn_pool.clone()).await?;
-
-                for _ in 0..parallel_size {
-                    let sinker = MysqlSinker {
-                        url: url.to_string(),
-                        conn_pool: conn_pool.clone(),
-                        meta_manager: meta_manager.clone(),
-                        router: router.clone(),
-                        batch_size,
-                        monitor: monitor.clone(),
-                        data_marker: data_marker.clone(),
-                        replace,
-                        monitor_interval,
-                    };
-                    sub_sinkers.push(Arc::new(async_mutex::Mutex::new(Box::new(sinker))));
                 }
-            }
+                ConnClient::PostgreSQL(conn_pool)
+                    if matches!(config.sinker_basic.db_type, DbType::GaussDBMySQL) =>
+                {
+                    let router =
+                        RdbRouter::from_config(&config.router, &config.sinker_basic.db_type)?;
+                    let meta_manager = PgMetaManager::new(conn_pool.clone()).await?;
+
+                    for _ in 0..parallel_size {
+                        let sinker = PgSinker {
+                            url: url.to_string(),
+                            db_type: config.sinker_basic.db_type.clone(),
+                            conn_pool: conn_pool.clone(),
+                            meta_manager: meta_manager.clone(),
+                            router: router.clone(),
+                            batch_size,
+                            monitor: monitor.clone(),
+                            data_marker: data_marker.clone(),
+                            replace,
+                            monitor_interval,
+                        };
+                        sub_sinkers.push(Arc::new(async_mutex::Mutex::new(Box::new(sinker))));
+                    }
+                }
+                _ => {
+                    bail!("connection pool not found");
+                }
+            },
 
             SinkerConfig::MysqlCheck {
+                url,
+                connection_auth,
                 batch_size,
                 output_full_row,
                 output_revise_sql,
@@ -140,43 +163,82 @@ impl SinkerUtil {
                 max_retries,
                 ..
             } => {
-                let reverse_router = create_router!(config, Mysql).reverse();
-                let filter = create_filter!(config, Mysql);
+                let reverse_router =
+                    RdbRouter::from_config(&config.router, &config.sinker_basic.db_type)?
+                        .reverse();
+                let filter =
+                    RdbFilter::from_config(&config.filter, &config.sinker_basic.db_type)?;
                 let extractor_meta_manager = ExtractorUtil::get_extractor_meta_manager(config)
                     .await?
                     .unwrap();
 
-                let conn_pool = match client {
-                    ConnClient::MySQL(conn_pool) => conn_pool,
+                match client {
+                    ConnClient::MySQL(conn_pool) => {
+                        let meta_manager = MysqlMetaManager::new(conn_pool.clone()).await?;
+
+                        for _ in 0..parallel_size {
+                            let sinker = MysqlChecker {
+                                conn_pool: conn_pool.clone(),
+                                meta_manager: meta_manager.clone(),
+                                common: CheckerCommon {
+                                    extractor_meta_manager: Some(extractor_meta_manager.clone()),
+                                    reverse_router: reverse_router.clone(),
+                                    batch_size,
+                                    monitor: monitor.clone(),
+                                    filter: filter.clone(),
+                                    output_full_row,
+                                    output_revise_sql,
+                                    revise_match_full_row,
+                                    retry_interval_secs,
+                                    max_retries,
+                                    summary: CheckSummaryLog {
+                                        start_time: Local::now().to_rfc3339(),
+                                        ..Default::default()
+                                    },
+                                    global_summary: check_summary.clone(),
+                                },
+                            };
+                            sub_sinkers
+                                .push(Arc::new(async_mutex::Mutex::new(Box::new(sinker))));
+                        }
+                    }
+                    ConnClient::PostgreSQL(conn_pool)
+                        if matches!(config.sinker_basic.db_type, DbType::GaussDBMySQL) =>
+                    {
+                        let meta_manager = PgMetaManager::new(conn_pool.clone()).await?;
+
+                        for _ in 0..parallel_size {
+                            let sinker = PgChecker {
+                                url: url.to_string(),
+                                connection_auth: connection_auth.clone(),
+                                db_type: config.sinker_basic.db_type.clone(),
+                                conn_pool: conn_pool.clone(),
+                                meta_manager: meta_manager.clone(),
+                                common: CheckerCommon {
+                                    extractor_meta_manager: Some(extractor_meta_manager.clone()),
+                                    reverse_router: reverse_router.clone(),
+                                    batch_size,
+                                    monitor: monitor.clone(),
+                                    filter: filter.clone(),
+                                    output_full_row,
+                                    output_revise_sql,
+                                    revise_match_full_row,
+                                    retry_interval_secs,
+                                    max_retries,
+                                    summary: CheckSummaryLog {
+                                        start_time: Local::now().to_rfc3339(),
+                                        ..Default::default()
+                                    },
+                                    global_summary: check_summary.clone(),
+                                },
+                            };
+                            sub_sinkers
+                                .push(Arc::new(async_mutex::Mutex::new(Box::new(sinker))));
+                        }
+                    }
                     _ => {
                         bail!("connection pool not found");
                     }
-                };
-                let meta_manager = MysqlMetaManager::new(conn_pool.clone()).await?;
-
-                for _ in 0..parallel_size {
-                    let sinker = MysqlChecker {
-                        conn_pool: conn_pool.clone(),
-                        meta_manager: meta_manager.clone(),
-                        common: CheckerCommon {
-                            extractor_meta_manager: Some(extractor_meta_manager.clone()),
-                            reverse_router: reverse_router.clone(),
-                            batch_size,
-                            monitor: monitor.clone(),
-                            filter: filter.clone(),
-                            output_full_row,
-                            output_revise_sql,
-                            revise_match_full_row,
-                            retry_interval_secs,
-                            max_retries,
-                            summary: CheckSummaryLog {
-                                start_time: Local::now().to_rfc3339(),
-                                ..Default::default()
-                            },
-                            global_summary: check_summary.clone(),
-                        },
-                    };
-                    sub_sinkers.push(Arc::new(async_mutex::Mutex::new(Box::new(sinker))));
                 }
             }
 
@@ -198,6 +260,7 @@ impl SinkerUtil {
                 for _ in 0..parallel_size {
                     let sinker = PgSinker {
                         url: url.to_string(),
+                        db_type: config.sinker_basic.db_type.clone(),
                         conn_pool: conn_pool.clone(),
                         meta_manager: meta_manager.clone(),
                         router: router.clone(),
@@ -212,6 +275,8 @@ impl SinkerUtil {
             }
 
             SinkerConfig::PgCheck {
+                url,
+                connection_auth,
                 batch_size,
                 output_full_row,
                 output_revise_sql,
@@ -237,6 +302,9 @@ impl SinkerUtil {
 
                 for _ in 0..parallel_size {
                     let sinker = PgChecker {
+                        url: url.to_string(),
+                        connection_auth: connection_auth.clone(),
+                        db_type: config.sinker_basic.db_type.clone(),
                         conn_pool: conn_pool.clone(),
                         meta_manager: meta_manager.clone(),
                         common: CheckerCommon {
@@ -368,26 +436,41 @@ impl SinkerUtil {
 
             SinkerConfig::MysqlStruct {
                 conflict_policy, ..
-            } => {
-                let filter = create_filter!(config, Mysql);
-                let router = create_router!(config, Mysql);
-
-                let conn_pool = match client {
-                    ConnClient::MySQL(conn_pool) => conn_pool,
-                    _ => {
-                        bail!("connection pool not found");
-                    }
-                };
-                let sinker = MysqlStructSinker {
-                    conn_pool,
-                    conflict_policy: conflict_policy.clone(),
-                    filter: filter.clone(),
-                    router,
-                    monitor: monitor.clone(),
-                    monitor_interval,
-                };
-                sub_sinkers.push(Arc::new(async_mutex::Mutex::new(Box::new(sinker))));
-            }
+            } => match client {
+                ConnClient::MySQL(conn_pool) => {
+                    let filter = create_filter!(config, Mysql);
+                    let router = create_router!(config, Mysql);
+                    let sinker = MysqlStructSinker {
+                        conn_pool,
+                        conflict_policy: conflict_policy.clone(),
+                        filter: filter.clone(),
+                        router,
+                        monitor: monitor.clone(),
+                        monitor_interval,
+                    };
+                    sub_sinkers.push(Arc::new(async_mutex::Mutex::new(Box::new(sinker))));
+                }
+                ConnClient::PostgreSQL(conn_pool)
+                    if matches!(config.sinker_basic.db_type, DbType::GaussDBMySQL) =>
+                {
+                    let filter =
+                        RdbFilter::from_config(&config.filter, &config.sinker_basic.db_type)?;
+                    let router =
+                        RdbRouter::from_config(&config.router, &config.sinker_basic.db_type)?;
+                    let sinker = PgStructSinker {
+                        conn_pool,
+                        conflict_policy: conflict_policy.clone(),
+                        filter: filter.clone(),
+                        router,
+                        monitor: monitor.clone(),
+                        monitor_interval,
+                    };
+                    sub_sinkers.push(Arc::new(async_mutex::Mutex::new(Box::new(sinker))));
+                }
+                _ => {
+                    bail!("connection pool not found");
+                }
+            },
 
             SinkerConfig::PgStruct {
                 conflict_policy, ..

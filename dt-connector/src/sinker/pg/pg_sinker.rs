@@ -13,6 +13,7 @@ use crate::{
     rdb_router::RdbRouter, sinker::base_sinker::BaseSinker, Sinker,
 };
 use dt_common::{
+    config::config_enums::DbType,
     log_error, log_info,
     meta::{
         ddl_meta::{ddl_data::DdlData, ddl_type::DdlType},
@@ -27,6 +28,7 @@ use dt_common::{
 #[derive(Clone)]
 pub struct PgSinker {
     pub url: String,
+    pub db_type: DbType,
     pub conn_pool: Pool<Postgres>,
     pub meta_manager: PgMetaManager,
     pub router: RdbRouter,
@@ -176,7 +178,8 @@ impl PgSinker {
                         row_data.schema, row_data.tb
                     )
                 })?;
-            let query_builder = RdbQueryBuilder::new_for_pg(tb_meta, None);
+            let query_builder =
+                RdbQueryBuilder::new_for_pg_compatible(tb_meta, None, self.db_type.clone());
 
             let query_info = query_builder.get_query_info(row_data, self.replace)?;
             let query = query_builder.create_pg_query(&query_info)?;
@@ -217,7 +220,8 @@ impl PgSinker {
         batch_size: usize,
     ) -> anyhow::Result<()> {
         let tb_meta = self.meta_manager.get_tb_meta_by_row_data(&data[0]).await?;
-        let query_builder = RdbQueryBuilder::new_for_pg(tb_meta, None);
+        let query_builder =
+            RdbQueryBuilder::new_for_pg_compatible(tb_meta, None, self.db_type.clone());
 
         let (query_info, data_size) =
             query_builder.get_batch_delete_query(data, start_index, batch_size)?;
@@ -259,7 +263,8 @@ impl PgSinker {
                 )
             })?
             .to_owned();
-        let query_builder = RdbQueryBuilder::new_for_pg(&tb_meta, None);
+        let query_builder =
+            RdbQueryBuilder::new_for_pg_compatible(&tb_meta, None, self.db_type.clone());
 
         let (query_info, data_size) =
             query_builder.get_batch_insert_query(data, start_index, batch_size, self.replace)?;

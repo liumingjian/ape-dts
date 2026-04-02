@@ -226,7 +226,7 @@ impl GaussDBJsonDecoder {
                 _ => ColValue::String(val),
             },
 
-            "int2" | "smallint" | "serial2" => val
+            "int1" | "int2" | "smallint" | "serial2" | "tinyint" => val
                 .parse::<i16>()
                 .map(ColValue::Short)
                 .unwrap_or_else(|_| ColValue::String(val)),
@@ -250,7 +250,7 @@ impl GaussDBJsonDecoder {
 
             "numeric" | "decimal" => ColValue::Decimal(val),
 
-            "bytea" => {
+            "bytea" | "blob" => {
                 let bytes = if val.starts_with("0x") {
                     hex::decode(val.trim_start_matches("0x")).ok()
                 } else if val.starts_with("\\") {
@@ -273,7 +273,7 @@ impl GaussDBJsonDecoder {
             }
 
             "timestamptz" => ColValue::Timestamp(val),
-            "timestamp" => ColValue::DateTime(val),
+            "timestamp" | "smalldatetime" => ColValue::DateTime(val),
             "time" => ColValue::Time(val),
             "date" => ColValue::String(val),
 
@@ -284,6 +284,8 @@ impl GaussDBJsonDecoder {
                 val = val.trim_end().into();
                 ColValue::String(val)
             }
+
+            "nvarchar2" | "clob" => ColValue::String(val),
 
             _ => ColValue::String(val),
         }
@@ -462,5 +464,41 @@ mod tests {
             .unwrap_err();
         assert!(err.to_string().contains("likely DDL"));
         assert!(err.to_string().contains("MVP supports only DML"));
+    }
+
+    #[test]
+    fn test_decode_unsupported_unknown_op_type_has_raw_sample_hint() {
+        let d = GaussDBJsonDecoder::default();
+        let err = d
+            .decode_message(r#"{"table":"public.t1","op_type":"TRUNCATE"}"#)
+            .unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("unsupported op_type: TRUNCATE"));
+        assert!(msg.contains("MVP supports only DML"));
+        assert!(msg.contains("provide raw sample"));
+    }
+
+    #[test]
+    fn test_decode_gaussdb_alias_types_for_cdc_values() {
+        assert_eq!(
+            GaussDBJsonDecoder::parse_col_value(Some("tinyint"), Some("8")),
+            ColValue::Short(8)
+        );
+        assert_eq!(
+            GaussDBJsonDecoder::parse_col_value(Some("smalldatetime"), Some("'2026-04-02 16:21:00'")),
+            ColValue::DateTime("2026-04-02 16:21:00".to_string())
+        );
+        assert_eq!(
+            GaussDBJsonDecoder::parse_col_value(Some("nvarchar2"), Some("'alpha'")),
+            ColValue::String("alpha".to_string())
+        );
+        assert_eq!(
+            GaussDBJsonDecoder::parse_col_value(Some("clob"), Some("'updated clob text'")),
+            ColValue::String("updated clob text".to_string())
+        );
+        assert_eq!(
+            GaussDBJsonDecoder::parse_col_value(Some("blob"), Some("'00A1FF'")),
+            ColValue::Blob(vec![0, 161, 255])
+        );
     }
 }
