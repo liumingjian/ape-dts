@@ -1,0 +1,12 @@
+RUN	dt_tests_failover	GAUSSDB_CM_REQUIRE_HEALTHY=1 ENABLE_GAUSSDB_FAILOVER_TEST=1 cargo test -p dt-tests --test integration_test -- gaussdb_to_pg::cdc_tests::test::cdc_failover_test --nocapture
+FAIL	dt_tests_failover	.codex-tasks/20260403-gaussdb-gate-batchb-resilience/raw/resilience/dt_tests_failover.log
+RUN	e2e_basic	bash scripts/e2e/gaussdb_to_pg_cdc.sh
+PASS	e2e_basic	.codex-tasks/20260403-gaussdb-gate-batchb-resilience/raw/resilience/e2e_basic.log
+RUN	e2e_resume	env TEST_RESUME=1 bash scripts/e2e/gaussdb_to_pg_cdc.sh
+PASS	e2e_resume	.codex-tasks/20260403-gaussdb-gate-batchb-resilience/raw/resilience/e2e_resume.log
+RUN	e2e_neg_slot_active	env TEST_NEG_SLOT_ACTIVE=1 bash scripts/e2e/gaussdb_to_pg_cdc.sh
+PASS	e2e_neg_slot_active	.codex-tasks/20260403-gaussdb-gate-batchb-resilience/raw/resilience/e2e_neg_slot_active.log
+RUN	e2e_neg_no_repl_user	env TEST_NEG_NO_REPL_USER=1 bash scripts/e2e/gaussdb_to_pg_cdc.sh
+PASS	e2e_neg_no_repl_user	.codex-tasks/20260403-gaussdb-gate-batchb-resilience/raw/resilience/e2e_neg_no_repl_user.log
+RUN	e2e_failover	env TEST_FAILOVER=1 bash scripts/e2e/gaussdb_to_pg_cdc.sh
+PASS	e2e_failover	.codex-tasks/20260403-gaussdb-gate-batchb-resilience/raw/resilience/e2e_failover.log

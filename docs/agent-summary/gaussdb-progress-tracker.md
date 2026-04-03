@@ -1,6 +1,6 @@
 # GaussDB 全局进度跟踪清单（PRD 真相源）
 
-> 最后更新：**2026-04-02（GaussDBMySQL 首波已收口；GaussDBPg 统一 E2E Batch A 已验证）**
+> 最后更新：**2026-04-03（GaussDBPg Batch B 已验证；script resilience 5/5 PASS；dt-tests failover 暴露 restore 红点）**
 >
 > 目标：每完成一次 spec 任务后，都能立刻知道“当前已交付什么、证据在哪、下一步做什么”。
 
@@ -74,7 +74,7 @@
 | `GaussDBPg → PG` snapshot/check/cdc（基础） | ✅ | `.codex-tasks/20260329-gaussdb-prd-e2e/PROGRESS.md` |
 | `GaussDBPg → PG` CDC：HA 端口 + NoTLS + candidate-first + sticky + 诊断增强 | ✅ | `.codex-tasks/20260331-gaussdb-p0-stability/PROGRESS.md` |
 | 无污染 e2e：`scripts/e2e/gaussdb_to_pg_cdc.sh` | ✅ | `.codex-tasks/20260331-gaussdb-p0-stability-e2e/PROGRESS.md` |
-| `GaussDBPg → PG` CDC P1：resume + failover + 负例套件 | ✅ | `.codex-tasks/20260331-gaussdb-cdc-resilience/PROGRESS.md` |
+| `GaussDBPg → PG` CDC P1：resume + failover + 负例套件 | PARTIAL | `.codex-tasks/20260331-gaussdb-cdc-resilience/PROGRESS.md` + `.codex-tasks/20260403-gaussdb-gate-batchb-resilience/PROGRESS.md` |
 | `GaussDBMySQL` 首波（`MySQL -> GaussDBMySQL` 目标端优先） | ✅ | `.codex-tasks/20260402-gaussdb-mysql-bootstrap/PROGRESS.md` |
 | `GaussDBPg` 质量补齐（类型矩阵 / check 细化 / 性能可观测） | ✅ | `.codex-tasks/20260402-gaussdbpg-quality-coverage/PROGRESS.md` |
 | `GaussDBOracle` 路线图 / 阻塞项 | ⛔ BLOCKED | `docs/agent-summary/gaussdb-oracle-roadmap.md` |
@@ -144,6 +144,18 @@
     - `--no-run` 编译已通过
     - 首次真运行被当前沙箱网络限制阻断，错误为 `Operation not permitted (os error 1)`
   - `GaussDBOracle` 与 `SHA256` 本轮均不进入 active implementation，只保留 roadmap / blocked 条目。
+- 2026-04-03：
+  - 已完成 `.codex-tasks/20260403-gaussdb-gate-batchb-resilience/` gate run：
+    - Batch B（6 条增强回归）`6/6 PASS`
+    - script resilience（`basic/resume/slot-active/no-repl-user/failover`）`5/5 PASS`
+    - `dt-tests cdc_failover_test` `FAIL`
+  - 新增的关键证据表明：
+    - 真实 failover 期间，CDC 已能从 `10.250.0.30:8001` 重连到 `10.250.0.51:8001` 并继续同步。
+    - 脚本路径的 best-effort restore 已能把主库恢复回 `node 2 / 10.250.0.30`，并完成 slot/schema/temp-role 无污染清理。
+    - 当前剩余红点集中在 `dt-tests` failover restore 校验，具体表现为 `cm_ctl busy / convergence timeout` 导致最终 `orig_primary_node=2, final_primary_node=1`。
+  - 因此，`GaussDBPg → PG CDC P1：resume + failover + 负例套件` 状态从“历史交付完成”收敛为 **PARTIAL**：
+    - e2e 运行链路已闭环
+    - `dt-tests` failover 自动回原主仍需进一步稳定化
 
 ## 6. 更新流程（每完成一个 spec 后怎么做）
 

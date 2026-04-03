@@ -1,0 +1,903 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.54s
+warning: the following packages contain code that will be rejected by a future version of Rust: snap v0.2.5
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 2`
+     Running tests/integration_test.rs (target/debug/deps/integration_test-9b60f916ab830360)
+
+running 1 test
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+selected gaussdb rw url: postgres://10.250.0.30:8000/postgres?sslmode=require (server_addr=192.168.1.30/32)
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.51:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.51:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.51:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.51:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+selected gaussdb rw url: postgres://10.250.0.30:8000/postgres?sslmode=require (server_addr=192.168.1.30/32)
+executing sql: DROP TABLE IF EXISTS public.gaussdb_cdc_failover
+executing sql: CREATE TABLE public.gaussdb_cdc_failover ( id INTEGER PRIMARY KEY, val TEXT )
+executing sql: DROP TABLE IF EXISTS public.gaussdb_cdc_failover
+executing sql: CREATE TABLE public.gaussdb_cdc_failover ( id INTEGER PRIMARY KEY, val TEXT )
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.51:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.51:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.51:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.51:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+selected gaussdb rw url: postgres://10.250.0.30:8000/postgres?sslmode=require (server_addr=192.168.1.30/32)
+2026-04-03T18:06:50.387121+08:00 INFO default_logger - start task: [taskID: 61eda85ae024215b, taskType: Some(Cdc)]
+2026-04-03T18:06:50.387545+08:00 WARN default_logger - recorder unsupported resumer config: Dummy
+2026-04-03T18:06:50.387579+08:00 WARN default_logger - recovery unsupported resumer config: Dummy
+2026-04-03T18:06:50.387599+08:00 INFO default_logger - recovery initialization for task_id: 61eda85ae024215b finished in 0 ms
+2026-04-03T18:06:50.916081+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-03T18:06:50.916899+08:00 ERROR default_logger - buffer_memory_mb=0 is too large and will be ignored to prevent overflow
+2026-04-03T18:06:50.916916+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-03T18:06:51.052900+08:00 INFO default_logger - GaussDBCdcExtractor starts, slot_name: ape_test_gaussdb_failover, start_lsn: , keepalive_interval_secs: 10, heartbeat_interval_secs: 0, heartbeat_tb: heartbeat_db.ape_dts_heartbeat
+2026-04-03T18:06:51.052976+08:00 INFO default_logger - try starting heartbeat, heartbeat_interval_secs: 0, heartbeat_tb: heartbeat_db.ape_dts_heartbeat, 
+2026-04-03T18:06:51.053030+08:00 INFO default_logger - heartbeat disabled, heartbeat_tb: heartbeat_db.ape_dts_heartbeat, heartbeat_interval_secs: 0
+2026-04-03T18:06:51.054827+08:00 INFO default_logger - gaussdb cdc endpoint selection: prefer_candidates=true candidates=3 base=10.250.0.30:8000 last_success=none
+2026-04-03T18:06:51.054845+08:00 INFO default_logger - gaussdb cdc candidates (sql ports): 10.250.0.52:8000,10.250.0.30:8000,10.250.0.51:8000
+2026-04-03T18:06:51.055074+08:00 INFO default_logger - gaussdb cdc probe order: 10.250.0.52:8000,10.250.0.30:8000,10.250.0.51:8000
+2026-04-03T18:06:51.055363+08:00 INFO default_logger - gaussdb cdc probing candidate 1/3: 10.250.0.52:8000
+2026-04-03T18:06:51.121571+08:00 INFO default_logger - MergeParallelizer starts, parallel_size: 1, checkpoint_interval_secs: 1
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+2026-04-03T18:06:51.469883+08:00 INFO default_logger - gaussdb cdc candidate sql connect ok: 10.250.0.52:8000
+2026-04-03T18:06:51.469978+08:00 INFO default_logger - gaussdb sql connection starts (ssl=on, host=10.250.0.52, port=8000)
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+2026-04-03T18:06:51.636645+08:00 WARN default_logger - gaussdb cdc candidate precheck failed: 10.250.0.52:8000, error: extractor error: GaussDB is in recovery/standby mode (pg_is_in_recovery=true), logical decoding is not supported
+2026-04-03T18:06:51.636675+08:00 INFO default_logger - gaussdb cdc probing candidate 2/3: 10.250.0.30:8000
+2026-04-03T18:06:51.986620+08:00 INFO default_logger - gaussdb cdc candidate sql connect ok: 10.250.0.30:8000
+2026-04-03T18:06:51.986664+08:00 INFO default_logger - gaussdb sql connection starts (ssl=on, host=10.250.0.30, port=8000)
+2026-04-03T18:06:52.123320+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-04-03T18:06:52.123348+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-04-03T18:06:52.123782+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:06:52.123802+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:06:52.123817+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-04-03T18:06:52.147486+08:00 INFO default_logger - gaussdb cdc candidate precheck ok: 10.250.0.30:8000
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.51:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.51:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+2026-04-03T18:06:52.200896+08:00 INFO default_logger - slot: ape_test_gaussdb_failover exists: true
+2026-04-03T18:06:52.200932+08:00 INFO default_logger - slot confirmed_flush_lsn(confirmed_flush/restart_lsn): 2/4410E488
+2026-04-03T18:06:52.200949+08:00 WARN default_logger - start_lsn is empty, will use confirmed_flush_lsn
+2026-04-03T18:06:52.200960+08:00 INFO default_logger - gaussdb cdc candidate slot ok: 10.250.0.30:8000 start_lsn=2/4410E488
+2026-04-03T18:06:52.460554+08:00 INFO default_logger - execute: START_REPLICATION SLOT "ape_test_gaussdb_failover" LOGICAL 2/4410E488 ("include-xids" 'false', "skip-empty-xacts" 'true')
+2026-04-03T18:06:52.460614+08:00 INFO default_logger - gaussdb replication connection starts (ssl=off, host=10.250.0.30, port=8001)
+2026-04-03T18:06:52.516488+08:00 INFO default_logger - gaussdb cdc replication streaming started: 10.250.0.30:8001 (sql_port=8000)
+2026-04-03T18:06:52.516569+08:00 INFO default_logger - gaussdb wal_sender_timeout=6s is smaller than keepalive_interval_secs=10, adjusting keepalive_interval_secs to 3s
+2026-04-03T18:06:52.528925+08:00 INFO default_logger - gaussdb replication keepalive clock unit inferred: MicrosSince2000 (clock=828526012705354)
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.51:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.51:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+2026-04-03T18:06:53.123163+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:06:53.123196+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:06:53.123217+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:06:53.123232+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:06:53.123242+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-04-03T18:06:53.123400+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-04-03T18:06:53.123416+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-04-03T18:06:54.123124+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:06:54.123178+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:06:54.123192+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:06:54.123204+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:06:54.123214+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-04-03T18:06:54.123432+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-04-03T18:06:54.123446+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-04-03T18:06:55.123104+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:06:55.123132+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:06:55.123171+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:06:55.123182+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:06:55.123193+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-04-03T18:06:55.123466+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-04-03T18:06:55.123493+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-04-03T18:06:55.517033+08:00 INFO default_logger - gaussdb keepalive tick: sending status update
+selected gaussdb rw url: postgres://10.250.0.30:8000/postgres?sslmode=require (server_addr=192.168.1.30/32)
+2026-04-03T18:06:56.123302+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=112 | avg_by_sec=112 | max_by_sec=112
+2026-04-03T18:06:56.123348+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:06:56.123369+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=6 | avg_by_sec=6 | max_by_sec=6
+2026-04-03T18:06:56.123384+08:00 INFO monitor_logger - extractor |  | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-04-03T18:06:56.123418+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=2 | avg=2 | max=2
+2026-04-03T18:06:56.123444+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:06:56.123457+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:06:56.123469+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:06:56.123479+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:06:56.123491+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-04-03T18:06:56.123925+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/4E24DB70","timestamp":"2026-04-03 10:06:56.207"}
+2026-04-03T18:06:56.123944+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/4E24DB70","timestamp":"2026-04-03 10:06:56.207"}
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+2026-04-03T18:06:57.123359+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=398 | avg_by_sec=398 | max_by_sec=398
+2026-04-03T18:06:57.123396+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:06:57.123412+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=23 | avg_by_sec=23 | max_by_sec=23
+2026-04-03T18:06:57.123429+08:00 INFO monitor_logger - extractor |  | record_count | sum=8 | avg_by_sec=8 | max_by_sec=8
+2026-04-03T18:06:57.123462+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=8 | avg=1 | max=4
+2026-04-03T18:06:57.123487+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:06:57.123502+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:06:57.123514+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:06:57.123525+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:06:57.123536+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210816207
+2026-04-03T18:06:57.123972+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/514FD580","timestamp":"2026-04-03 10:06:57.232"}
+2026-04-03T18:06:57.123987+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/514FD580","timestamp":"2026-04-03 10:06:57.232"}
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+2026-04-03T18:06:58.123104+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=490 | avg_by_sec=490 | max_by_sec=490
+2026-04-03T18:06:58.123146+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:06:58.123163+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=30 | avg_by_sec=30 | max_by_sec=30
+2026-04-03T18:06:58.123181+08:00 INFO monitor_logger - extractor |  | record_count | sum=12 | avg_by_sec=12 | max_by_sec=12
+2026-04-03T18:06:58.123222+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=12 | avg=2 | max=4
+2026-04-03T18:06:58.123246+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:06:58.123258+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:06:58.123268+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:06:58.123277+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:06:58.123287+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210817232
+2026-04-03T18:06:58.124036+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/51B7FB40","timestamp":"2026-04-03 10:06:57.409"}
+2026-04-03T18:06:58.124105+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/51B7FB40","timestamp":"2026-04-03 10:06:57.409"}
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.51:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.51:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+2026-04-03T18:06:58.516988+08:00 INFO default_logger - gaussdb keepalive tick: sending status update
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.51:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.51:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+2026-04-03T18:06:59.123003+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=53 | avg_by_sec=53 | max_by_sec=53
+2026-04-03T18:06:59.123037+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:06:59.123059+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=16 | avg_by_sec=16 | max_by_sec=16
+2026-04-03T18:06:59.123076+08:00 INFO monitor_logger - extractor |  | record_count | sum=6 | avg_by_sec=6 | max_by_sec=6
+2026-04-03T18:06:59.123196+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=6 | avg=1 | max=2
+2026-04-03T18:06:59.123219+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:06:59.123231+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:06:59.123240+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:06:59.123250+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:06:59.123260+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210817409
+2026-04-03T18:06:59.124171+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/5897DB10","timestamp":"2026-04-03 10:06:59.182"}
+2026-04-03T18:06:59.124227+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/5897DB10","timestamp":"2026-04-03 10:06:59.182"}
+2026-04-03T18:07:00.123030+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:00.123061+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:00.123075+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:00.123090+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:00.123122+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:00.123145+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:00.123158+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:00.123170+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:00.123182+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:00.123192+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210819182
+2026-04-03T18:07:00.124373+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/5897DB10","timestamp":"2026-04-03 10:06:59.182"}
+2026-04-03T18:07:00.124421+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/5897DB10","timestamp":"2026-04-03 10:06:59.182"}
+2026-04-03T18:07:01.123004+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10
+2026-04-03T18:07:01.123035+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:01.123048+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=3 | avg_by_sec=3 | max_by_sec=3
+2026-04-03T18:07:01.123060+08:00 INFO monitor_logger - extractor |  | record_count | sum=1 | avg_by_sec=1 | max_by_sec=1
+2026-04-03T18:07:01.123091+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=1 | avg=1 | max=1
+2026-04-03T18:07:01.123112+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:01.123123+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:01.123131+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:01.123139+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:01.123148+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210819182
+2026-04-03T18:07:01.124503+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/5D260050","timestamp":"2026-04-03 10:07:01.252"}
+2026-04-03T18:07:01.124553+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/5D260050","timestamp":"2026-04-03 10:07:01.252"}
+2026-04-03T18:07:01.516931+08:00 INFO default_logger - gaussdb keepalive tick: sending status update
+selected gaussdb rw url: postgres://10.250.0.30:8000/postgres?sslmode=require (server_addr=192.168.1.30/32)
+2026-04-03T18:07:02.122974+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=20 | avg_by_sec=20 | max_by_sec=20
+2026-04-03T18:07:02.123005+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:02.123020+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=6 | avg_by_sec=6 | max_by_sec=6
+2026-04-03T18:07:02.123034+08:00 INFO monitor_logger - extractor |  | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-04-03T18:07:02.123066+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=2 | avg=1 | max=1
+2026-04-03T18:07:02.123088+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:02.123098+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:02.123106+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:02.123115+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:02.123123+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210821252
+2026-04-03T18:07:02.124609+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/5E987DF8","timestamp":"2026-04-03 10:07:01.633"}
+2026-04-03T18:07:02.124659+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/5E987DF8","timestamp":"2026-04-03 10:07:01.633"}
+2026-04-03T18:07:03.122972+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=20 | avg_by_sec=20 | max_by_sec=20
+2026-04-03T18:07:03.123003+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:03.123019+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=6 | avg_by_sec=6 | max_by_sec=6
+2026-04-03T18:07:03.123032+08:00 INFO monitor_logger - extractor |  | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-04-03T18:07:03.123079+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=2 | avg=1 | max=1
+2026-04-03T18:07:03.123115+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:03.123132+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:03.123143+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:03.123154+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:03.123164+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210821633
+2026-04-03T18:07:03.124766+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:03.124805+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:04.122968+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:04.123095+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:04.123158+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:04.123186+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:04.123237+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:04.123262+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:04.123274+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:04.123283+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:04.123295+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:04.123306+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:04.124884+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:04.124932+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:04.516921+08:00 INFO default_logger - gaussdb keepalive tick: sending status update
+2026-04-03T18:07:05.122930+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:05.122961+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:05.122975+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:05.122988+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:05.123020+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:05.123039+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:05.123050+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:05.123058+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:05.123073+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:05.123082+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:05.125018+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:05.125066+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:06.122930+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:06.122961+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:06.122977+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:06.122994+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:06.123032+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:06.123057+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:06.123068+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:06.123078+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:06.123087+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:06.123110+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:06.125130+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:06.125175+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+2026-04-03T18:07:07.122960+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:07.122995+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:07.123015+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:07.123033+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:07.123069+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:07.123147+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:07.123204+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:07.123219+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:07.123231+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:07.123242+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:07.125239+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:07.125287+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+2026-04-03T18:07:07.516902+08:00 INFO default_logger - gaussdb keepalive tick: sending status update
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.51:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.51:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+2026-04-03T18:07:08.122904+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:08.122937+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:08.122956+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:08.122971+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:08.123004+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:08.123025+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:08.123037+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:08.123046+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:08.123056+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:08.123065+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:08.125340+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:08.125386+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.51:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.51:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+2026-04-03T18:07:09.122902+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:09.122935+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:09.122951+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:09.122964+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:09.122997+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:09.123028+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:09.123041+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:09.123051+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:09.123059+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:09.123068+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:09.125460+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:09.125509+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:10.122936+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:10.122980+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:10.122999+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:10.123012+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:10.123051+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:10.123075+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:10.123086+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:10.123095+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:10.123103+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:10.123112+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:10.125660+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:10.125714+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:10.516852+08:00 INFO default_logger - gaussdb keepalive tick: sending status update
+2026-04-03T18:07:11.122885+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:11.122916+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:11.122931+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:11.122945+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:11.122976+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:11.122996+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:11.123006+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:11.123014+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:11.123023+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:11.123031+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:11.125833+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:11.125897+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+selected gaussdb rw url: postgres://10.250.0.30:8000/postgres?sslmode=require (server_addr=192.168.1.30/32)
+executing sql: INSERT INTO public.gaussdb_cdc_failover (id, val) VALUES (1, 'a'), (2, 'b');
+2026-04-03T18:07:12.122875+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:12.122906+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:12.122921+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:12.122934+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:12.122965+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:12.122985+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:12.122996+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:12.123004+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:12.123013+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:12.123022+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:12.125965+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:12.126007+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+2026-04-03T18:07:13.122873+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:13.122902+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:13.122917+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:13.122933+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:13.122964+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:13.122985+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:13.122996+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:13.123004+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:13.123012+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:13.123020+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:13.126080+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:13.126124+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+2026-04-03T18:07:13.516842+08:00 INFO default_logger - gaussdb keepalive tick: sending status update
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.51:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.51:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+2026-04-03T18:07:14.122878+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:14.122912+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:14.122926+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:14.122939+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:14.122970+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:14.122999+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:14.123012+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:14.123022+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:14.123030+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:14.123038+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:14.126209+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:14.126351+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.51:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.51:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+2026-04-03T18:07:15.122927+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:15.122959+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:15.122975+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:15.122990+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:15.123026+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:15.123050+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:15.123062+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:15.123072+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:15.123082+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:15.123091+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:15.126419+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:15.126468+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:16.122865+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:16.122895+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:16.122909+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:16.122921+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:16.122953+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:16.122974+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:16.122983+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:16.122992+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:16.123002+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:16.123010+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:16.126553+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:16.126603+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:16.516824+08:00 INFO default_logger - gaussdb keepalive tick: sending status update
+2026-04-03T18:07:17.122864+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:17.122895+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:17.122909+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:17.122922+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:17.122953+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:17.122974+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:17.122983+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:17.122991+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:17.123+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:17.123008+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:17.126690+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:17.126750+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+selected gaussdb rw url: postgres://10.250.0.30:8000/postgres?sslmode=require (server_addr=192.168.1.30/32)
+2026-04-03T18:07:18.122936+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:18.122979+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:18.122994+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:18.123008+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:18.123044+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:18.123067+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:18.123078+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:18.123087+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:18.123096+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:18.123104+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:18.126832+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:18.126901+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:19.122862+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:19.122891+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:19.122904+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:19.122918+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:19.122956+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:19.122977+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:19.122996+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:19.123005+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:19.123014+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:19.123023+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:19.127022+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:19.127075+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:19.516832+08:00 INFO default_logger - gaussdb keepalive tick: sending status update
+2026-04-03T18:07:19.664239+08:00 WARN sqlx::postgres::notice - Fast path bit num leak.
+comparing row data for src_tb: ("public", "gaussdb_cdc_failover"), dst_tb: ("public", "gaussdb_cdc_failover"), src_data count: 2, dst_data count: 0
+row count mismatch: src=2, dst=0
+compare tb data failed, src_tb: ("public", "gaussdb_cdc_failover"), dst_tb: ("public", "gaussdb_cdc_failover")
+2026-04-03T18:07:20.122924+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:20.122961+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:20.122975+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:20.122989+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:20.123020+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:20.123041+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:20.123053+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:20.123063+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:20.123072+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:20.123080+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:20.127169+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:20.127210+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+2026-04-03T18:07:21.122863+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:21.122892+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:21.122907+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:21.122923+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:21.122955+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:21.122978+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:21.122991+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:21.123+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:21.123010+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:21.123024+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:21.127297+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:21.127362+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.51:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.51:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+2026-04-03T18:07:22.122852+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:22.122881+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:22.122895+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:22.122908+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:22.122940+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:22.122961+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:22.122970+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:22.122979+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:22.122990+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:22.122998+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:22.127502+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:22.127567+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.51:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.51:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+2026-04-03T18:07:22.516851+08:00 INFO default_logger - gaussdb keepalive tick: sending status update
+2026-04-03T18:07:23.122855+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:23.122885+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:23.122899+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:23.122914+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:23.122947+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:23.122970+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:23.122982+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:23.122992+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:23.123+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:23.123009+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:23.127718+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:23.127779+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:24.122859+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:24.122889+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:24.122904+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:24.122917+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:24.122949+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:24.123007+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:24.123045+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:24.123065+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:24.123078+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:24.123089+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:24.127872+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:24.127925+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:25.122887+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:25.122922+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:25.122937+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:25.122951+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:25.122984+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:25.123005+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:25.123014+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:25.123023+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:25.123033+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:25.123042+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:25.128043+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:25.128084+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:25.516870+08:00 INFO default_logger - gaussdb keepalive tick: sending status update
+selected gaussdb rw url: postgres://10.250.0.30:8000/postgres?sslmode=require (server_addr=192.168.1.30/32)
+2026-04-03T18:07:26.122858+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:26.122889+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:26.122903+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:26.122917+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:26.122947+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:26.122968+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:26.122978+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:26.122990+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:26.123+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:26.123010+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:26.128219+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:26.128297+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:26.252926+08:00 WARN sqlx::postgres::notice - Fast path bit num leak.
+comparing row data for src_tb: ("public", "gaussdb_cdc_failover"), dst_tb: ("public", "gaussdb_cdc_failover"), src_data count: 2, dst_data count: 0
+row count mismatch: src=2, dst=0
+compare tb data failed, src_tb: ("public", "gaussdb_cdc_failover"), dst_tb: ("public", "gaussdb_cdc_failover")
+2026-04-03T18:07:27.122860+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:27.122893+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:27.122907+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:27.122919+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:27.122960+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:27.122982+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:27.123001+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:27.123009+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:27.123017+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:27.123025+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:27.128430+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:27.128497+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+2026-04-03T18:07:28.122906+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:28.122947+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:28.122961+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:28.122974+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:28.123008+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:28.123034+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:28.123043+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:28.123053+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:28.123062+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:28.123072+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:28.128593+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:28.128645+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+2026-04-03T18:07:28.516863+08:00 INFO default_logger - gaussdb keepalive tick: sending status update
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.51:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.51:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+2026-04-03T18:07:29.122909+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:29.122944+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:29.122958+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:29.122972+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:29.123004+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:29.123026+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:29.123036+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:29.123051+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:29.123060+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:29.123068+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:29.128797+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:29.128866+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.51:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.51:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+2026-04-03T18:07:30.122871+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:30.122912+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:30.122928+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:30.122941+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:30.122973+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:30.122994+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:30.123006+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:30.123018+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:30.123026+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:30.123034+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:30.128977+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:30.129022+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:31.122886+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:31.122923+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:31.122938+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:31.122952+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:31.122984+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:31.123005+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:31.123020+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:31.123029+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:31.123038+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:31.123050+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:31.129135+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:31.129190+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:31.516852+08:00 INFO default_logger - gaussdb keepalive tick: sending status update
+2026-04-03T18:07:32.122847+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:32.122876+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:32.122890+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:32.122901+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:32.122963+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:32.122991+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:32.123005+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:32.123015+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:32.123027+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:32.123036+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:32.129280+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:32.129325+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+test gaussdb_to_pg::cdc_tests::test::cdc_failover_test has been running for over 60 seconds
+2026-04-03T18:07:33.122861+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:33.122890+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:33.122904+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:33.122917+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:33.122948+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:33.122968+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:33.122984+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:33.122997+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:33.123006+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:33.123015+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:33.129439+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:33.129494+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:34.122853+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:34.122883+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:34.122897+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:34.122911+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:34.122943+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:34.122963+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:34.122974+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:34.122994+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:34.123004+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:34.123012+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:34.129602+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:34.129654+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:34.516832+08:00 INFO default_logger - gaussdb keepalive tick: sending status update
+2026-04-03T18:07:35.122863+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:35.122893+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:35.122908+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:35.122920+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:35.122952+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:35.122973+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:35.122983+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:35.122992+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:35.123+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:35.123009+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:35.129754+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:35.129924+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:36.122861+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:36.122894+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:36.122909+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:36.122922+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:36.122954+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:36.122976+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:36.122988+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:36.122997+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:36.123006+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:36.123015+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:36.130058+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:36.130118+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:37.122896+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:37.122928+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:37.122944+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:37.122959+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:37.122991+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:37.123013+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:37.123024+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:37.123033+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:37.123043+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:37.123054+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:37.130230+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:37.130284+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:37.516832+08:00 INFO default_logger - gaussdb keepalive tick: sending status update
+2026-04-03T18:07:37.909301+08:00 INFO default_logger - gaussdb replication connection drops (ssl=off, host=10.250.0.30, port=8001), error: connection closed
+2026-04-03T18:07:37.909348+08:00 WARN default_logger - gaussdb replication stream closed, will reconnect: connection closed
+2026-04-03T18:07:37.909362+08:00 WARN default_logger - gaussdb replication disconnected, will reconnect in 500 ms (attempt 1)
+2026-04-03T18:07:38.122943+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:38.122989+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:38.123007+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:38.123022+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:38.123058+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:38.123082+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:38.123094+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:38.123108+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:38.123126+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:38.123138+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:38.130412+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:38.130469+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:38.410736+08:00 INFO default_logger - gaussdb cdc endpoint selection: prefer_candidates=true candidates=3 base=10.250.0.30:8000 last_success=10.250.0.30:8000
+2026-04-03T18:07:38.410762+08:00 INFO default_logger - gaussdb cdc candidates (sql ports): 10.250.0.52:8000,10.250.0.30:8000,10.250.0.51:8000
+2026-04-03T18:07:38.410782+08:00 INFO default_logger - gaussdb cdc probe order: 10.250.0.30:8000,10.250.0.52:8000,10.250.0.51:8000
+2026-04-03T18:07:38.410795+08:00 INFO default_logger - gaussdb cdc probing candidate 1/3: 10.250.0.30:8000
+2026-04-03T18:07:39.122900+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:39.122933+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:39.122948+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:39.122966+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:39.123001+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:39.123026+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:39.123041+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:39.123071+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:39.123105+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:39.123120+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:39.130570+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:39.130622+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:40.122911+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:40.122949+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:40.122963+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:40.122976+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:40.123009+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:40.123031+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:40.123041+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:40.123050+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:40.123059+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:40.123067+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:40.131626+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:40.131691+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:41.122905+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:41.122942+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:41.122964+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:41.122978+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:41.123009+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:41.123029+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:41.123039+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:41.123048+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:41.123059+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:41.123070+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:41.131818+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:41.131880+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+skip gaussdb candidate (connect failed): postgres://10.250.0.30:8000/postgres?sslmode=require, error: error communicating with database: Connection reset by peer (os error 54)
+2026-04-03T18:07:41.337654+08:00 WARN default_logger - gaussdb cdc candidate sql connect failed: 10.250.0.30:8000, error: error communicating with the server: Connection reset by peer (os error 54)
+2026-04-03T18:07:41.337685+08:00 INFO default_logger - gaussdb cdc probing candidate 2/3: 10.250.0.52:8000
+skip gaussdb candidate (connect failed): postgres://10.250.0.30:8000/postgres?sslmode=disable, error: error communicating with database: Connection reset by peer (os error 54)
+2026-04-03T18:07:41.686925+08:00 INFO default_logger - gaussdb cdc candidate sql connect ok: 10.250.0.52:8000
+2026-04-03T18:07:41.686968+08:00 INFO default_logger - gaussdb sql connection starts (ssl=on, host=10.250.0.52, port=8000)
+2026-04-03T18:07:41.849447+08:00 WARN default_logger - gaussdb cdc candidate precheck failed: 10.250.0.52:8000, error: extractor error: GaussDB is in recovery/standby mode (pg_is_in_recovery=true), logical decoding is not supported
+2026-04-03T18:07:41.849475+08:00 INFO default_logger - gaussdb cdc probing candidate 3/3: 10.250.0.51:8000
+2026-04-03T18:07:42.122939+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:42.122978+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:42.122992+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:42.123004+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:42.123038+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:42.123059+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:42.123068+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:42.123078+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:42.123088+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:42.123096+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:42.132028+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:42.132110+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:42.211067+08:00 INFO default_logger - gaussdb cdc candidate sql connect ok: 10.250.0.51:8000
+2026-04-03T18:07:42.211124+08:00 INFO default_logger - gaussdb sql connection starts (ssl=on, host=10.250.0.51, port=8000)
+2026-04-03T18:07:42.370570+08:00 INFO default_logger - gaussdb cdc candidate precheck ok: 10.250.0.51:8000
+2026-04-03T18:07:42.425748+08:00 INFO default_logger - slot: ape_test_gaussdb_failover exists: true
+2026-04-03T18:07:42.425781+08:00 INFO default_logger - slot confirmed_flush_lsn(confirmed_flush/restart_lsn): 2/62C2FD08
+2026-04-03T18:07:42.425798+08:00 WARN default_logger - start_lsn is empty, will use confirmed_flush_lsn
+2026-04-03T18:07:42.425809+08:00 INFO default_logger - gaussdb cdc candidate slot ok: 10.250.0.51:8000 start_lsn=2/62C2FD08
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+2026-04-03T18:07:42.594701+08:00 INFO default_logger - execute: START_REPLICATION SLOT "ape_test_gaussdb_failover" LOGICAL 2/62C2FD08 ("include-xids" 'false', "skip-empty-xacts" 'true')
+2026-04-03T18:07:42.594750+08:00 INFO default_logger - gaussdb replication connection starts (ssl=off, host=10.250.0.51, port=8001)
+2026-04-03T18:07:42.732367+08:00 INFO default_logger - gaussdb cdc replication streaming started: 10.250.0.51:8001 (sql_port=8000)
+2026-04-03T18:07:42.732402+08:00 INFO default_logger - gaussdb wal_sender_timeout=6s is smaller than keepalive_interval_secs=10, adjusting keepalive_interval_secs to 3s
+2026-04-03T18:07:42.743846+08:00 INFO default_logger - gaussdb replication keepalive clock unit inferred: MicrosSince2000 (clock=828526062836518)
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+2026-04-03T18:07:43.122933+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:43.122972+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:43.122986+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:43.122999+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:43.123034+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:43.123054+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:43.123063+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:43.123072+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:43.123082+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:43.123090+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:43.132229+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:43.132298+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:44.122874+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:44.122904+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:44.122918+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:44.122930+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:44.122963+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:44.122984+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:44.122994+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:44.123003+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:44.123033+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:44.123046+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:44.132439+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:44.132524+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:45.122877+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:45.122909+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:45.122922+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:45.122934+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:45.122966+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:45.122986+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:45.122997+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:45.123006+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:45.123015+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:45.123024+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:45.132668+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:45.132736+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:45.732833+08:00 INFO default_logger - gaussdb keepalive tick: sending status update
+2026-04-03T18:07:46.122917+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:46.122946+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:46.122959+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:46.122971+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T18:07:46.123005+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T18:07:46.123033+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T18:07:46.123044+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T18:07:46.123053+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T18:07:46.123062+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-03T18:07:46.123071+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775210822765
+2026-04-03T18:07:46.132876+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+2026-04-03T18:07:46.132936+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"2/62C2FD08","timestamp":"2026-04-03 10:07:02.765"}
+selected gaussdb rw url: postgres://10.250.0.51:8000/postgres?sslmode=require (server_addr=192.168.1.51/32)
+2026-04-03T18:07:46.714185+08:00 WARN sqlx::postgres::notice - Fast path bit num leak.
+comparing row data for src_tb: ("public", "gaussdb_cdc_failover"), dst_tb: ("public", "gaussdb_cdc_failover"), src_data count: 2, dst_data count: 0
+row count mismatch: src=2, dst=0
+compare tb data failed, src_tb: ("public", "gaussdb_cdc_failover"), dst_tb: ("public", "gaussdb_cdc_failover")
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+skip gaussdb candidate (connect failed): postgres://10.250.0.51:8000/postgres?sslmode=require, error: error communicating with database: Connection reset by peer (os error 54)
+skip gaussdb candidate (connect failed): postgres://10.250.0.51:8000/postgres?sslmode=disable, error: error communicating with database: Connection reset by peer (os error 54)
+skip gaussdb candidate (connect timeout#1) : postgres://10.250.0.30:8000/postgres?sslmode=require
+skip gaussdb candidate (connect timeout#1) : postgres://10.250.0.30:8000/postgres?sslmode=disable
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+selected gaussdb rw url: postgres://10.250.0.51:8000/postgres?sslmode=require (server_addr=192.168.1.51/32)
+cm restore attempt 1/3: target_node=2 dn_instance=6002 (on current_primary_host=10.250.0.51)
+WARN: cm restore attempt 1/3 returned error, will still verify: cm ssh command failed (host=10.250.0.51, status=exit status: 255): stdout_tail='.........................................................................................................................
+cm_ctl: failed to do switch-over. Wait the candidate to be promoted timeout.
+' stderr_tail='Warning: Permanently added '10.250.0.51' (ED25519) to the list of known hosts.
+
+Authorized users only. All activities may be monitored and reported.
+'
+WARN: cm primary did not converge to node 2 after restore attempt 1/3: operation timed out: cm primary did not converge to node 2 within 60 secs (hosts=["10.250.0.30", "10.250.0.52", "10.250.0.51"])
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+selected gaussdb rw url: postgres://10.250.0.51:8000/postgres?sslmode=require (server_addr=192.168.1.51/32)
+cm restore attempt 2/3: target_node=2 dn_instance=6002 (on current_primary_host=10.250.0.51)
+WARN: cm_ctl is busy (another command running), will retry switchover in 2s (busy_try 1/8)
+WARN: cm_ctl is busy (another command running), will retry switchover in 4s (busy_try 2/8)
+WARN: cm_ctl is busy (another command running), will retry switchover in 6s (busy_try 3/8)
+WARN: cm_ctl is busy (another command running), will retry switchover in 8s (busy_try 4/8)
+WARN: cm_ctl is busy (another command running), will retry switchover in 10s (busy_try 5/8)
+WARN: cm_ctl is busy (another command running), will retry switchover in 12s (busy_try 6/8)
+WARN: cm_ctl is busy (another command running), will retry switchover in 14s (busy_try 7/8)
+WARN: cm restore attempt 2/3 returned error, will still verify: cm ssh command failed (host=10.250.0.51, status=exit status: 255): stdout_tail='.
+cm_ctl: can not do switchover, another command(11) is running.
+' stderr_tail='Warning: Permanently added '10.250.0.51' (ED25519) to the list of known hosts.
+
+Authorized users only. All activities may be monitored and reported.
+'
+WARN: cm primary did not converge to node 2 after restore attempt 2/3: operation timed out: cm primary did not converge to node 2 within 30 secs (hosts=["10.250.0.30", "10.250.0.52", "10.250.0.51"])
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+selected gaussdb rw url: postgres://10.250.0.51:8000/postgres?sslmode=require (server_addr=192.168.1.51/32)
+cm restore attempt 3/3: target_node=2 dn_instance=6002 (on current_primary_host=10.250.0.51)
+WARN: cm_ctl is busy (another command running), will retry switchover in 2s (busy_try 1/8)
+WARN: cm_ctl is busy (another command running), will retry switchover in 4s (busy_try 2/8)
+WARN: cm_ctl is busy (another command running), will retry switchover in 6s (busy_try 3/8)
+WARN: cm_ctl is busy (another command running), will retry switchover in 8s (busy_try 4/8)
+WARN: cm_ctl is busy (another command running), will retry switchover in 10s (busy_try 5/8)
+WARN: cm_ctl is busy (another command running), will retry switchover in 12s (busy_try 6/8)
+WARN: cm_ctl is busy (another command running), will retry switchover in 14s (busy_try 7/8)
+WARN: cm restore attempt 3/3 returned error, will still verify: cm ssh command failed (host=10.250.0.51, status=exit status: 255): stdout_tail='.
+cm_ctl: can not do switchover, another command(11) is running.
+' stderr_tail='Warning: Permanently added '10.250.0.51' (ED25519) to the list of known hosts.
+
+Authorized users only. All activities may be monitored and reported.
+'
+WARN: cm primary did not converge to node 2 after restore attempt 3/3: operation timed out: cm primary did not converge to node 2 within 30 secs (hosts=["10.250.0.30", "10.250.0.52", "10.250.0.51"])
+WARN: cm restore did not converge to original primary (best-effort), will still verify via final cm query: cm primary did not converge to node 2 after 3 restore attempts (hosts=["10.250.0.30", "10.250.0.52", "10.250.0.51"])
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+selected gaussdb rw url: postgres://10.250.0.51:8000/postgres?sslmode=require (server_addr=192.168.1.51/32)
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+selected gaussdb rw url: postgres://10.250.0.51:8000/postgres?sslmode=require (server_addr=192.168.1.51/32)
+2026-04-03T18:18:10.984483+08:00 ERROR default_logger - panic: panicked at dt-tests/tests/test_runner/test_base.rs:201:17:
+called `Result::unwrap()` on an `Err` value: cm primary node is not restored after failover test (orig_primary_node=2, final_primary_node=1). Please restore manually. dn_rows={2: CmDatanodeRow { instance: 6002, role: "Standby", ha_status: "Normal" }, 3: CmDatanodeRow { instance: 6003, role: "Standby", ha_status: "Normal" }, 1: CmDatanodeRow { instance: 6001, role: "Primary", ha_status: "Normal" }}
+backtrace:
+disabled backtrace
+test gaussdb_to_pg::cdc_tests::test::cdc_failover_test ... FAILED
+
+failures:
+
+failures:
+    gaussdb_to_pg::cdc_tests::test::cdc_failover_test
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 356 filtered out; finished in 698.40s
+
+error: test failed, to rerun pass `-p dt-tests --test integration_test`

@@ -192,3 +192,16 @@
 
 - 2026-04-02：已执行 **Batch A**（9 条主路径）并全部 PASS。
   - 证据：`.codex-tasks/20260402-gaussdbpg-quality-coverage/tasks/20260402-05-quality-gate-evidence/raw/batch-a/summary.tsv`
+- 2026-04-03：已执行 **Batch B + Resilience Gate**（混合结果）。
+  - Batch B：`6/6 PASS`
+  - Resilience：
+    - `dt-tests cdc_failover_test`：`FAIL`
+    - script matrix（`basic/resume/slot-active/no-repl-user/failover`）：`5/5 PASS`
+  - 关键结论：
+    - `GaussDBPg -> PG` 的增强回归（type matrix / struct view-routine / CDC type matrix / CDC resume）已全部通过。
+    - 真实 e2e 脚本已经证明 failover 期间 CDC 可重连到新主并继续同步，且脚本收尾能把主库恢复回 `node 2 / 10.250.0.30`。
+    - 当前红点集中在 `dt-tests` 的 failover restore 校验：真实切主成功，但测试内 restore 回原主阶段仍会因 `cm_ctl busy / convergence timeout` 失败。
+  - 证据：
+    - `.codex-tasks/20260403-gaussdb-gate-batchb-resilience/PROGRESS.md`
+    - `.codex-tasks/20260403-gaussdb-gate-batchb-resilience/raw/batch-b/summary.tsv`
+    - `.codex-tasks/20260403-gaussdb-gate-batchb-resilience/raw/resilience/summary.tsv`
