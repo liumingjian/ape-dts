@@ -85,6 +85,8 @@ impl RdbTestRunner {
         )
         .await?;
         config = TaskConfig::new(&base.task_config_file).unwrap();
+        Self::maybe_rewrite_gaussdb_cdc_slot_name(&base.task_config_file, &config)?;
+        config = TaskConfig::new(&base.task_config_file).unwrap();
         let src_db_type = &config.extractor_basic.db_type;
         let dst_db_type = &config.sinker_basic.db_type;
         let src_url = &config.extractor_basic.url;
@@ -274,6 +276,76 @@ impl RdbTestRunner {
             base,
             unordered_compare,
         })
+    }
+
+    fn maybe_rewrite_gaussdb_cdc_slot_name(
+        task_config_file: &str,
+        config: &TaskConfig,
+    ) -> anyhow::Result<()> {
+        let use_unique_slot = env::var("DT_TEST_GAUSSDB_CDC_UNIQUE_SLOT")
+            .ok()
+            .map(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))
+            .unwrap_or(true);
+        if !use_unique_slot || !matches!(config.extractor_basic.db_type, DbType::GaussDBPg) {
+            return Ok(());
+        }
+
+        let ExtractorConfig::GaussDBCdc { ref slot_name, .. } = config.extractor else {
+            return Ok(());
+        };
+
+        let unique_slot_name = Self::build_unique_gaussdb_slot_name(slot_name);
+        if unique_slot_name == *slot_name {
+            return Ok(());
+        }
+
+        println!(
+            "rewrite gaussdb cdc slot_name for isolated dt-tests run: {} -> {}",
+            slot_name, unique_slot_name
+        );
+        let updates = vec![(
+            "extractor".to_string(),
+            "slot_name".to_string(),
+            unique_slot_name,
+        )];
+        TestConfigUtil::update_task_config(task_config_file, task_config_file, &updates);
+        Ok(())
+    }
+
+    fn build_unique_gaussdb_slot_name(base_slot_name: &str) -> String {
+        let mut sanitized_base: String = base_slot_name
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '_' {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .collect();
+        sanitized_base = sanitized_base.trim_matches('_').to_string();
+        if sanitized_base.is_empty() {
+            sanitized_base = "ape_test_gaussdb".to_string();
+        }
+
+        let suffix = format!(
+            "{}_{}",
+            Utc::now().format("%m%d%H%M%S"),
+            std::process::id()
+        );
+        let max_total_len = 63usize;
+        let reserved = suffix.len().saturating_add(1);
+        let max_base_len = max_total_len.saturating_sub(reserved);
+
+        if sanitized_base.len() > max_base_len {
+            sanitized_base.truncate(max_base_len);
+            sanitized_base = sanitized_base.trim_end_matches('_').to_string();
+        }
+        if sanitized_base.is_empty() {
+            sanitized_base = "ape".to_string();
+        }
+
+        format!("{}_{}", sanitized_base, suffix)
     }
 
     async fn maybe_rewrite_gaussdb_primary_urls(
@@ -1033,6 +1105,14 @@ impl RdbTestRunner {
             parse_millis.saturating_mul(8),
             worst_case_secs.saturating_mul(1_000),
         );
+        // Real HA environments often need noticeably longer end-to-end convergence windows than
+        // ordinary CDC tests, especially right after task startup and again immediately after
+        // failover. Keep the failover compares patient so short sink stalls do not surface as
+        // false negatives before the cluster has fully settled.
+        let phase1_compare_wait_millis =
+            std::cmp::max(parse_millis.saturating_mul(2), 60_000);
+        let phase2_compare_wait_millis =
+            std::cmp::max(parse_millis.saturating_mul(4), 120_000);
         let task = self.spawn_cdc_task(start_millis, task_parse_millis).await?;
 
         // Determine current RW endpoint (10.250.* candidate) so we can execute `cm_ctl switchover`
@@ -1134,7 +1214,7 @@ impl RdbTestRunner {
                 "failover_phase1",
                 &src_db_tbs,
                 &dst_db_tbs,
-                parse_millis,
+                phase1_compare_wait_millis,
             )
             .await?;
 
@@ -1197,7 +1277,7 @@ impl RdbTestRunner {
                 "failover_phase2",
                 &src_db_tbs,
                 &dst_db_tbs,
-                parse_millis.saturating_mul(2),
+                phase2_compare_wait_millis,
             )
             .await?;
             Ok::<(), anyhow::Error>(())
@@ -1271,43 +1351,47 @@ impl RdbTestRunner {
         // - Ensure we did not introduce NEW unhealthy nodes vs the initial state
         if let Ok(curr_rw_url) = self.resolve_current_gaussdb_rw_url().await {
             if let Ok((curr_host, _)) = Self::parse_host_port_from_url(&curr_rw_url) {
-                if let Ok(final_cv) = self.cm_run_as_ruby_on(&curr_host, "cm_ctl query -Cv").await {
-                    if let Ok((final_primary_node, _final_primary_instance, final_rows)) =
-                        Self::cm_parse_datanode_rows(&final_cv)
-                    {
-                        if final_primary_node != orig_primary_node {
-                            anyhow::bail!(
-                                "cm primary node is not restored after failover test (orig_primary_node={}, final_primary_node={}). Please restore manually. dn_rows={:?}",
-                                orig_primary_node,
-                                final_primary_node,
-                                final_rows
-                            );
-                        }
+                let cm_hosts = Self::cm_collect_ssh_hosts(&curr_host);
+                let final_state = if require_healthy {
+                    self.cm_wait_healthy_datanode_rows_any(
+                        &cm_hosts,
+                        orig_primary_node,
+                        std::cmp::max(60, converge_secs),
+                    )
+                    .await
+                } else {
+                    self.cm_query_datanode_rows_any(&cm_hosts).await
+                };
+                if let Ok((final_primary_node, _final_primary_instance, final_rows)) = final_state {
+                    if final_primary_node != orig_primary_node {
+                        anyhow::bail!(
+                            "cm primary node is not restored after failover test (orig_primary_node={}, final_primary_node={}). Please restore manually. dn_rows={:?}",
+                            orig_primary_node,
+                            final_primary_node,
+                            final_rows
+                        );
+                    }
 
-                        let final_unhealthy_nodes: HashSet<u32> = final_rows
-                            .iter()
-                            .filter(|(_n, r)| {
-                                r.role == "Down" || !r.ha_status.starts_with("Normal")
-                            })
-                            .map(|(n, _r)| *n)
-                            .collect();
-                        if require_healthy && !final_unhealthy_nodes.is_empty() {
-                            anyhow::bail!(
-                                "cm datanode state is not healthy after test (unhealthy_nodes={:?}) while GAUSSDB_CM_REQUIRE_HEALTHY=1. dn_rows={:?}",
-                                final_unhealthy_nodes,
-                                final_rows
-                            );
-                        }
-                        if !require_healthy
-                            && !final_unhealthy_nodes.is_subset(&initial_unhealthy_nodes)
-                        {
-                            anyhow::bail!(
-                                "cm datanode state became worse after test: initial_unhealthy_nodes={:?}, final_unhealthy_nodes={:?}. Please repair manually. dn_rows={:?}",
-                                initial_unhealthy_nodes,
-                                final_unhealthy_nodes,
-                                final_rows
-                            );
-                        }
+                    let final_unhealthy_nodes: HashSet<u32> = final_rows
+                        .iter()
+                        .filter(|(_n, r)| r.role == "Down" || !r.ha_status.starts_with("Normal"))
+                        .map(|(n, _r)| *n)
+                        .collect();
+                    if require_healthy && !final_unhealthy_nodes.is_empty() {
+                        anyhow::bail!(
+                            "cm datanode state is not healthy after test (unhealthy_nodes={:?}) while GAUSSDB_CM_REQUIRE_HEALTHY=1. dn_rows={:?}",
+                            final_unhealthy_nodes,
+                            final_rows
+                        );
+                    }
+                    if !require_healthy && !final_unhealthy_nodes.is_subset(&initial_unhealthy_nodes)
+                    {
+                        anyhow::bail!(
+                            "cm datanode state became worse after test: initial_unhealthy_nodes={:?}, final_unhealthy_nodes={:?}. Please repair manually. dn_rows={:?}",
+                            initial_unhealthy_nodes,
+                            final_unhealthy_nodes,
+                            final_rows
+                        );
                     }
                 }
             }
@@ -1834,6 +1918,80 @@ impl RdbTestRunner {
         )
     }
 
+    async fn cm_query_datanode_rows_any(
+        &self,
+        ssh_hosts: &[String],
+    ) -> anyhow::Result<(u32, u32, HashMap<u32, CmDatanodeRow>)> {
+        for host in ssh_hosts {
+            if host.trim().is_empty() {
+                continue;
+            }
+            let out = match self.cm_run_as_ruby_on(host, "cm_ctl query -Cv").await {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            if let Ok(parsed) = Self::cm_parse_datanode_rows(&out) {
+                return Ok(parsed);
+            }
+        }
+        anyhow::bail!(
+            "failed to query cm datanode rows from any host: {:?}",
+            ssh_hosts
+        )
+    }
+
+    async fn cm_wait_healthy_datanode_rows_any(
+        &self,
+        ssh_hosts: &[String],
+        expected_primary_node: u32,
+        timeout_secs: u64,
+    ) -> anyhow::Result<(u32, u32, HashMap<u32, CmDatanodeRow>)> {
+        let started = std::time::Instant::now();
+        let mut last_seen: Option<(String, u32, HashMap<u32, CmDatanodeRow>)> = None;
+
+        while started.elapsed().as_secs() < timeout_secs {
+            for host in ssh_hosts {
+                if host.trim().is_empty() {
+                    continue;
+                }
+                let out = match self.cm_run_as_ruby_on(host, "cm_ctl query -Cv").await {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+                let Ok((primary_node, primary_instance, rows)) = Self::cm_parse_datanode_rows(&out)
+                else {
+                    continue;
+                };
+                let unhealthy_nodes: HashSet<u32> = rows
+                    .iter()
+                    .filter(|(_n, r)| r.role == "Down" || !r.ha_status.starts_with("Normal"))
+                    .map(|(n, _r)| *n)
+                    .collect();
+                if primary_node == expected_primary_node && unhealthy_nodes.is_empty() {
+                    return Ok((primary_node, primary_instance, rows));
+                }
+                last_seen = Some((host.clone(), primary_node, rows));
+            }
+            TimeUtil::sleep_millis(1_000).await;
+        }
+
+        if let Some((host, primary_node, rows)) = last_seen {
+            anyhow::bail!(
+                "cm datanode state did not become healthy within {} secs (host={}, primary_node={}, dn_rows={:?})",
+                timeout_secs,
+                host,
+                primary_node,
+                rows
+            );
+        }
+
+        anyhow::bail!(
+            "cm datanode state did not become healthy within {} secs (hosts={:?})",
+            timeout_secs,
+            ssh_hosts
+        )
+    }
+
     async fn cm_switchover_until_primary_node(
         &self,
         action: &str,
@@ -1843,12 +2001,32 @@ impl RdbTestRunner {
         converge_timeout_secs: u64,
         cm_hosts: &[String],
     ) -> anyhow::Result<()> {
+        let is_restore = action.eq_ignore_ascii_case("restore");
+        let mut last_cm_action_host: Option<String> = None;
         for attempt in 1..=max_attempts {
             // `cm_ctl switchover` must be initiated on the CURRENT primary DN host.
-            let curr_rw_url = self
-                .resolve_current_gaussdb_rw_url_with_wait(30_000)
-                .await?;
-            let (curr_host, _curr_sql_port) = Self::parse_host_port_from_url(&curr_rw_url)?;
+            let curr_host = match self.resolve_current_gaussdb_rw_url_with_wait(30_000).await {
+                Ok(curr_rw_url) => {
+                    let (host, _curr_sql_port) = Self::parse_host_port_from_url(&curr_rw_url)?;
+                    last_cm_action_host = Some(host.clone());
+                    host
+                }
+                Err(e) => {
+                    let fallback_host = if let Some(host) = last_cm_action_host
+                        .clone()
+                        .or_else(|| cm_hosts.iter().find(|h| !h.trim().is_empty()).cloned())
+                    {
+                        host
+                    } else {
+                        return Err(e);
+                    };
+                    println!(
+                        "WARN: failed to resolve current gaussdb RW host before cm {} attempt {}/{}; fallback to host {}: {:#}",
+                        action, attempt, max_attempts, fallback_host, e
+                    );
+                    fallback_host
+                }
+            };
 
             println!(
                 "cm {} attempt {}/{}: target_node={} dn_instance={} (on current_primary_host={})",
@@ -1897,24 +2075,36 @@ impl RdbTestRunner {
                     action, attempt, max_attempts, e
                 );
                 let msg = format!("{:#}", e).to_lowercase();
-                if msg.contains("another command") && msg.contains("is running") {
+                if !is_restore && msg.contains("another command") && msg.contains("is running") {
                     attempt_converge_timeout_secs =
                         std::cmp::min(attempt_converge_timeout_secs, 30);
                 }
-                if msg.contains("failed to do switch-over")
-                    || msg.contains("candidate to be promoted timeout")
-                    || msg.contains("can not do switchover")
+                if !is_restore
+                    && (msg.contains("failed to do switch-over")
+                        || msg.contains("candidate to be promoted timeout")
+                        || msg.contains("can not do switchover"))
                 {
                     attempt_converge_timeout_secs =
                         std::cmp::min(attempt_converge_timeout_secs, 60);
                 }
-                if msg.contains("ssh:")
-                    || msg.contains("operation timed out")
-                    || msg.contains("connection refused")
-                    || msg.contains("no route to host")
+                if !is_restore
+                    && (msg.contains("ssh:")
+                        || msg.contains("operation timed out")
+                        || msg.contains("connection refused")
+                        || msg.contains("no route to host"))
                 {
                     attempt_converge_timeout_secs =
                         std::cmp::min(attempt_converge_timeout_secs, 30);
+                }
+                if is_restore
+                    && (msg.contains("failed to do switch-over")
+                        || msg.contains("candidate to be promoted timeout")
+                        || (msg.contains("another command") && msg.contains("is running")))
+                {
+                    println!(
+                        "INFO: cm restore returned a transitional CM error; keep full convergence wait ({}s) before retrying",
+                        attempt_converge_timeout_secs
+                    );
                 }
             }
 
@@ -1980,7 +2170,7 @@ impl RdbTestRunner {
         let max_busy_retries: u32 = env::var("GAUSSDB_CM_BUSY_RETRY_MAX")
             .ok()
             .and_then(|v| v.parse::<u32>().ok())
-            .unwrap_or(8);
+            .unwrap_or(30);
         for busy_try in 1..=max_busy_retries {
             match self
                 .cm_switchover_to_node_instance_on_with_fast(ssh_host, node, instance, fast)
@@ -2502,7 +2692,57 @@ impl RdbTestRunner {
 
     pub async fn execute_clean_sqls(&self) -> anyhow::Result<()> {
         self.execute_src_sqls(&self.base.src_clean_sqls).await?;
-        self.execute_dst_sqls(&self.base.dst_clean_sqls).await
+        self.execute_dst_sqls(&self.base.dst_clean_sqls).await?;
+        self.cleanup_gaussdb_cdc_slot().await
+    }
+
+    async fn cleanup_gaussdb_cdc_slot(&self) -> anyhow::Result<()> {
+        let config = TaskConfig::new(&self.base.task_config_file).unwrap();
+        let ExtractorConfig::GaussDBCdc { ref slot_name, .. } = config.extractor else {
+            return Ok(());
+        };
+        if !matches!(config.extractor_basic.db_type, DbType::GaussDBPg) {
+            return Ok(());
+        }
+
+        let _ = self.wait_gaussdb_cdc_slot_inactive(slot_name, 30_000).await;
+        let Some((rw_url, rw_pool)) = Self::create_gaussdb_rw_pg_pool_with_wait(
+            &config.extractor_basic.url,
+            &config.extractor_basic.connection_auth,
+            20_000,
+        )
+        .await?
+        else {
+            println!(
+                "WARN: skip gaussdb cdc slot cleanup because no RW endpoint was reachable (slot={})",
+                slot_name
+            );
+            return Ok(());
+        };
+
+        let drop_res = sqlx::query(
+            "SELECT pg_drop_replication_slot(slot_name) FROM pg_catalog.pg_replication_slots WHERE slot_name = $1",
+        )
+        .bind(slot_name)
+        .execute(&rw_pool)
+        .await;
+        rw_pool.close().await;
+
+        match drop_res {
+            Ok(_) => {
+                println!(
+                    "cleanup gaussdb cdc slot ok: slot={} rw_url={}",
+                    slot_name, rw_url
+                );
+            }
+            Err(e) => {
+                println!(
+                    "WARN: cleanup gaussdb cdc slot failed: slot={} rw_url={} error={:#}",
+                    slot_name, rw_url, e
+                );
+            }
+        }
+        Ok(())
     }
 
     pub async fn execute_src_sqls(&self, sqls: &Vec<String>) -> anyhow::Result<()> {

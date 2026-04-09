@@ -1,6 +1,6 @@
 # GaussDB 全局进度跟踪清单（PRD 真相源）
 
-> 最后更新：**2026-04-03（GaussDBPg Batch B 已验证；script resilience 5/5 PASS；dt-tests failover 暴露 restore 红点）**
+> 最后更新：**2026-04-09（GaussDBPg CDC P1 failover 红点已关闭；当前进入收口与下一阶段规划）**
 >
 > 目标：每完成一次 spec 任务后，都能立刻知道“当前已交付什么、证据在哪、下一步做什么”。
 
@@ -74,7 +74,7 @@
 | `GaussDBPg → PG` snapshot/check/cdc（基础） | ✅ | `.codex-tasks/20260329-gaussdb-prd-e2e/PROGRESS.md` |
 | `GaussDBPg → PG` CDC：HA 端口 + NoTLS + candidate-first + sticky + 诊断增强 | ✅ | `.codex-tasks/20260331-gaussdb-p0-stability/PROGRESS.md` |
 | 无污染 e2e：`scripts/e2e/gaussdb_to_pg_cdc.sh` | ✅ | `.codex-tasks/20260331-gaussdb-p0-stability-e2e/PROGRESS.md` |
-| `GaussDBPg → PG` CDC P1：resume + failover + 负例套件 | PARTIAL | `.codex-tasks/20260331-gaussdb-cdc-resilience/PROGRESS.md` + `.codex-tasks/20260403-gaussdb-gate-batchb-resilience/PROGRESS.md` |
+| `GaussDBPg → PG` CDC P1：resume + failover + 负例套件 | ✅ | `.codex-tasks/20260331-gaussdb-cdc-resilience/PROGRESS.md` + `.codex-tasks/20260403-gaussdb-dt-failover-restore/PROGRESS.md` |
 | `GaussDBMySQL` 首波（`MySQL -> GaussDBMySQL` 目标端优先） | ✅ | `.codex-tasks/20260402-gaussdb-mysql-bootstrap/PROGRESS.md` |
 | `GaussDBPg` 质量补齐（类型矩阵 / check 细化 / 性能可观测） | ✅ | `.codex-tasks/20260402-gaussdbpg-quality-coverage/PROGRESS.md` |
 | `GaussDBOracle` 路线图 / 阻塞项 | ⛔ BLOCKED | `docs/agent-summary/gaussdb-oracle-roadmap.md` |
@@ -156,6 +156,18 @@
   - 因此，`GaussDBPg → PG CDC P1：resume + failover + 负例套件` 状态从“历史交付完成”收敛为 **PARTIAL**：
     - e2e 运行链路已闭环
     - `dt-tests` failover 自动回原主仍需进一步稳定化
+- 2026-04-09：
+  - 已完成 `.codex-tasks/20260403-gaussdb-dt-failover-restore/` 的后续收口：
+    - `dt-tests cdc_failover_test` 真实环境 PASS
+    - failover restore 红点关闭
+  - 本轮稳定化的关键收敛点：
+    - dt-tests 改为使用每次运行唯一的 GaussDB CDC slot，避免共享环境重复运行造成 slot 污染
+    - restore 阶段允许在短暂无法解析 RW 主时回退到上一次成功的 CM host
+    - final safety check 增加 CM datanode health convergence wait，避免 `Standby Building(0%)` 的瞬时态误杀
+  - 因此当前项目阶段调整为：
+    - `GaussDBPg` 主线能力已基本闭环
+    - `GaussDBMySQL` 首波已完成，剩余主要是 `precheck` 证据补齐与后续扩展决策
+    - `SHA256` 与 `GaussDBOracle` 仍维持 `BLOCKED / roadmap`
 
 ## 6. 更新流程（每完成一个 spec 后怎么做）
 
