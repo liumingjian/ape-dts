@@ -74,6 +74,17 @@ impl PrecheckTestRunner {
         Ok(())
     }
 
+    pub async fn after_check(&self) -> anyhow::Result<()> {
+        match self.db_type {
+            DbType::Mysql | DbType::Pg | DbType::GaussDBPg => {
+                let base = RdbTestRunner::new(&self.test_dir).await?;
+                base.execute_clean_sqls().await?;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
     async fn before_check(&self) -> anyhow::Result<()> {
         match self.db_type {
             DbType::Mysql | DbType::Pg | DbType::GaussDBPg => {

@@ -2,7 +2,11 @@ use std::vec;
 
 use anyhow::bail;
 use dt_common::{
-    config::{config_enums::DbType, extractor_config::ExtractorConfig, task_config::TaskConfig},
+    config::{
+        config_enums::{DbType, WireProtocol},
+        extractor_config::ExtractorConfig,
+        task_config::TaskConfig,
+    },
     rdb_filter::RdbFilter,
 };
 
@@ -10,6 +14,7 @@ use crate::{
     config::precheck_config::PrecheckConfig,
     fetcher::{
         mongo::mongo_fetcher::MongoFetcher, mysql::mysql_fetcher::MysqlFetcher,
+        mysql::pg_compatible_mysql_fetcher::PgCompatibleMysqlFetcher,
         postgresql::pg_fetcher::PgFetcher, redis::redis_fetcher::RedisFetcher,
     },
     meta::check_result::CheckResult,
@@ -69,25 +74,34 @@ impl PrecheckerBuilder {
                 filter_config: self.task_config.filter.clone(),
                 precheck_config: self.precheck_config.clone(),
                 is_source,
-                fetcher: MysqlFetcher {
+                fetcher: Box::new(MysqlFetcher {
                     pool: None,
                     url,
                     connection_auth,
                     is_source,
                     filter,
-                },
+                }),
             })),
             DbType::GaussDBMySQL => Some(Box::new(MySqlPrechecker {
                 db_type: DbType::GaussDBMySQL,
                 filter_config: self.task_config.filter.clone(),
                 precheck_config: self.precheck_config.clone(),
                 is_source,
-                fetcher: MysqlFetcher {
-                    pool: None,
-                    url,
-                    connection_auth,
-                    is_source,
-                    filter,
+                fetcher: match WireProtocol::from_url(&url) {
+                    Some(WireProtocol::PostgreSQL) => Box::new(PgCompatibleMysqlFetcher {
+                        pool: None,
+                        url,
+                        connection_auth,
+                        is_source,
+                        filter,
+                    }),
+                    _ => Box::new(MysqlFetcher {
+                        pool: None,
+                        url,
+                        connection_auth,
+                        is_source,
+                        filter,
+                    }),
                 },
             })),
             DbType::Pg => Some(Box::new(PostgresqlPrechecker {

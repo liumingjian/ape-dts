@@ -78,3 +78,14 @@
   - the next natural implementation choice is either:
     - open a new `GaussDBMySQL` capability spec beyond first-wave bootstrap, or
     - shift focus to `GaussDBPg Quality Coverage`
+- 2026-04-09:
+  - child 7 opened to close the only remaining `GaussDBMySQL` tracker gap: standalone precheck automation + real-environment evidence
+  - early diagnosis shows `dt-precheck` still modeled `GaussDBMySQL` as `MySqlPrechecker + MysqlFetcher` only
+  - this is insufficient for the validated real environment, where the target is `DbType::GaussDBMySQL + postgres://.../jyp_test_m`
+  - active correction path:
+    - add a pg-wire MySQL-compatible fetcher for precheck metadata queries
+    - add `mysql_to_gaussdb_mysql` precheck tests and make precheck tests clean up after themselves
+  - child 7 is now closed:
+    - `GaussDBMySQL` precheck supports both mysql-wire and pg-wire targets
+    - added explicit `mysql_to_gaussdb_mysql` precheck automation and archived real-env evidence
+    - no-pollution verification passed on both source MySQL and target `jyp_test_m`

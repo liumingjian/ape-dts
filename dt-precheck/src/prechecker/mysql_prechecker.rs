@@ -2,12 +2,15 @@ use std::collections::HashSet;
 
 use anyhow::bail;
 use async_trait::async_trait;
-use dt_common::config::{config_enums::DbType, filter_config::FilterConfig};
+use dt_common::{
+    config::{config_enums::DbType, filter_config::FilterConfig},
+    rdb_filter::RdbFilter,
+};
 use regex::Regex;
 
 use crate::{
     config::precheck_config::PrecheckConfig,
-    fetcher::{mysql::mysql_fetcher::MysqlFetcher, traits::Fetcher},
+    fetcher::traits::Fetcher,
     meta::{check_item::CheckItem, check_result::CheckResult, db_table_model::DbTable},
     prechecker::basic::BasicPrechecker,
 };
@@ -18,7 +21,7 @@ const MYSQL_SUPPORT_DB_VERSION_REGEX: &str = r"5\..*|8\..*";
 
 pub struct MySqlPrechecker {
     pub db_type: DbType,
-    pub fetcher: MysqlFetcher,
+    pub fetcher: Box<dyn Fetcher + Send>,
     pub filter_config: FilterConfig,
     pub precheck_config: PrecheckConfig,
     pub is_source: bool,
@@ -48,7 +51,12 @@ impl Prechecker for MySqlPrechecker {
                     check_error = Some(anyhow::Error::msg("found no version info."));
                 } else {
                     let re = Regex::new(MYSQL_SUPPORT_DB_VERSION_REGEX).unwrap();
-                    if !re.is_match(version.as_str()) {
+                    let lower_version = version.to_lowercase();
+                    let is_gaussdb_compatible = matches!(self.db_type, DbType::GaussDBMySQL)
+                        && (lower_version.contains("gaussdb")
+                            || lower_version.contains("opengauss")
+                            || lower_version.contains("mysql"));
+                    if !re.is_match(version.as_str()) && !is_gaussdb_compatible {
                         check_error = Some(anyhow::Error::msg(format!(
                             "mysql version:[{}] is invalid.",
                             version
@@ -147,6 +155,7 @@ impl Prechecker for MySqlPrechecker {
 
     async fn check_struct_existed_or_not(&mut self) -> anyhow::Result<CheckResult> {
         let mut check_error = None;
+        let filter = RdbFilter::from_config(&self.filter_config, &self.db_type).unwrap();
 
         if !self.is_source && self.precheck_config.do_struct_init {
             // do nothing when the database is a target
@@ -159,8 +168,7 @@ impl Prechecker for MySqlPrechecker {
             ));
         }
 
-        let is_filter_pattern =
-            BasicPrechecker::is_filter_pattern(self.db_type.clone(), &self.fetcher.filter);
+        let is_filter_pattern = BasicPrechecker::is_filter_pattern(self.db_type.clone(), &filter);
         if is_filter_pattern {
             return Ok(CheckResult::build_with_err(
                 CheckItem::CheckIfStructExisted,
@@ -256,6 +264,7 @@ impl Prechecker for MySqlPrechecker {
 
     async fn check_table_structs(&mut self) -> anyhow::Result<CheckResult> {
         let (mut check_error, mut warn_error) = (None, None);
+        let filter = RdbFilter::from_config(&self.filter_config, &self.db_type).unwrap();
 
         if !self.is_source && self.precheck_config.do_struct_init {
             // do nothing when the database is a target
@@ -268,8 +277,7 @@ impl Prechecker for MySqlPrechecker {
             ));
         }
 
-        let is_filter_pattern =
-            BasicPrechecker::is_filter_pattern(self.db_type.clone(), &self.fetcher.filter);
+        let is_filter_pattern = BasicPrechecker::is_filter_pattern(self.db_type.clone(), &filter);
         if is_filter_pattern {
             return Ok(CheckResult::build_with_err(
                 CheckItem::CheckIfTableStructSupported,
@@ -330,7 +338,7 @@ impl Prechecker for MySqlPrechecker {
                                     "{}.{}",
                                     constraint.rel_database_name, constraint.rel_table_name
                                 );
-                                if self.fetcher.filter.filter_tb(
+                                if filter.filter_tb(
                                     &constraint.rel_database_name,
                                     &constraint.rel_table_name,
                                 ) {

@@ -1,0 +1,72 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.32s
+warning: the following packages contain code that will be rejected by a future version of Rust: snap v0.2.5
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 2`
+     Running tests/integration_test.rs (target/debug/deps/integration_test-9b60f916ab830360)
+
+running 1 test
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/jyp_test_m?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/jyp_test_m?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/jyp_test_m?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/jyp_test_m?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.30:8000/jyp_test_m?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.30:8000/jyp_test_m?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.30:8000/jyp_test_m?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.30:8000/jyp_test_m?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+selected gaussdb rw url: postgres://10.250.0.51:8000/jyp_test_m?sslmode=require (server_addr=192.168.1.51/32)
+executing sql: DROP DATABASE IF EXISTS gaussdb_mysql_precheck_basic
+executing sql: CREATE DATABASE gaussdb_mysql_precheck_basic
+executing sql: CREATE TABLE gaussdb_mysql_precheck_basic.table_test_1(id integer, text varchar(10), primary key (id))
+executing sql: DROP DATABASE IF EXISTS gaussdb_mysql_precheck_basic
+executing sql: CREATE DATABASE gaussdb_mysql_precheck_basic
+[*]begin to check the connection
+[*]begin to check the database version
+mysql query database version: SELECT version() AS VERSION
+gaussdb mysql-compatible query database version: SELECT version() AS version
+[*]begin to check the cdc setting
+mysql query config settings: SHOW variables WHERE variable_name IN ('log_bin','binlog_format','binlog_row_image')
+[*]begin to check the if the structs is existed or not
+mysql query dbs sql:: SELECT SCHEMA_NAME FROM information_schema.schemata
+[*]begin to check the database structs
+mysql query constraints sql:: SELECT
+              kcu.CONSTRAINT_NAME,
+              tc.CONSTRAINT_TYPE,
+              kcu.CONSTRAINT_SCHEMA,
+              kcu.TABLE_NAME,
+              kcu.COLUMN_NAME,
+              kcu.REFERENCED_TABLE_SCHEMA,
+              kcu.REFERENCED_TABLE_NAME,
+              kcu.REFERENCED_COLUMN_NAME
+            FROM
+              INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
+            JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+              ON kcu.CONSTRAINT_NAME = tc.CONSTRAINT_NAME AND kcu.CONSTRAINT_SCHEMA=tc.CONSTRAINT_SCHEMA
+            WHERE kcu.CONSTRAINT_SCHEMA not in ('mysql','performance_schema','sys','information_schema')
+        
+mysql query tables sql:: SELECT TABLE_SCHEMA, TABLE_NAME FROM information_schema.tables where TABLE_TYPE = 'BASE TABLE'
+comparing precheck result, item: CheckDatabaseConnection, is_source: true
+comparing precheck result, item: CheckDatabaseConnection, is_source: false
+comparing precheck result, item: CheckDatabaseVersionSupported, is_source: true
+comparing precheck result, item: CheckDatabaseVersionSupported, is_source: false
+comparing precheck result, item: CheckIfDatabaseSupportCdc, is_source: true
+comparing precheck result, item: CheckIfStructExisted, is_source: true
+comparing precheck result, item: CheckIfStructExisted, is_source: false
+comparing precheck result, item: CheckIfTableStructSupported, is_source: true
+comparing precheck result, item: CheckIfTableStructSupported, is_source: false
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/jyp_test_m?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/jyp_test_m?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/jyp_test_m?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/jyp_test_m?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.30:8000/jyp_test_m?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.30:8000/jyp_test_m?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.30:8000/jyp_test_m?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.30:8000/jyp_test_m?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+selected gaussdb rw url: postgres://10.250.0.51:8000/jyp_test_m?sslmode=require (server_addr=192.168.1.51/32)
+executing sql: DROP DATABASE IF EXISTS gaussdb_mysql_precheck_basic
+executing sql: DROP DATABASE IF EXISTS gaussdb_mysql_precheck_basic
+test mysql_to_gaussdb_mysql::precheck_tests::test::struct_supported_basic_test ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 358 filtered out; finished in 12.60s
+

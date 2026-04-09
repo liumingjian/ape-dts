@@ -447,15 +447,23 @@ impl TestBase {
         src_expected_results: &HashMap<String, bool>,
         dst_expected_results: &HashMap<String, bool>,
     ) {
-        let runner = PrecheckTestRunner::new(test_dir).await.unwrap();
-        runner
-            .run_check(
-                ignore_check_items,
-                src_expected_results,
-                dst_expected_results,
-            )
-            .await
-            .unwrap();
+        Self::run_with_retry(test_dir, "precheck", || async {
+            let runner = PrecheckTestRunner::new(test_dir).await?;
+            let run_res = runner
+                .run_check(
+                    ignore_check_items,
+                    src_expected_results,
+                    dst_expected_results,
+                )
+                .await;
+            let clean_res = runner.after_check().await;
+            if let Err(e) = run_res {
+                return Err(e);
+            }
+            clean_res?;
+            Ok(())
+        })
+        .await;
     }
 
     pub async fn run_rdb_kafka_rdb_cdc_test(test_dir: &str, start_millis: u64, parse_millis: u64) {

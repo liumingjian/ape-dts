@@ -30,13 +30,13 @@
 |---|---|---|---|---|---|---|---|
 | **PG → GaussDBPg** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **GaussDBPg → PG** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **MySQL → GaussDBMySQL（首波）** | ✅ | - | ✅ | ✅ | PARTIAL | ✅ | ✅ |
+| **MySQL → GaussDBMySQL（首波）** | ✅ | - | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 说明：
 
 - Struct（PRD MVP）已补齐：在已有 `table/index/constraint/sequence/comment/rbac` 基础上补齐 **view/matview/routine/routine grants**。
 - `MySQL → GaussDBMySQL（首波）` 当前只覆盖 `snapshot/struct/check/docs`；`cdc` 不在本轮范围内，因此以 `-` 标记。
-- `MySQL → GaussDBMySQL（首波）` 的 `precheck` 目前仅完成运行时/构建侧接入，尚未单独形成真实环境 precheck 证据，因此暂记为 `PARTIAL`。
+- `MySQL → GaussDBMySQL（首波）` 的 `precheck` 已完成独立自动化入口、真实环境证据与无污染校验。
 - SHA256 认证：当前以 `BLOCKED` 方式纳入执行真表（等待联调环境可用）。
 - 新阶段已拆为 **双 Epic**：`GaussDBMySQL Bootstrap` 与 `GaussDBPg Quality Coverage`。
 
@@ -99,6 +99,7 @@
 | `GaussDBMySQL` bootstrap：snapshot basic | ✅ | `.codex-tasks/20260402-gaussdb-mysql-bootstrap/tasks/20260402-03-snapshot-basic/PROGRESS.md` |
 | `GaussDBMySQL` bootstrap：struct + check basic | ✅ | `.codex-tasks/20260402-gaussdb-mysql-bootstrap/tasks/20260402-04-struct-check-basic/PROGRESS.md` |
 | `GaussDBMySQL` bootstrap：docs closeout | ✅ | `.codex-tasks/20260402-gaussdb-mysql-bootstrap/tasks/20260402-05-docs-closeout/PROGRESS.md` |
+| `GaussDBMySQL` bootstrap：precheck + 真实环境证据 | ✅ | `.codex-tasks/20260402-gaussdb-mysql-bootstrap/tasks/20260409-07-precheck-evidence/PROGRESS.md` |
 | `GaussDBPg` quality：truth-source normalization | ✅ | `.codex-tasks/20260402-gaussdbpg-quality-coverage/tasks/20260402-01-truth-source-normalization/PROGRESS.md` |
 | `GaussDBPg` quality：type contract + codecs | ✅ | `.codex-tasks/20260402-gaussdbpg-quality-coverage/tasks/20260402-02-type-contract-codecs/PROGRESS.md` |
 | `GaussDBPg` quality：non-CDC type matrix e2e | ✅ | `.codex-tasks/20260402-gaussdbpg-quality-coverage/tasks/20260402-03-non-cdc-type-matrix-e2e/PROGRESS.md` |
@@ -166,8 +167,12 @@
     - final safety check 增加 CM datanode health convergence wait，避免 `Standby Building(0%)` 的瞬时态误杀
   - 因此当前项目阶段调整为：
     - `GaussDBPg` 主线能力已基本闭环
-    - `GaussDBMySQL` 首波已完成，剩余主要是 `precheck` 证据补齐与后续扩展决策
+    - `GaussDBMySQL` 首波已全部闭环，后续主要是扩展能力决策
     - `SHA256` 与 `GaussDBOracle` 仍维持 `BLOCKED / roadmap`
+  - 已完成 `.codex-tasks/20260402-gaussdb-mysql-bootstrap/tasks/20260409-07-precheck-evidence/`：
+    - `GaussDBMySQL` precheck 已支持 pg-wire 目标（`postgres://.../jyp_test_m`）
+    - `mysql_to_gaussdb_mysql` precheck 正负例均已通过
+    - 源端/目标端测试 schema 均已清理，`precheck` 不再是 `PARTIAL`
 
 ## 6. 更新流程（每完成一个 spec 后怎么做）
 
