@@ -1,6 +1,6 @@
 # GaussDB 全局进度跟踪清单（PRD 真相源）
 
-> 最后更新：**2026-04-09（GaussDBPg CDC P1 failover 红点已关闭；当前进入收口与下一阶段规划）**
+> 最后更新：**2026-04-10（GaussDBMySQL 下一阶段已切入 CDC Expansion，child 1 为 cdc basic）**
 >
 > 目标：每完成一次 spec 任务后，都能立刻知道“当前已交付什么、证据在哪、下一步做什么”。
 
@@ -11,6 +11,7 @@
 1. **需求真相源**：`docs/agent-summary/gaussdb-prd.md`
 2. **执行真表**：当前进行中的对应 epic `SUBTASKS.csv`
    - `.codex-tasks/20260402-gaussdb-mysql-bootstrap/SUBTASKS.csv`
+   - `.codex-tasks/20260410-gaussdb-mysql-cdc-expansion/SUBTASKS.csv`
    - `.codex-tasks/20260402-gaussdbpg-quality-coverage/SUBTASKS.csv`
    - `.codex-tasks/20260331-gaussdb-prd-align/SUBTASKS.csv`（历史主 Epic + SHA256 blocked 入口）
 3. **证据归档**：`.codex-tasks/*/*/PROGRESS.md`（含验证命令与结果）与必要的脱敏 `raw/` 片段
@@ -38,7 +39,7 @@
 - `MySQL → GaussDBMySQL（首波）` 当前只覆盖 `snapshot/struct/check/docs`；`cdc` 不在本轮范围内，因此以 `-` 标记。
 - `MySQL → GaussDBMySQL（首波）` 的 `precheck` 已完成独立自动化入口、真实环境证据与无污染校验。
 - SHA256 认证：当前以 `BLOCKED` 方式纳入执行真表（等待联调环境可用）。
-- 新阶段已拆为 **双 Epic**：`GaussDBMySQL Bootstrap` 与 `GaussDBPg Quality Coverage`。
+- 当前 active 方向已演进为：`GaussDBMySQL CDC Expansion` 与 `GaussDBPg Quality Coverage`。
 
 ## 3. 执行真表（Epic）
 
@@ -53,6 +54,10 @@
   - `SUBTASKS.csv`
   - `PROGRESS.md`
 - Epic：`.codex-tasks/20260402-gaussdb-mysql-bootstrap/`
+  - `EPIC.md`
+  - `SUBTASKS.csv`
+  - `PROGRESS.md`
+- Epic：`.codex-tasks/20260410-gaussdb-mysql-cdc-expansion/`
   - `EPIC.md`
   - `SUBTASKS.csv`
   - `PROGRESS.md`
@@ -100,6 +105,7 @@
 | `GaussDBMySQL` bootstrap：struct + check basic | ✅ | `.codex-tasks/20260402-gaussdb-mysql-bootstrap/tasks/20260402-04-struct-check-basic/PROGRESS.md` |
 | `GaussDBMySQL` bootstrap：docs closeout | ✅ | `.codex-tasks/20260402-gaussdb-mysql-bootstrap/tasks/20260402-05-docs-closeout/PROGRESS.md` |
 | `GaussDBMySQL` bootstrap：precheck + 真实环境证据 | ✅ | `.codex-tasks/20260402-gaussdb-mysql-bootstrap/tasks/20260409-07-precheck-evidence/PROGRESS.md` |
+| `GaussDBMySQL` CDC Expansion：cdc basic | ✅ | `.codex-tasks/20260410-gaussdb-mysql-cdc-expansion/tasks/20260410-01-cdc-basic/PROGRESS.md` |
 | `GaussDBPg` quality：truth-source normalization | ✅ | `.codex-tasks/20260402-gaussdbpg-quality-coverage/tasks/20260402-01-truth-source-normalization/PROGRESS.md` |
 | `GaussDBPg` quality：type contract + codecs | ✅ | `.codex-tasks/20260402-gaussdbpg-quality-coverage/tasks/20260402-02-type-contract-codecs/PROGRESS.md` |
 | `GaussDBPg` quality：non-CDC type matrix e2e | ✅ | `.codex-tasks/20260402-gaussdbpg-quality-coverage/tasks/20260402-03-non-cdc-type-matrix-e2e/PROGRESS.md` |
@@ -173,6 +179,15 @@
     - `GaussDBMySQL` precheck 已支持 pg-wire 目标（`postgres://.../jyp_test_m`）
     - `mysql_to_gaussdb_mysql` precheck 正负例均已通过
     - 源端/目标端测试 schema 均已清理，`precheck` 不再是 `PARTIAL`
+- 2026-04-10：
+  - 已新建 `.codex-tasks/20260410-gaussdb-mysql-cdc-expansion/` 作为 `GaussDBMySQL` 第二阶段 Epic。
+  - 当前 active child 为 `MySQL→GaussDBMySQL cdc basic`：
+    - 优先填补 dashboard 中 `MySQL -> GaussDBMySQL` 唯一缺失的核心能力项 `cdc`
+    - 首轮范围锁为 DML 主路径，不提前混入 DDL / resume / failover
+  - 当前阶段判断：
+    - `GaussDBPg` 主线已基本闭环
+    - `GaussDBMySQL` 已从 bootstrap 进入 CDC Expansion
+    - `SHA256` 与 `GaussDBOracle` 仍维持 `BLOCKED / roadmap`
 
 ## 6. 更新流程（每完成一个 spec 后怎么做）
 

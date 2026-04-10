@@ -26,19 +26,16 @@ MVP（`DbType::GaussDBPg`）已在真实环境闭环验证：
 
 ## 2. 下一阶段（双 Epic 并行）
 
-### 2.1 Active Epic A：`GaussDBMySQL Bootstrap`
+### 2.1 Active Epic A：`GaussDBMySQL CDC Expansion`
 
-目标：以 **`MySQL -> GaussDBMySQL` 目标端优先** 的方式，启动 `DbType::GaussDBMySQL` 的首波落地。
+目标：在 `GaussDBMySQL Bootstrap` 已闭环的基础上，继续推进
+**`MySQL -> GaussDBMySQL`** 的下一阶段能力，优先补齐 **CDC basic**。
 
 本轮范围锁定：
 
-- 已完成“连接协议 vs 数据库兼容模式”的模型校正
-- 已完成 `snapshot basic`
-- 已完成 `struct + check basic`
-- 已完成 `runbook/template/tracker` 收口
 - 只做 `MySQL -> GaussDBMySQL`
-- 首波 bootstrap 已交付到 `snapshot + struct + check + docs`
-- **不做 CDC**
+- 首波 bootstrap 已交付到 `snapshot + struct + check + precheck + docs`
+- 当前下一阶段从 `cdc basic` 开始
 - **不做 `GaussDBMySQL -> MySQL` 源端抽取**
 
 环境约束：
@@ -54,7 +51,13 @@ MVP（`DbType::GaussDBPg`）已在真实环境闭环验证：
   - `MySQL -> GaussDBMySQL snapshot basic` 已通过真实环境验证
   - `MySQL -> GaussDBMySQL struct basic` 已通过真实环境验证
   - `MySQL -> GaussDBMySQL check basic` 已通过真实环境验证
+  - `MySQL -> GaussDBMySQL precheck` 已通过真实环境验证
   - 关键适配包括 pg-wire MySQL-mode 写入、目标 simple-query 对账、以及候选主库 RW 重写
+- 当前第二阶段执行策略：
+  - child 1：`cdc basic`
+  - child 2：`cdc type-matrix`
+  - child 3：`cdc resilience + negatives`
+  - child 4：`docs/runbook/tracker` 收口
 - 推荐通过 `dt-tests/tests/.env.local` 提供：
   - `gaussdb_mysql_sinker_without_auth_url`
   - `gaussdb_mysql_sinker_username`
@@ -63,7 +66,7 @@ MVP（`DbType::GaussDBPg`）已在真实环境闭环验证：
 
 执行真表：
 
-- `.codex-tasks/20260402-gaussdb-mysql-bootstrap/SUBTASKS.csv`
+- `.codex-tasks/20260410-gaussdb-mysql-cdc-expansion/SUBTASKS.csv`
 
 ### 2.2 Active Epic B：`GaussDBPg Quality Coverage`
 

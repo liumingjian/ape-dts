@@ -1,0 +1,148 @@
+   Compiling dt-common v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-common)
+   Compiling dt-connector v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-connector)
+   Compiling dt-parallelizer v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-parallelizer)
+   Compiling dt-pipeline v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-pipeline)
+   Compiling dt-task v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-task)
+   Compiling dt-precheck v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-precheck)
+   Compiling dt-tests v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-tests)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.28s
+warning: the following packages contain code that will be rejected by a future version of Rust: snap v0.2.5
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 2`
+     Running tests/integration_test.rs (target/debug/deps/integration_test-9b60f916ab830360)
+
+running 1 test
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/jyp_test_m?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/jyp_test_m?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/jyp_test_m?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/jyp_test_m?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.30:8000/jyp_test_m?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.30:8000/jyp_test_m?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.30:8000/jyp_test_m?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.30:8000/jyp_test_m?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+selected gaussdb rw url: postgres://10.250.0.51:8000/jyp_test_m?sslmode=require (server_addr=192.168.1.51/32)
+executing sql: DROP DATABASE IF EXISTS gaussdb_mysql_cdc_basic
+executing sql: CREATE DATABASE gaussdb_mysql_cdc_basic
+executing sql: CREATE TABLE gaussdb_mysql_cdc_basic.cdc_basic ( id INT PRIMARY KEY, val VARCHAR(64) )
+executing sql: DROP DATABASE IF EXISTS gaussdb_mysql_cdc_basic
+executing sql: CREATE DATABASE gaussdb_mysql_cdc_basic
+executing sql: CREATE TABLE gaussdb_mysql_cdc_basic.cdc_basic ( id INT PRIMARY KEY, val VARCHAR(64) )
+2026-04-10T15:19:22.617544+08:00 INFO default_logger - start task: [taskID: 87b810f0d41a91f8, taskType: Some(Cdc)]
+2026-04-10T15:19:22.617696+08:00 WARN default_logger - recorder unsupported resumer config: Dummy
+2026-04-10T15:19:22.617714+08:00 WARN default_logger - recovery unsupported resumer config: Dummy
+2026-04-10T15:19:22.617730+08:00 INFO default_logger - recovery initialization for task_id: 87b810f0d41a91f8 finished in 0 ms
+2026-04-10T15:19:22.972692+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-10T15:19:22.972799+08:00 ERROR default_logger - buffer_memory_mb=0 is too large and will be ignored to prevent overflow
+2026-04-10T15:19:22.972855+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-10T15:19:24.710334+08:00 INFO default_logger - schema: heartbeat_db, tb: ape_dts_heartbeat, schema_sql: CREATE DATABASE IF NOT EXISTS `heartbeat_db`, tb_sql: CREATE TABLE IF NOT EXISTS `heartbeat_db`.`ape_dts_heartbeat`(
+                        server_id INT UNSIGNED,
+                        update_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        received_binlog_filename VARCHAR(255),
+                        received_next_event_position INT UNSIGNED,
+                        received_timestamp VARCHAR(255),
+                        flushed_binlog_filename VARCHAR(255),
+                        flushed_next_event_position INT UNSIGNED,
+                        flushed_timestamp VARCHAR(255),
+                        PRIMARY KEY(server_id)
+                    )
+2026-04-10T15:19:24.719858+08:00 INFO default_logger - MysqlCdcExtractor starts, binlog_filename: mysql-bin.000003, binlog_position: 38177, gtid_enabled: false, gtid_set: , heartbeat_interval_secs: 1, heartbeat_tb: heartbeat_db.ape_dts_heartbeat
+2026-04-10T15:19:24.720656+08:00 INFO default_logger - MergeParallelizer starts, parallel_size: 1, checkpoint_interval_secs: 1
+2026-04-10T15:19:24.723534+08:00 INFO default_logger - try starting heartbeat, heartbeat_interval_secs: 1, heartbeat_tb: heartbeat_db.ape_dts_heartbeat, 
+2026-04-10T15:19:24.723616+08:00 INFO default_logger - heartbeat started
+executing sql: INSERT INTO gaussdb_mysql_cdc_basic.cdc_basic VALUES (1, 'a'), (2, 'b'), (3, 'c')
+executing sql: UPDATE gaussdb_mysql_cdc_basic.cdc_basic SET val = 'bb' WHERE id = 2
+executing sql: DELETE FROM gaussdb_mysql_cdc_basic.cdc_basic WHERE id = 3
+2026-04-10T15:19:25.724241+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=7 | avg_by_sec=7 | max_by_sec=7
+2026-04-10T15:19:25.724286+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=31 | avg_by_sec=31 | max_by_sec=31
+2026-04-10T15:19:25.724301+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=31 | avg_by_sec=31 | max_by_sec=31
+2026-04-10T15:19:25.724315+08:00 INFO monitor_logger - extractor |  | record_count | sum=7 | avg_by_sec=7 | max_by_sec=7
+2026-04-10T15:19:25.724348+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=4 | avg=4 | max=4
+2026-04-10T15:19:25.724360+08:00 INFO monitor_logger - pipeline |  | record_size | avg=3
+2026-04-10T15:19:25.724379+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-10T15:19:25.724464+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-10T15:19:26.724325+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=3 | avg_by_sec=3 | max_by_sec=3
+2026-04-10T15:19:26.724516+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-10T15:19:26.724621+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=48 | avg_by_sec=48 | max_by_sec=48
+2026-04-10T15:19:26.724733+08:00 INFO monitor_logger - extractor |  | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-04-10T15:19:26.724933+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-10T15:19:26.725044+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-04-10T15:19:26.725168+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-10T15:19:26.725259+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+comparing row data for src_tb: ("gaussdb_mysql_cdc_basic", "cdc_basic"), dst_tb: ("gaussdb_mysql_cdc_basic", "cdc_basic"), src_data count: 2, dst_data count: 0
+row count mismatch: src=2, dst=0
+compare tb data failed, src_tb: ("gaussdb_mysql_cdc_basic", "cdc_basic"), dst_tb: ("gaussdb_mysql_cdc_basic", "cdc_basic")
+2026-04-10T15:19:27.722812+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-10T15:19:27.722879+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-10T15:19:27.722926+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-10T15:19:27.722977+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-10T15:19:27.723130+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-10T15:19:27.723181+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-04-10T15:19:27.723311+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-10T15:19:27.723358+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-04-10T15:19:28.572911+08:00 INFO position_logger - current_position | {"type":"MysqlCdc","server_id":"","binlog_filename":"mysql-bin.000003","next_event_position":38497,"gtid_set":"","timestamp":"2026-04-10 07:19:25.000"}
+2026-04-10T15:19:28.572976+08:00 INFO position_logger - checkpoint_position | {"type":"MysqlCdc","server_id":"","binlog_filename":"mysql-bin.000003","next_event_position":38497,"gtid_set":"","timestamp":"2026-04-10 07:19:25.000"}
+2026-04-10T15:19:28.723208+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=4 | avg_by_sec=4 | max_by_sec=4
+2026-04-10T15:19:28.723257+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-10T15:19:28.723281+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=96 | avg_by_sec=96 | max_by_sec=96
+2026-04-10T15:19:28.723305+08:00 INFO monitor_logger - extractor |  | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-04-10T15:19:28.723355+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=4 | avg=4 | max=4
+2026-04-10T15:19:28.723375+08:00 INFO monitor_logger - pipeline |  | record_size | avg=4
+2026-04-10T15:19:28.723403+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=15
+2026-04-10T15:19:28.723417+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775805565000
+2026-04-10T15:19:28.723432+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=3
+2026-04-10T15:19:28.723449+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=4
+2026-04-10T15:19:28.723464+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=16
+2026-04-10T15:19:28.723495+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=306 | avg=153 | max=155
+2026-04-10T15:19:28.723516+08:00 INFO monitor_logger - sinker |  | record_count | sum=3 | avg_by_sec=3 | max_by_sec=3
+2026-04-10T15:19:28.723536+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=3 | avg=1 | max=2
+2026-04-10T15:19:28.723554+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=15 | avg_by_sec=15 | max_by_sec=15
+comparing row data for src_tb: ("gaussdb_mysql_cdc_basic", "cdc_basic"), dst_tb: ("gaussdb_mysql_cdc_basic", "cdc_basic"), src_data count: 2, dst_data count: 3
+row count mismatch: src=2, dst=3
+compare tb data failed, src_tb: ("gaussdb_mysql_cdc_basic", "cdc_basic"), dst_tb: ("gaussdb_mysql_cdc_basic", "cdc_basic")
+2026-04-10T15:19:29.573105+08:00 INFO position_logger - current_position | {"type":"MysqlCdc","server_id":"","binlog_filename":"mysql-bin.000003","next_event_position":40662,"gtid_set":"","timestamp":"2026-04-10 07:19:28.000"}
+2026-04-10T15:19:29.573177+08:00 INFO position_logger - checkpoint_position | {"type":"MysqlCdc","server_id":"","binlog_filename":"mysql-bin.000003","next_event_position":40662,"gtid_set":"","timestamp":"2026-04-10 07:19:28.000"}
+2026-04-10T15:19:29.722167+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-04-10T15:19:29.722196+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-10T15:19:29.722211+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=48 | avg_by_sec=48 | max_by_sec=48
+2026-04-10T15:19:29.722224+08:00 INFO monitor_logger - extractor |  | record_count | sum=1 | avg_by_sec=1 | max_by_sec=1
+2026-04-10T15:19:29.722254+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=4 | avg=4 | max=4
+2026-04-10T15:19:29.722266+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-04-10T15:19:29.722290+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=31
+2026-04-10T15:19:29.722302+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775805568000
+2026-04-10T15:19:29.722313+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=5
+2026-04-10T15:19:29.722327+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=4
+2026-04-10T15:19:29.722338+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=16
+2026-04-10T15:19:29.722361+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=204 | avg=102 | max=105
+2026-04-10T15:19:29.722374+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-10T15:19:29.722389+08:00 INFO monitor_logger - sinker |  | serial_writes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-10T15:19:29.722402+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-04-10T15:19:29.722414+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-10T15:19:30.573306+08:00 INFO position_logger - current_position | {"type":"MysqlCdc","server_id":"","binlog_filename":"mysql-bin.000003","next_event_position":41183,"gtid_set":"","timestamp":"2026-04-10 07:19:29.000"}
+2026-04-10T15:19:30.573360+08:00 INFO position_logger - checkpoint_position | {"type":"MysqlCdc","server_id":"","binlog_filename":"mysql-bin.000003","next_event_position":41183,"gtid_set":"","timestamp":"2026-04-10 07:19:29.000"}
+2026-04-10T15:19:30.722166+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-04-10T15:19:30.722198+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-10T15:19:30.722214+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=48 | avg_by_sec=48 | max_by_sec=48
+2026-04-10T15:19:30.722230+08:00 INFO monitor_logger - extractor |  | record_count | sum=1 | avg_by_sec=1 | max_by_sec=1
+2026-04-10T15:19:30.722268+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=1 | avg=1 | max=1
+2026-04-10T15:19:30.722282+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-04-10T15:19:30.722304+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=31
+2026-04-10T15:19:30.722315+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1775805569000
+2026-04-10T15:19:30.722324+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=5
+2026-04-10T15:19:30.722333+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-10T15:19:30.722341+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-10T15:19:30.722363+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-04-10T15:19:30.722374+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-10T15:19:30.722384+08:00 INFO monitor_logger - sinker |  | serial_writes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-10T15:19:30.722395+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-04-10T15:19:30.722404+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+comparing row data for src_tb: ("gaussdb_mysql_cdc_basic", "cdc_basic"), dst_tb: ("gaussdb_mysql_cdc_basic", "cdc_basic"), src_data count: 2, dst_data count: 2
+row index: 0, col: id, src_col_value: Long(1), dst_col_value: Long(1)
+row index: 0, col: val, src_col_value: String("a"), dst_col_value: String("a")
+row index: 1, col: id, src_col_value: Long(2), dst_col_value: Long(2)
+row index: 1, col: val, src_col_value: String("bb"), dst_col_value: String("bb")
+executing sql: DROP DATABASE IF EXISTS gaussdb_mysql_cdc_basic
+executing sql: DROP DATABASE IF EXISTS gaussdb_mysql_cdc_basic
+2026-04-10T15:19:31.264628+08:00 INFO sqlx::postgres::notice - drop cascades to table gaussdb_mysql_cdc_basic.cdc_basic
+test mysql_to_gaussdb_mysql::cdc_tests::test::cdc_basic_test ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 359 filtered out; finished in 15.57s
+

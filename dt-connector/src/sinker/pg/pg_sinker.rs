@@ -312,10 +312,10 @@ impl PgSinker {
 
         if let Err(error) = exec_result {
             log_error!(
-                "batch insert failed, will insert one by one, schema: {}, tb: {}, error: {}",
+                "batch insert failed, will insert one by one, schema: {}, tb: {}, error: {:#}",
                 tb_meta.basic.schema,
                 tb_meta.basic.tb,
-                error.to_string()
+                error
             );
             let sub_data = &data[start_index..start_index + batch_size];
             self.serial_sink(sub_data).await?;

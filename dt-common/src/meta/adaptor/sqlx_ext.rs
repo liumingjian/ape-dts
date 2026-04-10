@@ -28,7 +28,13 @@ impl<'q> SqlxPgExt<'q> for Query<'q, Postgres, PgArguments> {
                 ColValue::Timestamp(v) => self.bind(v),
                 ColValue::String(v) => self.bind(v),
                 ColValue::Json2(v) => self.bind(v),
-                ColValue::RawString(v) => self.bind(v),
+                // MySQL CDC decodes string-like columns as raw bytes. For pg-wire sinks we should
+                // bind them as text (UTF-8) whenever possible, otherwise fall back to a stable
+                // hex representation to avoid hard failures.
+                ColValue::RawString(v) => match std::str::from_utf8(v) {
+                    Ok(s) => self.bind(s),
+                    Err(_) => self.bind(hex::encode(v)),
+                },
                 ColValue::Blob(v) => {
                     if col_type.value_type == PgValueType::Bytes {
                         let bytea_str = format!(r#"\x{}"#, hex::encode(v));
