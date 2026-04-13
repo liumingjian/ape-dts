@@ -326,7 +326,9 @@ impl TaskUtil {
         db_type: &DbType,
     ) -> anyhow::Result<Vec<String>> {
         let mut dbs = match db_type {
-            DbType::Mysql | DbType::GaussDBMySQL => Self::list_mysql_dbs(conn_pool, db_type).await?,
+            DbType::Mysql | DbType::GaussDBMySQL => {
+                Self::list_mysql_dbs(conn_pool, db_type).await?
+            }
             DbType::Pg | DbType::GaussDBPg => Self::list_pg_schemas(conn_pool, db_type).await?,
             DbType::Mongo => Self::list_mongo_dbs(conn_pool).await?,
             _ => Vec::new(),
@@ -842,7 +844,7 @@ impl ConnClient {
                             connection_auth,
                             sinker_max_connections,
                             enable_sqlx_log,
-                            false,
+                            *disable_foreign_key_checks,
                         )
                         .await?,
                     )

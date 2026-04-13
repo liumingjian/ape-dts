@@ -5,9 +5,7 @@ use std::{
 };
 
 use anyhow::Context;
-use dt_common::config::{
-    config_enums::DbType, connection_auth_config::ConnectionAuthConfig,
-};
+use dt_common::config::{config_enums::DbType, connection_auth_config::ConnectionAuthConfig};
 use dt_common::meta::{
     adaptor::pg_col_value_convertor::PgColValueConvertor,
     col_value::ColValue,
@@ -116,8 +114,7 @@ impl RdbUtil {
         db_tb: &(String, String),
         where_sql: &str,
     ) -> anyhow::Result<Vec<RowData>> {
-        Self::fetch_data_pg_compatible(conn_pool, ignore_cols, db_tb, &DbType::Pg, where_sql)
-            .await
+        Self::fetch_data_pg_compatible(conn_pool, ignore_cols, db_tb, &DbType::Pg, where_sql).await
     }
 
     pub async fn fetch_data_pg_compatible(
@@ -200,7 +197,10 @@ impl RdbUtil {
     ) -> anyhow::Result<Vec<RowData>> {
         let handle = Self::get_or_create_pg_meta_manager(conn_pool).await?;
         let mut meta_manager = handle.lock().await;
-        let tb_meta = meta_manager.get_tb_meta(&db_tb.0, &db_tb.1).await?.to_owned();
+        let tb_meta = meta_manager
+            .get_tb_meta(&db_tb.0, &db_tb.1)
+            .await?
+            .to_owned();
         let cols: Vec<String> = tb_meta
             .basic
             .cols

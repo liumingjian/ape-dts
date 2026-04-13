@@ -16,7 +16,8 @@ use crate::{
 use dt_common::{
     config::{config_enums::DbType, connection_auth_config::ConnectionAuthConfig},
     meta::{
-        adaptor::pg_col_value_convertor::PgColValueConvertor, col_value::ColValue,
+        adaptor::pg_col_value_convertor::PgColValueConvertor,
+        col_value::ColValue,
         pg::{pg_meta_manager::PgMetaManager, pg_tb_meta::PgTbMeta},
         row_data::RowData,
         struct_meta::statement::struct_statement::StructStatement,
@@ -211,7 +212,8 @@ impl PgChecker {
     }
 
     async fn connect_simple_client(&self) -> anyhow::Result<Client> {
-        let final_url = ConnectionAuthConfig::merge_url_with_auth(&self.url, &self.connection_auth)?;
+        let final_url =
+            ConnectionAuthConfig::merge_url_with_auth(&self.url, &self.connection_auth)?;
         let prefer_ssl = Url::parse(&final_url)
             .ok()
             .and_then(|parsed| {

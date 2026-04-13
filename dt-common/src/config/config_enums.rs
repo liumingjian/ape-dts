@@ -76,16 +76,7 @@ impl WireProtocol {
 }
 
 #[derive(
-    Clone,
-    Display,
-    EnumString,
-    IntoStaticStr,
-    Debug,
-    PartialEq,
-    Eq,
-    Serialize,
-    Deserialize,
-    Hash,
+    Clone, Display, EnumString, IntoStaticStr, Debug, PartialEq, Eq, Serialize, Deserialize, Hash,
 )]
 pub enum GaussDBSqlCompatibility {
     #[strum(serialize = "P")]

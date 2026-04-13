@@ -104,6 +104,7 @@
 | Full | `MySQL -> GaussDBMySQL` CDC type matrix | `cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::cdc_tests::test::cdc_type_matrix_test --nocapture` | MySQL8 + GaussDBMySQL | CDC 类型矩阵 |
 | Full | `MySQL -> GaussDBMySQL` CDC resume | `cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::cdc_tests::test::cdc_resume_test --nocapture` | MySQL8 + GaussDBMySQL | checkpoint 恢复 |
 | Resilience | `GaussDBPg -> PG` CDC failover | `ENABLE_GAUSSDB_FAILOVER_TEST=1 cargo test -p dt-tests --test integration_test -- gaussdb_to_pg::cdc_tests::test::cdc_failover_test --nocapture` | GaussDB 集群 + SSH + PG | 切主自愈 |
+| Resilience | `MySQL -> GaussDBMySQL` CDC failover（target self-heal） | `ENABLE_GAUSSDB_FAILOVER_TEST=1 cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::cdc_tests::test::cdc_failover_test --nocapture` | MySQL8 + GaussDB 集群 + SSH | 目标端切主自愈 |
 | Resilience | script basic | `bash scripts/e2e/gaussdb_to_pg_cdc.sh` | `.local/e2e/.env` | 基础 e2e |
 | Resilience | script resume | `TEST_RESUME=1 bash scripts/e2e/gaussdb_to_pg_cdc.sh` | `.local/e2e/.env` | kill + restart |
 | Resilience | script failover | `TEST_FAILOVER=1 bash scripts/e2e/gaussdb_to_pg_cdc.sh` | `.local/e2e/.env` + CM SSH | 主备切换 |
@@ -188,6 +189,7 @@
 - `mysql_to_gaussdb_mysql::cdc_tests::test::cdc_type_matrix_test`
 - `mysql_to_gaussdb_mysql::cdc_tests::test::cdc_resume_test`
 - `ENABLE_GAUSSDB_FAILOVER_TEST=1 cargo test -p dt-tests --test integration_test -- gaussdb_to_pg::cdc_tests::test::cdc_failover_test --nocapture`
+- `ENABLE_GAUSSDB_FAILOVER_TEST=1 cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::cdc_tests::test::cdc_failover_test --nocapture`
 
 这样拆分的好处是：
 
@@ -212,3 +214,5 @@
     - `.codex-tasks/20260403-gaussdb-gate-batchb-resilience/PROGRESS.md`
     - `.codex-tasks/20260403-gaussdb-gate-batchb-resilience/raw/batch-b/summary.tsv`
     - `.codex-tasks/20260403-gaussdb-gate-batchb-resilience/raw/resilience/summary.tsv`
+- 2026-04-13：已在真实 HA 环境执行 `MySQL -> GaussDBMySQL` 的目标端 failover 自愈回归并 PASS。
+  - 证据：`.codex-tasks/20260413-gaussdb-target-selfheal/PROGRESS.md`

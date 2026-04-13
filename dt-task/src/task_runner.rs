@@ -138,7 +138,13 @@ impl Drop for AbortGuard {
         }
 
         // Allow cooperative exit first, then force-abort if the inner tasks are stuck.
-        self.shut_down.store(true, Ordering::Release);
+        let first = !self.shut_down.swap(true, Ordering::Release);
+        if first {
+            log_warn!(
+                "shutdown triggered by AbortGuard drop (start_task future cancelled/dropped). Aborting {} inner tasks.",
+                self.abort_handles.len()
+            );
+        }
         for h in &self.abort_handles {
             h.abort();
         }
@@ -535,7 +541,10 @@ impl TaskRunner {
             let extract_res = extractor.extract().await;
             let close_res = extractor.close().await;
             if extract_res.is_err() || close_res.is_err() {
-                shut_down_for_extractor.store(true, Ordering::Release);
+                let first = !shut_down_for_extractor.swap(true, Ordering::Release);
+                if first {
+                    log_error!("shutdown triggered by extractor error; forcing pipeline shutdown");
+                }
             }
             if let Err(e) = extract_res {
                 bail!("extractor.extract failed: {e:#}");
@@ -551,7 +560,16 @@ impl TaskRunner {
             let start_res = pipeline.start().await;
             let stop_res = pipeline.stop().await;
             if start_res.is_err() || stop_res.is_err() {
-                shut_down_for_pipeline.store(true, Ordering::Release);
+                let first = !shut_down_for_pipeline.swap(true, Ordering::Release);
+                if first {
+                    log_error!("shutdown triggered by pipeline error; forcing extractor shutdown");
+                }
+                if let Err(e) = &start_res {
+                    log_error!("pipeline.start returned error: {e:#}");
+                }
+                if let Err(e) = &stop_res {
+                    log_error!("pipeline.stop returned error: {e:#}");
+                }
             }
             if let Err(e) = start_res {
                 bail!("pipeline.start failed: {e:#}");

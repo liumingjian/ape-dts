@@ -36,7 +36,9 @@ impl Fetcher for PgCompatibleMysqlFetcher {
         let sql = String::from("SELECT version() AS version");
         let mut version = String::new();
 
-        let result = self.fetch_all(sql, "gaussdb mysql-compatible query database version").await;
+        let result = self
+            .fetch_all(sql, "gaussdb mysql-compatible query database version")
+            .await;
         match result {
             Ok(rows) => {
                 if !rows.is_empty() {
@@ -85,7 +87,8 @@ impl Fetcher for PgCompatibleMysqlFetcher {
         match rows_result {
             Ok(mut rows) => {
                 while let Some(row) = rows.try_next().await.unwrap() {
-                    let (db, tb): (String, String) = (row.get("table_schema"), row.get("table_name"));
+                    let (db, tb): (String, String) =
+                        (row.get("table_schema"), row.get("table_name"));
                     if !SystemDb::is_system_db(&db, &self.filter.db_type)
                         && !self.filter.filter_tb(&db, &tb)
                     {

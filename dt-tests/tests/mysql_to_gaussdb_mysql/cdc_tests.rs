@@ -21,4 +21,12 @@ mod test {
     async fn cdc_resume_test() {
         TestBase::run_cdc_resume_test("mysql_to_gaussdb_mysql/cdc/resume_test", 3000, 6000).await;
     }
+
+    #[tokio::test]
+    #[serial]
+    async fn cdc_failover_test() {
+        // Guarded by ENABLE_GAUSSDB_FAILOVER_TEST=1 in runner (real env only).
+        TestBase::run_cdc_failover_test("mysql_to_gaussdb_mysql/cdc/failover_test", 3000, 6000)
+            .await;
+    }
 }

@@ -266,7 +266,10 @@ mod tests {
 
     #[test]
     fn gaussdb_type_matrix_from_alias_maps_prd_specific_aliases() {
-        assert_eq!(PgValueType::from_alias("smalldatetime"), PgValueType::Timestamp);
+        assert_eq!(
+            PgValueType::from_alias("smalldatetime"),
+            PgValueType::Timestamp
+        );
         assert_eq!(PgValueType::from_alias("tinyint"), PgValueType::Int16);
         assert_eq!(PgValueType::from_alias("int1"), PgValueType::Int16);
         assert_eq!(PgValueType::from_alias("nvarchar2"), PgValueType::String);

@@ -96,12 +96,14 @@ CDC 解码与失败策略（MVP）：
 cargo test -p dt-tests --test integration_test -- pg_to_gaussdb::snapshot_tests::test::snapshot_basic_test --nocapture
 cargo test -p dt-tests --test integration_test -- gaussdb_to_pg::cdc_tests::test::cdc_basic_test --nocapture
 ENABLE_GAUSSDB_FAILOVER_TEST=1 cargo test -p dt-tests --test integration_test -- gaussdb_to_pg::cdc_tests::test::cdc_failover_test --nocapture
+ENABLE_GAUSSDB_FAILOVER_TEST=1 cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::cdc_tests::test::cdc_failover_test --nocapture
 ```
 
 说明：
 
 - `cdc_failover_test` 会在测试内部完成 `cm_ctl switchover`、等待 CDC 自动重连到新主 HA 端口，并在结束时 best-effort 恢复原主。
 - 若 GaussDB 使用 `gaussdb_pg_candidate_hosts`，测试侧源端读写会按候选解析当前 RW 主库，避免比较连接在切主后卡在旧主导致误报。
+- 对 `MySQL -> GaussDBMySQL`，failover 发生在**目标端**（pg-wire GaussDB MySQL-compatible DB），需要配置 `gaussdb_pg_candidate_hosts` 才能在无 VIP/LB 的情况下实现写入池切换与自愈。
 
 ### 3.3 CDC P1 演练（Resume + Failover + 负例，真实环境）
 

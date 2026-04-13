@@ -1,6 +1,6 @@
 # GaussDB 全局进度跟踪清单（PRD 真相源）
 
-> 最后更新：**2026-04-13（GaussDBMySQL CDC Expansion 已完成 child 1/2/3：cdc basic/type-matrix/resume）**
+> 最后更新：**2026-04-13（MySQL→GaussDBMySQL 目标端 failover self-heal 已闭环：`dt-tests cdc_failover_test` PASS）**
 >
 > 目标：每完成一次 spec 任务后，都能立刻知道“当前已交付什么、证据在哪、下一步做什么”。
 
@@ -81,6 +81,7 @@
 | 无污染 e2e：`scripts/e2e/gaussdb_to_pg_cdc.sh` | ✅ | `.codex-tasks/20260331-gaussdb-p0-stability-e2e/PROGRESS.md` |
 | `GaussDBPg → PG` CDC P1：resume + failover + 负例套件 | ✅ | `.codex-tasks/20260331-gaussdb-cdc-resilience/PROGRESS.md` + `.codex-tasks/20260403-gaussdb-dt-failover-restore/PROGRESS.md` |
 | `GaussDBMySQL` 首波（`MySQL -> GaussDBMySQL` 目标端优先） | ✅ | `.codex-tasks/20260402-gaussdb-mysql-bootstrap/PROGRESS.md` |
+| `MySQL → GaussDBMySQL` CDC：目标端 failover 自愈（无 VIP/LB） | ✅ | `.codex-tasks/20260413-gaussdb-target-selfheal/PROGRESS.md` |
 | `GaussDBPg` 质量补齐（类型矩阵 / check 细化 / 性能可观测） | ✅ | `.codex-tasks/20260402-gaussdbpg-quality-coverage/PROGRESS.md` |
 | `GaussDBOracle` 路线图 / 阻塞项 | ⛔ BLOCKED | `docs/agent-summary/gaussdb-oracle-roadmap.md` |
 

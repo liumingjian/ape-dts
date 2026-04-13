@@ -1,8 +1,7 @@
 use anyhow::Context;
 use dt_common::{
     config::{
-        config_enums::DbType, connection_auth_config::ConnectionAuthConfig,
-        task_config::TaskConfig,
+        config_enums::DbType, connection_auth_config::ConnectionAuthConfig, task_config::TaskConfig,
     },
     meta::ddl_meta::{ddl_parser::DdlParser, ddl_statement::DdlStatement},
 };
@@ -118,7 +117,9 @@ impl RdbStructTestRunner {
                 println!("src_ddl_sql: {}\n", src_ddl_sql);
             }
 
-            let dst_ddl_sql = self.fetch_mysql_compatible_database_ddl(&dst_db_tbs[i].0).await?;
+            let dst_ddl_sql = self
+                .fetch_mysql_compatible_database_ddl(&dst_db_tbs[i].0)
+                .await?;
             let key = dst_db_tbs[i].0.to_string();
             let expect_ddl_sql = expect_ddl_sqls.get(&key).unwrap().to_owned();
 
@@ -174,9 +175,10 @@ impl RdbStructTestRunner {
             &self.base.config.sinker_basic.connection_auth,
         )
         .await?;
-        let messages = client.simple_query(sql).await.with_context(|| {
-            format!("gaussdb mysql show create failed, sql: {}", sql)
-        })?;
+        let messages = client
+            .simple_query(sql)
+            .await
+            .with_context(|| format!("gaussdb mysql show create failed, sql: {}", sql))?;
         for message in messages {
             if let SimpleQueryMessage::Row(row) = message {
                 if let Some(value) = row.get(1) {

@@ -184,7 +184,10 @@ impl RdbTestRunner {
                     );
                 }
                 DbType::GaussDBMySQL
-                    if matches!(WireProtocol::from_url(dst_url), Some(WireProtocol::PostgreSQL)) =>
+                    if matches!(
+                        WireProtocol::from_url(dst_url),
+                        Some(WireProtocol::PostgreSQL)
+                    ) =>
                 {
                     dst_conn_pool_pg = Some(
                         tokio::time::timeout(
@@ -328,11 +331,7 @@ impl RdbTestRunner {
             sanitized_base = "ape_test_gaussdb".to_string();
         }
 
-        let suffix = format!(
-            "{}_{}",
-            Utc::now().format("%m%d%H%M%S"),
-            std::process::id()
-        );
+        let suffix = format!("{}_{}", Utc::now().format("%m%d%H%M%S"), std::process::id());
         let max_total_len = 63usize;
         let reserved = suffix.len().saturating_add(1);
         let max_base_len = max_total_len.saturating_sub(reserved);
@@ -364,19 +363,20 @@ impl RdbTestRunner {
                     && matches!(WireProtocol::from_url(url), Some(WireProtocol::PostgreSQL)))
         };
 
-        let (base_url, auth) = if is_pg_wire_gaussdb(&config.extractor_basic.db_type, &config.extractor_basic.url) {
-            (
-                config.extractor_basic.url.clone(),
-                config.extractor_basic.connection_auth.clone(),
-            )
-        } else if is_pg_wire_gaussdb(&config.sinker_basic.db_type, &config.sinker_basic.url) {
-            (
-                config.sinker_basic.url.clone(),
-                config.sinker_basic.connection_auth.clone(),
-            )
-        } else {
-            return Ok(());
-        };
+        let (base_url, auth) =
+            if is_pg_wire_gaussdb(&config.extractor_basic.db_type, &config.extractor_basic.url) {
+                (
+                    config.extractor_basic.url.clone(),
+                    config.extractor_basic.connection_auth.clone(),
+                )
+            } else if is_pg_wire_gaussdb(&config.sinker_basic.db_type, &config.sinker_basic.url) {
+                (
+                    config.sinker_basic.url.clone(),
+                    config.sinker_basic.connection_auth.clone(),
+                )
+            } else {
+                return Ok(());
+            };
 
         let primary_url = match Self::resolve_gaussdb_rw_url(&base_url, &auth, &candidates).await? {
             Some(v) => v,
@@ -437,6 +437,7 @@ impl RdbTestRunner {
         let base = Url::parse(base_url)?;
         let base_host = base.host_str().map(|s| s.to_string()).unwrap_or_default();
         let base_port = base.port();
+        let mut printed_op_not_permitted_hint = false;
 
         // Prefer direct node hosts over VIP/LB host in base_url, because VIPs may route
         // different connections to primary/standby and cause intermittent "read-only transaction"
@@ -482,11 +483,19 @@ impl RdbTestRunner {
             };
 
             let mut u = base.clone();
-            u.set_host(Some(&host))
-                .map_err(|_| anyhow::anyhow!("failed to set host in url: {}", base_url))?;
+            u.set_host(Some(&host)).map_err(|_| {
+                anyhow::anyhow!(
+                    "failed to set host in url: {}",
+                    Self::redact_url_for_log(base_url)
+                )
+            })?;
             if let Some(port) = port {
-                u.set_port(Some(port))
-                    .map_err(|_| anyhow::anyhow!("failed to set port in url: {}", base_url))?;
+                u.set_port(Some(port)).map_err(|_| {
+                    anyhow::anyhow!(
+                        "failed to set port in url: {}",
+                        Self::redact_url_for_log(base_url)
+                    )
+                })?;
             }
 
             let mut candidate_urls = vec![u.to_string()];
@@ -523,15 +532,29 @@ impl RdbTestRunner {
                         Ok(Err(e)) => {
                             println!(
                                 "skip gaussdb candidate (connect failed): {}, error: {}",
-                                url, e
+                                Self::redact_url_for_log(&url),
+                                e
                             );
+                            if !printed_op_not_permitted_hint
+                                && format!("{:#}", e)
+                                    .to_lowercase()
+                                    .contains("operation not permitted")
+                            {
+                                printed_op_not_permitted_hint = true;
+                                println!(
+                                    "HINT: connection blocked with \"Operation not permitted\". \
+This usually indicates the current execution sandbox has restricted network access to the GaussDB subnet. \
+Please run the test from a normal terminal environment with network access."
+                                );
+                            }
                             all_rw = false;
                             break;
                         }
                         Err(_) => {
                             println!(
                                 "skip gaussdb candidate (connect timeout#{}) : {}",
-                                probe_idx, url
+                                probe_idx,
+                                Self::redact_url_for_log(&url)
                             );
                             all_rw = false;
                             break;
@@ -567,7 +590,9 @@ impl RdbTestRunner {
                             Err(e) => {
                                 println!(
                                     "skip gaussdb candidate (probe failed#{}) : {}, error: {}",
-                                    probe_idx, url, e
+                                    probe_idx,
+                                    Self::redact_url_for_log(&url),
+                                    e
                                 );
                                 pool.close().await;
                                 all_rw = false;
@@ -581,7 +606,7 @@ impl RdbTestRunner {
                     if in_recovery {
                         println!(
                             "gaussdb candidate reports in_recovery=true, will still probe write: {}",
-                            url
+                            Self::redact_url_for_log(&url)
                         );
                     }
                     let is_on = |v: &Option<String>| {
@@ -590,7 +615,9 @@ impl RdbTestRunner {
                     if is_on(&transaction_ro) || is_on(&default_transaction_ro) {
                         println!(
                             "skip gaussdb candidate (read-only): {} (transaction_read_only={:?}, default_transaction_read_only={:?})",
-                            url, transaction_ro, default_transaction_ro
+                            Self::redact_url_for_log(&url),
+                            transaction_ro,
+                            default_transaction_ro
                         );
                         pool.close().await;
                         all_rw = false;
@@ -644,7 +671,9 @@ impl RdbTestRunner {
                         Ok(Err(e)) => {
                             println!(
                                 "skip gaussdb candidate (ddl probe failed#{}) : {}, error: {}",
-                                probe_idx, url, e
+                                probe_idx,
+                                Self::redact_url_for_log(&url),
+                                e
                             );
                             pool.close().await;
                             all_rw = false;
@@ -653,7 +682,8 @@ impl RdbTestRunner {
                         Err(_) => {
                             println!(
                                 "skip gaussdb candidate (ddl probe timeout#{}) : {}",
-                                probe_idx, url
+                                probe_idx,
+                                Self::redact_url_for_log(&url)
                             );
                             pool.close().await;
                             all_rw = false;
@@ -666,7 +696,9 @@ impl RdbTestRunner {
                         if prev != &server_addr {
                             println!(
                                 "skip gaussdb candidate (routes to multiple server_addr): {} ({} -> {})",
-                                url, prev, server_addr
+                                Self::redact_url_for_log(&url),
+                                prev,
+                                server_addr
                             );
                             all_rw = false;
                             break;
@@ -678,9 +710,16 @@ impl RdbTestRunner {
 
                 if all_rw {
                     if let Some(addr) = &server_addr_seen {
-                        println!("selected gaussdb rw url: {} (server_addr={})", url, addr);
+                        println!(
+                            "selected gaussdb rw url: {} (server_addr={})",
+                            Self::redact_url_for_log(&url),
+                            addr
+                        );
                     } else {
-                        println!("selected gaussdb rw url: {}", url);
+                        println!(
+                            "selected gaussdb rw url: {}",
+                            Self::redact_url_for_log(&url)
+                        );
                     }
                     return Ok(Some(url));
                 }
@@ -1109,15 +1148,53 @@ impl RdbTestRunner {
         // ordinary CDC tests, especially right after task startup and again immediately after
         // failover. Keep the failover compares patient so short sink stalls do not surface as
         // false negatives before the cluster has fully settled.
-        let phase1_compare_wait_millis =
-            std::cmp::max(parse_millis.saturating_mul(2), 60_000);
-        let phase2_compare_wait_millis =
-            std::cmp::max(parse_millis.saturating_mul(4), 120_000);
+        let phase1_compare_wait_millis = std::cmp::max(parse_millis.saturating_mul(2), 60_000);
+        let phase2_compare_wait_millis = std::cmp::max(parse_millis.saturating_mul(4), 120_000);
         let task = self.spawn_cdc_task(start_millis, task_parse_millis).await?;
+
+        // Determine which side is the GaussDB HA cluster for this failover test.
+        //
+        // - GaussDBPg -> PG CDC: extractor is GaussDBPg (source-side failover)
+        // - MySQL -> GaussDBMySQL CDC: sinker is GaussDBMySQL via PG wire (target-side failover)
+        let is_pg_wire_gaussdb = |db_type: &DbType, url: &str| {
+            matches!(db_type, DbType::GaussDBPg)
+                || (matches!(db_type, DbType::GaussDBMySQL)
+                    && matches!(WireProtocol::from_url(url), Some(WireProtocol::PostgreSQL)))
+        };
+
+        let (ha_base_url, ha_auth, ha_is_extractor_side) = if is_pg_wire_gaussdb(
+            &self.config.extractor_basic.db_type,
+            &self.config.extractor_basic.url,
+        ) {
+            (
+                self.config.extractor_basic.url.clone(),
+                self.config.extractor_basic.connection_auth.clone(),
+                true,
+            )
+        } else if is_pg_wire_gaussdb(
+            &self.config.sinker_basic.db_type,
+            &self.config.sinker_basic.url,
+        ) {
+            (
+                self.config.sinker_basic.url.clone(),
+                self.config.sinker_basic.connection_auth.clone(),
+                false,
+            )
+        } else {
+            anyhow::bail!(
+                "unsupported failover test config: neither extractor nor sinker is pg-wire gaussdb (extractor_db_type={}, sinker_db_type={}, extractor_url={}, sinker_url={})",
+                self.config.extractor_basic.db_type,
+                self.config.sinker_basic.db_type,
+                self.config.extractor_basic.url,
+                self.config.sinker_basic.url
+            );
+        };
 
         // Determine current RW endpoint (10.250.* candidate) so we can execute `cm_ctl switchover`
         // on the real primary DN host (switchover must be initiated on the current primary).
-        let old_rw_url = self.resolve_current_gaussdb_rw_url().await?;
+        let old_rw_url = self
+            .resolve_current_gaussdb_rw_url_for(&ha_base_url, &ha_auth)
+            .await?;
         let (cm_primary_host, _cm_primary_sql_port) = Self::parse_host_port_from_url(&old_rw_url)?;
 
         // Capture the original CM primary so we can best-effort restore it after the test, and
@@ -1218,14 +1295,27 @@ impl RdbTestRunner {
             )
             .await?;
 
-            if matches!(self.config.extractor_basic.db_type, DbType::GaussDBPg) {
+            if task.is_finished() {
+                anyhow::bail!(
+                    "cdc task finished unexpectedly after phase1 compare (before switchover). \
+                     This indicates the CDC job did not survive long enough for failover validation. \
+                     Please check logs in '{}'.",
+                    self.resume_log_dir()
+                );
+            }
+
+            if ha_is_extractor_side {
                 if let Some(pool) = &self.src_conn_pool_pg {
-                    // The source-side comparison pool can stay idle on the current primary after
+                    // The GaussDB-side comparison pool can stay idle on the current primary after
                     // phase1 verification. Close it before `cm_ctl switchover` so the test itself
                     // does not keep an extra SQL session pinned to the old primary during HA
                     // promotion; later reads/writes re-resolve the current RW endpoint on demand.
                     pool.close().await;
                 }
+            } else if let Some(pool) = &self.dst_conn_pool_pg {
+                // Target-side failover: close the dst comparison pool before promotion so we do
+                // not keep an extra SQL session pinned to the old primary during switchover.
+                pool.close().await;
             }
 
             // Perform CM switchover to the target node. Must execute on the current primary host.
@@ -1242,6 +1332,8 @@ impl RdbTestRunner {
                 max_attempts,
                 converge_secs,
                 &cm_hosts,
+                &ha_base_url,
+                &ha_auth,
             )
             .await?;
 
@@ -1257,22 +1349,43 @@ impl RdbTestRunner {
 
             // Determine the new RW endpoint and wait for dt-main to reconnect (HA port = sql+1).
             let new_rw_url = self
-                .resolve_current_gaussdb_rw_url_with_wait(120_000)
+                .resolve_current_gaussdb_rw_url_with_wait_for(&ha_base_url, &ha_auth, 120_000)
                 .await?;
             if new_rw_url == old_rw_url {
                 anyhow::bail!(
                     "failover did not change RW endpoint url (still '{}')",
-                    new_rw_url
+                    Self::redact_url_for_log(&new_rw_url)
                 );
             }
             let (new_host, new_sql_port) = Self::parse_host_port_from_url(&new_rw_url)?;
-            let new_ha_port = new_sql_port.saturating_add(1);
-            self.wait_for_streaming_started_on(&new_host, new_ha_port, streaming_wait_millis)
-                .await?;
+            if ha_is_extractor_side {
+                let new_ha_port = new_sql_port.saturating_add(1);
+                self.wait_for_streaming_started_on(&new_host, new_ha_port, streaming_wait_millis)
+                    .await?;
+            }
+
+            if task.is_finished() {
+                anyhow::bail!(
+                    "cdc task finished unexpectedly right after switchover (new_rw_url='{}'). \
+                     This indicates the CDC job did not self-heal / stay alive across failover. \
+                     Please check logs in '{}'.",
+                    Self::redact_url_for_log(&new_rw_url),
+                    self.resume_log_dir()
+                );
+            }
 
             // Phase B: DML after failover should still be captured.
             let phase2_sqls = self.load_extra_sqls("src_test_phase2.sql")?;
             self.execute_src_sqls(&phase2_sqls).await?;
+            if task.is_finished() {
+                anyhow::bail!(
+                    "cdc task finished unexpectedly after phase2 DML (new_rw_url='{}'). \
+                     This indicates the CDC job did not self-heal / stay alive long enough to capture post-failover changes. \
+                     Please check logs in '{}'.",
+                    Self::redact_url_for_log(&new_rw_url),
+                    self.resume_log_dir()
+                );
+            }
             self.compare_data_for_tbs_with_retry(
                 "failover_phase2",
                 &src_db_tbs,
@@ -1280,12 +1393,45 @@ impl RdbTestRunner {
                 phase2_compare_wait_millis,
             )
             .await?;
+
+            if !ha_is_extractor_side {
+                // Target-side failover: best-effort evidence collection.
+                // Do not gate the test outcome on this log line to avoid long hangs when
+                // the task already recovered and convergence is slower than expected.
+                if let Err(e) = self
+                    .wait_for_gaussdb_target_write_pool_switched_to(
+                        &new_host,
+                        new_sql_port,
+                        std::cmp::min(60_000, phase2_compare_wait_millis),
+                    )
+                    .await
+                {
+                    println!(
+                        "WARN: gaussdb target pool-switch evidence not found (best-effort): {:#}",
+                        e
+                    );
+                }
+            }
             Ok::<(), anyhow::Error>(())
         }
         .await;
 
         // Always stop the task to avoid leaking long-running CDC tasks across retries.
+        let completed_before_abort = task.is_finished();
         let _ = self.base.abort_task(&task).await;
+        match task.await {
+            Ok(()) => {
+                if !completed_before_abort {
+                    println!("WARN: cdc task finished without being aborted (unexpected)");
+                }
+            }
+            Err(e) if e.is_cancelled() => {
+                // Expected for long-running CDC tasks: we abort at the end of the test.
+            }
+            Err(e) => {
+                println!("WARN: cdc task join failed: {}", e);
+            }
+        }
 
         // Best-effort restore original primary (avoid polluting shared HA env).
         if let Some((node, instance)) = orig_primary {
@@ -1295,7 +1441,7 @@ impl RdbTestRunner {
                 // Some environments restrict SSH connectivity to only a subset of nodes; however,
                 // `cm_ctl switchover` can still be executed from a reachable node.
                 let prefer_host = self
-                    .resolve_current_gaussdb_rw_url()
+                    .resolve_current_gaussdb_rw_url_for(&ha_base_url, &ha_auth)
                     .await
                     .ok()
                     .and_then(|u| Self::parse_host_port_from_url(&u).ok())
@@ -1334,6 +1480,8 @@ impl RdbTestRunner {
                             max_attempts,
                             converge_secs,
                             &cm_hosts,
+                            &ha_base_url,
+                            &ha_auth,
                         )
                         .await
                     {
@@ -1349,7 +1497,10 @@ impl RdbTestRunner {
         // Final safety check: avoid leaving the shared HA env polluted.
         // - Ensure primary is restored to the original node (unless target == original)
         // - Ensure we did not introduce NEW unhealthy nodes vs the initial state
-        if let Ok(curr_rw_url) = self.resolve_current_gaussdb_rw_url().await {
+        if let Ok(curr_rw_url) = self
+            .resolve_current_gaussdb_rw_url_for(&ha_base_url, &ha_auth)
+            .await
+        {
             if let Ok((curr_host, _)) = Self::parse_host_port_from_url(&curr_rw_url) {
                 let cm_hosts = Self::cm_collect_ssh_hosts(&curr_host);
                 let final_state = if require_healthy {
@@ -1384,7 +1535,8 @@ impl RdbTestRunner {
                             final_rows
                         );
                     }
-                    if !require_healthy && !final_unhealthy_nodes.is_subset(&initial_unhealthy_nodes)
+                    if !require_healthy
+                        && !final_unhealthy_nodes.is_subset(&initial_unhealthy_nodes)
                     {
                         anyhow::bail!(
                             "cm datanode state became worse after test: initial_unhealthy_nodes={:?}, final_unhealthy_nodes={:?}. Please repair manually. dn_rows={:?}",
@@ -1452,7 +1604,10 @@ impl RdbTestRunner {
                         continue;
                     }
                     let pos = Position::from_log(line);
-                    if Self::checkpoint_position_matches_extractor(&pos, &self.config.extractor_basic.db_type) {
+                    if Self::checkpoint_position_matches_extractor(
+                        &pos,
+                        &self.config.extractor_basic.db_type,
+                    ) {
                         last = Some(pos);
                     }
                 }
@@ -1531,6 +1686,18 @@ impl RdbTestRunner {
         Ok((host, port))
     }
 
+    fn redact_url_for_log(url: &str) -> String {
+        match Url::parse(url) {
+            Ok(mut u) => {
+                if u.password().is_some() {
+                    let _ = u.set_password(None);
+                }
+                u.to_string()
+            }
+            Err(_) => url.to_string(),
+        }
+    }
+
     async fn wait_for_streaming_started_on(
         &self,
         host: &str,
@@ -1565,13 +1732,46 @@ impl RdbTestRunner {
         )
     }
 
-    async fn resolve_current_gaussdb_rw_url(&self) -> anyhow::Result<String> {
+    async fn wait_for_gaussdb_target_write_pool_switched_to(
+        &self,
+        host: &str,
+        sql_port: u16,
+        max_wait_millis: u64,
+    ) -> anyhow::Result<()> {
+        let started = std::time::Instant::now();
+        let log_dir = self.resume_log_dir();
+        let default_log = format!("{}/default.log", log_dir);
+        let default1_log = format!("{}/default1.log", log_dir);
+        let needle = format!("gaussdb target write pool switched: {}:{}", host, sql_port);
+
+        while started.elapsed().as_millis() < max_wait_millis as u128 {
+            for p in [&default_log, &default1_log] {
+                if let Ok(content) = fs::read_to_string(p) {
+                    if content.contains(&needle) {
+                        return Ok(());
+                    }
+                }
+            }
+            TimeUtil::sleep_millis(500).await;
+        }
+
+        anyhow::bail!(
+            "operation timed out: gaussdb target switch evidence not found within {} ms (expected='{}', log_dir={})",
+            max_wait_millis,
+            needle,
+            log_dir
+        )
+    }
+
+    async fn resolve_current_gaussdb_rw_url_for(
+        &self,
+        base_url: &str,
+        auth: &dt_common::config::connection_auth_config::ConnectionAuthConfig,
+    ) -> anyhow::Result<String> {
         let candidates = env::var("gaussdb_pg_candidate_hosts").unwrap_or_default();
         if candidates.trim().is_empty() {
             anyhow::bail!("gaussdb_pg_candidate_hosts is empty (required for failover test)");
         }
-        let base_url = &self.config.extractor_basic.url;
-        let auth = &self.config.extractor_basic.connection_auth;
         let Some(url) = Self::resolve_gaussdb_rw_url(base_url, auth, &candidates).await? else {
             anyhow::bail!(
                 "cannot resolve gaussdb rw url (gaussdb_pg_candidate_hosts={})",
@@ -1581,16 +1781,16 @@ impl RdbTestRunner {
         Ok(url)
     }
 
-    async fn resolve_current_gaussdb_rw_url_with_wait(
+    async fn resolve_current_gaussdb_rw_url_with_wait_for(
         &self,
+        base_url: &str,
+        auth: &dt_common::config::connection_auth_config::ConnectionAuthConfig,
         max_wait_millis: u64,
     ) -> anyhow::Result<String> {
         let candidates = env::var("gaussdb_pg_candidate_hosts").unwrap_or_default();
         if candidates.trim().is_empty() {
             anyhow::bail!("gaussdb_pg_candidate_hosts is empty (required for failover test)");
         }
-        let base_url = &self.config.extractor_basic.url;
-        let auth = &self.config.extractor_basic.connection_auth;
 
         let started = std::time::Instant::now();
         while started.elapsed().as_millis() < max_wait_millis as u128 {
@@ -2017,12 +2217,17 @@ impl RdbTestRunner {
         max_attempts: u64,
         converge_timeout_secs: u64,
         cm_hosts: &[String],
+        ha_base_url: &str,
+        ha_auth: &dt_common::config::connection_auth_config::ConnectionAuthConfig,
     ) -> anyhow::Result<()> {
         let is_restore = action.eq_ignore_ascii_case("restore");
         let mut last_cm_action_host: Option<String> = None;
         for attempt in 1..=max_attempts {
             // `cm_ctl switchover` must be initiated on the CURRENT primary DN host.
-            let curr_host = match self.resolve_current_gaussdb_rw_url_with_wait(30_000).await {
+            let curr_host = match self
+                .resolve_current_gaussdb_rw_url_with_wait_for(ha_base_url, ha_auth, 30_000)
+                .await
+            {
                 Ok(curr_rw_url) => {
                     let (host, _curr_sql_port) = Self::parse_host_port_from_url(&curr_rw_url)?;
                     last_cm_action_host = Some(host.clone());
@@ -2597,6 +2802,22 @@ impl RdbTestRunner {
         dst_db_tbs: &[(String, String)],
         max_wait_millis: u64,
     ) -> anyhow::Result<()> {
+        let check_task_shutdown = || -> anyhow::Result<()> {
+            let default_log = format!("{}/default.log", self.resume_log_dir());
+            if let Ok(content) = fs::read_to_string(&default_log) {
+                // When the CDC task triggers shutdown (extractor finished / pipeline error / abort guard),
+                // further compare retries are pointless and hide the real failure signal.
+                if content.contains("shutdown triggered by ") {
+                    anyhow::bail!(
+                        "cdc task reported shutdown while waiting for compare (stage={}, default.log={})",
+                        stage,
+                        default_log
+                    );
+                }
+            }
+            Ok(())
+        };
+
         let started = std::time::Instant::now();
         let mut backoff_millis: u64 = 500;
 
@@ -2605,6 +2826,7 @@ impl RdbTestRunner {
             Ok(_) => return Ok(()),
             Err(e) => e,
         };
+        check_task_shutdown()?;
 
         while started.elapsed().as_millis() < max_wait_millis as u128 {
             TimeUtil::sleep_millis(backoff_millis).await;
@@ -2614,6 +2836,7 @@ impl RdbTestRunner {
                 Ok(_) => return Ok(()),
                 Err(e) => last_err = e,
             }
+            check_task_shutdown()?;
         }
 
         anyhow::bail!(
@@ -2749,13 +2972,16 @@ impl RdbTestRunner {
             Ok(_) => {
                 println!(
                     "cleanup gaussdb cdc slot ok: slot={} rw_url={}",
-                    slot_name, rw_url
+                    slot_name,
+                    Self::redact_url_for_log(&rw_url)
                 );
             }
             Err(e) => {
                 println!(
                     "WARN: cleanup gaussdb cdc slot failed: slot={} rw_url={} error={:#}",
-                    slot_name, rw_url, e
+                    slot_name,
+                    Self::redact_url_for_log(&rw_url),
+                    e
                 );
             }
         }
@@ -2771,9 +2997,14 @@ impl RdbTestRunner {
             // GaussDB HA primary can switch mid-test, making a previously RW connection suddenly
             // read-only. When candidate hosts are configured, always resolve a fresh RW endpoint
             // for write SQLs to reduce flakiness.
-            if matches!(self.config.extractor_basic.db_type, DbType::GaussDBPg)
-                && env::var("gaussdb_pg_candidate_hosts").is_ok()
-            {
+            let extractor_is_pg_wire_gaussdb =
+                matches!(self.config.extractor_basic.db_type, DbType::GaussDBPg)
+                    || (matches!(self.config.extractor_basic.db_type, DbType::GaussDBMySQL)
+                        && matches!(
+                            WireProtocol::from_url(&self.config.extractor_basic.url),
+                            Some(WireProtocol::PostgreSQL)
+                        ));
+            if extractor_is_pg_wire_gaussdb && env::var("gaussdb_pg_candidate_hosts").is_ok() {
                 if let Some((_, rw_pool)) = Self::create_gaussdb_rw_pg_pool_with_wait(
                     &self.config.extractor_basic.url,
                     &self.config.extractor_basic.connection_auth,
@@ -2802,9 +3033,14 @@ impl RdbTestRunner {
             // GaussDB HA primary can switch mid-test, making a previously RW connection suddenly
             // read-only. When candidate hosts are configured, always resolve a fresh RW endpoint
             // for write SQLs to reduce flakiness (mirror execute_src_sqls behavior).
-            if matches!(self.config.sinker_basic.db_type, DbType::GaussDBPg)
-                && env::var("gaussdb_pg_candidate_hosts").is_ok()
-            {
+            let sinker_is_pg_wire_gaussdb =
+                matches!(self.config.sinker_basic.db_type, DbType::GaussDBPg)
+                    || (matches!(self.config.sinker_basic.db_type, DbType::GaussDBMySQL)
+                        && matches!(
+                            WireProtocol::from_url(&self.config.sinker_basic.url),
+                            Some(WireProtocol::PostgreSQL)
+                        ));
+            if sinker_is_pg_wire_gaussdb && env::var("gaussdb_pg_candidate_hosts").is_ok() {
                 if let Some((_, rw_pool)) = Self::create_gaussdb_rw_pg_pool_with_wait(
                     &self.config.sinker_basic.url,
                     &self.config.sinker_basic.connection_auth,
@@ -2817,6 +3053,24 @@ impl RdbTestRunner {
                     res?;
                     return Ok(());
                 }
+            }
+
+            // Failover tests intentionally close the comparison pools before `cm_ctl switchover` to
+            // avoid pinning extra sessions to the old primary. Closed pools can't be reused, so
+            // re-create a fresh pool on demand for subsequent cleanup SQLs.
+            if pool.is_closed() {
+                let new_pool = TaskUtil::create_pg_conn_pool(
+                    &self.config.sinker_basic.url,
+                    &self.config.sinker_basic.connection_auth,
+                    1,
+                    false,
+                    false,
+                )
+                .await?;
+                let res = RdbUtil::execute_sqls_pg(&new_pool, sqls).await;
+                new_pool.close().await;
+                res?;
+                return Ok(());
             }
 
             RdbUtil::execute_sqls_pg(pool, sqls).await?;
@@ -3285,18 +3539,94 @@ impl RdbTestRunner {
         let data = if let Some(pool) = conn_pool_mysql {
             RdbUtil::fetch_data_mysql_compatible(pool, None, db_tb, &db_type, &where_sql).await?
         } else if let Some(pool) = conn_pool_pg {
-            if matches!(db_type, DbType::GaussDBMySQL) {
-                let (url, connection_auth) = if from == SRC {
-                    (
-                        &self.config.extractor_basic.url,
-                        &self.config.extractor_basic.connection_auth,
+            let (url, connection_auth) = if from == SRC {
+                (
+                    &self.config.extractor_basic.url,
+                    &self.config.extractor_basic.connection_auth,
+                )
+            } else {
+                (
+                    &self.config.sinker_basic.url,
+                    &self.config.sinker_basic.connection_auth,
+                )
+            };
+
+            // In failover tests we may close the original pool intentionally to avoid pinning
+            // sessions to the old primary. For GaussDB, also prefer querying the current RW
+            // primary when candidate hosts are provided.
+            let prefer_gaussdb_rw = matches!(db_type, DbType::GaussDBPg | DbType::GaussDBMySQL)
+                && env::var("gaussdb_pg_candidate_hosts").is_ok();
+            if prefer_gaussdb_rw {
+                if let Some((rw_url, rw_pool)) =
+                    Self::create_gaussdb_rw_pg_pool_with_wait(url, connection_auth, 20_000).await?
+                {
+                    let res = if matches!(db_type, DbType::GaussDBMySQL) {
+                        RdbUtil::fetch_data_gaussdb_mysql_simple_query(
+                            &rw_pool,
+                            &rw_url,
+                            connection_auth,
+                            None,
+                            db_tb,
+                            &where_sql,
+                        )
+                        .await
+                    } else {
+                        RdbUtil::fetch_data_pg(&rw_pool, None, db_tb, &where_sql).await
+                    };
+                    rw_pool.close().await;
+                    res?
+                } else if pool.is_closed() {
+                    // Fall through to a fresh pool created from `url` (best-effort).
+                    let fresh_pool =
+                        TaskUtil::create_pg_conn_pool(url, connection_auth, 1, false, false)
+                            .await?;
+                    let res = if matches!(db_type, DbType::GaussDBMySQL) {
+                        RdbUtil::fetch_data_gaussdb_mysql_simple_query(
+                            &fresh_pool,
+                            url,
+                            connection_auth,
+                            None,
+                            db_tb,
+                            &where_sql,
+                        )
+                        .await
+                    } else {
+                        RdbUtil::fetch_data_pg(&fresh_pool, None, db_tb, &where_sql).await
+                    };
+                    fresh_pool.close().await;
+                    res?
+                } else if matches!(db_type, DbType::GaussDBMySQL) {
+                    RdbUtil::fetch_data_gaussdb_mysql_simple_query(
+                        pool,
+                        url,
+                        connection_auth,
+                        None,
+                        db_tb,
+                        &where_sql,
                     )
+                    .await?
                 } else {
-                    (
-                        &self.config.sinker_basic.url,
-                        &self.config.sinker_basic.connection_auth,
+                    RdbUtil::fetch_data_pg(pool, None, db_tb, &where_sql).await?
+                }
+            } else if pool.is_closed() {
+                let fresh_pool =
+                    TaskUtil::create_pg_conn_pool(url, connection_auth, 1, false, false).await?;
+                let res = if matches!(db_type, DbType::GaussDBMySQL) {
+                    RdbUtil::fetch_data_gaussdb_mysql_simple_query(
+                        &fresh_pool,
+                        url,
+                        connection_auth,
+                        None,
+                        db_tb,
+                        &where_sql,
                     )
+                    .await
+                } else {
+                    RdbUtil::fetch_data_pg(&fresh_pool, None, db_tb, &where_sql).await
                 };
+                fresh_pool.close().await;
+                res?
+            } else if matches!(db_type, DbType::GaussDBMySQL) {
                 RdbUtil::fetch_data_gaussdb_mysql_simple_query(
                     pool,
                     url,
@@ -3306,23 +3636,6 @@ impl RdbTestRunner {
                     &where_sql,
                 )
                 .await?
-            } else if from == SRC
-                && matches!(self.config.extractor_basic.db_type, DbType::GaussDBPg)
-                && env::var("gaussdb_pg_candidate_hosts").is_ok()
-            {
-                if let Some((_, rw_pool)) = Self::create_gaussdb_rw_pg_pool_with_wait(
-                    &self.config.extractor_basic.url,
-                    &self.config.extractor_basic.connection_auth,
-                    20_000,
-                )
-                .await?
-                {
-                    let res = RdbUtil::fetch_data_pg(&rw_pool, None, db_tb, &where_sql).await;
-                    rw_pool.close().await;
-                    res?
-                } else {
-                    RdbUtil::fetch_data_pg(pool, None, db_tb, &where_sql).await?
-                }
             } else {
                 RdbUtil::fetch_data_pg(pool, None, db_tb, &where_sql).await?
             }

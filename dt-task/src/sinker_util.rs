@@ -101,8 +101,10 @@ impl SinkerUtil {
 
             SinkerConfig::Mysql {
                 url,
+                connection_auth,
                 batch_size,
                 replace,
+                disable_foreign_key_checks,
                 ..
             } => match client {
                 ConnClient::MySQL(conn_pool) => {
@@ -130,15 +132,24 @@ impl SinkerUtil {
                     let router =
                         RdbRouter::from_config(&config.router, &config.sinker_basic.db_type)?;
                     let meta_manager = PgMetaManager::new(conn_pool.clone()).await?;
+                    let shared_pool = Arc::new(RwLock::new(conn_pool));
+                    let reconnect_lock = Arc::new(Mutex::new(()));
+                    let last_success_endpoint = Arc::new(RwLock::new(None));
 
                     for _ in 0..parallel_size {
                         let sinker = PgSinker {
                             url: url.to_string(),
+                            connection_auth: connection_auth.clone(),
                             db_type: config.sinker_basic.db_type.clone(),
-                            conn_pool: conn_pool.clone(),
+                            conn_pool: shared_pool.clone(),
                             meta_manager: meta_manager.clone(),
                             router: router.clone(),
                             batch_size,
+                            max_connections: config.sinker_basic.max_connections,
+                            enable_sqlx_log,
+                            disable_foreign_key_checks,
+                            reconnect_lock: reconnect_lock.clone(),
+                            last_success_endpoint: last_success_endpoint.clone(),
                             monitor: monitor.clone(),
                             data_marker: data_marker.clone(),
                             replace,
@@ -164,10 +175,8 @@ impl SinkerUtil {
                 ..
             } => {
                 let reverse_router =
-                    RdbRouter::from_config(&config.router, &config.sinker_basic.db_type)?
-                        .reverse();
-                let filter =
-                    RdbFilter::from_config(&config.filter, &config.sinker_basic.db_type)?;
+                    RdbRouter::from_config(&config.router, &config.sinker_basic.db_type)?.reverse();
+                let filter = RdbFilter::from_config(&config.filter, &config.sinker_basic.db_type)?;
                 let extractor_meta_manager = ExtractorUtil::get_extractor_meta_manager(config)
                     .await?
                     .unwrap();
@@ -198,8 +207,7 @@ impl SinkerUtil {
                                     global_summary: check_summary.clone(),
                                 },
                             };
-                            sub_sinkers
-                                .push(Arc::new(async_mutex::Mutex::new(Box::new(sinker))));
+                            sub_sinkers.push(Arc::new(async_mutex::Mutex::new(Box::new(sinker))));
                         }
                     }
                     ConnClient::PostgreSQL(conn_pool)
@@ -232,8 +240,7 @@ impl SinkerUtil {
                                     global_summary: check_summary.clone(),
                                 },
                             };
-                            sub_sinkers
-                                .push(Arc::new(async_mutex::Mutex::new(Box::new(sinker))));
+                            sub_sinkers.push(Arc::new(async_mutex::Mutex::new(Box::new(sinker))));
                         }
                     }
                     _ => {
@@ -244,8 +251,10 @@ impl SinkerUtil {
 
             SinkerConfig::Pg {
                 url,
+                connection_auth,
                 batch_size,
                 replace,
+                disable_foreign_key_checks,
                 ..
             } => {
                 let router = RdbRouter::from_config(&config.router, &config.sinker_basic.db_type)?;
@@ -256,15 +265,24 @@ impl SinkerUtil {
                     }
                 };
                 let meta_manager = PgMetaManager::new(conn_pool.clone()).await?;
+                let shared_pool = Arc::new(RwLock::new(conn_pool));
+                let reconnect_lock = Arc::new(Mutex::new(()));
+                let last_success_endpoint = Arc::new(RwLock::new(None));
 
                 for _ in 0..parallel_size {
                     let sinker = PgSinker {
                         url: url.to_string(),
+                        connection_auth: connection_auth.clone(),
                         db_type: config.sinker_basic.db_type.clone(),
-                        conn_pool: conn_pool.clone(),
+                        conn_pool: shared_pool.clone(),
                         meta_manager: meta_manager.clone(),
                         router: router.clone(),
                         batch_size,
+                        max_connections: config.sinker_basic.max_connections,
+                        enable_sqlx_log,
+                        disable_foreign_key_checks,
+                        reconnect_lock: reconnect_lock.clone(),
+                        last_success_endpoint: last_success_endpoint.clone(),
                         monitor: monitor.clone(),
                         data_marker: data_marker.clone(),
                         replace,

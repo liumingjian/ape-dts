@@ -264,17 +264,12 @@ mod tests {
     fn gaussdb_type_matrix_convertor_maps_datetime_and_integer_aliases() {
         let mut meta_manager = dummy_meta_manager();
 
-        let smalldatetime =
-            make_col_type("smalldatetime", "timestamp", PgValueType::Timestamp);
+        let smalldatetime = make_col_type("smalldatetime", "timestamp", PgValueType::Timestamp);
         let tinyint = make_col_type("tinyint", "int2", PgValueType::Int16);
 
         assert_eq!(
-            PgColValueConvertor::from_str(
-                &smalldatetime,
-                "2026-04-02 13:20:00",
-                &mut meta_manager
-            )
-            .unwrap(),
+            PgColValueConvertor::from_str(&smalldatetime, "2026-04-02 13:20:00", &mut meta_manager)
+                .unwrap(),
             ColValue::DateTime("2026-04-02 13:20:00".to_string())
         );
         assert_eq!(

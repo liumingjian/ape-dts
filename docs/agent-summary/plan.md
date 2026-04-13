@@ -58,7 +58,8 @@ MVP（`DbType::GaussDBPg`）已在真实环境闭环验证：
   - child 2：`cdc type-matrix`
   - child 3：`cdc resilience + negatives`
   - child 4：`docs/runbook/tracker` 收口
-  - 当前进度（2026-04-13）：child 1/2/3 已完成，待收口 docs/tracker
+  - 当前进度（2026-04-13）：child 1/2/3/4 已完成；并已补齐 **目标端 failover 自愈** 的集成测试：
+    - `mysql_to_gaussdb_mysql::cdc_tests::test::cdc_failover_test` 已在真实 HA 环境 PASS（证据见 `.codex-tasks/20260413-gaussdb-target-selfheal/PROGRESS.md`）
 - 推荐通过 `dt-tests/tests/.env.local` 提供：
   - `gaussdb_mysql_sinker_without_auth_url`
   - `gaussdb_mysql_sinker_username`

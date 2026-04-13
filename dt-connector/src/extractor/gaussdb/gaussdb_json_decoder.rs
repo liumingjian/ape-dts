@@ -485,7 +485,10 @@ mod tests {
             ColValue::Short(8)
         );
         assert_eq!(
-            GaussDBJsonDecoder::parse_col_value(Some("smalldatetime"), Some("'2026-04-02 16:21:00'")),
+            GaussDBJsonDecoder::parse_col_value(
+                Some("smalldatetime"),
+                Some("'2026-04-02 16:21:00'")
+            ),
             ColValue::DateTime("2026-04-02 16:21:00".to_string())
         );
         assert_eq!(
