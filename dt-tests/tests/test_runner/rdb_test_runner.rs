@@ -22,7 +22,7 @@ use dt_common::{
 
 use dt_common::meta::{
     col_value::ColValue, ddl_meta::ddl_parser::DdlParser,
-    mysql::mysql_meta_manager::MysqlMetaManager, row_data::RowData,
+    mysql::mysql_meta_manager::MysqlMetaManager, position::Position, row_data::RowData,
 };
 use dt_connector::{
     meta_fetcher::mysql::mysql_struct_check_fetcher::MysqlStructCheckFetcher, rdb_router::RdbRouter,
@@ -1017,16 +1017,16 @@ impl RdbTestRunner {
                 parse_millis,
             )
             .await?;
-            self.wait_for_pg_cdc_checkpoint_lsn(start_millis).await
+            self.wait_for_cdc_checkpoint_position(start_millis).await
         }
         .await;
         let _ = self.base.abort_task(&task_a).await;
-        let checkpoint_lsn = res_a?;
+        let checkpoint_position = res_a?;
 
         // Phase B: restart task, verify it recovers from the checkpoint LSN, then execute DML#2.
         let task_b = self.spawn_cdc_task(start_millis, parse_millis).await?;
         let res_b = async {
-            self.wait_for_recovery_log(&checkpoint_lsn, start_millis)
+            self.wait_for_recovery_log_for_position(&checkpoint_position, start_millis)
                 .await?;
 
             let phase2_sqls = self.load_extra_sqls("src_test_phase2.sql")?;
@@ -1438,45 +1438,69 @@ impl RdbTestRunner {
             .collect())
     }
 
-    async fn wait_for_pg_cdc_checkpoint_lsn(&self, max_wait_millis: u64) -> anyhow::Result<String> {
+    async fn wait_for_cdc_checkpoint_position(
+        &self,
+        max_wait_millis: u64,
+    ) -> anyhow::Result<Position> {
         let started = std::time::Instant::now();
         let pos_path = format!("{}/position.log", self.resume_log_dir());
         while started.elapsed().as_millis() < max_wait_millis as u128 {
             if let Ok(content) = fs::read_to_string(&pos_path) {
-                // Find the last checkpoint_position line that contains PgCdc.
-                let mut last_lsn: Option<String> = None;
+                let mut last: Option<Position> = None;
                 for line in content.lines() {
                     if !line.contains("checkpoint_position") {
                         continue;
                     }
-                    if !line.contains("\"type\":\"PgCdc\"") {
-                        continue;
-                    }
-                    if let Some(lsn) = Self::extract_json_field(line, "\"lsn\":\"") {
-                        last_lsn = Some(lsn);
+                    let pos = Position::from_log(line);
+                    if Self::checkpoint_position_matches_extractor(&pos, &self.config.extractor_basic.db_type) {
+                        last = Some(pos);
                     }
                 }
-                if let Some(lsn) = last_lsn {
-                    return Ok(lsn);
+                if let Some(pos) = last {
+                    return Ok(pos);
                 }
             }
             TimeUtil::sleep_millis(500).await;
         }
         anyhow::bail!(
-            "operation timed out: checkpoint_position PgCdc lsn not found within {} ms (position.log={})",
+            "operation timed out: checkpoint_position not found within {} ms (position.log={})",
             max_wait_millis,
             pos_path
         )
     }
 
-    async fn wait_for_recovery_log(
+    fn checkpoint_position_matches_extractor(position: &Position, db_type: &DbType) -> bool {
+        match db_type {
+            DbType::Mysql => matches!(position, Position::MysqlCdc { .. }),
+            DbType::Pg | DbType::GaussDBPg | DbType::GaussDBMySQL => {
+                matches!(position, Position::PgCdc { .. })
+            }
+            _ => false,
+        }
+    }
+
+    async fn wait_for_recovery_log_for_position(
         &self,
-        expected_lsn: &str,
+        expected_position: &Position,
         max_wait_millis: u64,
     ) -> anyhow::Result<()> {
         let started = std::time::Instant::now();
         let default_log = format!("{}/default.log", self.resume_log_dir());
-        let needle = format!("cdc recovery from lsn:[{}]", expected_lsn);
+        let needle = match expected_position {
+            Position::PgCdc { lsn, .. } => format!("cdc recovery from lsn:[{}]", lsn),
+            Position::MysqlCdc {
+                binlog_filename,
+                next_event_position,
+                ..
+            } => format!(
+                "cdc recovery from binlogfile:[{}], binlog_position:[{}]",
+                binlog_filename, next_event_position
+            ),
+            _ => anyhow::bail!(
+                "unsupported cdc position for recovery assertion: {:?}",
+                expected_position
+            ),
+        };
 
         while started.elapsed().as_millis() < max_wait_millis as u128 {
             if let Ok(content) = fs::read_to_string(&default_log) {
@@ -1493,13 +1517,6 @@ impl RdbTestRunner {
             needle,
             default_log
         )
-    }
-
-    fn extract_json_field(haystack: &str, prefix: &str) -> Option<String> {
-        let start = haystack.find(prefix)? + prefix.len();
-        let rest = &haystack[start..];
-        let end = rest.find('"')?;
-        Some(rest[..end].to_string())
     }
 
     fn parse_host_port_from_url(url: &str) -> anyhow::Result<(String, u16)> {

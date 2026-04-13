@@ -15,4 +15,10 @@ mod test {
     async fn cdc_type_matrix_test() {
         TestBase::run_cdc_test("mysql_to_gaussdb_mysql/cdc/type_matrix_test", 3000, 6000).await;
     }
+
+    #[tokio::test]
+    #[serial]
+    async fn cdc_resume_test() {
+        TestBase::run_cdc_resume_test("mysql_to_gaussdb_mysql/cdc/resume_test", 3000, 6000).await;
+    }
 }

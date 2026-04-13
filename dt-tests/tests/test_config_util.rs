@@ -111,13 +111,19 @@ impl TestConfigUtil {
         {
             let resume_log_dir = format!("{}/{}", project_root, log_dir);
             update_configs.push((RESUMER.to_string(), "log_dir".to_string(), resume_log_dir));
-            // resumer/resume_config_file
-            let resume_config_file = format!("{}/{}", project_root, config_file);
-            update_configs.push((
-                RESUMER.to_string(),
-                "config_file".to_string(),
-                resume_config_file,
-            ));
+            // resumer/config_file (optional)
+            //
+            // When the source ini omits `resumer.config_file`, TaskConfig loads it as an empty string.
+            // Do not rewrite an empty path to `{project_root}/` (a directory), otherwise LogRecovery
+            // will try to open it as a file and crash.
+            if !config_file.is_empty() {
+                let resume_config_file = format!("{}/{}", project_root, config_file);
+                update_configs.push((
+                    RESUMER.to_string(),
+                    "config_file".to_string(),
+                    resume_config_file,
+                ));
+            }
         }
 
         // extractor/check_log_dir
