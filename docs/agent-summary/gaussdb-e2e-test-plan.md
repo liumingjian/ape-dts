@@ -93,6 +93,7 @@
 | Quick | `MySQL -> GaussDBMySQL` smoke | `cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::snapshot_tests::test::smoke_test --nocapture` | MySQL8 + GaussDBMySQL | 最小连通性 |
 | Quick | `MySQL -> GaussDBMySQL` struct basic | `cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::struct_tests::test::struct_basic_test --nocapture` | MySQL8 + GaussDBMySQL | 对象同步主路径 |
 | Quick | `MySQL -> GaussDBMySQL` check basic | `cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::check_tests::test::check_basic_test --nocapture` | MySQL8 + GaussDBMySQL | 对账主路径 |
+| Quick | `MySQL -> GaussDBMySQL` CDC basic | `cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::cdc_tests::test::cdc_basic_test --nocapture` | MySQL8 + GaussDBMySQL | 基础 CDC 主路径 |
 | Full | `PG -> GaussDBPg` CDC basic | `cargo test -p dt-tests --test integration_test -- pg_to_gaussdb::cdc_tests::test::cdc_basic_test --nocapture` | PG + GaussDBPg | 正向 CDC |
 | Full | `PG -> GaussDBPg` type matrix | `cargo test -p dt-tests --test integration_test -- pg_to_gaussdb::snapshot_tests::test::type_matrix_test --nocapture` | PG + GaussDBPg | 特有类型快照兼容 |
 | Full | `PG -> GaussDBPg` struct view/routine | `cargo test -p dt-tests --test integration_test -- pg_to_gaussdb::struct_tests::test::struct_view_routine_test --nocapture` | PG + GaussDBPg | 视图/函数/过程 |
@@ -100,6 +101,8 @@
 | Full | `GaussDBPg -> PG` struct view/routine | `cargo test -p dt-tests --test integration_test -- gaussdb_to_pg::struct_tests::test::struct_view_routine_test --nocapture` | GaussDBPg + PG | 反向对象同步 |
 | Full | `GaussDBPg -> PG` CDC type matrix | `cargo test -p dt-tests --test integration_test -- gaussdb_to_pg::cdc_tests::test::cdc_type_matrix_test --nocapture` | GaussDBPg + PG | 特有类型 CDC |
 | Full | `GaussDBPg -> PG` CDC resume | `cargo test -p dt-tests --test integration_test -- gaussdb_to_pg::cdc_tests::test::cdc_resume_test --nocapture` | GaussDBPg + PG | checkpoint 恢复 |
+| Full | `MySQL -> GaussDBMySQL` CDC type matrix | `cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::cdc_tests::test::cdc_type_matrix_test --nocapture` | MySQL8 + GaussDBMySQL | CDC 类型矩阵 |
+| Full | `MySQL -> GaussDBMySQL` CDC resume | `cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::cdc_tests::test::cdc_resume_test --nocapture` | MySQL8 + GaussDBMySQL | checkpoint 恢复 |
 | Resilience | `GaussDBPg -> PG` CDC failover | `ENABLE_GAUSSDB_FAILOVER_TEST=1 cargo test -p dt-tests --test integration_test -- gaussdb_to_pg::cdc_tests::test::cdc_failover_test --nocapture` | GaussDB 集群 + SSH + PG | 切主自愈 |
 | Resilience | script basic | `bash scripts/e2e/gaussdb_to_pg_cdc.sh` | `.local/e2e/.env` | 基础 e2e |
 | Resilience | script resume | `TEST_RESUME=1 bash scripts/e2e/gaussdb_to_pg_cdc.sh` | `.local/e2e/.env` | kill + restart |
@@ -116,6 +119,7 @@
 1. `GaussDBPg -> PG` CDC basic
 2. `PG -> GaussDBPg` snapshot/struct/check basic
 3. `MySQL -> GaussDBMySQL` smoke/struct/check basic
+4. `MySQL -> GaussDBMySQL` CDC basic
 
 ### 5.2 spec 合并前回归
 
@@ -171,6 +175,7 @@
 - `mysql_to_gaussdb_mysql::snapshot_tests::test::smoke_test`
 - `mysql_to_gaussdb_mysql::struct_tests::test::struct_basic_test`
 - `mysql_to_gaussdb_mysql::check_tests::test::check_basic_test`
+- `mysql_to_gaussdb_mysql::cdc_tests::test::cdc_basic_test`
 
 ### Batch B：增强能力回归
 
@@ -180,6 +185,8 @@
 - `gaussdb_to_pg::struct_tests::test::struct_view_routine_test`
 - `gaussdb_to_pg::cdc_tests::test::cdc_type_matrix_test`
 - `gaussdb_to_pg::cdc_tests::test::cdc_resume_test`
+- `mysql_to_gaussdb_mysql::cdc_tests::test::cdc_type_matrix_test`
+- `mysql_to_gaussdb_mysql::cdc_tests::test::cdc_resume_test`
 - `ENABLE_GAUSSDB_FAILOVER_TEST=1 cargo test -p dt-tests --test integration_test -- gaussdb_to_pg::cdc_tests::test::cdc_failover_test --nocapture`
 
 这样拆分的好处是：

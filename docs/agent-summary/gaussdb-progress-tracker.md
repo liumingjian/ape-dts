@@ -1,6 +1,6 @@
 # GaussDB 全局进度跟踪清单（PRD 真相源）
 
-> 最后更新：**2026-04-10（GaussDBMySQL 下一阶段已切入 CDC Expansion，child 1 为 cdc basic）**
+> 最后更新：**2026-04-13（GaussDBMySQL CDC Expansion 已完成 child 1/2/3：cdc basic/type-matrix/resume）**
 >
 > 目标：每完成一次 spec 任务后，都能立刻知道“当前已交付什么、证据在哪、下一步做什么”。
 
@@ -31,12 +31,12 @@
 |---|---|---|---|---|---|---|---|
 | **PG → GaussDBPg** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **GaussDBPg → PG** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **MySQL → GaussDBMySQL（首波）** | ✅ | - | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **MySQL → GaussDBMySQL（首波）** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 说明：
 
 - Struct（PRD MVP）已补齐：在已有 `table/index/constraint/sequence/comment/rbac` 基础上补齐 **view/matview/routine/routine grants**。
-- `MySQL → GaussDBMySQL（首波）` 当前只覆盖 `snapshot/struct/check/docs`；`cdc` 不在本轮范围内，因此以 `-` 标记。
+- `MySQL → GaussDBMySQL（首波）` 已覆盖 `snapshot/struct/check/cdc(DML)`，并已归档真实环境证据。
 - `MySQL → GaussDBMySQL（首波）` 的 `precheck` 已完成独立自动化入口、真实环境证据与无污染校验。
 - SHA256 认证：当前以 `BLOCKED` 方式纳入执行真表（等待联调环境可用）。
 - 当前 active 方向已演进为：`GaussDBMySQL CDC Expansion` 与 `GaussDBPg Quality Coverage`。
@@ -106,6 +106,8 @@
 | `GaussDBMySQL` bootstrap：docs closeout | ✅ | `.codex-tasks/20260402-gaussdb-mysql-bootstrap/tasks/20260402-05-docs-closeout/PROGRESS.md` |
 | `GaussDBMySQL` bootstrap：precheck + 真实环境证据 | ✅ | `.codex-tasks/20260402-gaussdb-mysql-bootstrap/tasks/20260409-07-precheck-evidence/PROGRESS.md` |
 | `GaussDBMySQL` CDC Expansion：cdc basic | ✅ | `.codex-tasks/20260410-gaussdb-mysql-cdc-expansion/tasks/20260410-01-cdc-basic/PROGRESS.md` |
+| `GaussDBMySQL` CDC Expansion：cdc type-matrix | ✅ | `.codex-tasks/20260410-gaussdb-mysql-cdc-expansion/tasks/20260410-02-cdc-type-matrix/PROGRESS.md` |
+| `GaussDBMySQL` CDC Expansion：cdc resume | ✅ | `.codex-tasks/20260410-gaussdb-mysql-cdc-expansion/tasks/20260410-03-cdc-resilience-negatives/PROGRESS.md` |
 | `GaussDBPg` quality：truth-source normalization | ✅ | `.codex-tasks/20260402-gaussdbpg-quality-coverage/tasks/20260402-01-truth-source-normalization/PROGRESS.md` |
 | `GaussDBPg` quality：type contract + codecs | ✅ | `.codex-tasks/20260402-gaussdbpg-quality-coverage/tasks/20260402-02-type-contract-codecs/PROGRESS.md` |
 | `GaussDBPg` quality：non-CDC type matrix e2e | ✅ | `.codex-tasks/20260402-gaussdbpg-quality-coverage/tasks/20260402-03-non-cdc-type-matrix-e2e/PROGRESS.md` |

@@ -1,16 +1,18 @@
 # MySQL -> GaussDB (MySQL-compatible) templates
 
 > GaussDB MySQL-compatible mode is configured as `db_type=gaussdb_mysql`.
-> Current first wave is **target-first** only and has been validated for:
+> Current delivery is **target-first** only and has been validated for:
 >
 > - `snapshot`
 > - `struct`
 > - `check`
+> - `cdc` (DML only)
 >
 > Scope guard:
 >
 > - supported in this phase: `MySQL -> GaussDBMySQL`
-> - not in this phase: CDC, `GaussDBMySQL -> MySQL`
+> - not in this phase: `GaussDBMySQL -> MySQL`
+> - CDC boundary: DML only (no DDL CDC)
 >
 > Recommended local test contract:
 >
@@ -100,6 +102,9 @@ Notes:
   - `cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::snapshot_tests::test::snapshot_basic_test --nocapture`
   - `cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::struct_tests::test::struct_basic_test --nocapture`
   - `cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::check_tests::test::check_basic_test --nocapture`
+  - `cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::cdc_tests::test::cdc_basic_test --nocapture`
+  - `cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::cdc_tests::test::cdc_type_matrix_test --nocapture`
+  - `cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::cdc_tests::test::cdc_resume_test --nocapture`
 
 # Snapshot
 
@@ -138,6 +143,40 @@ parallel_size=4
 [pipeline]
 buffer_size=16000
 checkpoint_interval_secs=10
+
+[runtime]
+log_level=info
+log4rs_file=./log4rs.yaml
+log_dir=./logs
+```
+
+# CDC
+
+```ini
+[extractor]
+db_type=mysql
+extract_type=cdc
+url=mysql://127.0.0.1:3311?ssl-mode=disabled
+username=root
+password=123456
+server_id=2100
+heartbeat_interval_secs=1
+heartbeat_tb=heartbeat_db.ape_dts_heartbeat
+
+[filter]
+do_tbs=test_db.*
+do_events=insert,update,delete
+
+[sinker]
+db_type=gaussdb_mysql
+sink_type=write
+url=postgres://gaussdb-user:gaussdb-pass@gaussdb-host:8000/mysql_mode_db?sslmode=require
+batch_size=2
+disable_foreign_key_checks=true
+
+[pipeline]
+buffer_size=4
+checkpoint_interval_secs=1
 
 [runtime]
 log_level=info

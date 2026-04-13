@@ -58,6 +58,7 @@ MVP（`DbType::GaussDBPg`）已在真实环境闭环验证：
   - child 2：`cdc type-matrix`
   - child 3：`cdc resilience + negatives`
   - child 4：`docs/runbook/tracker` 收口
+  - 当前进度（2026-04-13）：child 1/2/3 已完成，待收口 docs/tracker
 - 推荐通过 `dt-tests/tests/.env.local` 提供：
   - `gaussdb_mysql_sinker_without_auth_url`
   - `gaussdb_mysql_sinker_username`

@@ -31,3 +31,7 @@
 - Completed:
   - child 3 `MySQL→GaussDBMySQL cdc resilience + negatives` DONE
   - evidence: `tasks/20260410-03-cdc-resilience-negatives/raw/cdc_resume_test.pass.20260413.log`
+
+- Completed:
+  - child 4 `docs/runbook/tracker 收口` DONE
+  - evidence: `tasks/20260410-04-docs-closeout/PROGRESS.md`
