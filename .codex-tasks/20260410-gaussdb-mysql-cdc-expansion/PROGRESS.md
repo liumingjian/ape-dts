@@ -21,3 +21,9 @@
 - Completed:
   - child 1 `MySQL→GaussDBMySQL cdc basic` DONE
   - evidence: `tasks/20260410-01-cdc-basic/raw/cdc_basic_test.run2.log`
+
+## 2026-04-13
+
+- Completed:
+  - child 2 `MySQL→GaussDBMySQL cdc type-matrix` DONE
+  - evidence: `tasks/20260410-02-cdc-type-matrix/raw/cdc_type_matrix_test.pass.20260413.log`

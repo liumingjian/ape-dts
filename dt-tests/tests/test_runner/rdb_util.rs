@@ -51,11 +51,16 @@ impl RdbUtil {
     ) -> anyhow::Result<PgMetaManagerHandle> {
         let key = conn_pool as *const Pool<Postgres> as usize;
         let cache = PG_META_MANAGERS.get_or_init(|| Mutex::new(HashMap::new()));
-        {
-            let map = cache.lock().await;
-            if let Some(handle) = map.get(&key) {
-                return Ok(handle.clone());
+        // Cache is keyed by the address of `Pool<Postgres>` *value*. In dt-tests we frequently
+        // create/close pools across retries, and the address can be reused by the allocator.
+        // If we blindly reuse the old handle, we'll end up querying on a closed pool.
+        let cached = { cache.lock().await.get(&key).cloned() };
+        if let Some(handle) = cached {
+            if !handle.lock().await.conn_pool.is_closed() {
+                return Ok(handle);
             }
+            // Drop the stale entry so we can rebuild from the current pool.
+            cache.lock().await.remove(&key);
         }
 
         let manager = PgMetaManager::new(conn_pool.clone()).await?;
@@ -219,6 +224,14 @@ impl RdbUtil {
         );
 
         let client = Self::connect_pg_simple_client(url, connection_auth).await?;
+        // GaussDB MySQL-compatible mode TIMESTAMP behaves like a timezone-aware type (similar to
+        // timestamptz): its text output depends on the session TimeZone. For dt-tests we fetch
+        // MySQL TIMESTAMP in UTC (sqlx initializes `session.time_zone='+00:00'`), so we align the
+        // GaussDB session timezone to UTC to make comparisons deterministic.
+        client
+            .simple_query("SET TIME ZONE 'UTC'")
+            .await
+            .context("gaussdb mysql: failed to set session timezone to UTC")?;
         let messages = client.simple_query(&sql).await.with_context(|| {
             format!(
                 "gaussdb mysql simple_query failed for tb: {:?}, sql: {}",

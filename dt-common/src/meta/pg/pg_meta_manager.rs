@@ -239,29 +239,36 @@ impl PgMetaManager {
         schema: &str,
         tb: &str,
     ) -> anyhow::Result<HashMap<String, Vec<String>>> {
-        let sql = format!(
-            "SELECT kcu.column_name as col_name, 
+        let mut key_map: HashMap<String, Vec<String>> = HashMap::new();
+
+        // Primary attempt: use information_schema (works for vanilla Postgres).
+        //
+        // NOTE: In GaussDB MySQL-compat databases (pg-wire), information_schema.table_constraints
+        // may not expose PK/UK constraints, even though pg_constraint does. We fallback below.
+        let info_schema_sql = format!(
+            "SELECT kcu.column_name as col_name,
                 kcu.constraint_name as constraint_name,
                 tc.constraint_type as constraint_type
-            FROM 
+            FROM
                 information_schema.table_constraints AS tc
-            JOIN 
+            JOIN
                 information_schema.key_column_usage AS kcu
-            ON 
+            ON
                 tc.constraint_name = kcu.constraint_name
                 AND tc.table_schema = kcu.table_schema
                 AND tc.table_name = kcu.table_name
-            WHERE 
-                tc.table_schema = '{}' 
+            WHERE
+                tc.table_schema = '{}'
                 AND tc.table_name = '{}'
                 AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')
-            ORDER BY 
+            ORDER BY
                 kcu.ordinal_position;",
             schema, tb
         );
 
-        let mut key_map: HashMap<String, Vec<String>> = HashMap::new();
-        let mut rows = sqlx::query(&sql).disable_arguments().fetch(conn_pool);
+        let mut rows = sqlx::query(&info_schema_sql)
+            .disable_arguments()
+            .fetch(conn_pool);
         while let Some(row) = rows.try_next().await? {
             let col_name: String = row.try_get("col_name")?;
             let constraint_type: String = row.try_get("constraint_type")?;
@@ -270,27 +277,99 @@ impl PgMetaManager {
                 key_name = RDB_PRIMARY_KEY_FLAG.to_string();
             }
 
-            // key_map
             if let Some(key_cols) = key_map.get_mut(&key_name) {
                 key_cols.push(col_name);
             } else {
                 key_map.insert(key_name, vec![col_name]);
             }
         }
+
+        if !key_map.is_empty() {
+            return Ok(key_map);
+        }
+
+        // Fallback: use pg_catalog (works in GaussDB MySQL-compat databases where information_schema
+        // omits constraints). Keep ordering best-effort by attnum (composite key order may differ).
+        let pg_catalog_sql = format!(
+            "SELECT c.conname as constraint_name,
+                    -- NOTE: In GaussDB MySQL-compat databases, `CAST(... AS TEXT/VARCHAR/CHAR)` may
+                    -- fail due to MySQL-style CAST rules. Postgres-style `::text` works reliably.
+                    c.contype::text as constraint_type,
+                    a.attname as col_name
+             FROM pg_constraint c
+             JOIN pg_class t ON t.oid = c.conrelid
+             JOIN pg_namespace n ON n.oid = t.relnamespace
+             JOIN pg_attribute a ON a.attrelid = t.oid
+             WHERE n.nspname = '{}'
+               AND t.relname = '{}'
+               AND c.contype IN ('p','u')
+               AND a.attnum = ANY(c.conkey)
+             ORDER BY c.conname, a.attnum;",
+            schema, tb
+        );
+
+        let mut rows = sqlx::query(&pg_catalog_sql)
+            .disable_arguments()
+            .fetch(conn_pool);
+        while let Some(row) = rows.try_next().await? {
+            let col_name: String = row.try_get("col_name")?;
+            let constraint_type: String = row.try_get("constraint_type")?;
+            let mut key_name: String = row.try_get("constraint_name")?;
+            if constraint_type == "p" {
+                key_name = RDB_PRIMARY_KEY_FLAG.to_string();
+            }
+
+            if let Some(key_cols) = key_map.get_mut(&key_name) {
+                key_cols.push(col_name);
+            } else {
+                key_map.insert(key_name, vec![col_name]);
+            }
+        }
+
         Ok(key_map)
     }
 
     async fn get_oid(conn_pool: &Pool<Postgres>, schema: &str, tb: &str) -> anyhow::Result<i32> {
-        let sql = format!(r#"SELECT '"{}"."{}"'::regclass::oid;"#, schema, tb);
-        let mut rows = sqlx::query(&sql).disable_arguments().fetch(conn_pool);
+        // Primary: regclass cast (works on vanilla Postgres/GaussDBPg).
+        //
+        // NOTE: In GaussDB MySQL-compat databases, `regclass` may be unsupported, so we fallback
+        // to a pg_catalog join query below.
+        let regclass_sql = format!(r#"SELECT '"{}"."{}"'::regclass::oid as oid;"#, schema, tb);
+        let mut rows = sqlx::query(&regclass_sql)
+            .disable_arguments()
+            .fetch(conn_pool);
+        match rows.try_next().await {
+            Ok(Some(row)) => {
+                let oid: i32 = row.try_get_unchecked("oid")?;
+                return Ok(oid);
+            }
+            Ok(None) => {
+                // continue to fallback
+            }
+            Err(_) => {
+                // continue to fallback
+            }
+        }
+
+        // Fallback: pg_catalog join (works in GaussDB MySQL-compat databases too).
+        let fallback_sql = format!(
+            "SELECT t.oid as oid
+             FROM pg_class t
+             JOIN pg_namespace n ON n.oid = t.relnamespace
+             WHERE n.nspname = '{}' AND t.relname = '{}';",
+            schema, tb
+        );
+        let mut rows = sqlx::query(&fallback_sql)
+            .disable_arguments()
+            .fetch(conn_pool);
         if let Some(row) = rows.try_next().await? {
             let oid: i32 = row.try_get_unchecked("oid")?;
             return Ok(oid);
         }
 
         bail! {Error::MetadataError(format!(
-            "failed to get oid for: {} by query: {}",
-            tb, sql
+            "failed to get oid for: {} by query: {}; fallback query: {}",
+            tb, regclass_sql, fallback_sql
         ))}
     }
 
