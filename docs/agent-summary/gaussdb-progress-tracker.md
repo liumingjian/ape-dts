@@ -32,7 +32,7 @@
 |---|---|---|---|---|---|---|---|
 | **PG → GaussDBPg** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **GaussDBPg → PG** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **GaussDBPg → MySQL（bootstrap）** | ✅ | ✅ | - | ✅ | - | ✅ | - |
+| **GaussDBPg → MySQL（bootstrap）** | ✅ | ✅ | - | ✅ | ✅ | ✅ | - |
 | **MySQL → GaussDBMySQL（首波）** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 说明：
@@ -41,6 +41,7 @@
 - `MySQL → GaussDBMySQL（首波）` 已覆盖 `snapshot/struct/check/cdc(DML)`，并已归档真实环境证据。
 - `MySQL → GaussDBMySQL（首波）` 的 `precheck` 已完成独立自动化入口、真实环境证据与无污染校验。
 - `GaussDBPg → MySQL（bootstrap）` 已新增 `dt-tests` 入口并完成真实验证：snapshot/check/cdc basic（证据见 `.codex-tasks/20260413-gaussdb-to-mysql-bootstrap/PROGRESS.md`）。
+- `GaussDBPg → MySQL（bootstrap）` 的 `precheck` 已新增 `dt-tests` 入口（证据见 `.codex-tasks/20260415-gaussdb-to-mysql-precheck/PROGRESS.md`）。
 - SHA256 认证：当前以 `BLOCKED` 方式纳入执行真表（等待联调环境可用）。
 - 当前 active 方向已演进为：`GaussDBMySQL CDC Expansion`、`GaussDBPg Quality Coverage`、`GaussDB -> MySQL Bootstrap`。
 
