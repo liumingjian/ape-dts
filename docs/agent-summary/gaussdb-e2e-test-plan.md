@@ -51,6 +51,7 @@
 - `GaussDBPg -> PG` struct view/routine
 - `GaussDBPg -> PG` CDC type matrix
 - `GaussDBPg -> PG` CDC resume
+- `GaussDBPg -> MySQL` struct advanced（default/index）
 
 ### 2.3 Resilience Gate
 
@@ -114,6 +115,7 @@
 | Full | `GaussDBPg -> PG` CDC resume | `cargo test -p dt-tests --test integration_test -- gaussdb_to_pg::cdc_tests::test::cdc_resume_test --nocapture` | GaussDBPg + PG | checkpoint 恢复 |
 | Full | `MySQL -> GaussDBMySQL` CDC type matrix | `cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::cdc_tests::test::cdc_type_matrix_test --nocapture` | MySQL8 + GaussDBMySQL | CDC 类型矩阵 |
 | Full | `MySQL -> GaussDBMySQL` CDC resume | `cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::cdc_tests::test::cdc_resume_test --nocapture` | MySQL8 + GaussDBMySQL | checkpoint 恢复 |
+| Full | `GaussDBPg -> MySQL` struct advanced | `cargo test -p dt-tests --test integration_test -- gaussdb_to_mysql::struct_tests::test::struct_advanced_test --nocapture` | GaussDBPg + MySQL8 | default/index 映射覆盖 |
 | Resilience | `GaussDBPg -> PG` CDC failover | `ENABLE_GAUSSDB_FAILOVER_TEST=1 cargo test -p dt-tests --test integration_test -- gaussdb_to_pg::cdc_tests::test::cdc_failover_test --nocapture` | GaussDB 集群 + SSH + PG | 切主自愈 |
 | Resilience | `MySQL -> GaussDBMySQL` CDC failover（target self-heal） | `ENABLE_GAUSSDB_FAILOVER_TEST=1 cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::cdc_tests::test::cdc_failover_test --nocapture` | MySQL8 + GaussDB 集群 + SSH | 目标端切主自愈 |
 | Resilience | script basic | `bash scripts/e2e/gaussdb_to_pg_cdc.sh` | `.local/e2e/.env` | 基础 e2e |
