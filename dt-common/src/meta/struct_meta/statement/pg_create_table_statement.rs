@@ -69,11 +69,11 @@ impl PgCreateTableStatement {
         if !filter.filter_structure(&StructureType::Table) {
             for i in self.sequences.iter() {
                 let key = format!("sequence.{}.{}", i.schema_name, i.sequence_name);
-                sqls.push((key, Self::sequence_to_sql(i)));
+                sqls.push((key, Self::sequence_to_sql(i, &filter.db_type)));
             }
 
             let key = format!("table.{}.{}", self.table.schema_name, self.table.table_name);
-            sqls.push((key, Self::table_to_sql(&mut self.table)));
+            sqls.push((key, Self::table_to_sql(&mut self.table, &filter.db_type)));
 
             for i in self.sequence_owners.iter() {
                 let key = format!(
@@ -133,14 +133,20 @@ impl PgCreateTableStatement {
             }
 
             let key = format!("index.{}.{}.{}", i.schema_name, i.table_name, i.index_name);
-            sqls.push((key, Self::index_to_sql(i)?));
+            sqls.push((key, Self::index_to_sql(i, &filter.db_type)?));
         }
 
         Ok(sqls)
     }
 
-    fn table_to_sql(table: &mut Table) -> String {
+    fn table_to_sql(table: &mut Table, db_type: &DbType) -> String {
         let columns_sql = Self::columns_to_sql(&mut table.columns);
+        if matches!(db_type, DbType::GaussDBOracle) {
+            return format!(
+                r#"CREATE TABLE "{}"."{}" ({})"#,
+                table.schema_name, table.table_name, columns_sql
+            );
+        }
         format!(
             r#"CREATE TABLE IF NOT EXISTS "{}"."{}" ({})"#,
             table.schema_name, table.table_name, columns_sql
@@ -179,15 +185,25 @@ impl PgCreateTableStatement {
         sql
     }
 
-    fn index_to_sql(index: &Index) -> anyhow::Result<String> {
+    fn index_to_sql(index: &Index, db_type: &DbType) -> anyhow::Result<String> {
         let parser = DdlParser::new(DbType::Pg);
         if let Ok(Some(mut ddl_data)) = parser.parse(&index.definition) {
             if let DdlStatement::PgCreateIndex(s) = &mut ddl_data.statement {
                 s.schema = index.schema_name.clone();
                 s.tb = index.table_name.clone();
-                s.if_not_exists = true;
+                s.if_not_exists = !matches!(db_type, DbType::GaussDBOracle);
             }
-            Ok(ddl_data.to_sql())
+            let sql = ddl_data.to_sql();
+            if matches!(db_type, DbType::GaussDBOracle) {
+                // GaussDB Oracle compatibility mode may not support `IF NOT EXISTS` for indexes,
+                // but it does support `DO $$ ... $$` blocks. Use a best-effort idempotent wrapper
+                // to avoid failing on implicit indexes created by constraints (e.g. primary keys).
+                return Ok(format!(
+                    "DO $$ BEGIN {}; EXCEPTION WHEN duplicate_table THEN NULL; END $$;",
+                    sql
+                ));
+            }
+            Ok(sql)
         } else {
             bail! {Error::Unexpected( format!(
                 "failed to parse index, schema: {}, tb: {}, definition: {}",
@@ -210,12 +226,26 @@ impl PgCreateTableStatement {
         }
     }
 
-    fn sequence_to_sql(sequence: &Sequence) -> String {
+    fn sequence_to_sql(sequence: &Sequence, db_type: &DbType) -> String {
         let cycle_str = if sequence.cycle_option.to_lowercase() == "yes" {
             "CYCLE"
         } else {
             "NO CYCLE"
         };
+
+        if matches!(db_type, DbType::GaussDBOracle) {
+            return format!(
+                r#"CREATE SEQUENCE "{}"."{}" AS {} START {} INCREMENT by {} MINVALUE {} MAXVALUE {} {}"#,
+                sequence.schema_name,
+                sequence.sequence_name,
+                sequence.data_type,
+                sequence.start_value,
+                sequence.increment,
+                sequence.minimum_value,
+                sequence.maximum_value,
+                cycle_str
+            );
+        }
 
         format!(
             r#"CREATE SEQUENCE IF NOT EXISTS "{}"."{}" AS {} START {} INCREMENT by {} MINVALUE {} MAXVALUE {} {}"#,

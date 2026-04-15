@@ -474,7 +474,8 @@ impl RdbStructTestRunner {
     }
 
     fn requires_pg_struct_normalization(src_db_type: &DbType, dst_db_type: &DbType) -> bool {
-        matches!(src_db_type, DbType::GaussDBPg) || matches!(dst_db_type, DbType::GaussDBPg)
+        matches!(src_db_type, DbType::GaussDBPg | DbType::GaussDBOracle)
+            || matches!(dst_db_type, DbType::GaussDBPg | DbType::GaussDBOracle)
     }
 
     fn assert_cross_engine_pg_table_eq(

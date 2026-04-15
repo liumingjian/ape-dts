@@ -360,7 +360,7 @@ impl RdbTestRunner {
         };
 
         let is_pg_wire_gaussdb = |db_type: &DbType, url: &str| {
-            matches!(db_type, DbType::GaussDBPg)
+            matches!(db_type, DbType::GaussDBPg | DbType::GaussDBOracle)
                 || (matches!(db_type, DbType::GaussDBMySQL)
                     && matches!(WireProtocol::from_url(url), Some(WireProtocol::PostgreSQL)))
         };
@@ -1159,7 +1159,7 @@ Please run the test from a normal terminal environment with network access."
         // - GaussDBPg -> PG CDC: extractor is GaussDBPg (source-side failover)
         // - MySQL -> GaussDBMySQL CDC: sinker is GaussDBMySQL via PG wire (target-side failover)
         let is_pg_wire_gaussdb = |db_type: &DbType, url: &str| {
-            matches!(db_type, DbType::GaussDBPg)
+            matches!(db_type, DbType::GaussDBPg | DbType::GaussDBOracle)
                 || (matches!(db_type, DbType::GaussDBMySQL)
                     && matches!(WireProtocol::from_url(url), Some(WireProtocol::PostgreSQL)))
         };
@@ -3000,7 +3000,10 @@ Please run the test from a normal terminal environment with network access."
             // read-only. When candidate hosts are configured, always resolve a fresh RW endpoint
             // for write SQLs to reduce flakiness.
             let extractor_is_pg_wire_gaussdb =
-                matches!(self.config.extractor_basic.db_type, DbType::GaussDBPg)
+                matches!(
+                    self.config.extractor_basic.db_type,
+                    DbType::GaussDBPg | DbType::GaussDBOracle
+                )
                     || (matches!(self.config.extractor_basic.db_type, DbType::GaussDBMySQL)
                         && matches!(
                             WireProtocol::from_url(&self.config.extractor_basic.url),
@@ -3036,7 +3039,10 @@ Please run the test from a normal terminal environment with network access."
             // read-only. When candidate hosts are configured, always resolve a fresh RW endpoint
             // for write SQLs to reduce flakiness (mirror execute_src_sqls behavior).
             let sinker_is_pg_wire_gaussdb =
-                matches!(self.config.sinker_basic.db_type, DbType::GaussDBPg)
+                matches!(
+                    self.config.sinker_basic.db_type,
+                    DbType::GaussDBPg | DbType::GaussDBOracle
+                )
                     || (matches!(self.config.sinker_basic.db_type, DbType::GaussDBMySQL)
                         && matches!(
                             WireProtocol::from_url(&self.config.sinker_basic.url),

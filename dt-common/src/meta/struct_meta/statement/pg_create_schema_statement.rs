@@ -21,7 +21,7 @@ impl PgCreateSchemaStatement {
 
         let key = format!("schema.{}", self.schema.name);
         let sql = match filter.db_type {
-            DbType::GaussDBPg => format!(
+            DbType::GaussDBPg | DbType::GaussDBOracle => format!(
                 r#"DO $$ BEGIN CREATE SCHEMA "{}"; EXCEPTION WHEN duplicate_schema THEN NULL; END $$;"#,
                 self.schema.name
             ),

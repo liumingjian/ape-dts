@@ -1,6 +1,6 @@
 # GaussDB 全局进度跟踪清单（PRD 真相源）
 
-> 最后更新：**2026-04-15（GaussDBOracle 本机 docker smoke PASS；GaussDBPg→MySQL bootstrap：struct advanced PASS + 一键 e2e 脚本落盘；MySQL→GaussDBMySQL 目标端 failover self-heal PASS）**
+> 最后更新：**2026-04-15（GaussDBOracle 远端 oracle-mode testdb：snapshot/struct/check PASS；Oracle XE 本机 docker ready；GaussDBPg→MySQL bootstrap：struct advanced PASS + 一键 e2e 脚本落盘；MySQL→GaussDBMySQL 目标端 failover self-heal PASS）**
 >
 > 目标：每完成一次 spec 任务后，都能立刻知道“当前已交付什么、证据在哪、下一步做什么”。
 
@@ -34,7 +34,7 @@
 | **GaussDBPg → PG** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **GaussDBPg → MySQL（bootstrap）** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **MySQL → GaussDBMySQL（首波）** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **PG → GaussDBOracle（local smoke）** | ✅ | - | - | - | - | ✅ | - |
+| **PG → GaussDBOracle（non-CDC basic）** | ✅ | - | ✅ | ✅ | - | ✅ | - |
 
 说明：
 
@@ -46,7 +46,8 @@
 - `GaussDBPg → MySQL（bootstrap）` 的 `struct` 已新增 `dt-tests` 入口 `gaussdb_to_mysql::struct_tests::test::struct_basic_test` 并完成真实验证（证据见 `.codex-tasks/20260415-gaussdb-to-mysql-struct-basic/PROGRESS.md`）。
 - `GaussDBPg → MySQL（bootstrap）` 的 `struct advanced` 已覆盖 `default/index(ubtree)` 并完成真实验证（证据见 `.codex-tasks/20260415-gaussdb-to-mysql-struct-advance/PROGRESS.md`）。
 - `GaussDBPg → MySQL（bootstrap）` 已补齐一键回归脚本：`bash scripts/e2e/gaussdb_to_mysql_bootstrap.sh`（quick/full，详见 `docs/agent-summary/gaussdb-e2e-test-plan.md`）。
-- `GaussDBOracle` 已解锁本机 docker 环境（openGauss `sql_compatibility=A`）与最小 smoke：`pg_to_gaussdb_oracle::snapshot_tests::test::smoke_test`（证据见 `.codex-tasks/20260415-gaussdb-oracle-bootstrap/PROGRESS.md`）。
+- `GaussDBOracle` 已支持远端 oracle-mode `testdb` 的 non-CDC basic：`snapshot/struct/check`（证据见 `.codex-tasks/20260415-gaussdb-oracle-next/PROGRESS.md`）。
+- `GaussDBOracle` 同时保留本机 docker 环境（openGauss `sql_compatibility=A`）作为快速回归替身（证据见 `.codex-tasks/20260415-gaussdb-oracle-bootstrap/PROGRESS.md`）。
 - SHA256 认证：当前以 `BLOCKED` 方式纳入执行真表（等待联调环境可用）。
 - 当前 active 方向已演进为：`GaussDBOracle Bootstrap`、`GaussDBMySQL CDC Expansion`、`GaussDBPg Quality Coverage`、`GaussDB -> MySQL Bootstrap`。
 

@@ -80,7 +80,7 @@ impl PgStructCheckFetcher {
     }
 
     async fn get_table_columns(&self, oid: &str) -> anyhow::Result<Vec<HashMap<String, String>>> {
-        let sql = if matches!(self.db_type, DbType::GaussDBPg) {
+        let sql = if matches!(self.db_type, DbType::GaussDBPg | DbType::GaussDBOracle) {
             // GaussDB PG mode does not expose `pg_attribute.attgenerated`.
             format!(
                 r#"SELECT a.attname,
@@ -214,7 +214,7 @@ impl PgStructCheckFetcher {
         db_type: &DbType,
         oid: &str,
     ) -> (String, Vec<&'static str>, HashMap<&'static str, PgColType>) {
-        if matches!(db_type, DbType::GaussDBPg) {
+        if matches!(db_type, DbType::GaussDBPg | DbType::GaussDBOracle) {
             let sql = format!(
                 r#"SELECT c.relchecks, c.relkind, c.relhasindex, c.relhasrules,
                 c.relhastriggers, false AS relhasoids, c.relpersistence
@@ -284,7 +284,7 @@ impl PgStructCheckFetcher {
         db_type: &DbType,
         oid: &str,
     ) -> (String, Vec<&'static str>, HashMap<&'static str, PgColType>) {
-        if matches!(db_type, DbType::GaussDBPg) {
+        if matches!(db_type, DbType::GaussDBPg | DbType::GaussDBOracle) {
             let sql = format!(
                 r#"SELECT c2.relname, i.indisprimary, i.indisunique, i.indisclustered, i.indisvalid,
                     pg_catalog.pg_get_indexdef(i.indexrelid, 0, true),
@@ -354,7 +354,7 @@ impl PgStructCheckFetcher {
     }
 
     fn build_table_foreign_key_constraints_query(db_type: &DbType, oid: &str) -> String {
-        if matches!(db_type, DbType::GaussDBPg) {
+        if matches!(db_type, DbType::GaussDBPg | DbType::GaussDBOracle) {
             return format!(
                 r#"SELECT conname, conrelid::pg_catalog.regclass::text AS ontable,
                 pg_catalog.pg_get_constraintdef(oid, true) AS condef

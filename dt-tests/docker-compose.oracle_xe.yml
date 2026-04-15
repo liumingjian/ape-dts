@@ -1,0 +1,25 @@
+services:
+  oracle-xe:
+    image: wnameless/oracle-xe-11g-r2:latest
+    container_name: oracle-xe-local
+    environment:
+      ORACLE_ALLOW_REMOTE: "true"
+    ports:
+      - "15211:1521"
+      - "18080:8080"
+    volumes:
+      - oracle-xe-data:/u01/app/oracle
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "export ORACLE_HOME=/u01/app/oracle/product/11.2.0/xe; export PATH=$$ORACLE_HOME/bin:$$PATH; export LD_LIBRARY_PATH=$$ORACLE_HOME/lib; echo 'select 1 from dual;' | sqlplus -s system/oracle@//127.0.0.1:1521/XE >/dev/null 2>&1",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 60
+      start_period: 60s
+
+volumes:
+  oracle-xe-data:
+    name: oracle-xe-data
