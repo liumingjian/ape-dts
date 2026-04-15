@@ -332,6 +332,7 @@ impl TaskUtil {
             DbType::Pg | DbType::GaussDBPg | DbType::GaussDBOracle => {
                 Self::list_pg_schemas(conn_pool, db_type).await?
             }
+            DbType::Oracle => Self::list_oracle_schemas(conn_pool).await?,
             DbType::Mongo => Self::list_mongo_dbs(conn_pool).await?,
             _ => Vec::new(),
         };
@@ -351,6 +352,7 @@ impl TaskUtil {
             DbType::Pg | DbType::GaussDBPg | DbType::GaussDBOracle => {
                 Self::list_pg_tbs(conn_client, schema).await?
             }
+            DbType::Oracle => Self::list_oracle_tbs(conn_client, schema).await?,
             DbType::Mongo => Self::list_mongo_tbs(conn_client, schema).await?,
             _ => Vec::new(),
         };
@@ -580,6 +582,43 @@ WHERE
         Ok(tbs)
     }
 
+    async fn list_oracle_schemas(conn_client: &ConnClient) -> anyhow::Result<Vec<String>> {
+        let client = match conn_client {
+            ConnClient::Oracle(client) => client,
+            _ => {
+                bail!("conn_client is not found")
+            }
+        };
+
+        // Return the current user as the only schema for bootstrap usage.
+        let mut out = Vec::new();
+        for line in client.query_lines("SELECT user FROM dual").await? {
+            let schema = line.trim();
+            if schema.is_empty() {
+                continue;
+            }
+            out.push(schema.to_string());
+            break;
+        }
+        Ok(out)
+    }
+
+    async fn list_oracle_tbs(conn_client: &ConnClient, schema: &str) -> anyhow::Result<Vec<String>> {
+        let client = match conn_client {
+            ConnClient::Oracle(client) => client,
+            _ => {
+                bail!("conn_client is not found")
+            }
+        };
+
+        let owner = schema.to_uppercase().replace('\'', "''");
+        let sql = format!(
+            "SELECT table_name FROM all_tables WHERE owner='{}' ORDER BY table_name ASC",
+            owner
+        );
+        Ok(client.query_lines(&sql).await?)
+    }
+
     async fn list_mysql_dbs(
         conn_client: &ConnClient,
         db_type: &DbType,
@@ -719,6 +758,7 @@ pub enum ConnClient {
     None,
     MySQL(Pool<MySql>),
     PostgreSQL(Pool<Postgres>),
+    Oracle(dt_connector::oracle::OracleSqlPlusClient),
     MongoDB(mongodb::Client),
     S3(Operator),
 }
@@ -829,6 +869,14 @@ impl ConnClient {
                 )
                 .await?,
             ),
+            ExtractorConfig::OracleSnapshot {
+                url,
+                connection_auth,
+                ..
+            } => ConnClient::Oracle(dt_connector::oracle::OracleSqlPlusClient::new(
+                url.clone(),
+                connection_auth.clone(),
+            )),
             _ => ConnClient::None,
         };
         let sinker_client = match &task_config.sinker {
@@ -959,6 +1007,14 @@ impl ConnClient {
                 )
                 .await?,
             ),
+            SinkerConfig::Oracle {
+                url,
+                connection_auth,
+                ..
+            } => ConnClient::Oracle(dt_connector::oracle::OracleSqlPlusClient::new(
+                url.clone(),
+                connection_auth.clone(),
+            )),
             _ => ConnClient::None,
         };
         Ok((extractor_client, sinker_client))

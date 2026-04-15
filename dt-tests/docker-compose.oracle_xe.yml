@@ -20,6 +20,20 @@ services:
       retries: 60
       start_period: 60s
 
+  oracle-xe-init:
+    image: wnameless/oracle-xe-11g-r2:latest
+    container_name: oracle-xe-init
+    depends_on:
+      oracle-xe:
+        condition: service_healthy
+    restart: "no"
+    entrypoint:
+      [
+        "bash",
+        "-lc",
+        "export ORACLE_HOME=/u01/app/oracle/product/11.2.0/xe; export PATH=$$ORACLE_HOME/bin:$$PATH; export LD_LIBRARY_PATH=$$ORACLE_HOME/lib; cat <<'SQL' | sqlplus -s system/oracle@//oracle-xe:1521/XE >/dev/null\nWHENEVER SQLERROR EXIT SQL.SQLCODE;\nDECLARE\n  v_cnt INTEGER;\nBEGIN\n  SELECT COUNT(*) INTO v_cnt FROM dba_users WHERE username = 'APE_DTS';\n  IF v_cnt = 0 THEN\n    EXECUTE IMMEDIATE 'CREATE USER APE_DTS IDENTIFIED BY ape_dts';\n    EXECUTE IMMEDIATE 'GRANT CREATE SESSION, CREATE TABLE, CREATE SEQUENCE, CREATE VIEW, CREATE PROCEDURE TO APE_DTS';\n    EXECUTE IMMEDIATE 'ALTER USER APE_DTS QUOTA UNLIMITED ON SYSTEM';\n  END IF;\nEND;\n/\nEXIT;\nSQL\n",
+      ]
+
 volumes:
   oracle-xe-data:
     name: oracle-xe-data

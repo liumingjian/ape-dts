@@ -7,6 +7,7 @@ pub mod gaussdb;
 pub mod kafka;
 pub mod mongo;
 pub mod mysql;
+pub mod oracle;
 pub mod pg;
 pub mod rdb_snapshot_extract_statement;
 pub mod redis;

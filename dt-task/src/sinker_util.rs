@@ -48,6 +48,7 @@ use dt_connector::{
             mysql_checker::MysqlChecker, mysql_sinker::MysqlSinker,
             mysql_struct_sinker::MysqlStructSinker,
         },
+        oracle::oracle_sinker::OracleSinker,
         pg::{pg_checker::PgChecker, pg_sinker::PgSinker, pg_struct_sinker::PgStructSinker},
         redis::{redis_sinker::RedisSinker, redis_statistic_sinker::RedisStatisticSinker},
         sql_sinker::SqlSinker,
@@ -286,6 +287,25 @@ impl SinkerUtil {
                         monitor: monitor.clone(),
                         data_marker: data_marker.clone(),
                         replace,
+                        monitor_interval,
+                    };
+                    sub_sinkers.push(Arc::new(async_mutex::Mutex::new(Box::new(sinker))));
+                }
+            }
+
+            SinkerConfig::Oracle { batch_size, .. } => {
+                let client = match client {
+                    ConnClient::Oracle(client) => client,
+                    _ => {
+                        bail!("oracle client not found");
+                    }
+                };
+
+                for _ in 0..parallel_size {
+                    let sinker = OracleSinker {
+                        client: client.clone(),
+                        batch_size,
+                        monitor: monitor.clone(),
                         monitor_interval,
                     };
                     sub_sinkers.push(Arc::new(async_mutex::Mutex::new(Box::new(sinker))));

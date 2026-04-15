@@ -84,7 +84,9 @@ impl SqlUtil {
             | DbType::StarRocks => {
                 vec![(MYSQL_ESCAPE, MYSQL_ESCAPE)]
             }
-            DbType::Pg | DbType::GaussDBPg | DbType::GaussDBOracle => vec![(PG_ESCAPE, PG_ESCAPE)],
+            DbType::Pg | DbType::Oracle | DbType::GaussDBPg | DbType::GaussDBOracle => {
+                vec![(PG_ESCAPE, PG_ESCAPE)]
+            }
             DbType::Redis => vec![(REDIS_ESCAPE, REDIS_ESCAPE)],
             _ => vec![],
         }
@@ -105,6 +107,7 @@ impl SqlUtil {
             DbType::Mysql
             | DbType::GaussDBMySQL
             | DbType::Pg
+            | DbType::Oracle
             | DbType::GaussDBPg
             | DbType::GaussDBOracle => 64,
             // TODO
@@ -116,6 +119,7 @@ impl SqlUtil {
                 DbType::Mysql
                 | DbType::GaussDBMySQL
                 | DbType::Pg
+                | DbType::Oracle
                 | DbType::GaussDBPg
                 | DbType::GaussDBOracle => {
                     let pattern = format!(r"^[a-zA-Z0-9_\?\*\-]{{1,{}}}$", max_token_len);

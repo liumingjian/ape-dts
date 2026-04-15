@@ -42,6 +42,7 @@ use dt_connector::{
             mysql_snapshot_extractor::MysqlSnapshotExtractor,
             mysql_struct_extractor::MysqlStructExtractor,
         },
+        oracle::oracle_snapshot_extractor::OracleSnapshotExtractor,
         pg::{
             pg_cdc_extractor::PgCdcExtractor, pg_check_extractor::PgCheckExtractor,
             pg_snapshot_extractor::PgSnapshotExtractor, pg_struct_extractor::PgStructExtractor,
@@ -257,6 +258,34 @@ impl ExtractorUtil {
                     filter,
                     recovery,
                     user_defined_partition_col,
+                };
+                Box::new(extractor)
+            }
+
+            ExtractorConfig::OracleSnapshot {
+                schema,
+                tb,
+                sample_interval,
+                parallel_size,
+                batch_size,
+                ..
+            } => {
+                let client = match extractor_client {
+                    ConnClient::Oracle(client) => client,
+                    _ => {
+                        bail!("oracle client not found");
+                    }
+                };
+                let extractor = OracleSnapshotExtractor {
+                    client,
+                    batch_size,
+                    parallel_size,
+                    sample_interval: sample_interval as u64,
+                    schema,
+                    tb,
+                    base_extractor,
+                    filter,
+                    recovery,
                 };
                 Box::new(extractor)
             }

@@ -19,6 +19,7 @@
   - 端口：`127.0.0.1:55432`
 - 本机 Oracle XE 11g（仅环境，供后续 Oracle connector 联调）
   - `docker compose -f dt-tests/docker-compose.oracle_xe.yml up -d`
+  - dt-tests 默认通过 `ORACLE_SQLPLUS_DOCKER_CONTAINER=oracle-xe-local` 以 `docker exec` 调用容器内 `sqlplus`
   - 端口：`15211`（listener），`18080`（HTTP）
 
 ## 2. 当前已交付（non-CDC basic）
@@ -32,13 +33,22 @@
   - `.codex-tasks/20260415-gaussdb-oracle-next/PROGRESS.md`
   - `.codex-tasks/20260415-gaussdb-oracle-bootstrap/PROGRESS.md`（本机 docker 替身）
 
+## 2.1 额外交付：Oracle ↔ GaussDBOracle（bootstrap snapshot）
+
+- 代码：新增 `DbType::Oracle` + `OracleSqlPlusClient` + `OracleSnapshotExtractor` + `OracleSinker`（bootstrap：仅 snapshot + INSERT）
+- 自动化（dt-tests）：
+  - snapshot: `oracle_to_gaussdb_oracle::snapshot_tests::test::smoke_test`
+  - snapshot: `gaussdb_oracle_to_oracle::snapshot_tests::test::smoke_test`
+- 证据：
+  - `.codex-tasks/20260415-oracle-gaussdboracle-bidir-epic/PROGRESS.md`
+
 ## 3. 下一步建议（按优先级）
 
 1. `PG -> GaussDBOracle` 补齐 `precheck basic`（struct_supported）
 2. 扩展 struct 覆盖（view/routine 等）与 Oracle-mode 差异用例
-3. 未来如需：单开 Epic 做 `Oracle -> GaussDBOracle`（依赖 Oracle connector；本轮已提供 Oracle XE 环境）
+3. `Oracle <-> GaussDBOracle` 扩展 snapshot 类型覆盖，并评估 CDC（LogMiner/OGG）与防环（DataMarker 拓扑）策略
 
 ## 4. 明确不做（当前阶段）
 
-- 不实现 Oracle wire-protocol/OCI 级别连接器（仅提供 Oracle XE 环境）
+- 不实现 Oracle wire-protocol/OCI/JDBC 级别连接器（bootstrap 走 `sqlplus` CLI）
 - 不承诺 `GaussDBOracle` 的 CDC/resume/failover（后续单开 Epic）

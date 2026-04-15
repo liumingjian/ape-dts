@@ -235,7 +235,8 @@ impl TaskRunner {
 
         let partition_cols = match &self.config.extractor {
             ExtractorConfig::MysqlSnapshot { partition_cols, .. }
-            | ExtractorConfig::PgSnapshot { partition_cols, .. } => Some(Arc::new(
+            | ExtractorConfig::PgSnapshot { partition_cols, .. }
+            | ExtractorConfig::OracleSnapshot { partition_cols, .. } => Some(Arc::new(
                 ExtractorUtil::parse_partition_cols(partition_cols)?,
             )),
             _ => None,
@@ -271,6 +272,7 @@ impl TaskRunner {
 
             ExtractorConfig::MysqlSnapshot { .. }
             | ExtractorConfig::PgSnapshot { .. }
+            | ExtractorConfig::OracleSnapshot { .. }
             | ExtractorConfig::MongoSnapshot { .. }
             | ExtractorConfig::FoxlakeS3 { .. } => self.start_multi_task(task_context).await?,
 
@@ -1168,6 +1170,24 @@ impl TaskRunner {
                             partition_cols: String::new(),
                         },
 
+                        ExtractorConfig::OracleSnapshot {
+                            url,
+                            connection_auth,
+                            sample_interval,
+                            parallel_size,
+                            batch_size,
+                            ..
+                        } => ExtractorConfig::OracleSnapshot {
+                            url: url.clone(),
+                            connection_auth: connection_auth.clone(),
+                            schema: schema.clone(),
+                            tb: tb.clone(),
+                            sample_interval: *sample_interval,
+                            parallel_size: *parallel_size,
+                            batch_size: *batch_size,
+                            partition_cols: String::new(),
+                        },
+
                         ExtractorConfig::MongoSnapshot {
                             url,
                             connection_auth,
@@ -1226,6 +1246,7 @@ impl TaskRunner {
         match &self.config.extractor {
             ExtractorConfig::MysqlSnapshot { .. }
             | ExtractorConfig::PgSnapshot { .. }
+            | ExtractorConfig::OracleSnapshot { .. }
             | ExtractorConfig::FoxlakeS3 { .. }
             | ExtractorConfig::MongoSnapshot { .. } => self.config.runtime.tb_parallel_size,
             _ => 1,

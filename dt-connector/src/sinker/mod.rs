@@ -7,6 +7,7 @@ pub mod foxlake;
 pub mod kafka;
 pub mod mongo;
 pub mod mysql;
+pub mod oracle;
 pub mod pg;
 pub mod redis;
 pub mod sql_sinker;

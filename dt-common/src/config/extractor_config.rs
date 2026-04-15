@@ -73,6 +73,17 @@ pub enum ExtractorConfig {
         partition_cols: String,
     },
 
+    OracleSnapshot {
+        url: String,
+        connection_auth: ConnectionAuthConfig,
+        schema: String,
+        tb: String,
+        sample_interval: usize,
+        parallel_size: usize,
+        batch_size: usize,
+        partition_cols: String,
+    },
+
     PgCdc {
         url: String,
         connection_auth: ConnectionAuthConfig,

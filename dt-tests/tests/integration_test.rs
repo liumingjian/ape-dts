@@ -1,5 +1,6 @@
 mod gaussdb_to_mysql;
 mod gaussdb_to_pg;
+mod gaussdb_oracle_to_oracle;
 mod log_reader;
 mod mongo_to_mongo;
 mod mysql_to_clickhouse;
@@ -13,6 +14,7 @@ mod mysql_to_mysql_lua;
 mod mysql_to_redis;
 mod mysql_to_starrocks;
 mod mysql_to_tidb;
+mod oracle_to_gaussdb_oracle;
 mod pg_to_clickhouse;
 mod pg_to_doris;
 mod pg_to_gaussdb;

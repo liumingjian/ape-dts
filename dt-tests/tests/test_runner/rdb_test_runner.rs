@@ -5,6 +5,7 @@ use std::{
     str::FromStr,
 };
 
+use anyhow::Context;
 use chrono::{Duration, Utc};
 use dt_common::{
     config::{
@@ -27,6 +28,7 @@ use dt_common::meta::{
 use dt_connector::{
     meta_fetcher::mysql::mysql_struct_check_fetcher::MysqlStructCheckFetcher, rdb_router::RdbRouter,
 };
+use dt_connector::oracle::OracleSqlPlusClient;
 use dt_task::{task_runner::TaskRunner, task_util::TaskUtil};
 
 use sqlx::{query, types::BigDecimal, MySql, Pool, Postgres, Row};
@@ -46,6 +48,8 @@ pub struct RdbTestRunner {
     pub dst_conn_pool_mysql: Option<Pool<MySql>>,
     pub src_conn_pool_pg: Option<Pool<Postgres>>,
     pub dst_conn_pool_pg: Option<Pool<Postgres>>,
+    pub src_oracle_client: Option<OracleSqlPlusClient>,
+    pub dst_oracle_client: Option<OracleSqlPlusClient>,
     pub meta_center_pool_mysql: Option<Pool<MySql>>,
     pub config: TaskConfig,
     pub router: RdbRouter,
@@ -76,6 +80,8 @@ impl RdbTestRunner {
         let mut dst_conn_pool_mysql = None;
         let mut src_conn_pool_pg = None;
         let mut dst_conn_pool_pg = None;
+        let mut src_oracle_client = None;
+        let mut dst_oracle_client = None;
 
         let mut config = TaskConfig::new(&base.task_config_file).unwrap();
         Self::maybe_rewrite_gaussdb_primary_urls(
@@ -162,6 +168,12 @@ impl RdbTestRunner {
                     })??,
                 );
             }
+            DbType::Oracle => {
+                src_oracle_client = Some(OracleSqlPlusClient::new(
+                    src_url.to_string(),
+                    src_connection_auth.clone(),
+                ));
+            }
             _ => {}
         }
 
@@ -243,6 +255,12 @@ impl RdbTestRunner {
                         })??,
                     );
                 }
+                DbType::Oracle => {
+                    dst_oracle_client = Some(OracleSqlPlusClient::new(
+                        dst_url.to_string(),
+                        dst_connection_auth.clone(),
+                    ));
+                }
                 _ => {}
             }
         }
@@ -274,6 +292,8 @@ impl RdbTestRunner {
             dst_conn_pool_mysql,
             src_conn_pool_pg,
             dst_conn_pool_pg,
+            src_oracle_client,
+            dst_oracle_client,
             meta_center_pool_mysql,
             config,
             router,
@@ -2995,6 +3015,10 @@ Please run the test from a normal terminal environment with network access."
             RdbUtil::execute_sqls_mysql(pool, sqls).await?;
         }
 
+        if let Some(client) = &self.src_oracle_client {
+            RdbUtil::execute_sqls_oracle(client, sqls).await?;
+        }
+
         if let Some(pool) = &self.src_conn_pool_pg {
             // GaussDB HA primary can switch mid-test, making a previously RW connection suddenly
             // read-only. When candidate hosts are configured, always resolve a fresh RW endpoint
@@ -3032,6 +3056,10 @@ Please run the test from a normal terminal environment with network access."
     pub async fn execute_dst_sqls(&self, sqls: &Vec<String>) -> anyhow::Result<()> {
         if let Some(pool) = &self.dst_conn_pool_mysql {
             RdbUtil::execute_sqls_mysql(pool, sqls).await?;
+        }
+
+        if let Some(client) = &self.dst_oracle_client {
+            RdbUtil::execute_sqls_oracle(client, sqls).await?;
         }
 
         if let Some(pool) = &self.dst_conn_pool_pg {
@@ -3542,6 +3570,19 @@ Please run the test from a normal terminal environment with network access."
     ) -> anyhow::Result<Vec<RowData>> {
         let where_sql = self.get_where_sql(&db_tb.0, &db_tb.1, condition);
         let db_type = self.get_db_type(from);
+
+        if matches!(db_type, DbType::Oracle) {
+            let client = if from == SRC {
+                self.src_oracle_client
+                    .as_ref()
+                    .context("src oracle client not initialized")?
+            } else {
+                self.dst_oracle_client
+                    .as_ref()
+                    .context("dst oracle client not initialized")?
+            };
+            return RdbUtil::fetch_data_oracle(client, db_tb, &where_sql).await;
+        }
 
         let (conn_pool_mysql, conn_pool_pg) = self.get_conn_pool(from);
         let data = if let Some(pool) = conn_pool_mysql {

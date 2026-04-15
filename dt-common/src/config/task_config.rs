@@ -338,6 +338,20 @@ impl TaskConfig {
                 _ => bail! { not_supported_err },
             },
 
+            DbType::Oracle => match extract_type {
+                ExtractType::Snapshot => ExtractorConfig::OracleSnapshot {
+                    url,
+                    connection_auth,
+                    schema: String::new(),
+                    tb: String::new(),
+                    sample_interval: loader.get_with_default(EXTRACTOR, SAMPLE_INTERVAL, 1),
+                    parallel_size: loader.get_with_default(EXTRACTOR, PARALLEL_SIZE, 1),
+                    batch_size,
+                    partition_cols: loader.get_optional(EXTRACTOR, PARTITION_COLS),
+                },
+                _ => bail! { not_supported_err },
+            },
+
             DbType::GaussDBPg => match extract_type {
                 ExtractType::Snapshot => ExtractorConfig::PgSnapshot {
                     url,
@@ -663,6 +677,15 @@ impl TaskConfig {
                     reverse: loader.get_optional(SINKER, REVERSE),
                 },
 
+                _ => bail! { not_supported_err },
+            },
+
+            DbType::Oracle => match sink_type {
+                SinkType::Write => SinkerConfig::Oracle {
+                    url,
+                    connection_auth,
+                    batch_size,
+                },
                 _ => bail! { not_supported_err },
             },
 

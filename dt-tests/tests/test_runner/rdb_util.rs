@@ -14,6 +14,7 @@ use dt_common::meta::{
     row_data::RowData,
 };
 use dt_common::utils::sql_util::SqlUtil;
+use dt_connector::oracle::OracleSqlPlusClient;
 use dt_connector::rdb_query_builder::RdbQueryBuilder;
 use futures::TryStreamExt;
 use openssl::ssl::{SslConnector, SslMethod, SslVerifyMode};
@@ -117,6 +118,72 @@ impl RdbUtil {
         Self::fetch_data_pg_compatible(conn_pool, ignore_cols, db_tb, &DbType::Pg, where_sql).await
     }
 
+    pub async fn fetch_data_oracle(
+        client: &OracleSqlPlusClient,
+        db_tb: &(String, String),
+        where_sql: &str,
+    ) -> anyhow::Result<Vec<RowData>> {
+        let owner = db_tb.0.to_uppercase().replace('\'', "''");
+        let table = db_tb.1.to_uppercase().replace('\'', "''");
+        let col_sql = format!(
+            "SELECT column_name, data_type FROM all_tab_columns WHERE owner='{}' AND table_name='{}' ORDER BY column_id ASC",
+            owner, table
+        );
+        let col_lines = client.query_lines(&col_sql).await?;
+
+        let mut cols: Vec<(String, String)> = Vec::new();
+        for line in col_lines {
+            let parts: Vec<&str> = line.split('|').collect();
+            if parts.len() < 2 {
+                continue;
+            }
+            cols.push((parts[0].trim().to_string(), parts[1].trim().to_string()));
+        }
+        if cols.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let select_cols = cols.iter().map(|(c, _)| c.as_str()).collect::<Vec<_>>();
+        let order_col = select_cols[0];
+        let select_sql = format!(
+            "SELECT {} FROM {}.{} {} ORDER BY {} ASC",
+            select_cols.join(","),
+            db_tb.0,
+            db_tb.1,
+            where_sql,
+            order_col
+        );
+        let lines = client.query_lines(&select_sql).await?;
+
+        let mut out = Vec::with_capacity(lines.len());
+        for line in lines {
+            let values: Vec<&str> = line.split('|').collect();
+            if values.len() != cols.len() {
+                anyhow::bail!(
+                    "oracle fetch_data column count mismatch: expected {}, got {}, line={}",
+                    cols.len(),
+                    values.len(),
+                    line
+                );
+            }
+
+            let mut after = HashMap::with_capacity(cols.len());
+            for (idx, (name, ty)) in cols.iter().enumerate() {
+                let raw = values[idx].trim();
+                after.insert(name.clone(), Self::oracle_parse_col_value(raw, ty)?);
+            }
+
+            out.push(RowData::new(
+                db_tb.0.clone(),
+                db_tb.1.clone(),
+                dt_common::meta::row_type::RowType::Insert,
+                None,
+                Some(after),
+            ));
+        }
+        Ok(out)
+    }
+
     pub async fn fetch_data_pg_compatible(
         conn_pool: &Pool<Postgres>,
         ignore_cols: Option<&HashSet<String>>,
@@ -185,6 +252,31 @@ impl RdbUtil {
                 )
             },
         )
+    }
+
+    fn oracle_parse_col_value(raw: &str, data_type: &str) -> anyhow::Result<ColValue> {
+        if raw.is_empty() || raw == "<NULL>" {
+            return Ok(ColValue::None);
+        }
+
+        let ty = data_type.trim().to_uppercase();
+        Ok(match ty.as_str() {
+            "NUMBER" => {
+                if raw.contains('.') {
+                    ColValue::Decimal(raw.to_string())
+                } else if let Ok(v) = raw.parse::<i64>() {
+                    ColValue::LongLong(v)
+                } else {
+                    ColValue::Decimal(raw.to_string())
+                }
+            }
+            "FLOAT" | "BINARY_FLOAT" | "BINARY_DOUBLE" => {
+                ColValue::Double(raw.parse::<f64>()?)
+            }
+            "DATE" => ColValue::DateTime(raw.to_string()),
+            "TIMESTAMP" | "TIMESTAMP(6)" => ColValue::Timestamp(raw.to_string()),
+            _ => ColValue::String(raw.to_string()),
+        })
     }
 
     pub async fn fetch_data_gaussdb_mysql_simple_query(
@@ -474,6 +566,20 @@ impl RdbUtil {
             if let Some(err) = last_err {
                 return Err(err);
             }
+        }
+        Ok(())
+    }
+
+    pub async fn execute_sqls_oracle(
+        client: &OracleSqlPlusClient,
+        sqls: &[String],
+    ) -> anyhow::Result<()> {
+        for sql in sqls.iter() {
+            if sql.trim().is_empty() {
+                continue;
+            }
+            println!("executing oracle sql: {}", sql);
+            client.exec(sql).await?;
         }
         Ok(())
     }

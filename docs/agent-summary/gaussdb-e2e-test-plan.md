@@ -78,6 +78,9 @@
 - MySQL 8：本机 Docker
   - source：默认 `3311`
   - sink（GaussDB→MySQL bootstrap）：默认 `3308`
+- Oracle XE 11g：本机 Docker（镜像：`wnameless/oracle-xe-11g-r2:latest`）
+  - `docker compose -f dt-tests/docker-compose.oracle_xe.yml up -d`
+  - listener：`15211`（宿主机端口）
 
 ### 3.2 远端环境
 
@@ -115,6 +118,8 @@
 | Quick | `PG -> GaussDBOracle` snapshot smoke | `cargo test -p dt-tests --test integration_test -- pg_to_gaussdb_oracle::snapshot_tests::test::smoke_test --nocapture` | PG + GaussDBOracle | 最小连通性（oracle-mode） |
 | Quick | `PG -> GaussDBOracle` struct basic | `cargo test -p dt-tests --test integration_test -- pg_to_gaussdb_oracle::struct_tests::test::struct_basic_test --nocapture` | PG + GaussDBOracle | 基础对象同步（oracle-mode） |
 | Quick | `PG -> GaussDBOracle` check basic | `cargo test -p dt-tests --test integration_test -- pg_to_gaussdb_oracle::check_tests::test::check_basic_test --nocapture` | PG + GaussDBOracle | 基础对账（oracle-mode） |
+| Quick | `Oracle -> GaussDBOracle` snapshot smoke | `cargo test -p dt-tests --test integration_test -- oracle_to_gaussdb_oracle::snapshot_tests::test::smoke_test --nocapture` | Oracle XE + GaussDBOracle | Oracle 源端快照（bootstrap） |
+| Quick | `GaussDBOracle -> Oracle` snapshot smoke | `cargo test -p dt-tests --test integration_test -- gaussdb_oracle_to_oracle::snapshot_tests::test::smoke_test --nocapture` | GaussDBOracle + Oracle XE | Oracle 目标端写入（bootstrap） |
 | Full | `PG -> GaussDBPg` CDC basic | `cargo test -p dt-tests --test integration_test -- pg_to_gaussdb::cdc_tests::test::cdc_basic_test --nocapture` | PG + GaussDBPg | 正向 CDC |
 | Full | `PG -> GaussDBPg` type matrix | `cargo test -p dt-tests --test integration_test -- pg_to_gaussdb::snapshot_tests::test::type_matrix_test --nocapture` | PG + GaussDBPg | 特有类型快照兼容 |
 | Full | `PG -> GaussDBPg` struct view/routine | `cargo test -p dt-tests --test integration_test -- pg_to_gaussdb::struct_tests::test::struct_view_routine_test --nocapture` | PG + GaussDBPg | 视图/函数/过程 |
