@@ -1,6 +1,6 @@
 # GaussDB 全局进度跟踪清单（PRD 真相源）
 
-> 最后更新：**2026-04-13（GaussDB→MySQL bootstrap：snapshot/check/cdc basic 已闭环；MySQL→GaussDBMySQL 目标端 failover self-heal PASS）**
+> 最后更新：**2026-04-15（GaussDBPg→MySQL bootstrap：struct basic PASS；MySQL→GaussDBMySQL 目标端 failover self-heal PASS）**
 >
 > 目标：每完成一次 spec 任务后，都能立刻知道“当前已交付什么、证据在哪、下一步做什么”。
 
@@ -32,7 +32,7 @@
 |---|---|---|---|---|---|---|---|
 | **PG → GaussDBPg** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **GaussDBPg → PG** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **GaussDBPg → MySQL（bootstrap）** | ✅ | ✅ | - | ✅ | ✅ | ✅ | - |
+| **GaussDBPg → MySQL（bootstrap）** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | **MySQL → GaussDBMySQL（首波）** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 说明：
@@ -42,6 +42,7 @@
 - `MySQL → GaussDBMySQL（首波）` 的 `precheck` 已完成独立自动化入口、真实环境证据与无污染校验。
 - `GaussDBPg → MySQL（bootstrap）` 已新增 `dt-tests` 入口并完成真实验证：snapshot/check/cdc basic（证据见 `.codex-tasks/20260413-gaussdb-to-mysql-bootstrap/PROGRESS.md`）。
 - `GaussDBPg → MySQL（bootstrap）` 的 `precheck` 已新增 `dt-tests` 入口（证据见 `.codex-tasks/20260415-gaussdb-to-mysql-precheck/PROGRESS.md`）。
+- `GaussDBPg → MySQL（bootstrap）` 的 `struct` 已新增 `dt-tests` 入口 `gaussdb_to_mysql::struct_tests::test::struct_basic_test` 并完成真实验证（证据见 `.codex-tasks/20260415-gaussdb-to-mysql-struct-basic/PROGRESS.md`）。
 - SHA256 认证：当前以 `BLOCKED` 方式纳入执行真表（等待联调环境可用）。
 - 当前 active 方向已演进为：`GaussDBMySQL CDC Expansion`、`GaussDBPg Quality Coverage`、`GaussDB -> MySQL Bootstrap`。
 

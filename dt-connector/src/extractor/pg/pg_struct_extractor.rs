@@ -80,15 +80,19 @@ impl PgStructExtractor {
         }
 
         // routines (functions/procedures)
-        for routine_statement in pg_fetcher.get_create_routine_statements("", "").await? {
-            self.push_dt_data(StructStatement::PgCreateRoutine(routine_statement))
-                .await?;
+        if !self.filter.filter_structure(&StructureType::Routine) {
+            for routine_statement in pg_fetcher.get_create_routine_statements("", "").await? {
+                self.push_dt_data(StructStatement::PgCreateRoutine(routine_statement))
+                    .await?;
+            }
         }
 
         // views (including materialized views)
-        for view_statement in pg_fetcher.get_create_view_statements("", "").await? {
-            self.push_dt_data(StructStatement::PgCreateView(view_statement))
-                .await?;
+        if !self.filter.filter_structure(&StructureType::View) {
+            for view_statement in pg_fetcher.get_create_view_statements("", "").await? {
+                self.push_dt_data(StructStatement::PgCreateView(view_statement))
+                    .await?;
+            }
         }
 
         if do_global_structs && !self.filter.filter_structure(&StructureType::Rbac) {

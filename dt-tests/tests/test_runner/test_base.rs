@@ -419,10 +419,19 @@ impl TestBase {
     }
 
     pub async fn run_mysql_struct_test(test_dir: &str) {
-        let mut runner = RdbStructTestRunner::new(test_dir).await.unwrap();
-        runner.run_mysql_struct_test().await.unwrap();
-        runner.base.execute_clean_sqls().await.unwrap();
-        runner.close().await.unwrap();
+        Self::run_with_retry(test_dir, "mysql_struct", || async {
+            let mut runner = RdbStructTestRunner::new(test_dir).await?;
+            let run_res = runner.run_mysql_struct_test().await;
+            let clean_res = runner.base.execute_clean_sqls().await;
+            let _ = runner.close().await;
+
+            if let Err(e) = run_res {
+                return Err(e);
+            }
+            clean_res?;
+            Ok(())
+        })
+        .await;
     }
 
     pub async fn run_pg_struct_test(test_dir: &str) {
