@@ -4,17 +4,17 @@
 
 ## 1. 适用范围
 
-当前计划覆盖 3 条主线：
+当前计划覆盖 4 条主线：
 
 1. `PG <-> GaussDBPg`
 2. `GaussDBPg -> PG` CDC 与稳定性
 3. `MySQL -> GaussDBMySQL`
+4. `GaussDBPg -> MySQL`（bootstrap）
 
 当前不纳入本轮统一 E2E 主矩阵：
 
 - `SHA256` 认证
 - `GaussDBOracle`
-- `MySQL -> GaussDBMySQL` CDC
 
 ## 2. 测试分层
 
@@ -30,6 +30,9 @@
 - `GaussDBPg -> PG` snapshot basic
 - `GaussDBPg -> PG` check basic
 - `GaussDBPg -> PG` CDC basic
+- `GaussDBPg -> MySQL` snapshot basic
+- `GaussDBPg -> MySQL` check basic
+- `GaussDBPg -> MySQL` CDC basic
 - `MySQL -> GaussDBMySQL` smoke
 - `MySQL -> GaussDBMySQL` struct basic
 - `MySQL -> GaussDBMySQL` check basic
@@ -66,7 +69,9 @@
 ### 3.1 本地服务
 
 - PostgreSQL 15：本机 Docker，默认 `5434`
-- MySQL 8：本机 Docker，默认 `3311`
+- MySQL 8：本机 Docker
+  - source：默认 `3311`
+  - sink（GaussDB→MySQL bootstrap）：默认 `3308`
 
 ### 3.2 远端环境
 
@@ -90,6 +95,9 @@
 | Quick | `GaussDBPg -> PG` snapshot basic | `cargo test -p dt-tests --test integration_test -- gaussdb_to_pg::snapshot_tests::test::snapshot_basic_test --nocapture` | GaussDBPg + PG | 反向快照主路径 |
 | Quick | `GaussDBPg -> PG` check basic | `cargo test -p dt-tests --test integration_test -- gaussdb_to_pg::check_tests::test::check_basic_test --nocapture` | GaussDBPg + PG | 反向对账主路径 |
 | Quick | `GaussDBPg -> PG` CDC basic | `cargo test -p dt-tests --test integration_test -- gaussdb_to_pg::cdc_tests::test::cdc_basic_test --nocapture` | GaussDBPg + PG | 基础 CDC 主路径 |
+| Quick | `GaussDBPg -> MySQL` snapshot basic | `cargo test -p dt-tests --test integration_test -- gaussdb_to_mysql::snapshot_tests::test::snapshot_basic_test --nocapture` | GaussDBPg + MySQL8 | 反向快照主路径（bootstrap） |
+| Quick | `GaussDBPg -> MySQL` check basic | `cargo test -p dt-tests --test integration_test -- gaussdb_to_mysql::check_tests::test::check_basic_test --nocapture` | GaussDBPg + MySQL8 | 反向对账主路径（bootstrap） |
+| Quick | `GaussDBPg -> MySQL` CDC basic | `cargo test -p dt-tests --test integration_test -- gaussdb_to_mysql::cdc_tests::test::cdc_basic_test --nocapture` | GaussDBPg + MySQL8 | 基础 CDC 主路径（bootstrap） |
 | Quick | `MySQL -> GaussDBMySQL` smoke | `cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::snapshot_tests::test::smoke_test --nocapture` | MySQL8 + GaussDBMySQL | 最小连通性 |
 | Quick | `MySQL -> GaussDBMySQL` struct basic | `cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::struct_tests::test::struct_basic_test --nocapture` | MySQL8 + GaussDBMySQL | 对象同步主路径 |
 | Quick | `MySQL -> GaussDBMySQL` check basic | `cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::check_tests::test::check_basic_test --nocapture` | MySQL8 + GaussDBMySQL | 对账主路径 |
@@ -119,8 +127,9 @@
 
 1. `GaussDBPg -> PG` CDC basic
 2. `PG -> GaussDBPg` snapshot/struct/check basic
-3. `MySQL -> GaussDBMySQL` smoke/struct/check basic
-4. `MySQL -> GaussDBMySQL` CDC basic
+3. `GaussDBPg -> MySQL` snapshot/check/cdc basic
+4. `MySQL -> GaussDBMySQL` smoke/struct/check basic
+5. `MySQL -> GaussDBMySQL` CDC basic
 
 ### 5.2 spec 合并前回归
 

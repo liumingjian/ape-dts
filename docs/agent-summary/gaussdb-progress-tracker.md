@@ -1,6 +1,6 @@
 # GaussDB 全局进度跟踪清单（PRD 真相源）
 
-> 最后更新：**2026-04-13（MySQL→GaussDBMySQL 目标端 failover self-heal 已闭环：`dt-tests cdc_failover_test` PASS）**
+> 最后更新：**2026-04-13（GaussDB→MySQL bootstrap：snapshot/check/cdc basic 已闭环；MySQL→GaussDBMySQL 目标端 failover self-heal PASS）**
 >
 > 目标：每完成一次 spec 任务后，都能立刻知道“当前已交付什么、证据在哪、下一步做什么”。
 
@@ -13,6 +13,7 @@
    - `.codex-tasks/20260402-gaussdb-mysql-bootstrap/SUBTASKS.csv`
    - `.codex-tasks/20260410-gaussdb-mysql-cdc-expansion/SUBTASKS.csv`
    - `.codex-tasks/20260402-gaussdbpg-quality-coverage/SUBTASKS.csv`
+   - `.codex-tasks/20260413-gaussdb-to-mysql-bootstrap/SUBTASKS.csv`
    - `.codex-tasks/20260331-gaussdb-prd-align/SUBTASKS.csv`（历史主 Epic + SHA256 blocked 入口）
 3. **证据归档**：`.codex-tasks/*/*/PROGRESS.md`（含验证命令与结果）与必要的脱敏 `raw/` 片段
 
@@ -31,6 +32,7 @@
 |---|---|---|---|---|---|---|---|
 | **PG → GaussDBPg** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **GaussDBPg → PG** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **GaussDBPg → MySQL（bootstrap）** | ✅ | ✅ | - | ✅ | - | ✅ | - |
 | **MySQL → GaussDBMySQL（首波）** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 说明：
@@ -38,8 +40,9 @@
 - Struct（PRD MVP）已补齐：在已有 `table/index/constraint/sequence/comment/rbac` 基础上补齐 **view/matview/routine/routine grants**。
 - `MySQL → GaussDBMySQL（首波）` 已覆盖 `snapshot/struct/check/cdc(DML)`，并已归档真实环境证据。
 - `MySQL → GaussDBMySQL（首波）` 的 `precheck` 已完成独立自动化入口、真实环境证据与无污染校验。
+- `GaussDBPg → MySQL（bootstrap）` 已新增 `dt-tests` 入口并完成真实验证：snapshot/check/cdc basic（证据见 `.codex-tasks/20260413-gaussdb-to-mysql-bootstrap/PROGRESS.md`）。
 - SHA256 认证：当前以 `BLOCKED` 方式纳入执行真表（等待联调环境可用）。
-- 当前 active 方向已演进为：`GaussDBMySQL CDC Expansion` 与 `GaussDBPg Quality Coverage`。
+- 当前 active 方向已演进为：`GaussDBMySQL CDC Expansion`、`GaussDBPg Quality Coverage`、`GaussDB -> MySQL Bootstrap`。
 
 ## 3. 执行真表（Epic）
 
@@ -65,6 +68,10 @@
   - `EPIC.md`
   - `SUBTASKS.csv`
   - `PROGRESS.md`
+- Epic：`.codex-tasks/20260413-gaussdb-to-mysql-bootstrap/`
+  - `EPIC.md`
+  - `SUBTASKS.csv`
+  - `PROGRESS.md`
 
 ## 4. Master Checklist（面向 PRD 的主清单）
 
@@ -82,6 +89,7 @@
 | `GaussDBPg → PG` CDC P1：resume + failover + 负例套件 | ✅ | `.codex-tasks/20260331-gaussdb-cdc-resilience/PROGRESS.md` + `.codex-tasks/20260403-gaussdb-dt-failover-restore/PROGRESS.md` |
 | `GaussDBMySQL` 首波（`MySQL -> GaussDBMySQL` 目标端优先） | ✅ | `.codex-tasks/20260402-gaussdb-mysql-bootstrap/PROGRESS.md` |
 | `MySQL → GaussDBMySQL` CDC：目标端 failover 自愈（无 VIP/LB） | ✅ | `.codex-tasks/20260413-gaussdb-target-selfheal/PROGRESS.md` |
+| `GaussDBPg → MySQL` bootstrap（snapshot/check/cdc basic） | ✅ | `.codex-tasks/20260413-gaussdb-to-mysql-bootstrap/PROGRESS.md` |
 | `GaussDBPg` 质量补齐（类型矩阵 / check 细化 / 性能可观测） | ✅ | `.codex-tasks/20260402-gaussdbpg-quality-coverage/PROGRESS.md` |
 | `GaussDBOracle` 路线图 / 阻塞项 | ⛔ BLOCKED | `docs/agent-summary/gaussdb-oracle-roadmap.md` |
 
@@ -114,6 +122,7 @@
 | `GaussDBPg` quality：non-CDC type matrix e2e | ✅ | `.codex-tasks/20260402-gaussdbpg-quality-coverage/tasks/20260402-03-non-cdc-type-matrix-e2e/PROGRESS.md` |
 | `GaussDBPg` quality：CDC type matrix + fail-fast evidence | ✅ | `.codex-tasks/20260402-gaussdbpg-quality-coverage/tasks/20260402-04-cdc-type-matrix-e2e/PROGRESS.md` |
 | `GaussDBPg` quality：统一 e2e 质量门槛规划 | ✅ | `.codex-tasks/20260402-gaussdbpg-quality-coverage/tasks/20260402-05-quality-gate-evidence/PROGRESS.md` |
+| `GaussDB -> MySQL` bootstrap：snapshot/check/cdc basic | ✅ | `.codex-tasks/20260413-gaussdb-to-mysql-bootstrap/PROGRESS.md` |
 
 ## 5. 决策记录（Decision Log）
 

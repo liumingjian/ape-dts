@@ -1,3 +1,4 @@
+mod gaussdb_to_mysql;
 mod gaussdb_to_pg;
 mod log_reader;
 mod mongo_to_mongo;

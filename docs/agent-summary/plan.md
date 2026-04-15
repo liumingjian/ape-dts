@@ -24,7 +24,7 @@ MVP（`DbType::GaussDBPg`）已在真实环境闭环验证：
 - `.codex-tasks/20260331-gaussdb-p0-stability/PROGRESS.md`
 - `.codex-tasks/20260331-gaussdb-cdc-resilience/PROGRESS.md`
 
-## 2. 下一阶段（双 Epic 并行）
+## 2. 下一阶段（三 Epic 并行）
 
 ### 2.1 Active Epic A：`GaussDBMySQL CDC Expansion`
 
@@ -87,7 +87,36 @@ MVP（`DbType::GaussDBPg`）已在真实环境闭环验证：
 
 - `.codex-tasks/20260402-gaussdbpg-quality-coverage/SUBTASKS.csv`
 
-### 2.3 Blocked Backlog
+### 2.3 Active Epic C：`GaussDB -> MySQL Bootstrap`
+
+目标：启动 **`GaussDBPg -> MySQL`** 反向链路的第一轮 bootstrap，先用最小 `dt-tests`
+证据证明“源端 GaussDB / 目标端 MySQL”的 snapshot / check / cdc 三条主路径可运行。
+
+范围锁定：
+
+- 只做 `GaussDBPg -> MySQL` 的 bootstrap（先跑通最小链路，再决定是否扩展 struct/ddl/resume/failover）。
+- 第一个阶段交付到：
+  - `snapshot basic`（一表两行）
+  - `check basic`（确定性 1 行 diff + expect_check_log）
+  - `cdc basic`（一表 insert/update/delete，最终状态对比）
+
+关键约定：
+
+- router：`db_map=public:<dst_mysql_db>`（按用例分别落到 `gaussdb_to_mysql_{snapshot,check,cdc}_dst`）
+- 目标端：本机 MySQL 8 sink（通过 `dt-tests/tests/.env.local` 的 `mysql_sinker_*` 契约提供）
+
+执行真表：
+
+- `.codex-tasks/20260413-gaussdb-to-mysql-bootstrap/SUBTASKS.csv`
+
+当前进度（2026-04-13）：
+
+- child 1 `snapshot basic` ✅
+- child 2 `check basic` ✅
+- child 3 `cdc basic` ✅
+- child 4 `docs/tracker/e2e 收口` ✅
+
+### 2.4 Blocked Backlog
 
 - `SHA256`
   - 继续单独阻塞管理，不进入本轮 active Epic
