@@ -25,6 +25,8 @@ pub enum DbType {
     GaussDBPg,
     #[strum(serialize = "gaussdb_mysql")]
     GaussDBMySQL,
+    #[strum(serialize = "gaussdb_oracle")]
+    GaussDBOracle,
     #[strum(serialize = "kafka")]
     Kafka,
     #[strum(serialize = "mongo")]
@@ -116,6 +118,13 @@ mod tests {
         let t = DbType::from_str("gaussdb_mysql").unwrap();
         assert_eq!(t, DbType::GaussDBMySQL);
         assert_eq!(t.to_string(), "gaussdb_mysql");
+    }
+
+    #[test]
+    fn test_db_type_gaussdb_oracle_parse_and_display() {
+        let t = DbType::from_str("gaussdb_oracle").unwrap();
+        assert_eq!(t, DbType::GaussDBOracle);
+        assert_eq!(t.to_string(), "gaussdb_oracle");
     }
 
     #[test]

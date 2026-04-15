@@ -134,6 +134,21 @@ impl PrecheckerBuilder {
                     filter,
                 },
             })),
+            DbType::GaussDBOracle => Some(Box::new(PostgresqlPrechecker {
+                db_type: DbType::GaussDBOracle,
+                filter_config: self.task_config.filter.clone(),
+                precheck_config: self.precheck_config.clone(),
+                is_source,
+                slot_name,
+                selected_endpoint: None,
+                fetcher: PgFetcher {
+                    pool: None,
+                    url,
+                    connection_auth,
+                    is_source,
+                    filter,
+                },
+            })),
             DbType::Mongo => Some(Box::new(MongoPrechecker {
                 fetcher: MongoFetcher {
                     pool: None,

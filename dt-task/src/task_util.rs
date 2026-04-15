@@ -329,7 +329,9 @@ impl TaskUtil {
             DbType::Mysql | DbType::GaussDBMySQL => {
                 Self::list_mysql_dbs(conn_pool, db_type).await?
             }
-            DbType::Pg | DbType::GaussDBPg => Self::list_pg_schemas(conn_pool, db_type).await?,
+            DbType::Pg | DbType::GaussDBPg | DbType::GaussDBOracle => {
+                Self::list_pg_schemas(conn_pool, db_type).await?
+            }
             DbType::Mongo => Self::list_mongo_dbs(conn_pool).await?,
             _ => Vec::new(),
         };
@@ -346,7 +348,9 @@ impl TaskUtil {
             DbType::Mysql | DbType::GaussDBMySQL => {
                 Self::list_mysql_tbs(conn_client, schema).await?
             }
-            DbType::Pg | DbType::GaussDBPg => Self::list_pg_tbs(conn_client, schema).await?,
+            DbType::Pg | DbType::GaussDBPg | DbType::GaussDBOracle => {
+                Self::list_pg_tbs(conn_client, schema).await?
+            }
             DbType::Mongo => Self::list_mongo_tbs(conn_client, schema).await?,
             _ => Vec::new(),
         };
@@ -366,7 +370,7 @@ impl TaskUtil {
                 DbType::Mysql | DbType::GaussDBMySQL => {
                     Self::estimate_mysql_snapshot(conn_pool, db_type, schemas, filter).await
                 }
-                DbType::Pg | DbType::GaussDBPg => {
+                DbType::Pg | DbType::GaussDBPg | DbType::GaussDBOracle => {
                     Self::estimate_pg_snapshot(conn_pool, db_type, schemas, filter).await
                 }
                 _ => Ok(0),

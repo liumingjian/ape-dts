@@ -1,6 +1,6 @@
 # GaussDB 全局进度跟踪清单（PRD 真相源）
 
-> 最后更新：**2026-04-15（GaussDBPg→MySQL bootstrap：struct advanced PASS + 一键 e2e 脚本落盘；MySQL→GaussDBMySQL 目标端 failover self-heal PASS）**
+> 最后更新：**2026-04-15（GaussDBOracle 本机 docker smoke PASS；GaussDBPg→MySQL bootstrap：struct advanced PASS + 一键 e2e 脚本落盘；MySQL→GaussDBMySQL 目标端 failover self-heal PASS）**
 >
 > 目标：每完成一次 spec 任务后，都能立刻知道“当前已交付什么、证据在哪、下一步做什么”。
 
@@ -34,6 +34,7 @@
 | **GaussDBPg → PG** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **GaussDBPg → MySQL（bootstrap）** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **MySQL → GaussDBMySQL（首波）** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **PG → GaussDBOracle（local smoke）** | ✅ | - | - | - | - | ✅ | - |
 
 说明：
 
@@ -45,8 +46,9 @@
 - `GaussDBPg → MySQL（bootstrap）` 的 `struct` 已新增 `dt-tests` 入口 `gaussdb_to_mysql::struct_tests::test::struct_basic_test` 并完成真实验证（证据见 `.codex-tasks/20260415-gaussdb-to-mysql-struct-basic/PROGRESS.md`）。
 - `GaussDBPg → MySQL（bootstrap）` 的 `struct advanced` 已覆盖 `default/index(ubtree)` 并完成真实验证（证据见 `.codex-tasks/20260415-gaussdb-to-mysql-struct-advance/PROGRESS.md`）。
 - `GaussDBPg → MySQL（bootstrap）` 已补齐一键回归脚本：`bash scripts/e2e/gaussdb_to_mysql_bootstrap.sh`（quick/full，详见 `docs/agent-summary/gaussdb-e2e-test-plan.md`）。
+- `GaussDBOracle` 已解锁本机 docker 环境（openGauss `sql_compatibility=A`）与最小 smoke：`pg_to_gaussdb_oracle::snapshot_tests::test::smoke_test`（证据见 `.codex-tasks/20260415-gaussdb-oracle-bootstrap/PROGRESS.md`）。
 - SHA256 认证：当前以 `BLOCKED` 方式纳入执行真表（等待联调环境可用）。
-- 当前 active 方向已演进为：`GaussDBMySQL CDC Expansion`、`GaussDBPg Quality Coverage`、`GaussDB -> MySQL Bootstrap`。
+- 当前 active 方向已演进为：`GaussDBOracle Bootstrap`、`GaussDBMySQL CDC Expansion`、`GaussDBPg Quality Coverage`、`GaussDB -> MySQL Bootstrap`。
 
 ## 3. 执行真表（Epic）
 
@@ -98,7 +100,7 @@
 | `GaussDBPg → MySQL` struct（basic + advanced） | ✅ | `.codex-tasks/20260415-gaussdb-to-mysql-struct-basic/TODO.csv` + `.codex-tasks/20260415-gaussdb-to-mysql-struct-advance/PROGRESS.md` |
 | 一键回归 e2e：`scripts/e2e/gaussdb_to_mysql_bootstrap.sh` | ✅ | `scripts/e2e/gaussdb_to_mysql_bootstrap.sh` + `docs/agent-summary/gaussdb-e2e-test-plan.md` |
 | `GaussDBPg` 质量补齐（类型矩阵 / check 细化 / 性能可观测） | ✅ | `.codex-tasks/20260402-gaussdbpg-quality-coverage/PROGRESS.md` |
-| `GaussDBOracle` 路线图 / 阻塞项 | ⛔ BLOCKED | `docs/agent-summary/gaussdb-oracle-roadmap.md` |
+| `GaussDBOracle` bootstrap（local docker smoke） | ✅ | `.codex-tasks/20260415-gaussdb-oracle-bootstrap/PROGRESS.md` + `dt-tests/docker-compose.gaussdb_oracle.yml` |
 
 ### 4.2 本 Epic 状态（20260331-gaussdb-prd-align）
 
@@ -207,6 +209,11 @@
     - `GaussDBPg` 主线已基本闭环
     - `GaussDBMySQL` 已从 bootstrap 进入 CDC Expansion
     - `SHA256` 与 `GaussDBOracle` 仍维持 `BLOCKED / roadmap`
+- 2026-04-15：
+  - `GaussDBOracle` 已解锁 **本机 Docker** 环境（openGauss `sql_compatibility=A`）并形成最小 smoke 闭环：
+    - compose：`dt-tests/docker-compose.gaussdb_oracle.yml`
+    - dt-tests：`pg_to_gaussdb_oracle::snapshot_tests::test::smoke_test` PASS
+    - 证据：`.codex-tasks/20260415-gaussdb-oracle-bootstrap/PROGRESS.md`
 
 ## 6. 更新流程（每完成一个 spec 后怎么做）
 

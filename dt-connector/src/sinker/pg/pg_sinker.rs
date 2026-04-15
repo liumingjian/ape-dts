@@ -184,7 +184,10 @@ impl Sinker for PgSinker {
 
 impl PgSinker {
     fn is_gaussdb_target(&self) -> bool {
-        matches!(self.db_type, DbType::GaussDBPg | DbType::GaussDBMySQL)
+        matches!(
+            self.db_type,
+            DbType::GaussDBPg | DbType::GaussDBMySQL | DbType::GaussDBOracle
+        )
     }
 
     fn is_failover_related_error(&self, err: &anyhow::Error) -> bool {

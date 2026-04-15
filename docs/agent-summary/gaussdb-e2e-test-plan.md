@@ -4,17 +4,17 @@
 
 ## 1. 适用范围
 
-当前计划覆盖 4 条主线：
+当前计划覆盖 5 条主线：
 
 1. `PG <-> GaussDBPg`
 2. `GaussDBPg -> PG` CDC 与稳定性
 3. `MySQL -> GaussDBMySQL`
 4. `GaussDBPg -> MySQL`（bootstrap）
+5. `PG -> GaussDBOracle`（local docker smoke）
 
 当前不纳入本轮统一 E2E 主矩阵：
 
 - `SHA256` 认证
-- `GaussDBOracle`
 
 ## 2. 测试分层
 
@@ -37,6 +37,7 @@
 - `MySQL -> GaussDBMySQL` smoke
 - `MySQL -> GaussDBMySQL` struct basic
 - `MySQL -> GaussDBMySQL` check basic
+- `PG -> GaussDBOracle` snapshot smoke
 - 或一键回归（Quick）：`bash scripts/e2e/gaussdb_to_mysql_bootstrap.sh`
 
 ### 2.2 Full Functional Gate
@@ -81,6 +82,7 @@
 - `GaussDBPg`：通过 `.env.local` 中 `gaussdb_pg_*` 配置
 - `GaussDBPg` 候选主机：通过 `gaussdb_pg_candidate_hosts`
 - `GaussDBMySQL`：当前为 `postgres://.../jyp_test_m` 这类 pg-wire + MySQL 兼容模式库
+- `GaussDBOracle`（local）：通过 `docker compose -f dt-tests/docker-compose.gaussdb_oracle.yml up -d` 拉起（端口 `55432`，变量见 `dt-tests/tests/.env` 的 `gaussdb_oracle_*`）
 
 ### 3.3 无污染要求
 
@@ -108,6 +110,7 @@
 | Quick | `MySQL -> GaussDBMySQL` struct basic | `cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::struct_tests::test::struct_basic_test --nocapture` | MySQL8 + GaussDBMySQL | 对象同步主路径 |
 | Quick | `MySQL -> GaussDBMySQL` check basic | `cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::check_tests::test::check_basic_test --nocapture` | MySQL8 + GaussDBMySQL | 对账主路径 |
 | Quick | `MySQL -> GaussDBMySQL` CDC basic | `cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::cdc_tests::test::cdc_basic_test --nocapture` | MySQL8 + GaussDBMySQL | 基础 CDC 主路径 |
+| Quick | `PG -> GaussDBOracle` snapshot smoke | `cargo test -p dt-tests --test integration_test -- pg_to_gaussdb_oracle::snapshot_tests::test::smoke_test --nocapture` | PG + GaussDBOracle | 最小连通性（oracle-mode） |
 | Full | `PG -> GaussDBPg` CDC basic | `cargo test -p dt-tests --test integration_test -- pg_to_gaussdb::cdc_tests::test::cdc_basic_test --nocapture` | PG + GaussDBPg | 正向 CDC |
 | Full | `PG -> GaussDBPg` type matrix | `cargo test -p dt-tests --test integration_test -- pg_to_gaussdb::snapshot_tests::test::type_matrix_test --nocapture` | PG + GaussDBPg | 特有类型快照兼容 |
 | Full | `PG -> GaussDBPg` struct view/routine | `cargo test -p dt-tests --test integration_test -- pg_to_gaussdb::struct_tests::test::struct_view_routine_test --nocapture` | PG + GaussDBPg | 视图/函数/过程 |

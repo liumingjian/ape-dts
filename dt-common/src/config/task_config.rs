@@ -388,6 +388,43 @@ impl TaskConfig {
                 _ => bail! { not_supported_err },
             },
 
+            DbType::GaussDBOracle => match extract_type {
+                ExtractType::Snapshot => ExtractorConfig::PgSnapshot {
+                    url,
+                    connection_auth,
+                    schema: String::new(),
+                    tb: String::new(),
+                    sample_interval: loader.get_with_default(EXTRACTOR, SAMPLE_INTERVAL, 1),
+                    parallel_size: loader.get_with_default(EXTRACTOR, PARALLEL_SIZE, 1),
+                    batch_size,
+                    partition_cols: loader.get_optional(EXTRACTOR, PARTITION_COLS),
+                },
+
+                // NOTE: `GaussDBOracle` is expected to be reached via Postgres wire protocol
+                // with `sql_compatibility=A`. We intentionally do not claim CDC support here yet.
+                ExtractType::CheckLog => ExtractorConfig::PgCheck {
+                    url,
+                    connection_auth,
+                    check_log_dir: loader.get_required(EXTRACTOR, CHECK_LOG_DIR),
+                    batch_size: loader.get_with_default(EXTRACTOR, BATCH_SIZE, 200),
+                },
+
+                ExtractType::Struct => ExtractorConfig::PgStruct {
+                    url,
+                    connection_auth,
+                    schema: String::new(),
+                    schemas: Vec::new(),
+                    do_global_structs: false,
+                    db_batch_size: loader.get_with_default(
+                        EXTRACTOR,
+                        "db_batch_size",
+                        DEFAULT_DB_BATCH_SIZE,
+                    ),
+                },
+
+                _ => bail! { not_supported_err },
+            },
+
             DbType::Mongo => {
                 let app_name: String =
                     loader.get_with_default(EXTRACTOR, APP_NAME, APE_DTS.to_string());
@@ -582,7 +619,7 @@ impl TaskConfig {
                 _ => bail! { not_supported_err },
             },
 
-            DbType::Pg | DbType::GaussDBPg => match sink_type {
+            DbType::Pg | DbType::GaussDBPg | DbType::GaussDBOracle => match sink_type {
                 SinkType::Write => SinkerConfig::Pg {
                     url,
                     connection_auth,

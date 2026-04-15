@@ -126,9 +126,9 @@ impl RdbTestRunner {
                     .await?,
                 );
             }
-            DbType::Pg | DbType::GaussDBPg => {
+            DbType::Pg | DbType::GaussDBPg | DbType::GaussDBOracle => {
                 let disable_fk_checks = matches!(src_db_type, DbType::Pg);
-                let max_connections = if matches!(src_db_type, DbType::GaussDBPg) {
+                let max_connections = if matches!(src_db_type, DbType::GaussDBPg | DbType::GaussDBOracle) {
                     // GaussDB cluster endpoints may be behind VIP/LB; using multiple pooled
                     // connections can intermittently hit standby nodes (read-only transaction)
                     // or trigger unstable behavior during tests. Keep a single connection for
@@ -137,7 +137,7 @@ impl RdbTestRunner {
                 } else {
                     5
                 };
-                let pool_timeout = if matches!(src_db_type, DbType::GaussDBPg) {
+                let pool_timeout = if matches!(src_db_type, DbType::GaussDBPg | DbType::GaussDBOracle) {
                     std::time::Duration::from_secs(90)
                 } else {
                     std::time::Duration::from_secs(30)
@@ -209,14 +209,16 @@ impl RdbTestRunner {
                         })??,
                     );
                 }
-                DbType::Pg | DbType::GaussDBPg => {
+                DbType::Pg | DbType::GaussDBPg | DbType::GaussDBOracle => {
                     let disable_fk_checks = matches!(dst_db_type, DbType::Pg);
-                    let max_connections = if matches!(dst_db_type, DbType::GaussDBPg) {
+                    let max_connections =
+                        if matches!(dst_db_type, DbType::GaussDBPg | DbType::GaussDBOracle) {
                         1
                     } else {
                         5
                     };
-                    let pool_timeout = if matches!(dst_db_type, DbType::GaussDBPg) {
+                    let pool_timeout =
+                        if matches!(dst_db_type, DbType::GaussDBPg | DbType::GaussDBOracle) {
                         std::time::Duration::from_secs(90)
                     } else {
                         std::time::Duration::from_secs(30)

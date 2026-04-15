@@ -84,7 +84,7 @@ impl SqlUtil {
             | DbType::StarRocks => {
                 vec![(MYSQL_ESCAPE, MYSQL_ESCAPE)]
             }
-            DbType::Pg | DbType::GaussDBPg => vec![(PG_ESCAPE, PG_ESCAPE)],
+            DbType::Pg | DbType::GaussDBPg | DbType::GaussDBOracle => vec![(PG_ESCAPE, PG_ESCAPE)],
             DbType::Redis => vec![(REDIS_ESCAPE, REDIS_ESCAPE)],
             _ => vec![],
         }
@@ -102,14 +102,22 @@ impl SqlUtil {
 
     pub fn is_valid_token(token: &str, db_type: &DbType, escape_pairs: &[(char, char)]) -> bool {
         let max_token_len = match db_type {
-            DbType::Mysql | DbType::GaussDBMySQL | DbType::Pg | DbType::GaussDBPg => 64,
+            DbType::Mysql
+            | DbType::GaussDBMySQL
+            | DbType::Pg
+            | DbType::GaussDBPg
+            | DbType::GaussDBOracle => 64,
             // TODO
             _ => i32::MAX,
         } as usize;
 
         let _is_valid_token = |token: &str, db_type: &DbType| -> bool {
             match db_type {
-                DbType::Mysql | DbType::GaussDBMySQL | DbType::Pg | DbType::GaussDBPg => {
+                DbType::Mysql
+                | DbType::GaussDBMySQL
+                | DbType::Pg
+                | DbType::GaussDBPg
+                | DbType::GaussDBOracle => {
                     let pattern = format!(r"^[a-zA-Z0-9_\?\*\-]{{1,{}}}$", max_token_len);
                     Regex::new(&pattern).unwrap().is_match(token)
                 }
