@@ -5,13 +5,13 @@
 - **Task**: `GaussDBPg -> MySQL struct basic`
 - **Shape**: `single-full`
 - **Truth file**: `.codex-tasks/20260415-gaussdb-to-mysql-struct-basic/TODO.csv`
-- **Current status**: `IN_PROGRESS`
-- **Current step**: `4 - 真实环境运行 struct basic`
+- **Current status**: `DONE`
+- **Last completed**: `5 - 更新 tracker/e2e 矩阵并收口证据`
 - **Key context**:
   - `PgStructExtractor` 产出的 struct statements 为 PG 风格；MySQL 目标端需要显式转换后再执行。
   - 当前实现只覆盖 `PgCreateSchema/PgCreateTable` 的最小转换，以便 bootstrap 级别用例可跑通。
-- **Next action**:
-  - 使用 `.env.local` 执行 `gaussdb_to_mysql::struct_basic_test`，如 expect_ddl 不匹配则以 dst_ddl 输出为准迭代基线。
+- **Validation**:
+  - `set -a; source dt-tests/tests/.env.local; set +a && cargo test -p dt-tests --test integration_test -- gaussdb_to_mysql::struct_tests::test::struct_basic_test --nocapture` ✅（MySQL8 expect 基线同步后 PASS）
 
 ## 验证记录
 

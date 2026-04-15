@@ -90,15 +90,20 @@ MVP（`DbType::GaussDBPg`）已在真实环境闭环验证：
 ### 2.3 Active Epic C：`GaussDB -> MySQL Bootstrap`
 
 目标：启动 **`GaussDBPg -> MySQL`** 反向链路的第一轮 bootstrap，先用最小 `dt-tests`
-证据证明“源端 GaussDB / 目标端 MySQL”的 snapshot / check / cdc 三条主路径可运行。
+证据证明“源端 GaussDB / 目标端 MySQL”的主路径可运行，并在 bootstrap 稳定后补齐
+`precheck/struct/e2e` 入口，形成可重复回归的最小闭环。
 
 范围锁定：
 
-- 只做 `GaussDBPg -> MySQL` 的 bootstrap（先跑通最小链路，再决定是否扩展 struct/ddl/resume/failover）。
-- 第一个阶段交付到：
+- 只做 `GaussDBPg -> MySQL` 的 bootstrap（先跑通最小链路；本轮额外补齐 `precheck/struct`；暂不扩展 `cdc resume/failover/ddl`）。
+- 本阶段交付到：
   - `snapshot basic`（一表两行）
   - `check basic`（确定性 1 行 diff + expect_check_log）
   - `cdc basic`（一表 insert/update/delete，最终状态对比）
+  - `precheck basic`（struct_supported 主路径）
+  - `struct basic`（schema/table 转换）
+  - `struct advanced`（default/index(ubtree) 覆盖）
+  - 一键回归脚本：`bash scripts/e2e/gaussdb_to_mysql_bootstrap.sh`（quick/full）
 
 关键约定：
 
@@ -109,12 +114,22 @@ MVP（`DbType::GaussDBPg`）已在真实环境闭环验证：
 
 - `.codex-tasks/20260413-gaussdb-to-mysql-bootstrap/SUBTASKS.csv`
 
-当前进度（2026-04-13）：
+补充 spec（不进入 Epic C 真表）：
+
+- `GaussDBPg -> MySQL precheck basic`：`.codex-tasks/20260415-gaussdb-to-mysql-precheck/`
+- `GaussDBPg -> MySQL struct basic`：`.codex-tasks/20260415-gaussdb-to-mysql-struct-basic/`
+- `GaussDBPg -> MySQL struct advanced`：`.codex-tasks/20260415-gaussdb-to-mysql-struct-advance/`
+
+当前进度（2026-04-15）：
 
 - child 1 `snapshot basic` ✅
 - child 2 `check basic` ✅
 - child 3 `cdc basic` ✅
 - child 4 `docs/tracker/e2e 收口` ✅
+- `precheck basic` ✅
+- `struct basic` ✅
+- `struct advanced` ✅
+- `scripts/e2e/gaussdb_to_mysql_bootstrap.sh` ✅
 
 ### 2.4 Blocked Backlog
 

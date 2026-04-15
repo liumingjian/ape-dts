@@ -1,6 +1,6 @@
 # GaussDB 全局进度跟踪清单（PRD 真相源）
 
-> 最后更新：**2026-04-15（GaussDBPg→MySQL bootstrap：struct basic PASS；MySQL→GaussDBMySQL 目标端 failover self-heal PASS）**
+> 最后更新：**2026-04-15（GaussDBPg→MySQL bootstrap：struct advanced PASS + 一键 e2e 脚本落盘；MySQL→GaussDBMySQL 目标端 failover self-heal PASS）**
 >
 > 目标：每完成一次 spec 任务后，都能立刻知道“当前已交付什么、证据在哪、下一步做什么”。
 
@@ -32,7 +32,7 @@
 |---|---|---|---|---|---|---|---|
 | **PG → GaussDBPg** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **GaussDBPg → PG** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **GaussDBPg → MySQL（bootstrap）** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| **GaussDBPg → MySQL（bootstrap）** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **MySQL → GaussDBMySQL（首波）** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 说明：
@@ -43,6 +43,8 @@
 - `GaussDBPg → MySQL（bootstrap）` 已新增 `dt-tests` 入口并完成真实验证：snapshot/check/cdc basic（证据见 `.codex-tasks/20260413-gaussdb-to-mysql-bootstrap/PROGRESS.md`）。
 - `GaussDBPg → MySQL（bootstrap）` 的 `precheck` 已新增 `dt-tests` 入口（证据见 `.codex-tasks/20260415-gaussdb-to-mysql-precheck/PROGRESS.md`）。
 - `GaussDBPg → MySQL（bootstrap）` 的 `struct` 已新增 `dt-tests` 入口 `gaussdb_to_mysql::struct_tests::test::struct_basic_test` 并完成真实验证（证据见 `.codex-tasks/20260415-gaussdb-to-mysql-struct-basic/PROGRESS.md`）。
+- `GaussDBPg → MySQL（bootstrap）` 的 `struct advanced` 已覆盖 `default/index(ubtree)` 并完成真实验证（证据见 `.codex-tasks/20260415-gaussdb-to-mysql-struct-advance/PROGRESS.md`）。
+- `GaussDBPg → MySQL（bootstrap）` 已补齐一键回归脚本：`bash scripts/e2e/gaussdb_to_mysql_bootstrap.sh`（quick/full，详见 `docs/agent-summary/gaussdb-e2e-test-plan.md`）。
 - SHA256 认证：当前以 `BLOCKED` 方式纳入执行真表（等待联调环境可用）。
 - 当前 active 方向已演进为：`GaussDBMySQL CDC Expansion`、`GaussDBPg Quality Coverage`、`GaussDB -> MySQL Bootstrap`。
 
@@ -92,6 +94,9 @@
 | `GaussDBMySQL` 首波（`MySQL -> GaussDBMySQL` 目标端优先） | ✅ | `.codex-tasks/20260402-gaussdb-mysql-bootstrap/PROGRESS.md` |
 | `MySQL → GaussDBMySQL` CDC：目标端 failover 自愈（无 VIP/LB） | ✅ | `.codex-tasks/20260413-gaussdb-target-selfheal/PROGRESS.md` |
 | `GaussDBPg → MySQL` bootstrap（snapshot/check/cdc basic） | ✅ | `.codex-tasks/20260413-gaussdb-to-mysql-bootstrap/PROGRESS.md` |
+| `GaussDBPg → MySQL` precheck basic | ✅ | `.codex-tasks/20260415-gaussdb-to-mysql-precheck/PROGRESS.md` |
+| `GaussDBPg → MySQL` struct（basic + advanced） | ✅ | `.codex-tasks/20260415-gaussdb-to-mysql-struct-basic/TODO.csv` + `.codex-tasks/20260415-gaussdb-to-mysql-struct-advance/PROGRESS.md` |
+| 一键回归 e2e：`scripts/e2e/gaussdb_to_mysql_bootstrap.sh` | ✅ | `scripts/e2e/gaussdb_to_mysql_bootstrap.sh` + `docs/agent-summary/gaussdb-e2e-test-plan.md` |
 | `GaussDBPg` 质量补齐（类型矩阵 / check 细化 / 性能可观测） | ✅ | `.codex-tasks/20260402-gaussdbpg-quality-coverage/PROGRESS.md` |
 | `GaussDBOracle` 路线图 / 阻塞项 | ⛔ BLOCKED | `docs/agent-summary/gaussdb-oracle-roadmap.md` |
 

@@ -1,0 +1,6 @@
+id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
+1,收集真相源并形成“双向链路完成度”结论草稿,DONE,PROGRESS.md 里有清晰结论与证据索引,"test -f .codex-tasks/20260415-gaussdb-mysql-bidir-review/PROGRESS.md",2026-04-15 13:55:34 +0800,0,结论与证据索引已写入 PROGRESS.md
+2,定位 tracker/plan 与实际交付的偏差点（需要修正的点）,DONE,PROGRESS.md 列出偏差点与修正项,"rg -n \"GaussDBPg → MySQL|GaussDBPg -> MySQL|GaussDBMySQL\" docs/agent-summary/gaussdb-progress-tracker.md docs/agent-summary/plan.md | wc -l",2026-04-15 13:55:34 +0800,0,偏差点已识别并修正（e2e/struct advanced/状态块一致性）
+3,更新 tracker 与 plan（对齐到最新交付）,DONE,文档更新后可检索到 struct advanced + e2e script + 最新状态,"rg -n \"gaussdb_to_mysql_bootstrap\\.sh|struct advanced|struct_advanced_test\" docs/agent-summary/gaussdb-progress-tracker.md docs/agent-summary/plan.md",2026-04-15 13:55:34 +0800,0,tracker/plan 已更新并通过检索验证
+4,修正文档/任务中可恢复信息的小一致性问题（如 PROGRESS 状态块）,DONE,不影响真相源但保证恢复信息自洽,"rg -n \"Current status\" .codex-tasks/20260415-gaussdb-to-mysql-struct-basic/PROGRESS.md",2026-04-15 13:55:34 +0800,0,struct basic 任务 PROGRESS 状态块已对齐 TODO.csv
+5,最终复盘输出：给出“是否可跳下一模块”的推荐与下一步任务入口,DONE,结论写入 PROGRESS.md 且指向下一步（可能是新 Epic 或后续 spec）,"rg -n \"结论|下一步\" .codex-tasks/20260415-gaussdb-mysql-bidir-review/PROGRESS.md",2026-04-15 13:55:34 +0800,0,已写入最终结论与下一步建议
