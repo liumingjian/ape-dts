@@ -683,7 +683,7 @@ impl ExtractorUtil {
                 .await?;
                 Some(RdbMetaManager::from_mysql(meta_manager))
             }
-            DbType::Pg | DbType::GaussDBPg => {
+            DbType::Pg | DbType::GaussDBPg | DbType::GaussDBOracle => {
                 let conn_pool =
                     TaskUtil::create_pg_conn_pool(extractor_url, connection_auth, 1, true, false)
                         .await?;

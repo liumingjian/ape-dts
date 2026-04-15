@@ -1,6 +1,6 @@
 # GaussDB 全局进度跟踪清单（PRD 真相源）
 
-> 最后更新：**2026-04-15（Oracle <-> GaussDBOracle snapshot smoke PASS；GaussDBOracle 远端 oracle-mode testdb：snapshot/struct/check PASS；Oracle XE 本机 docker ready；GaussDBPg→MySQL bootstrap：struct advanced PASS + 一键 e2e 脚本落盘；MySQL→GaussDBMySQL 目标端 failover self-heal PASS）**
+> 最后更新：**2026-04-15（PG ↔ GaussDBOracle：snapshot/struct/check/cdc basic PASS；Oracle <-> GaussDBOracle snapshot smoke PASS；Oracle XE 本机 docker ready；GaussDBPg→MySQL bootstrap：struct advanced PASS + 一键 e2e 脚本落盘；MySQL→GaussDBMySQL 目标端 failover self-heal PASS）**
 >
 > 目标：每完成一次 spec 任务后，都能立刻知道“当前已交付什么、证据在哪、下一步做什么”。
 
@@ -34,7 +34,8 @@
 | **GaussDBPg → PG** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **GaussDBPg → MySQL（bootstrap）** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **MySQL → GaussDBMySQL（首波）** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **PG → GaussDBOracle（non-CDC basic）** | ✅ | - | ✅ | ✅ | - | ✅ | - |
+| **PG → GaussDBOracle** | ✅ | ✅ | ✅ | ✅ | - | ✅ | ✅ |
+| **GaussDBOracle → PG** | ✅ | ✅ | ✅ | ✅ | - | ✅ | ✅ |
 | **Oracle -> GaussDBOracle（snapshot bootstrap）** | ✅ | - | - | - | - | ✅ | - |
 | **GaussDBOracle -> Oracle（snapshot bootstrap）** | ✅ | - | - | - | - | ✅ | - |
 
@@ -48,14 +49,17 @@
 - `GaussDBPg → MySQL（bootstrap）` 的 `struct` 已新增 `dt-tests` 入口 `gaussdb_to_mysql::struct_tests::test::struct_basic_test` 并完成真实验证（证据见 `.codex-tasks/20260415-gaussdb-to-mysql-struct-basic/PROGRESS.md`）。
 - `GaussDBPg → MySQL（bootstrap）` 的 `struct advanced` 已覆盖 `default/index(ubtree)` 并完成真实验证（证据见 `.codex-tasks/20260415-gaussdb-to-mysql-struct-advance/PROGRESS.md`）。
 - `GaussDBPg → MySQL（bootstrap）` 已补齐一键回归脚本：`bash scripts/e2e/gaussdb_to_mysql_bootstrap.sh`（quick/full，详见 `docs/agent-summary/gaussdb-e2e-test-plan.md`）。
-- `GaussDBOracle` 已支持远端 oracle-mode `testdb` 的 non-CDC basic：`snapshot/struct/check`（证据见 `.codex-tasks/20260415-gaussdb-oracle-next/PROGRESS.md`）。
+- `PG ↔ GaussDBOracle` 已交付双向同步最小闭环：`snapshot/struct/check/cdc basic`（证据见 `.codex-tasks/20260415-pg-gaussdboracle-bidir-sync-epic/`）。
+  - `PG -> GaussDBOracle`: `pg_to_gaussdb_oracle::cdc_tests::test::cdc_basic_test` PASS
+  - `GaussDBOracle -> PG`: `gaussdb_oracle_to_pg::cdc_tests::test::cdc_basic_test` PASS
+- `GaussDBOracle` 同时保留远端 oracle-mode `testdb` 的 non-CDC basic 证据（见 `.codex-tasks/20260415-gaussdb-oracle-next/PROGRESS.md`）。
 - `GaussDBOracle` 同时保留本机 docker 环境（openGauss `sql_compatibility=A`）作为快速回归替身（证据见 `.codex-tasks/20260415-gaussdb-oracle-bootstrap/PROGRESS.md`）。
 - `Oracle <-> GaussDBOracle` 已交付 bootstrap 级 snapshot 双向链路（`sqlplus` CLI via docker exec）：
   - `Oracle -> GaussDBOracle`: `oracle_to_gaussdb_oracle::snapshot_tests::test::smoke_test` PASS
   - `GaussDBOracle -> Oracle`: `gaussdb_oracle_to_oracle::snapshot_tests::test::smoke_test` PASS
   - 证据：`.codex-tasks/20260415-oracle-gaussdboracle-bidir-epic/PROGRESS.md`
 - SHA256 认证：当前以 `BLOCKED` 方式纳入执行真表（等待联调环境可用）。
-- 当前 active 方向已演进为：`GaussDBOracle Bootstrap`、`Oracle <-> GaussDBOracle Bootstrap`、`GaussDBMySQL CDC Expansion`、`GaussDBPg Quality Coverage`、`GaussDB -> MySQL Bootstrap`。
+- 当前 active 方向已演进为：`PG <-> GaussDBOracle Sync`、`GaussDBOracle Bootstrap`、`Oracle <-> GaussDBOracle Bootstrap`、`GaussDBMySQL CDC Expansion`、`GaussDBPg Quality Coverage`、`GaussDB -> MySQL Bootstrap`。
 
 ## 3. 执行真表（Epic）
 
@@ -86,6 +90,10 @@
   - `SUBTASKS.csv`
   - `PROGRESS.md`
 - Epic：`.codex-tasks/20260415-oracle-gaussdboracle-bidir-epic/`
+  - `EPIC.md`
+  - `SUBTASKS.csv`
+  - `PROGRESS.md`
+- Epic：`.codex-tasks/20260415-pg-gaussdboracle-bidir-sync-epic/`
   - `EPIC.md`
   - `SUBTASKS.csv`
   - `PROGRESS.md`

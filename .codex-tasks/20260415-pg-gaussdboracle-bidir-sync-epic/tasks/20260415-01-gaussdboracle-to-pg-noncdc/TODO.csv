@@ -1,0 +1,7 @@
+id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
+1,新增 dt-tests 模块与入口（integration_test + mod.rs）,DONE,integration_test.rs 可编译且包含新模块,cargo test -p dt-tests --test integration_test --no-run,2026-04-15 17:47:32 +0800,0,PASS
+2,新增 snapshot smoke fixture + 用例,DONE,snapshot smoke 文件齐全,test -f dt-tests/tests/gaussdb_oracle_to_pg/snapshot/smoke_test/task_config.ini,2026-04-15 17:47:32 +0800,0,OK
+3,新增 struct basic fixture + 用例,DONE,struct basic 文件齐全,test -f dt-tests/tests/gaussdb_oracle_to_pg/struct/basic_test/task_config.ini,2026-04-15 17:47:32 +0800,0,OK
+4,新增 check basic fixture + 用例,DONE,check basic 文件齐全,test -f dt-tests/tests/gaussdb_oracle_to_pg/check/basic_test/task_config.ini,2026-04-15 17:47:32 +0800,0,OK
+5,运行并通过三条用例（snapshot/struct/check）,DONE,三条测试均 PASS,cargo test -p dt-tests --test integration_test -- gaussdb_oracle_to_pg::snapshot_tests::test::smoke_test gaussdb_oracle_to_pg::struct_tests::test::struct_basic_test gaussdb_oracle_to_pg::check_tests::test::check_basic_test --nocapture,2026-04-15 17:53:24 +0800,0,PASS（含一次 transient retry）
+6,更新 docs/agent-summary 能力矩阵与 e2e matrix,DONE,rg 可检索到新入口,rg -n \"gaussdb_oracle_to_pg\" docs/agent-summary/*.md,2026-04-15 17:56:01 +0800,0,PASS

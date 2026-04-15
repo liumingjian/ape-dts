@@ -1040,6 +1040,10 @@ Please run the test from a normal terminal environment with network access."
     }
 
     pub async fn run_cdc_test(&self, start_millis: u64, parse_millis: u64) -> anyhow::Result<()> {
+        // Ensure the log directory is clean so compare retries don't trip over shutdown markers
+        // from previous runs (CDC tests always abort tasks at the end).
+        self.prepare_resume_log_dir()?;
+
         // prepare src and dst tables
         self.execute_prepare_sqls().await?;
 
@@ -3603,7 +3607,10 @@ Please run the test from a normal terminal environment with network access."
             // In failover tests we may close the original pool intentionally to avoid pinning
             // sessions to the old primary. For GaussDB, also prefer querying the current RW
             // primary when candidate hosts are provided.
-            let prefer_gaussdb_rw = matches!(db_type, DbType::GaussDBPg | DbType::GaussDBMySQL)
+            let prefer_gaussdb_rw = matches!(
+                db_type,
+                DbType::GaussDBPg | DbType::GaussDBMySQL | DbType::GaussDBOracle
+            )
                 && env::var("gaussdb_pg_candidate_hosts").is_ok();
             if prefer_gaussdb_rw {
                 if let Some((rw_url, rw_pool)) =

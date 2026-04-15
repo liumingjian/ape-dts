@@ -414,8 +414,24 @@ impl TaskConfig {
                     partition_cols: loader.get_optional(EXTRACTOR, PARTITION_COLS),
                 },
 
+                // GaussDB CDC is implemented via mppdb_decoding (see dt-connector extractor/gaussdb).
                 // NOTE: `GaussDBOracle` is expected to be reached via Postgres wire protocol
-                // with `sql_compatibility=A`. We intentionally do not claim CDC support here yet.
+                // with `sql_compatibility=A`. CDC support here is best-effort and depends on the
+                // server-side plugin availability/configuration.
+                ExtractType::Cdc => ExtractorConfig::GaussDBCdc {
+                    url,
+                    connection_auth,
+                    slot_name: loader.get_required(EXTRACTOR, "slot_name"),
+                    start_lsn: loader.get_optional(EXTRACTOR, "start_lsn"),
+                    recreate_slot_if_exists: loader
+                        .get_optional(EXTRACTOR, "recreate_slot_if_exists"),
+                    keepalive_interval_secs,
+                    heartbeat_interval_secs,
+                    heartbeat_tb,
+                    start_time_utc: loader.get_optional(EXTRACTOR, "start_time_utc"),
+                    end_time_utc: loader.get_optional(EXTRACTOR, "end_time_utc"),
+                },
+
                 ExtractType::CheckLog => ExtractorConfig::PgCheck {
                     url,
                     connection_auth,

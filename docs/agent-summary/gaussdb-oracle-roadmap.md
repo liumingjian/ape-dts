@@ -1,8 +1,8 @@
 # GaussDB Oracle 兼容模式路线图（已解锁：远端 oracle-mode + 本机 Docker）
 
-> 状态：`ACTIVE (non-CDC basic PASS)`
+> 状态：`ACTIVE (CDC basic PASS)`
 
-当前已在远端 oracle-mode 数据库验证通过 `PG -> GaussDBOracle` 的 **snapshot/struct/check basic**，
+当前已在远端 oracle-mode 数据库验证通过 `PG -> GaussDBOracle` 与 `GaussDBOracle -> PG` 的 **snapshot/struct/check/cdc basic**，
 并保留本机 openGauss oracle-mode 作为快速回归替身环境。
 
 ## 1. 环境
@@ -22,16 +22,22 @@
   - dt-tests 默认通过 `ORACLE_SQLPLUS_DOCKER_CONTAINER=oracle-xe-local` 以 `docker exec` 调用容器内 `sqlplus`
   - 端口：`15211`（listener），`18080`（HTTP）
 
-## 2. 当前已交付（non-CDC basic）
+## 2. 当前已交付（sync basic）
 
-- 代码：`DbType::GaussDBOracle`（`gaussdb_oracle`）已补齐 non-CDC 主链路所需的 DDL/struct-check 兼容
+- 代码：`DbType::GaussDBOracle`（`gaussdb_oracle`）已补齐 sync basic 主链路（snapshot/struct/check/cdc）
 - 自动化（dt-tests）：
   - snapshot: `pg_to_gaussdb_oracle::snapshot_tests::test::smoke_test`
+  - snapshot: `gaussdb_oracle_to_pg::snapshot_tests::test::smoke_test`
   - struct: `pg_to_gaussdb_oracle::struct_tests::test::struct_basic_test`
+  - struct: `gaussdb_oracle_to_pg::struct_tests::test::struct_basic_test`
   - check: `pg_to_gaussdb_oracle::check_tests::test::check_basic_test`
+  - check: `gaussdb_oracle_to_pg::check_tests::test::check_basic_test`
+  - cdc: `pg_to_gaussdb_oracle::cdc_tests::test::cdc_basic_test`
+  - cdc: `gaussdb_oracle_to_pg::cdc_tests::test::cdc_basic_test`
 - 证据：
   - `.codex-tasks/20260415-gaussdb-oracle-next/PROGRESS.md`
   - `.codex-tasks/20260415-gaussdb-oracle-bootstrap/PROGRESS.md`（本机 docker 替身）
+  - `.codex-tasks/20260415-pg-gaussdboracle-bidir-sync-epic/`（PG ↔ GaussDBOracle sync basic）
 
 ## 2.1 额外交付：Oracle ↔ GaussDBOracle（bootstrap snapshot）
 
@@ -51,4 +57,4 @@
 ## 4. 明确不做（当前阶段）
 
 - 不实现 Oracle wire-protocol/OCI/JDBC 级别连接器（bootstrap 走 `sqlplus` CLI）
-- 不承诺 `GaussDBOracle` 的 CDC/resume/failover（后续单开 Epic）
+- 不承诺 `GaussDBOracle` 的 CDC resume/failover/DDL-CDC（后续按需要单开 Epic）
