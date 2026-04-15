@@ -37,6 +37,7 @@
 - `MySQL -> GaussDBMySQL` smoke
 - `MySQL -> GaussDBMySQL` struct basic
 - `MySQL -> GaussDBMySQL` check basic
+- 或一键回归（Quick）：`bash scripts/e2e/gaussdb_to_mysql_bootstrap.sh`
 
 ### 2.2 Full Functional Gate
 
@@ -102,6 +103,7 @@
 | Quick | `GaussDBPg -> MySQL` check basic | `cargo test -p dt-tests --test integration_test -- gaussdb_to_mysql::check_tests::test::check_basic_test --nocapture` | GaussDBPg + MySQL8 | 反向对账主路径（bootstrap） |
 | Quick | `GaussDBPg -> MySQL` CDC basic | `cargo test -p dt-tests --test integration_test -- gaussdb_to_mysql::cdc_tests::test::cdc_basic_test --nocapture` | GaussDBPg + MySQL8 | 基础 CDC 主路径（bootstrap） |
 | Quick | `GaussDBPg -> MySQL` precheck basic | `cargo test -p dt-tests --test integration_test -- gaussdb_to_mysql::precheck_tests::test::struct_supported_basic_test --nocapture` | GaussDBPg + MySQL8 | 预检查主路径（bootstrap） |
+| Quick | `GaussDBPg -> MySQL` bootstrap batch（script） | `bash scripts/e2e/gaussdb_to_mysql_bootstrap.sh` | GaussDBPg + MySQL8 | 一键回归（snapshot/struct/check/cdc/precheck） |
 | Quick | `MySQL -> GaussDBMySQL` smoke | `cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::snapshot_tests::test::smoke_test --nocapture` | MySQL8 + GaussDBMySQL | 最小连通性 |
 | Quick | `MySQL -> GaussDBMySQL` struct basic | `cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::struct_tests::test::struct_basic_test --nocapture` | MySQL8 + GaussDBMySQL | 对象同步主路径 |
 | Quick | `MySQL -> GaussDBMySQL` check basic | `cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::check_tests::test::check_basic_test --nocapture` | MySQL8 + GaussDBMySQL | 对账主路径 |
