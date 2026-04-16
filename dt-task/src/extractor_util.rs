@@ -42,7 +42,10 @@ use dt_connector::{
             mysql_snapshot_extractor::MysqlSnapshotExtractor,
             mysql_struct_extractor::MysqlStructExtractor,
         },
-        oracle::oracle_snapshot_extractor::OracleSnapshotExtractor,
+        oracle::{
+            oracle_cdc_extractor::OracleCdcExtractor,
+            oracle_snapshot_extractor::OracleSnapshotExtractor,
+        },
         pg::{
             pg_cdc_extractor::PgCdcExtractor, pg_check_extractor::PgCheckExtractor,
             pg_snapshot_extractor::PgSnapshotExtractor, pg_struct_extractor::PgStructExtractor,
@@ -285,6 +288,31 @@ impl ExtractorUtil {
                     tb,
                     base_extractor,
                     filter,
+                    recovery,
+                };
+                Box::new(extractor)
+            }
+
+            ExtractorConfig::OracleCdc {
+                poll_interval_millis,
+                poll_batch_size,
+                start_change_id,
+                start_time_utc,
+                end_time_utc,
+                ..
+            } => {
+                let client = match extractor_client {
+                    ConnClient::Oracle(client) => client,
+                    _ => bail!("oracle client not found"),
+                };
+                base_extractor.time_filter = TimeFilter::new(&start_time_utc, &end_time_utc)?;
+                let extractor = OracleCdcExtractor {
+                    client,
+                    filter,
+                    poll_interval_millis,
+                    poll_batch_size,
+                    start_change_id,
+                    base_extractor,
                     recovery,
                 };
                 Box::new(extractor)

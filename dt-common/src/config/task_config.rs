@@ -349,6 +349,19 @@ impl TaskConfig {
                     batch_size,
                     partition_cols: loader.get_optional(EXTRACTOR, PARTITION_COLS),
                 },
+                ExtractType::Cdc => ExtractorConfig::OracleCdc {
+                    url,
+                    connection_auth,
+                    poll_interval_millis: loader.get_with_default(
+                        EXTRACTOR,
+                        "poll_interval_millis",
+                        200_u64,
+                    ),
+                    poll_batch_size: loader.get_with_default(EXTRACTOR, "poll_batch_size", 200),
+                    start_change_id: loader.get_optional(EXTRACTOR, "start_change_id"),
+                    start_time_utc: loader.get_optional(EXTRACTOR, "start_time_utc"),
+                    end_time_utc: loader.get_optional(EXTRACTOR, "end_time_utc"),
+                },
                 _ => bail! { not_supported_err },
             },
 

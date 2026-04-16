@@ -132,6 +132,7 @@
 | Quick | `GaussDBOracle -> PG` precheck basic | `cargo test -p dt-tests --test integration_test -- gaussdb_oracle_to_pg::precheck_tests::test::struct_supported_basic_test --nocapture` | GaussDBOracle + PG | 反向预检查（oracle-mode） |
 | Quick | `GaussDBOracle -> PG` CDC basic | `cargo test -p dt-tests --test integration_test -- gaussdb_oracle_to_pg::cdc_tests::test::cdc_basic_test --nocapture` | GaussDBOracle + PG | 反向增量同步（oracle-mode） |
 | Quick | `Oracle -> GaussDBOracle` snapshot smoke | `cargo test -p dt-tests --test integration_test -- oracle_to_gaussdb_oracle::snapshot_tests::test::smoke_test --nocapture` | Oracle XE + GaussDBOracle | Oracle 源端快照（bootstrap） |
+| Quick | `Oracle -> GaussDBOracle` CDC basic | `cargo test -p dt-tests --test integration_test -- oracle_to_gaussdb_oracle::cdc_tests::test::cdc_basic_test --nocapture` | Oracle XE + GaussDBOracle | Oracle 源端增量（bootstrap trigger-based） |
 | Quick | `GaussDBOracle -> Oracle` snapshot smoke | `cargo test -p dt-tests --test integration_test -- gaussdb_oracle_to_oracle::snapshot_tests::test::smoke_test --nocapture` | GaussDBOracle + Oracle XE | Oracle 目标端写入（bootstrap） |
 | Full | `PG -> GaussDBPg` CDC basic | `cargo test -p dt-tests --test integration_test -- pg_to_gaussdb::cdc_tests::test::cdc_basic_test --nocapture` | PG + GaussDBPg | 正向 CDC |
 | Full | `PG -> GaussDBPg` type matrix | `cargo test -p dt-tests --test integration_test -- pg_to_gaussdb::snapshot_tests::test::type_matrix_test --nocapture` | PG + GaussDBPg | 特有类型快照兼容 |

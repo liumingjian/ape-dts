@@ -3,10 +3,12 @@
 ## Goal
 
 - 交付 `Oracle ↔ GaussDBOracle` 的**双向链路（bootstrap）**：至少支持 `snapshot` 级别的全量迁移在两端可跑通，并提供 `dt-tests` 自动化回归入口。
+- 在 bootstrap 范围内，补齐 `Oracle -> GaussDBOracle` 的 **CDC basic** 回归入口（DML：insert/update/delete）。
 
 ## Non-Goals
 
 - 本 Epic **不承诺** Oracle 侧 CDC（LogMiner/OGG 等）与双活防环（DataMarker 拓扑）的完整实现。
+  - 当前 CDC basic 以 **trigger-based** 方案打通主链路（可回归、可验证），并不等同于 redo/logminer 级别能力。
 - 本 Epic **不承诺** Oracle 侧 Struct 同步的完整覆盖（视图/序列/存储过程等）。
 
 ## Constraints
@@ -25,6 +27,7 @@
 
 - `DbType::Oracle` + 最小可用 Oracle Snapshot Extractor / Oracle Write Sinker（用于 `snapshot` 双向链路）。
 - `dt-tests`：新增 `oracle_to_gaussdb_oracle` 与 `gaussdb_oracle_to_oracle` 的 snapshot smoke，用 Oracle XE + 远端 GaussDBOracle 进行回归。
+- `dt-connector/dt-task/dt-common`：补齐 Oracle CDC（bootstrap：trigger-based）并提供 `oracle_to_gaussdb_oracle::cdc_basic_test` 回归入口。
 - 文档与 tracker：补齐入口与证据索引（避免后续上下文丢失）。
 
 ## Done-When
@@ -32,3 +35,4 @@
 - [x] `SUBTASKS.csv` 全部为 `DONE`
 - [x] `cargo test -p dt-tests --test integration_test -- oracle_to_gaussdb_oracle::snapshot_tests::test::smoke_test --nocapture` 通过
 - [x] `cargo test -p dt-tests --test integration_test -- gaussdb_oracle_to_oracle::snapshot_tests::test::smoke_test --nocapture` 通过
+- [x] `cargo test -p dt-tests --test integration_test -- oracle_to_gaussdb_oracle::cdc_tests::test::cdc_basic_test --nocapture` 通过

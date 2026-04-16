@@ -84,6 +84,16 @@ pub enum ExtractorConfig {
         partition_cols: String,
     },
 
+    OracleCdc {
+        url: String,
+        connection_auth: ConnectionAuthConfig,
+        poll_interval_millis: u64,
+        poll_batch_size: usize,
+        start_change_id: u64,
+        start_time_utc: String,
+        end_time_utc: String,
+    },
+
     PgCdc {
         url: String,
         connection_auth: ConnectionAuthConfig,

@@ -43,9 +43,12 @@
 
 ## 2.1 额外交付：Oracle ↔ GaussDBOracle（bootstrap snapshot）
 
-- 代码：新增 `DbType::Oracle` + `OracleSqlPlusClient` + `OracleSnapshotExtractor` + `OracleSinker`（bootstrap：仅 snapshot + INSERT）
+- 代码：
+  - 新增 `DbType::Oracle` + `OracleSqlPlusClient` + `OracleSnapshotExtractor` + `OracleSinker`（bootstrap：snapshot + INSERT）
+  - 新增 `OracleCdcExtractor`（bootstrap：trigger-based，支持 DML insert/update/delete，用于 `Oracle -> GaussDBOracle`）
 - 自动化（dt-tests）：
   - snapshot: `oracle_to_gaussdb_oracle::snapshot_tests::test::smoke_test`
+  - cdc: `oracle_to_gaussdb_oracle::cdc_tests::test::cdc_basic_test`
   - snapshot: `gaussdb_oracle_to_oracle::snapshot_tests::test::smoke_test`
 - 证据：
   - `.codex-tasks/20260415-oracle-gaussdboracle-bidir-epic/PROGRESS.md`
