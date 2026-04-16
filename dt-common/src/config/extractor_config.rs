@@ -94,6 +94,16 @@ pub enum ExtractorConfig {
         end_time_utc: String,
     },
 
+    OracleLogMinerCdc {
+        url: String,
+        connection_auth: ConnectionAuthConfig,
+        poll_interval_millis: u64,
+        poll_batch_size: usize,
+        start_scn: u64,
+        start_time_utc: String,
+        end_time_utc: String,
+    },
+
     PgCdc {
         url: String,
         connection_auth: ConnectionAuthConfig,

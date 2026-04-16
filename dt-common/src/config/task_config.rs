@@ -102,6 +102,8 @@ const DDL_CONFLICT_POLICY: &str = "ddl_conflict_policy";
 const REPLACE: &str = "replace";
 const DISABLE_FOREIGN_KEY_CHECKS: &str = "disable_foreign_key_checks";
 const RESUME_TYPE: &str = "resume_type";
+const CDC_MODE: &str = "cdc_mode";
+const START_SCN: &str = "start_scn";
 // deprecated keys
 const RESUME_FROM_LOG: &str = "resume_from_log";
 const RESUME_LOG_DIR: &str = "resume_log_dir";
@@ -349,19 +351,40 @@ impl TaskConfig {
                     batch_size,
                     partition_cols: loader.get_optional(EXTRACTOR, PARTITION_COLS),
                 },
-                ExtractType::Cdc => ExtractorConfig::OracleCdc {
-                    url,
-                    connection_auth,
-                    poll_interval_millis: loader.get_with_default(
-                        EXTRACTOR,
-                        "poll_interval_millis",
-                        200_u64,
-                    ),
-                    poll_batch_size: loader.get_with_default(EXTRACTOR, "poll_batch_size", 200),
-                    start_change_id: loader.get_optional(EXTRACTOR, "start_change_id"),
-                    start_time_utc: loader.get_optional(EXTRACTOR, "start_time_utc"),
-                    end_time_utc: loader.get_optional(EXTRACTOR, "end_time_utc"),
-                },
+                ExtractType::Cdc => {
+                    let cdc_mode: String = loader.get_optional(EXTRACTOR, CDC_MODE);
+                    let poll_interval_millis =
+                        loader.get_with_default(EXTRACTOR, "poll_interval_millis", 200_u64);
+                    let poll_batch_size = loader.get_with_default(EXTRACTOR, "poll_batch_size", 200);
+                    let start_time_utc = loader.get_optional(EXTRACTOR, "start_time_utc");
+                    let end_time_utc = loader.get_optional(EXTRACTOR, "end_time_utc");
+
+                    if cdc_mode.trim().eq_ignore_ascii_case("logminer") {
+                        ExtractorConfig::OracleLogMinerCdc {
+                            url,
+                            connection_auth,
+                            poll_interval_millis,
+                            poll_batch_size,
+                            start_scn: loader.get_optional(EXTRACTOR, START_SCN),
+                            start_time_utc,
+                            end_time_utc,
+                        }
+                    } else if cdc_mode.trim().is_empty()
+                        || cdc_mode.trim().eq_ignore_ascii_case("trigger")
+                    {
+                        ExtractorConfig::OracleCdc {
+                            url,
+                            connection_auth,
+                            poll_interval_millis,
+                            poll_batch_size,
+                            start_change_id: loader.get_optional(EXTRACTOR, "start_change_id"),
+                            start_time_utc,
+                            end_time_utc,
+                        }
+                    } else {
+                        bail!("unknown oracle cdc_mode: {}", cdc_mode);
+                    }
+                }
                 _ => bail! { not_supported_err },
             },
 

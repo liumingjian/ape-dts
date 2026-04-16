@@ -44,6 +44,7 @@ use dt_connector::{
         },
         oracle::{
             oracle_cdc_extractor::OracleCdcExtractor,
+            oracle_logminer_cdc_extractor::OracleLogMinerCdcExtractor,
             oracle_snapshot_extractor::OracleSnapshotExtractor,
         },
         pg::{
@@ -312,6 +313,31 @@ impl ExtractorUtil {
                     poll_interval_millis,
                     poll_batch_size,
                     start_change_id,
+                    base_extractor,
+                    recovery,
+                };
+                Box::new(extractor)
+            }
+
+            ExtractorConfig::OracleLogMinerCdc {
+                poll_interval_millis,
+                poll_batch_size,
+                start_scn,
+                start_time_utc,
+                end_time_utc,
+                ..
+            } => {
+                let client = match extractor_client {
+                    ConnClient::Oracle(client) => client,
+                    _ => bail!("oracle client not found"),
+                };
+                base_extractor.time_filter = TimeFilter::new(&start_time_utc, &end_time_utc)?;
+                let extractor = OracleLogMinerCdcExtractor {
+                    client,
+                    filter,
+                    poll_interval_millis,
+                    poll_batch_size,
+                    start_scn,
                     base_extractor,
                     recovery,
                 };

@@ -1,6 +1,6 @@
 id,task,task_type,status,depends_on,task_dir,acceptance_criteria,validation_command,completed_at,retry_count,notes
 1,整理 dt-precheck OraclePrechecker（拆分文件，满足 AGENTS.md 行数约束）,single-full,DONE,,tasks/20260416-01-precheck-refactor,oracle precheck 模块编译且单文件<=300行,cargo test -p dt-precheck --no-run,2026-04-16 13:18:52 +0800,0,PASS
-2,实现 Oracle LogMiner CDC extractor（显式模式）,single-full,TODO,1,tasks/20260416-02-logminer-extractor,logminer extractor 编译通过且能抓到 DML,cargo test -p dt-connector -p dt-task --no-run,,0,
+2,实现 Oracle LogMiner CDC extractor（显式模式）,single-full,DONE,1,tasks/20260416-02-logminer-extractor,logminer extractor 编译通过且能抓到 DML,cargo test -p dt-connector -p dt-task --no-run,2026-04-16 13:40:24 +0800,0,PASS
 3,更新 Oracle XE docker init：授予 LogMiner 权限 + supplemental logging（idempotent）,single-full,TODO,2,tasks/20260416-03-oracle-xe-logminer-privs,容器内 APE_DTS 可执行 logminer 相关 SQL,docker compose -f dt-tests/docker-compose.oracle_xe.yml up -d,,0,
 4,dt-tests：Oracle -> GaussDBOracle cdc basic 切换 logminer 并 PASS,single-full,TODO,2;3,tasks/20260416-04-dt-tests-logminer-cdc,集成测试 PASS,cargo test -p dt-tests --test integration_test -- oracle_to_gaussdb_oracle::cdc_tests::test::cdc_basic_test --nocapture,,0,
 5,docs/tracker/e2e-plan 更新（logminer 模式说明与入口）,single-compact,TODO,4,tasks/20260416-05-docs,rg 可检索入口与证据,rg -n \"logminer\" docs/agent-summary/*.md,,0,

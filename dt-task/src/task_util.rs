@@ -878,6 +878,11 @@ impl ConnClient {
                 url,
                 connection_auth,
                 ..
+            }
+            | ExtractorConfig::OracleLogMinerCdc {
+                url,
+                connection_auth,
+                ..
             } => ConnClient::Oracle(dt_connector::oracle::OracleSqlPlusClient::new(
                 url.clone(),
                 connection_auth.clone(),
