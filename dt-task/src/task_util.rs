@@ -874,6 +874,11 @@ impl ConnClient {
                 connection_auth,
                 ..
             }
+            | ExtractorConfig::OracleStruct {
+                url,
+                connection_auth,
+                ..
+            }
             | ExtractorConfig::OracleCdc {
                 url,
                 connection_auth,

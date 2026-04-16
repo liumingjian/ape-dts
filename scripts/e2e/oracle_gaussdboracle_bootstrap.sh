@@ -15,6 +15,7 @@ cd "$ROOT"
 
 tests=(
   "oracle_to_gaussdb_oracle::snapshot_tests::test::smoke_test"
+  "oracle_to_gaussdb_oracle::struct_tests::test::struct_basic_test"
   "oracle_to_gaussdb_oracle::check_tests::test::check_basic_test"
   "oracle_to_gaussdb_oracle::cdc_tests::test::cdc_basic_test"
   "oracle_to_gaussdb_oracle::precheck_tests::test::struct_supported_basic_test"
@@ -31,4 +32,3 @@ payload=("${tests[@]}")
 
 # Run all selected tests in one invocation to avoid repeated compilation.
 cargo test -p dt-tests --test integration_test -- "${payload[@]}" --nocapture
-

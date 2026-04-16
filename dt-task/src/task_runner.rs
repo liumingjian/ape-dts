@@ -263,7 +263,9 @@ impl TaskRunner {
             .await;
 
         match &self.config.extractor {
-            ExtractorConfig::MysqlStruct { .. } | ExtractorConfig::PgStruct { .. } => {
+            ExtractorConfig::MysqlStruct { .. }
+            | ExtractorConfig::PgStruct { .. }
+            | ExtractorConfig::OracleStruct { .. } => {
                 let mut pending_tasks = self.build_pending_tasks(task_context, false).await?;
                 if let Some(task_context) = pending_tasks.pop_front() {
                     self.clone().start_single_task(task_context, false).await?
@@ -1058,7 +1060,9 @@ impl TaskRunner {
 
         let is_db_extractor_config = matches!(
             &self.config.extractor,
-            ExtractorConfig::MysqlStruct { .. } | ExtractorConfig::PgStruct { .. }
+            ExtractorConfig::MysqlStruct { .. }
+                | ExtractorConfig::PgStruct { .. }
+                | ExtractorConfig::OracleStruct { .. }
         );
         if is_db_extractor_config {
             let db_extractor_config = match &self.config.extractor {
@@ -1087,6 +1091,19 @@ impl TaskRunner {
                     schema: schema.clone(),
                     schemas,
                     do_global_structs: true,
+                    db_batch_size: *db_batch_size,
+                },
+                ExtractorConfig::OracleStruct {
+                    url,
+                    connection_auth,
+                    schema,
+                    db_batch_size,
+                    ..
+                } => ExtractorConfig::OracleStruct {
+                    url: url.clone(),
+                    connection_auth: connection_auth.clone(),
+                    schema: schema.clone(),
+                    schemas,
                     db_batch_size: *db_batch_size,
                 },
                 _ => {

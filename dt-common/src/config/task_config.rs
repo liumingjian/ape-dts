@@ -351,6 +351,17 @@ impl TaskConfig {
                     batch_size,
                     partition_cols: loader.get_optional(EXTRACTOR, PARTITION_COLS),
                 },
+                ExtractType::Struct => ExtractorConfig::OracleStruct {
+                    url,
+                    connection_auth,
+                    schema: String::new(),
+                    schemas: Vec::new(),
+                    db_batch_size: loader.get_with_default(
+                        EXTRACTOR,
+                        "db_batch_size",
+                        DEFAULT_DB_BATCH_SIZE,
+                    ),
+                },
                 ExtractType::Cdc => {
                     let cdc_mode: String = loader.get_optional(EXTRACTOR, CDC_MODE);
                     let poll_interval_millis =

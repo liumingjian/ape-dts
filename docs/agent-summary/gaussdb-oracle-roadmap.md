@@ -41,14 +41,16 @@
   - `.codex-tasks/20260415-gaussdb-oracle-bootstrap/PROGRESS.md`（本机 docker 替身）
   - `.codex-tasks/20260415-pg-gaussdboracle-bidir-sync-epic/`（PG ↔ GaussDBOracle sync basic）
 
-## 2.1 额外交付：Oracle ↔ GaussDBOracle（bootstrap snapshot）
+## 2.1 额外交付：Oracle ↔ GaussDBOracle（bootstrap）
 
 - 代码：
   - 新增 `DbType::Oracle` + `OracleSqlPlusClient` + `OracleSnapshotExtractor` + `OracleSinker`（bootstrap：snapshot + INSERT）
+  - 新增 `OracleStructExtractor`（bootstrap：struct basic，输出 PgCreateSchema/PgCreateTable）
   - 新增 `OracleLogMinerCdcExtractor`（bootstrap：logminer，支持 DML insert/update/delete，用于 `Oracle -> GaussDBOracle`）
   - 兼容保留：`OracleCdcExtractor`（bootstrap：trigger-based）
 - 自动化（dt-tests）：
   - snapshot: `oracle_to_gaussdb_oracle::snapshot_tests::test::smoke_test`
+  - struct: `oracle_to_gaussdb_oracle::struct_tests::test::struct_basic_test`
   - check: `oracle_to_gaussdb_oracle::check_tests::test::check_basic_test`
   - cdc: `oracle_to_gaussdb_oracle::cdc_tests::test::cdc_basic_test`
   - snapshot: `gaussdb_oracle_to_oracle::snapshot_tests::test::smoke_test`
@@ -59,6 +61,7 @@
   - `.codex-tasks/20260416-gaussdboracle-to-oracle-cdc-epic/PROGRESS.md`
   - `.codex-tasks/20260416-oracle-gaussdboracle-logminer-cdc-epic/PROGRESS.md`
   - `.codex-tasks/20260416-oracle-gaussdboracle-check-basic/PROGRESS.md`
+  - `.codex-tasks/20260416-oracle-gaussdboracle-struct-basic/PROGRESS.md`
   - `.codex-tasks/20260416-oracle-gaussdboracle-e2e-script/PROGRESS.md`
 
 ## 3. 下一步建议（按优先级）

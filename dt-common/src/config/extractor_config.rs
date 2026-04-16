@@ -26,6 +26,14 @@ pub enum ExtractorConfig {
         db_batch_size: usize,
     },
 
+    OracleStruct {
+        url: String,
+        connection_auth: ConnectionAuthConfig,
+        schema: String,
+        schemas: Vec<String>,
+        db_batch_size: usize,
+    },
+
     MysqlSnapshot {
         url: String,
         connection_auth: ConnectionAuthConfig,

@@ -46,6 +46,7 @@ use dt_connector::{
             oracle_cdc_extractor::OracleCdcExtractor,
             oracle_logminer_cdc_extractor::OracleLogMinerCdcExtractor,
             oracle_snapshot_extractor::OracleSnapshotExtractor,
+            oracle_struct_extractor::OracleStructExtractor,
         },
         pg::{
             pg_cdc_extractor::PgCdcExtractor, pg_check_extractor::PgCheckExtractor,
@@ -290,6 +291,26 @@ impl ExtractorUtil {
                     base_extractor,
                     filter,
                     recovery,
+                };
+                Box::new(extractor)
+            }
+
+            ExtractorConfig::OracleStruct {
+                schemas,
+                db_batch_size,
+                ..
+            } => {
+                let client = match extractor_client {
+                    ConnClient::Oracle(client) => client,
+                    _ => bail!("oracle client not found"),
+                };
+                let db_batch_size = PgStructExtractor::validate_db_batch_size(db_batch_size)?;
+                let extractor = OracleStructExtractor {
+                    client,
+                    schemas,
+                    db_batch_size,
+                    base_extractor,
+                    filter,
                 };
                 Box::new(extractor)
             }

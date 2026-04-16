@@ -13,11 +13,12 @@ use crate::test_runner::rdb_test_runner::DST;
 
 use super::{
     mongo_check_test_runner::MongoCheckTestRunner, mongo_test_runner::MongoTestRunner,
-    precheck_test_runner::PrecheckTestRunner, rdb_check_test_runner::RdbCheckTestRunner,
-    rdb_kafka_rdb_test_runner::RdbKafkaRdbTestRunner, rdb_lua_test_runner::RdbLuaTestRunner,
-    rdb_redis_test_runner::RdbRedisTestRunner, rdb_sql_test_runner::RdbSqlTestRunner,
-    rdb_starrocks_test_runner::RdbStarRocksTestRunner, rdb_struct_test_runner::RdbStructTestRunner,
-    rdb_test_runner::RdbTestRunner, redis_statistic_runner::RedisStatisticTestRunner,
+    oracle_struct_test_runner::OracleStructTestRunner, precheck_test_runner::PrecheckTestRunner,
+    rdb_check_test_runner::RdbCheckTestRunner, rdb_kafka_rdb_test_runner::RdbKafkaRdbTestRunner,
+    rdb_lua_test_runner::RdbLuaTestRunner, rdb_redis_test_runner::RdbRedisTestRunner,
+    rdb_sql_test_runner::RdbSqlTestRunner, rdb_starrocks_test_runner::RdbStarRocksTestRunner,
+    rdb_struct_test_runner::RdbStructTestRunner, rdb_test_runner::RdbTestRunner,
+    redis_statistic_runner::RedisStatisticTestRunner,
     redis_test_runner::RedisTestRunner,
 };
 
@@ -438,6 +439,22 @@ impl TestBase {
         Self::run_with_retry(test_dir, "pg_struct", || async {
             let mut runner = RdbStructTestRunner::new(test_dir).await?;
             let run_res = runner.run_pg_struct_test().await;
+            let clean_res = runner.base.execute_clean_sqls().await;
+            let _ = runner.close().await;
+
+            if let Err(e) = run_res {
+                return Err(e);
+            }
+            clean_res?;
+            Ok(())
+        })
+        .await;
+    }
+
+    pub async fn run_oracle_struct_test(test_dir: &str) {
+        Self::run_with_retry(test_dir, "oracle_struct", || async {
+            let mut runner = OracleStructTestRunner::new(test_dir).await?;
+            let run_res = runner.run_struct_test().await;
             let clean_res = runner.base.execute_clean_sqls().await;
             let _ = runner.close().await;
 
