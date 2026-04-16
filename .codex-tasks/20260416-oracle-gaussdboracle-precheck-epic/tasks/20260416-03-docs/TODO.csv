@@ -1,0 +1,4 @@
+id,task,status,completed_at,notes
+1,更新 tracker：Oracle ↔ GaussDBOracle precheck ✅ + 证据入口,DONE,2026-04-16 12:46:25 +0800,
+2,更新 e2e-plan：补齐两条 quick precheck 命令,DONE,2026-04-16 12:46:25 +0800,
+3,rg 验证入口可检索,DONE,2026-04-16 12:46:25 +0800,PASS

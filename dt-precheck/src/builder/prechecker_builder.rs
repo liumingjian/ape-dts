@@ -15,12 +15,14 @@ use crate::{
     fetcher::{
         mongo::mongo_fetcher::MongoFetcher, mysql::mysql_fetcher::MysqlFetcher,
         mysql::pg_compatible_mysql_fetcher::PgCompatibleMysqlFetcher,
+        oracle::oracle_fetcher::OracleFetcher,
         postgresql::pg_fetcher::PgFetcher, redis::redis_fetcher::RedisFetcher,
     },
     meta::check_result::CheckResult,
     prechecker::{
         mongo_prechecker::MongoPrechecker, mysql_prechecker::MySqlPrechecker,
-        pg_prechecker::PostgresqlPrechecker, redis_prechecker::RedisPrechecker, traits::Prechecker,
+        oracle_prechecker::OraclePrechecker, pg_prechecker::PostgresqlPrechecker,
+        redis_prechecker::RedisPrechecker, traits::Prechecker,
     },
 };
 
@@ -160,6 +162,13 @@ impl PrecheckerBuilder {
                 filter_config: self.task_config.filter.clone(),
                 precheck_config: self.precheck_config.clone(),
                 is_source,
+            })),
+            DbType::Oracle => Some(Box::new(OraclePrechecker {
+                db_type: DbType::Oracle,
+                filter_config: self.task_config.filter.clone(),
+                precheck_config: self.precheck_config.clone(),
+                is_source,
+                fetcher: OracleFetcher::new(url, connection_auth, is_source, filter),
             })),
             DbType::Redis => Some(Box::new(RedisPrechecker {
                 fetcher: RedisFetcher {

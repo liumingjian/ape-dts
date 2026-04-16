@@ -1,0 +1,5 @@
+id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
+1,实现 OracleFetcher（build_connection/version/schemas/tables/constraints）,DONE,OracleFetcher 编译通过,cargo test -p dt-precheck --no-run,2026-04-16 12:46:25 +0800,0,
+2,实现 OraclePrechecker（connection/version/cdc/struct/table_struct）,DONE,OraclePrechecker 编译通过,cargo test -p dt-precheck --no-run,2026-04-16 12:46:25 +0800,0,
+3,接入 PrecheckerBuilder（DbType::Oracle source/sink）,DONE,PrecheckerBuilder 可为 Oracle 构建 checker,cargo test -p dt-precheck --no-run,2026-04-16 12:46:25 +0800,0,
+4,验证编译（dt-precheck --no-run）,DONE,`cargo test -p dt-precheck --no-run` PASS,cargo test -p dt-precheck --no-run,2026-04-16 12:46:25 +0800,0,PASS
