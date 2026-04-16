@@ -27,16 +27,16 @@ impl Sinker for OracleSinker {
             return Ok(());
         }
 
-        // Bootstrap: snapshot only (INSERT). Update/Delete will be handled when CDC support is added.
-        if !data.iter().all(|r| matches!(r.row_type, RowType::Insert)) {
-            bail!("oracle sinker only supports INSERT for now (bootstrap snapshot)");
-        }
-
         let mut sqls = Vec::with_capacity(data.len() + 1);
         let mut data_size = 0u64;
         for row in &data {
             data_size += row.data_size as u64;
-            sqls.push(Self::build_insert_sql(row)?);
+            let sql = match row.row_type {
+                RowType::Insert => Self::build_insert_sql(row)?,
+                RowType::Update => Self::build_update_sql(row)?,
+                RowType::Delete => Self::build_delete_sql(row)?,
+            };
+            sqls.push(sql);
         }
         sqls.push("COMMIT".to_string());
 
@@ -88,6 +88,68 @@ impl OracleSinker {
         ))
     }
 
+    fn build_update_sql(row: &RowData) -> anyhow::Result<String> {
+        let before = row.require_before()?;
+        let after = row.require_after()?;
+
+        if before.is_empty() {
+            bail!("oracle update requires non-empty row_data.before for WHERE clause");
+        }
+        if after.is_empty() {
+            bail!("oracle update requires non-empty row_data.after for SET clause");
+        }
+
+        let mut set_cols = after.keys().cloned().collect::<Vec<_>>();
+        set_cols.sort();
+        let mut set_pairs = Vec::with_capacity(set_cols.len());
+        for col in &set_cols {
+            let v = after
+                .get(col)
+                .with_context(|| format!("missing col {} in oracle row_data.after", col))?;
+            set_pairs.push(format!("{}={}", col, Self::to_oracle_literal(v)?));
+        }
+
+        let where_sql = Self::build_where_sql(before)?;
+
+        Ok(format!(
+            "UPDATE {}.{} SET {} WHERE {}",
+            row.schema,
+            row.tb,
+            set_pairs.join(","),
+            where_sql
+        ))
+    }
+
+    fn build_delete_sql(row: &RowData) -> anyhow::Result<String> {
+        let before = row.require_before()?;
+        if before.is_empty() {
+            bail!("oracle delete requires non-empty row_data.before for WHERE clause");
+        }
+
+        let where_sql = Self::build_where_sql(before)?;
+        Ok(format!(
+            "DELETE FROM {}.{} WHERE {}",
+            row.schema, row.tb, where_sql
+        ))
+    }
+
+    fn build_where_sql(before: &std::collections::HashMap<String, ColValue>) -> anyhow::Result<String> {
+        let mut cols = before.keys().cloned().collect::<Vec<_>>();
+        cols.sort();
+        let mut clauses = Vec::with_capacity(cols.len());
+        for col in &cols {
+            let v = before
+                .get(col)
+                .with_context(|| format!("missing col {} in oracle row_data.before", col))?;
+            if matches!(v, ColValue::None) {
+                clauses.push(format!("{} IS NULL", col));
+            } else {
+                clauses.push(format!("{}={}", col, Self::to_oracle_literal(v)?));
+            }
+        }
+        Ok(clauses.join(" AND "))
+    }
+
     fn escape_str(s: &str) -> String {
         s.replace('\'', "''")
     }
@@ -134,3 +196,50 @@ impl OracleSinker {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use super::*;
+
+    #[test]
+    fn build_update_sql_escapes_strings_and_sorts_cols() {
+        let mut before = HashMap::new();
+        before.insert("ID".to_string(), ColValue::Long(1));
+
+        let mut after = HashMap::new();
+        after.insert("VAL".to_string(), ColValue::String("O'Reilly".to_string()));
+        after.insert("ID".to_string(), ColValue::Long(1));
+
+        let row = RowData::new(
+            "APE_DTS".to_string(),
+            "GDBO_ORA_CDC_BASIC".to_string(),
+            RowType::Update,
+            Some(before),
+            Some(after),
+        );
+
+        let sql = OracleSinker::build_update_sql(&row).unwrap();
+        assert_eq!(
+            sql,
+            "UPDATE APE_DTS.GDBO_ORA_CDC_BASIC SET ID=1,VAL='O''Reilly' WHERE ID=1"
+        );
+    }
+
+    #[test]
+    fn build_delete_sql_uses_is_null_for_none() {
+        let mut before = HashMap::new();
+        before.insert("ID".to_string(), ColValue::None);
+
+        let row = RowData::new(
+            "APE_DTS".to_string(),
+            "T".to_string(),
+            RowType::Delete,
+            Some(before),
+            None,
+        );
+
+        let sql = OracleSinker::build_delete_sql(&row).unwrap();
+        assert_eq!(sql, "DELETE FROM APE_DTS.T WHERE ID IS NULL");
+    }
+}

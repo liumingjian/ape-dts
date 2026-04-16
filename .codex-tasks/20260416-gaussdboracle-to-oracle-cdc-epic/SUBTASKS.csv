@@ -1,0 +1,4 @@
+id,task,task_type,status,depends_on,task_dir,acceptance_criteria,validation_command,completed_at,retry_count,notes
+1,扩展 OracleSinker：支持 CDC DML（UPDATE/DELETE）,single-full,DONE,,tasks/20260416-01-oracle-sinker-cdc-dml,OracleSinker 支持 insert/update/delete 且编译通过,cargo test -p dt-connector --no-run,2026-04-16 11:35:12 +0800,0,PASS（含最小单测）
+2,dt-tests：GaussDBOracle -> Oracle cdc basic,single-full,DONE,1,tasks/20260416-02-gaussdboracle-to-oracle-cdc-basic,新增用例并 PASS,cargo test -p dt-tests --test integration_test -- gaussdb_oracle_to_oracle::cdc_tests::test::cdc_basic_test --nocapture,2026-04-16 12:04:15 +0800,1,PASS
+3,docs/tracker 收口（能力矩阵 + e2e matrix）,single-compact,DONE,2,tasks/20260416-03-docs,rg 可检索入口并与 SUBTASKS 对齐,rg -n \"gaussdb_oracle_to_oracle::cdc_tests\" docs/agent-summary/*.md,2026-04-16 12:04:15 +0800,0,PASS

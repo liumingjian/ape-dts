@@ -1,6 +1,6 @@
 # GaussDB 全局进度跟踪清单（PRD 真相源）
 
-> 最后更新：**2026-04-16（PG ↔ GaussDBOracle：snapshot/struct/check/precheck/cdc basic PASS；Oracle -> GaussDBOracle cdc basic PASS（trigger-based）；Oracle <-> GaussDBOracle snapshot smoke PASS；Oracle XE 本机 docker ready；GaussDBPg→MySQL bootstrap：struct advanced PASS + 一键 e2e 脚本落盘；MySQL→GaussDBMySQL 目标端 failover self-heal PASS）**
+> 最后更新：**2026-04-16（PG ↔ GaussDBOracle：snapshot/struct/check/precheck/cdc basic PASS；Oracle -> GaussDBOracle cdc basic PASS（trigger-based）；Oracle <-> GaussDBOracle snapshot smoke PASS；GaussDBOracle -> Oracle cdc basic PASS；Oracle XE 本机 docker ready；GaussDBPg→MySQL bootstrap：struct advanced PASS + 一键 e2e 脚本落盘；MySQL→GaussDBMySQL 目标端 failover self-heal PASS）**
 >
 > 目标：每完成一次 spec 任务后，都能立刻知道“当前已交付什么、证据在哪、下一步做什么”。
 
@@ -37,7 +37,7 @@
 | **PG → GaussDBOracle** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **GaussDBOracle → PG** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Oracle -> GaussDBOracle（bootstrap）** | ✅ | ✅ | - | - | - | ✅ | - |
-| **GaussDBOracle -> Oracle（snapshot bootstrap）** | ✅ | - | - | - | - | ✅ | - |
+| **GaussDBOracle -> Oracle（snapshot bootstrap）** | ✅ | ✅ | - | - | - | ✅ | - |
 
 说明：
 
@@ -58,7 +58,8 @@
   - `Oracle -> GaussDBOracle`: `oracle_to_gaussdb_oracle::snapshot_tests::test::smoke_test` PASS
   - `Oracle -> GaussDBOracle`: `oracle_to_gaussdb_oracle::cdc_tests::test::cdc_basic_test` PASS（trigger-based）
   - `GaussDBOracle -> Oracle`: `gaussdb_oracle_to_oracle::snapshot_tests::test::smoke_test` PASS
-  - 证据：`.codex-tasks/20260415-oracle-gaussdboracle-bidir-epic/PROGRESS.md`
+  - `GaussDBOracle -> Oracle`: `gaussdb_oracle_to_oracle::cdc_tests::test::cdc_basic_test` PASS
+  - 证据：`.codex-tasks/20260415-oracle-gaussdboracle-bidir-epic/PROGRESS.md` + `.codex-tasks/20260416-gaussdboracle-to-oracle-cdc-epic/PROGRESS.md`
 - SHA256 认证：当前以 `BLOCKED` 方式纳入执行真表（等待联调环境可用）。
 - 当前 active 方向已演进为：`PG <-> GaussDBOracle Sync`、`GaussDBOracle Bootstrap`、`Oracle <-> GaussDBOracle Bootstrap`、`GaussDBMySQL CDC Expansion`、`GaussDBPg Quality Coverage`、`GaussDB -> MySQL Bootstrap`。
 

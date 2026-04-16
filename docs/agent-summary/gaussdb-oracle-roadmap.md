@@ -50,8 +50,10 @@
   - snapshot: `oracle_to_gaussdb_oracle::snapshot_tests::test::smoke_test`
   - cdc: `oracle_to_gaussdb_oracle::cdc_tests::test::cdc_basic_test`
   - snapshot: `gaussdb_oracle_to_oracle::snapshot_tests::test::smoke_test`
+  - cdc: `gaussdb_oracle_to_oracle::cdc_tests::test::cdc_basic_test`
 - 证据：
   - `.codex-tasks/20260415-oracle-gaussdboracle-bidir-epic/PROGRESS.md`
+  - `.codex-tasks/20260416-gaussdboracle-to-oracle-cdc-epic/PROGRESS.md`
 
 ## 3. 下一步建议（按优先级）
 
