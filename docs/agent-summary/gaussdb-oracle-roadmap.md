@@ -2,7 +2,7 @@
 
 > 状态：`ACTIVE (CDC basic PASS)`
 
-当前已在远端 oracle-mode 数据库验证通过 `PG -> GaussDBOracle` 与 `GaussDBOracle -> PG` 的 **snapshot/struct/check/cdc basic**，
+当前已在远端 oracle-mode 数据库验证通过 `PG -> GaussDBOracle` 与 `GaussDBOracle -> PG` 的 **snapshot/struct/check/precheck/cdc basic**，
 并保留本机 openGauss oracle-mode 作为快速回归替身环境。
 
 ## 1. 环境
@@ -24,7 +24,7 @@
 
 ## 2. 当前已交付（sync basic）
 
-- 代码：`DbType::GaussDBOracle`（`gaussdb_oracle`）已补齐 sync basic 主链路（snapshot/struct/check/cdc）
+- 代码：`DbType::GaussDBOracle`（`gaussdb_oracle`）已补齐 sync basic 主链路（snapshot/struct/check/precheck/cdc）
 - 自动化（dt-tests）：
   - snapshot: `pg_to_gaussdb_oracle::snapshot_tests::test::smoke_test`
   - snapshot: `gaussdb_oracle_to_pg::snapshot_tests::test::smoke_test`
@@ -32,6 +32,8 @@
   - struct: `gaussdb_oracle_to_pg::struct_tests::test::struct_basic_test`
   - check: `pg_to_gaussdb_oracle::check_tests::test::check_basic_test`
   - check: `gaussdb_oracle_to_pg::check_tests::test::check_basic_test`
+  - precheck: `pg_to_gaussdb_oracle::precheck_tests::test::struct_supported_basic_test`
+  - precheck: `gaussdb_oracle_to_pg::precheck_tests::test::struct_supported_basic_test`
   - cdc: `pg_to_gaussdb_oracle::cdc_tests::test::cdc_basic_test`
   - cdc: `gaussdb_oracle_to_pg::cdc_tests::test::cdc_basic_test`
 - 证据：
@@ -50,8 +52,8 @@
 
 ## 3. 下一步建议（按优先级）
 
-1. `PG -> GaussDBOracle` 补齐 `precheck basic`（struct_supported）
-2. 扩展 struct 覆盖（view/routine 等）与 Oracle-mode 差异用例
+1. 扩展 struct 覆盖（view/routine 等）与 Oracle-mode 差异用例
+2. 扩展 precheck（负例/边界用例），避免误配上线
 3. `Oracle <-> GaussDBOracle` 扩展 snapshot 类型覆盖，并评估 CDC（LogMiner/OGG）与防环（DataMarker 拓扑）策略
 
 ## 4. 明确不做（当前阶段）

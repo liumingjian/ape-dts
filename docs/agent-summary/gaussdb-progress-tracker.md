@@ -1,6 +1,6 @@
 # GaussDB 全局进度跟踪清单（PRD 真相源）
 
-> 最后更新：**2026-04-15（PG ↔ GaussDBOracle：snapshot/struct/check/cdc basic PASS；Oracle <-> GaussDBOracle snapshot smoke PASS；Oracle XE 本机 docker ready；GaussDBPg→MySQL bootstrap：struct advanced PASS + 一键 e2e 脚本落盘；MySQL→GaussDBMySQL 目标端 failover self-heal PASS）**
+> 最后更新：**2026-04-15（PG ↔ GaussDBOracle：snapshot/struct/check/precheck/cdc basic PASS；Oracle <-> GaussDBOracle snapshot smoke PASS；Oracle XE 本机 docker ready；GaussDBPg→MySQL bootstrap：struct advanced PASS + 一键 e2e 脚本落盘；MySQL→GaussDBMySQL 目标端 failover self-heal PASS）**
 >
 > 目标：每完成一次 spec 任务后，都能立刻知道“当前已交付什么、证据在哪、下一步做什么”。
 
@@ -34,8 +34,8 @@
 | **GaussDBPg → PG** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **GaussDBPg → MySQL（bootstrap）** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **MySQL → GaussDBMySQL（首波）** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **PG → GaussDBOracle** | ✅ | ✅ | ✅ | ✅ | - | ✅ | ✅ |
-| **GaussDBOracle → PG** | ✅ | ✅ | ✅ | ✅ | - | ✅ | ✅ |
+| **PG → GaussDBOracle** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **GaussDBOracle → PG** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Oracle -> GaussDBOracle（snapshot bootstrap）** | ✅ | - | - | - | - | ✅ | - |
 | **GaussDBOracle -> Oracle（snapshot bootstrap）** | ✅ | - | - | - | - | ✅ | - |
 
@@ -49,7 +49,7 @@
 - `GaussDBPg → MySQL（bootstrap）` 的 `struct` 已新增 `dt-tests` 入口 `gaussdb_to_mysql::struct_tests::test::struct_basic_test` 并完成真实验证（证据见 `.codex-tasks/20260415-gaussdb-to-mysql-struct-basic/PROGRESS.md`）。
 - `GaussDBPg → MySQL（bootstrap）` 的 `struct advanced` 已覆盖 `default/index(ubtree)` 并完成真实验证（证据见 `.codex-tasks/20260415-gaussdb-to-mysql-struct-advance/PROGRESS.md`）。
 - `GaussDBPg → MySQL（bootstrap）` 已补齐一键回归脚本：`bash scripts/e2e/gaussdb_to_mysql_bootstrap.sh`（quick/full，详见 `docs/agent-summary/gaussdb-e2e-test-plan.md`）。
-- `PG ↔ GaussDBOracle` 已交付双向同步最小闭环：`snapshot/struct/check/cdc basic`（证据见 `.codex-tasks/20260415-pg-gaussdboracle-bidir-sync-epic/`）。
+- `PG ↔ GaussDBOracle` 已交付双向同步最小闭环：`snapshot/struct/check/precheck/cdc basic`（证据见 `.codex-tasks/20260415-pg-gaussdboracle-bidir-sync-epic/`）。
   - `PG -> GaussDBOracle`: `pg_to_gaussdb_oracle::cdc_tests::test::cdc_basic_test` PASS
   - `GaussDBOracle -> PG`: `gaussdb_oracle_to_pg::cdc_tests::test::cdc_basic_test` PASS
 - `GaussDBOracle` 同时保留远端 oracle-mode `testdb` 的 non-CDC basic 证据（见 `.codex-tasks/20260415-gaussdb-oracle-next/PROGRESS.md`）。

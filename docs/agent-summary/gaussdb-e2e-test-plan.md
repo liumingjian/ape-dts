@@ -41,8 +41,10 @@
 - `PG -> GaussDBOracle` snapshot smoke
 - `PG -> GaussDBOracle` struct basic
 - `PG -> GaussDBOracle` check basic
+- `PG -> GaussDBOracle` precheck basic
 - `PG -> GaussDBOracle` CDC basic
 - `GaussDBOracle -> PG` snapshot/struct/check basic
+- `GaussDBOracle -> PG` precheck basic
 - `GaussDBOracle -> PG` CDC basic
 - 或一键回归（Quick）：`bash scripts/e2e/gaussdb_to_mysql_bootstrap.sh`
 
@@ -122,10 +124,12 @@
 | Quick | `PG -> GaussDBOracle` snapshot smoke | `cargo test -p dt-tests --test integration_test -- pg_to_gaussdb_oracle::snapshot_tests::test::smoke_test --nocapture` | PG + GaussDBOracle | 最小连通性（oracle-mode） |
 | Quick | `PG -> GaussDBOracle` struct basic | `cargo test -p dt-tests --test integration_test -- pg_to_gaussdb_oracle::struct_tests::test::struct_basic_test --nocapture` | PG + GaussDBOracle | 基础对象同步（oracle-mode） |
 | Quick | `PG -> GaussDBOracle` check basic | `cargo test -p dt-tests --test integration_test -- pg_to_gaussdb_oracle::check_tests::test::check_basic_test --nocapture` | PG + GaussDBOracle | 基础对账（oracle-mode） |
+| Quick | `PG -> GaussDBOracle` precheck basic | `cargo test -p dt-tests --test integration_test -- pg_to_gaussdb_oracle::precheck_tests::test::struct_supported_basic_test --nocapture` | PG + GaussDBOracle | 预检查（oracle-mode） |
 | Quick | `PG -> GaussDBOracle` CDC basic | `cargo test -p dt-tests --test integration_test -- pg_to_gaussdb_oracle::cdc_tests::test::cdc_basic_test --nocapture` | PG + GaussDBOracle | 增量同步（oracle-mode） |
 | Quick | `GaussDBOracle -> PG` snapshot smoke | `cargo test -p dt-tests --test integration_test -- gaussdb_oracle_to_pg::snapshot_tests::test::smoke_test --nocapture` | GaussDBOracle + PG | 反向快照主路径（oracle-mode） |
 | Quick | `GaussDBOracle -> PG` struct basic | `cargo test -p dt-tests --test integration_test -- gaussdb_oracle_to_pg::struct_tests::test::struct_basic_test --nocapture` | GaussDBOracle + PG | 反向对象同步（oracle-mode） |
 | Quick | `GaussDBOracle -> PG` check basic | `cargo test -p dt-tests --test integration_test -- gaussdb_oracle_to_pg::check_tests::test::check_basic_test --nocapture` | GaussDBOracle + PG | 反向对账主路径（oracle-mode） |
+| Quick | `GaussDBOracle -> PG` precheck basic | `cargo test -p dt-tests --test integration_test -- gaussdb_oracle_to_pg::precheck_tests::test::struct_supported_basic_test --nocapture` | GaussDBOracle + PG | 反向预检查（oracle-mode） |
 | Quick | `GaussDBOracle -> PG` CDC basic | `cargo test -p dt-tests --test integration_test -- gaussdb_oracle_to_pg::cdc_tests::test::cdc_basic_test --nocapture` | GaussDBOracle + PG | 反向增量同步（oracle-mode） |
 | Quick | `Oracle -> GaussDBOracle` snapshot smoke | `cargo test -p dt-tests --test integration_test -- oracle_to_gaussdb_oracle::snapshot_tests::test::smoke_test --nocapture` | Oracle XE + GaussDBOracle | Oracle 源端快照（bootstrap） |
 | Quick | `GaussDBOracle -> Oracle` snapshot smoke | `cargo test -p dt-tests --test integration_test -- gaussdb_oracle_to_oracle::snapshot_tests::test::smoke_test --nocapture` | GaussDBOracle + Oracle XE | Oracle 目标端写入（bootstrap） |
