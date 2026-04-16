@@ -1,6 +1,6 @@
 # GaussDB 全局进度跟踪清单（PRD 真相源）
 
-> 最后更新：**2026-04-16（PG ↔ GaussDBOracle：snapshot/struct/check/precheck/cdc basic PASS；Oracle ↔ GaussDBOracle：snapshot/cdc basic（trigger-based）+ precheck basic PASS；Oracle XE 本机 docker ready；GaussDBPg→MySQL bootstrap：struct advanced PASS + 一键 e2e 脚本落盘；MySQL→GaussDBMySQL 目标端 failover self-heal PASS）**
+> 最后更新：**2026-04-16（PG ↔ GaussDBOracle：snapshot/struct/check/precheck/cdc basic PASS；Oracle ↔ GaussDBOracle：snapshot/check/cdc basic（logminer）+ precheck basic PASS；Oracle XE 本机 docker ready；GaussDBPg→MySQL bootstrap：struct advanced PASS + 一键 e2e 脚本落盘；MySQL→GaussDBMySQL 目标端 failover self-heal PASS）**
 >
 > 目标：每完成一次 spec 任务后，都能立刻知道“当前已交付什么、证据在哪、下一步做什么”。
 
@@ -36,8 +36,8 @@
 | **MySQL → GaussDBMySQL（首波）** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **PG → GaussDBOracle** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **GaussDBOracle → PG** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Oracle -> GaussDBOracle（bootstrap）** | ✅ | ✅ | - | - | ✅ | ✅ | - |
-| **GaussDBOracle -> Oracle（snapshot bootstrap）** | ✅ | ✅ | - | - | ✅ | ✅ | - |
+| **Oracle -> GaussDBOracle（bootstrap）** | ✅ | ✅ | - | ✅ | ✅ | ✅ | ✅ |
+| **GaussDBOracle -> Oracle（snapshot bootstrap）** | ✅ | ✅ | - | - | ✅ | ✅ | ✅ |
 
 说明：
 
@@ -56,12 +56,14 @@
 - `GaussDBOracle` 同时保留本机 docker 环境（openGauss `sql_compatibility=A`）作为快速回归替身（证据见 `.codex-tasks/20260415-gaussdb-oracle-bootstrap/PROGRESS.md`）。
 - `Oracle <-> GaussDBOracle` 已交付 bootstrap 级 snapshot 双向链路（`sqlplus` CLI via docker exec）：
   - `Oracle -> GaussDBOracle`: `oracle_to_gaussdb_oracle::snapshot_tests::test::smoke_test` PASS
-  - `Oracle -> GaussDBOracle`: `oracle_to_gaussdb_oracle::cdc_tests::test::cdc_basic_test` PASS（trigger-based）
+  - `Oracle -> GaussDBOracle`: `oracle_to_gaussdb_oracle::cdc_tests::test::cdc_basic_test` PASS（logminer）
+  - `Oracle -> GaussDBOracle`: `oracle_to_gaussdb_oracle::check_tests::test::check_basic_test` PASS
   - `Oracle -> GaussDBOracle`: `oracle_to_gaussdb_oracle::precheck_tests::test::struct_supported_basic_test` PASS
   - `GaussDBOracle -> Oracle`: `gaussdb_oracle_to_oracle::snapshot_tests::test::smoke_test` PASS
   - `GaussDBOracle -> Oracle`: `gaussdb_oracle_to_oracle::cdc_tests::test::cdc_basic_test` PASS
   - `GaussDBOracle -> Oracle`: `gaussdb_oracle_to_oracle::precheck_tests::test::struct_supported_basic_test` PASS
-  - 证据：`.codex-tasks/20260415-oracle-gaussdboracle-bidir-epic/PROGRESS.md` + `.codex-tasks/20260416-gaussdboracle-to-oracle-cdc-epic/PROGRESS.md` + `.codex-tasks/20260416-oracle-gaussdboracle-precheck-epic/PROGRESS.md`
+  - 一键回归脚本：`bash scripts/e2e/oracle_gaussdboracle_bootstrap.sh` PASS
+  - 证据：`.codex-tasks/20260415-oracle-gaussdboracle-bidir-epic/PROGRESS.md` + `.codex-tasks/20260416-oracle-gaussdboracle-logminer-cdc-epic/PROGRESS.md` + `.codex-tasks/20260416-oracle-gaussdboracle-check-basic/PROGRESS.md` + `.codex-tasks/20260416-gaussdboracle-to-oracle-cdc-epic/PROGRESS.md` + `.codex-tasks/20260416-oracle-gaussdboracle-precheck-epic/PROGRESS.md`
 - SHA256 认证：当前以 `BLOCKED` 方式纳入执行真表（等待联调环境可用）。
 - 当前 active 方向已演进为：`PG <-> GaussDBOracle Sync`、`GaussDBOracle Bootstrap`、`Oracle <-> GaussDBOracle Bootstrap`、`GaussDBMySQL CDC Expansion`、`GaussDBPg Quality Coverage`、`GaussDB -> MySQL Bootstrap`。
 

@@ -178,9 +178,8 @@ impl SinkerUtil {
                 let reverse_router =
                     RdbRouter::from_config(&config.router, &config.sinker_basic.db_type)?.reverse();
                 let filter = RdbFilter::from_config(&config.filter, &config.sinker_basic.db_type)?;
-                let extractor_meta_manager = ExtractorUtil::get_extractor_meta_manager(config)
-                    .await?
-                    .unwrap();
+                let extractor_meta_manager =
+                    ExtractorUtil::get_extractor_meta_manager(config).await?;
 
                 match client {
                     ConnClient::MySQL(conn_pool) => {
@@ -191,7 +190,7 @@ impl SinkerUtil {
                                 conn_pool: conn_pool.clone(),
                                 meta_manager: meta_manager.clone(),
                                 common: CheckerCommon {
-                                    extractor_meta_manager: Some(extractor_meta_manager.clone()),
+                                    extractor_meta_manager: extractor_meta_manager.clone(),
                                     reverse_router: reverse_router.clone(),
                                     batch_size,
                                     monitor: monitor.clone(),
@@ -224,7 +223,7 @@ impl SinkerUtil {
                                 conn_pool: conn_pool.clone(),
                                 meta_manager: meta_manager.clone(),
                                 common: CheckerCommon {
-                                    extractor_meta_manager: Some(extractor_meta_manager.clone()),
+                                    extractor_meta_manager: extractor_meta_manager.clone(),
                                     reverse_router: reverse_router.clone(),
                                     batch_size,
                                     monitor: monitor.clone(),
@@ -326,9 +325,8 @@ impl SinkerUtil {
                 let reverse_router =
                     RdbRouter::from_config(&config.router, &config.sinker_basic.db_type)?.reverse();
                 let filter = RdbFilter::from_config(&config.filter, &config.sinker_basic.db_type)?;
-                let extractor_meta_manager = ExtractorUtil::get_extractor_meta_manager(config)
-                    .await?
-                    .unwrap();
+                let extractor_meta_manager =
+                    ExtractorUtil::get_extractor_meta_manager(config).await?;
 
                 let conn_pool = match client {
                     ConnClient::PostgreSQL(conn_pool) => conn_pool,
@@ -339,19 +337,19 @@ impl SinkerUtil {
                 let meta_manager = PgMetaManager::new(conn_pool.clone()).await?;
 
                 for _ in 0..parallel_size {
-                    let sinker = PgChecker {
-                        url: url.to_string(),
-                        connection_auth: connection_auth.clone(),
-                        db_type: config.sinker_basic.db_type.clone(),
-                        conn_pool: conn_pool.clone(),
-                        meta_manager: meta_manager.clone(),
-                        common: CheckerCommon {
-                            extractor_meta_manager: Some(extractor_meta_manager.clone()),
-                            reverse_router: reverse_router.clone(),
-                            batch_size,
-                            monitor: monitor.clone(),
-                            filter: filter.clone(),
-                            output_full_row,
+                        let sinker = PgChecker {
+                            url: url.to_string(),
+                            connection_auth: connection_auth.clone(),
+                            db_type: config.sinker_basic.db_type.clone(),
+                            conn_pool: conn_pool.clone(),
+                            meta_manager: meta_manager.clone(),
+                            common: CheckerCommon {
+                                extractor_meta_manager: extractor_meta_manager.clone(),
+                                reverse_router: reverse_router.clone(),
+                                batch_size,
+                                monitor: monitor.clone(),
+                                filter: filter.clone(),
+                                output_full_row,
                             output_revise_sql,
                             revise_match_full_row,
                             retry_interval_secs,

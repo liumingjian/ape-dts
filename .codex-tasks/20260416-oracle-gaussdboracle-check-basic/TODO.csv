@@ -1,0 +1,5 @@
+id,task,status,completed_at,notes
+1,允许 PgCheck/MysqlCheck 在 extractor_meta_manager 缺失时运行（移除 unwrap）,DONE,2026-04-16 14:32:49 +0800,dt-task: dt-task/src/sinker_util.rs
+2,dt-tests：新增 Oracle -> GaussDBOracle check basic fixture + test,DONE,2026-04-16 14:32:49 +0800,dt-tests: oracle_to_gaussdb_oracle/check/basic_test + check_tests.rs
+3,验证：check_basic_test PASS,DONE,2026-04-16 14:32:49 +0800,cargo test -p dt-tests --test integration_test -- oracle_to_gaussdb_oracle::check_tests::test::check_basic_test --nocapture
+4,docs/tracker/e2e-plan/roadmap 收口,DONE,2026-04-16 14:32:49 +0800,docs updated: progress-tracker|e2e-plan|roadmap
