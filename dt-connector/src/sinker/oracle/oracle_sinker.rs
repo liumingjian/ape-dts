@@ -66,7 +66,7 @@ impl Sinker for OracleSinker {
 }
 
 impl OracleSinker {
-    fn build_insert_sql(row: &RowData) -> anyhow::Result<String> {
+    pub(crate) fn build_insert_sql(row: &RowData) -> anyhow::Result<String> {
         let after = row.require_after()?;
         let mut cols = after.keys().cloned().collect::<Vec<_>>();
         cols.sort();
@@ -88,7 +88,7 @@ impl OracleSinker {
         ))
     }
 
-    fn build_update_sql(row: &RowData) -> anyhow::Result<String> {
+    pub(crate) fn build_update_sql(row: &RowData) -> anyhow::Result<String> {
         let before = row.require_before()?;
         let after = row.require_after()?;
 
@@ -120,7 +120,7 @@ impl OracleSinker {
         ))
     }
 
-    fn build_delete_sql(row: &RowData) -> anyhow::Result<String> {
+    pub(crate) fn build_delete_sql(row: &RowData) -> anyhow::Result<String> {
         let before = row.require_before()?;
         if before.is_empty() {
             bail!("oracle delete requires non-empty row_data.before for WHERE clause");
@@ -133,7 +133,9 @@ impl OracleSinker {
         ))
     }
 
-    fn build_where_sql(before: &std::collections::HashMap<String, ColValue>) -> anyhow::Result<String> {
+    pub(crate) fn build_where_sql(
+        before: &std::collections::HashMap<String, ColValue>,
+    ) -> anyhow::Result<String> {
         let mut cols = before.keys().cloned().collect::<Vec<_>>();
         cols.sort();
         let mut clauses = Vec::with_capacity(cols.len());
@@ -150,11 +152,11 @@ impl OracleSinker {
         Ok(clauses.join(" AND "))
     }
 
-    fn escape_str(s: &str) -> String {
+    pub(crate) fn escape_str(s: &str) -> String {
         s.replace('\'', "''")
     }
 
-    fn to_oracle_literal(v: &ColValue) -> anyhow::Result<String> {
+    pub(crate) fn to_oracle_literal(v: &ColValue) -> anyhow::Result<String> {
         Ok(match v {
             ColValue::None => "NULL".to_string(),
             ColValue::Bool(b) => {

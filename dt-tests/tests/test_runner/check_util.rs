@@ -128,6 +128,7 @@ impl CheckUtil {
         let dst_check_log_dir = match base_test_runner.get_config().sinker {
             SinkerConfig::MysqlCheck { check_log_dir, .. }
             | SinkerConfig::PgCheck { check_log_dir, .. }
+            | SinkerConfig::OracleCheck { check_log_dir, .. }
             | SinkerConfig::MongoCheck { check_log_dir, .. } => check_log_dir.clone(),
             _ => String::new(),
         };

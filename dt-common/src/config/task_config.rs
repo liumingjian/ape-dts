@@ -749,6 +749,31 @@ impl TaskConfig {
                     connection_auth,
                     batch_size,
                 },
+                SinkType::Check => SinkerConfig::OracleCheck {
+                    url,
+                    connection_auth,
+                    batch_size,
+                    check_log_dir: loader.get_optional(SINKER, CHECK_LOG_DIR),
+                    check_log_file_size: loader.get_with_default(
+                        SINKER,
+                        CHECK_LOG_FILE_SIZE,
+                        DEFAULT_CHECK_LOG_FILE_SIZE.to_string(),
+                    ),
+                    output_full_row: loader.get_with_default(SINKER, OUTPUT_FULL_ROW, false),
+                    output_revise_sql: loader.get_with_default(SINKER, OUTPUT_REVISE_SQL, false),
+                    revise_match_full_row: loader.get_with_default(
+                        SINKER,
+                        REVISE_MATCH_FULL_ROW,
+                        false,
+                    ),
+                    retry_interval_secs: loader.get_with_default(SINKER, RETRY_INTERVAL_SECS, 0),
+                    max_retries: loader.get_with_default(SINKER, MAX_RETRIES, 1),
+                },
+                SinkType::Struct => SinkerConfig::OracleStruct {
+                    url,
+                    connection_auth,
+                    conflict_policy,
+                },
                 _ => bail! { not_supported_err },
             },
 

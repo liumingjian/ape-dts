@@ -20,6 +20,8 @@ tests=(
   "oracle_to_gaussdb_oracle::cdc_tests::test::cdc_basic_test"
   "oracle_to_gaussdb_oracle::precheck_tests::test::struct_supported_basic_test"
   "gaussdb_oracle_to_oracle::snapshot_tests::test::smoke_test"
+  "gaussdb_oracle_to_oracle::struct_tests::test::struct_basic_test"
+  "gaussdb_oracle_to_oracle::check_tests::test::check_basic_test"
   "gaussdb_oracle_to_oracle::cdc_tests::test::cdc_basic_test"
   "gaussdb_oracle_to_oracle::precheck_tests::test::struct_supported_basic_test"
 )

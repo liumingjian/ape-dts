@@ -1,0 +1,4 @@
+id,task,status,completed_at,notes
+1,更新 e2e 脚本加入 struct/check 用例,DONE,2026-04-16 16:32:36 +0800,PASS
+2,更新 tracker/e2e matrix 文档入口,DONE,2026-04-16 16:32:36 +0800,PASS
+3,rg 验证入口可检索,DONE,2026-04-16 16:32:36 +0800,PASS

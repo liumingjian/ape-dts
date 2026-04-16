@@ -1026,6 +1026,16 @@ impl ConnClient {
                 url,
                 connection_auth,
                 ..
+            }
+            | SinkerConfig::OracleStruct {
+                url,
+                connection_auth,
+                ..
+            }
+            | SinkerConfig::OracleCheck {
+                url,
+                connection_auth,
+                ..
             } => ConnClient::Oracle(dt_connector::oracle::OracleSqlPlusClient::new(
                 url.clone(),
                 connection_auth.clone(),

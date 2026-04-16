@@ -744,6 +744,11 @@ impl TaskRunner {
                 check_log_file_size,
                 ..
             }
+            | SinkerConfig::OracleCheck {
+                check_log_dir,
+                check_log_file_size,
+                ..
+            }
             | SinkerConfig::MongoCheck {
                 check_log_dir,
                 check_log_file_size,

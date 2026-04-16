@@ -13,6 +13,7 @@ use crate::{
     rdb_query_builder::RdbQueryBuilder,
     rdb_router::RdbRouter,
     sinker::base_sinker::BaseSinker,
+    sinker::oracle::oracle_sinker::OracleSinker,
     sinker::mongo::mongo_cmd,
     Sinker,
 };
@@ -51,6 +52,7 @@ pub enum CheckerTbMeta {
     Mysql(MysqlTbMeta),
     Pg(PgTbMeta),
     Mongo(RdbTbMeta),
+    Oracle(RdbTbMeta),
 }
 
 impl CheckerTbMeta {
@@ -59,6 +61,7 @@ impl CheckerTbMeta {
             CheckerTbMeta::Mysql(m) => &m.basic,
             CheckerTbMeta::Pg(m) => &m.basic,
             CheckerTbMeta::Mongo(m) => m,
+            CheckerTbMeta::Oracle(m) => m,
         }
     }
 
@@ -137,6 +140,7 @@ impl CheckerTbMeta {
                 .get_query_sql(row_data, false)
                 .map(Some),
             CheckerTbMeta::Mongo(_) => unreachable!("Mongo should be handled"),
+            CheckerTbMeta::Oracle(_) => OracleSinker::build_insert_sql(row_data).map(Some),
         }
     }
 
@@ -173,6 +177,32 @@ impl CheckerTbMeta {
                     .map(Some)
             }
             CheckerTbMeta::Mongo(_) => unreachable!("Mongo should be handled in build_miss_sql"),
+            CheckerTbMeta::Oracle(meta) => {
+                let before = row_data.require_before()?;
+                let before = if match_full_row {
+                    before.clone()
+                } else {
+                    meta.id_cols
+                        .iter()
+                        .map(|col| {
+                            before
+                                .get(col)
+                                .cloned()
+                                .map(|v| (col.clone(), v))
+                                .with_context(|| format!("oracle check revise sql missing id col {}", col))
+                        })
+                        .collect::<anyhow::Result<_>>()?
+                };
+                let after = row_data.require_after()?.clone();
+                let update_row = RowData::new(
+                    row_data.schema.clone(),
+                    row_data.tb.clone(),
+                    RowType::Update,
+                    Some(before),
+                    Some(after),
+                );
+                OracleSinker::build_update_sql(&update_row).map(Some)
+            }
         }
     }
 

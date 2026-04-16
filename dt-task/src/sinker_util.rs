@@ -1,4 +1,4 @@
-use std::{str::FromStr, sync::Arc};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use anyhow::{bail, Context};
 use kafka::producer::{Producer, RequiredAcks};
@@ -48,7 +48,10 @@ use dt_connector::{
             mysql_checker::MysqlChecker, mysql_sinker::MysqlSinker,
             mysql_struct_sinker::MysqlStructSinker,
         },
-        oracle::oracle_sinker::OracleSinker,
+        oracle::{
+            oracle_checker::OracleChecker, oracle_sinker::OracleSinker,
+            oracle_struct_sinker::OracleStructSinker,
+        },
         pg::{pg_checker::PgChecker, pg_sinker::PgSinker, pg_struct_sinker::PgStructSinker},
         redis::{redis_sinker::RedisSinker, redis_statistic_sinker::RedisStatisticSinker},
         sql_sinker::SqlSinker,
@@ -306,6 +309,72 @@ impl SinkerUtil {
                         batch_size,
                         monitor: monitor.clone(),
                         monitor_interval,
+                    };
+                    sub_sinkers.push(Arc::new(async_mutex::Mutex::new(Box::new(sinker))));
+                }
+            }
+
+            SinkerConfig::OracleStruct {
+                conflict_policy, ..
+            } => {
+                let filter = RdbFilter::from_config(&config.filter, &config.sinker_basic.db_type)?;
+                let client = match client {
+                    ConnClient::Oracle(client) => client,
+                    _ => bail!("oracle client not found"),
+                };
+
+                let sinker = OracleStructSinker {
+                    client: client.clone(),
+                    conflict_policy: conflict_policy.clone(),
+                    filter,
+                    monitor: monitor.clone(),
+                    monitor_interval,
+                };
+                sub_sinkers.push(Arc::new(async_mutex::Mutex::new(Box::new(sinker))));
+            }
+
+            SinkerConfig::OracleCheck {
+                batch_size,
+                output_full_row,
+                output_revise_sql,
+                revise_match_full_row,
+                retry_interval_secs,
+                max_retries,
+                ..
+            } => {
+                let reverse_router =
+                    RdbRouter::from_config(&config.router, &config.sinker_basic.db_type)?.reverse();
+                let filter = RdbFilter::from_config(&config.filter, &config.sinker_basic.db_type)?;
+                let extractor_meta_manager =
+                    ExtractorUtil::get_extractor_meta_manager(config).await?;
+
+                let client = match client {
+                    ConnClient::Oracle(client) => client,
+                    _ => bail!("oracle client not found"),
+                };
+
+                let meta_cache = Arc::new(tokio::sync::Mutex::new(HashMap::new()));
+                for _ in 0..parallel_size {
+                    let sinker = OracleChecker {
+                        client: client.clone(),
+                        meta_cache: meta_cache.clone(),
+                        common: CheckerCommon {
+                            extractor_meta_manager: extractor_meta_manager.clone(),
+                            reverse_router: reverse_router.clone(),
+                            batch_size,
+                            monitor: monitor.clone(),
+                            filter: filter.clone(),
+                            output_full_row,
+                            output_revise_sql,
+                            revise_match_full_row,
+                            retry_interval_secs,
+                            max_retries,
+                            summary: CheckSummaryLog {
+                                start_time: Local::now().to_rfc3339(),
+                                ..Default::default()
+                            },
+                            global_summary: check_summary.clone(),
+                        },
                     };
                     sub_sinkers.push(Arc::new(async_mutex::Mutex::new(Box::new(sinker))));
                 }
