@@ -1,0 +1,3 @@
+id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
+1,更新 task_config.ini：启用 cdc_mode=logminer + start_scn,DONE,配置可被解析并进入 logminer extractor,cargo test -p dt-tests --test integration_test -- oracle_to_gaussdb_oracle::cdc_tests::test::cdc_basic_test --nocapture,2026-04-16 13:57:00 +0800,0,PASS
+2,运行集成测试并修复失败,DONE,集成测试 PASS,cargo test -p dt-tests --test integration_test -- oracle_to_gaussdb_oracle::cdc_tests::test::cdc_basic_test --nocapture,2026-04-16 13:57:00 +0800,0,PASS

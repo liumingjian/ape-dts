@@ -34,12 +34,14 @@ pub(crate) async fn redo_log_files(client: &OracleSqlPlusClient) -> anyhow::Resu
     Ok(lines)
 }
 
-pub(crate) async fn start_logminer_session(
+pub(crate) async fn fetch_logmnr_rows_in_range(
     client: &OracleSqlPlusClient,
     redo_logs: &[String],
     start_scn: u64,
     end_scn: u64,
-) -> anyhow::Result<()> {
+    captured: &[(String, String)],
+    limit: usize,
+) -> anyhow::Result<Vec<LogMinerRow>> {
     if start_scn == 0 || end_scn == 0 || end_scn < start_scn {
         bail!(
             "invalid logminer scn range: start_scn={}, end_scn={}",
@@ -51,7 +53,13 @@ pub(crate) async fn start_logminer_session(
         bail!("oracle logminer redo_logs empty");
     }
 
-    let mut script = String::from("BEGIN\n");
+    let pairs = build_seg_owner_table_predicate(captured)?;
+
+    // NOTE: LogMiner state is session-scoped. Because `OracleSqlPlusClient` runs `sqlplus` as a
+    // fresh process per call, we must do START_LOGMNR -> SELECT -> END_LOGMNR in the same script.
+    let mut script = String::new();
+    script.push_str("SET TERMOUT OFF\n");
+    script.push_str("BEGIN\n");
     for (idx, path) in redo_logs.iter().enumerate() {
         let opt = if idx == 0 {
             "DBMS_LOGMNR.NEW"
@@ -69,38 +77,36 @@ pub(crate) async fn start_logminer_session(
         start_scn, end_scn
     ));
     script.push_str("END;\n/\n");
-
-    client.exec(&script).await
-}
-
-pub(crate) async fn end_logminer_session(client: &OracleSqlPlusClient) -> anyhow::Result<()> {
-    client.exec("BEGIN DBMS_LOGMNR.END_LOGMNR; END;\n/").await
-}
-
-pub(crate) async fn fetch_logmnr_rows(
-    client: &OracleSqlPlusClient,
-    captured: &[(String, String)],
-    limit: usize,
-) -> anyhow::Result<Vec<LogMinerRow>> {
-    let pairs = build_seg_owner_table_predicate(captured)?;
-    let sql = format!(
-        "SELECT scn, operation, seg_owner, table_name, sql_redo, sql_undo FROM (SELECT scn, operation, seg_owner, table_name, sql_redo, sql_undo FROM V$LOGMNR_CONTENTS WHERE operation IN ('INSERT','UPDATE','DELETE') AND ({pairs}) ORDER BY scn ASC) WHERE ROWNUM <= {limit}",
+    script.push_str("SET TERMOUT ON\n");
+    script.push_str(&format!(
+        "SELECT scn, operation, seg_owner, table_name, sql_redo, sql_undo FROM (SELECT scn, operation, seg_owner, table_name, sql_redo, sql_undo FROM V$LOGMNR_CONTENTS WHERE operation IN ('INSERT','UPDATE','DELETE') AND ({pairs}) ORDER BY scn ASC) WHERE ROWNUM <= {limit};\n",
         pairs = pairs,
         limit = limit
-    );
+    ));
+    script.push_str("SET TERMOUT OFF\n");
+    script.push_str("BEGIN DBMS_LOGMNR.END_LOGMNR; END;\n/\n");
 
-    let lines = client.query_lines(&sql).await?;
-    let mut out = Vec::with_capacity(lines.len());
+    let lines = client.query_lines(&script).await?;
+    let mut out = Vec::new();
     for line in lines {
-        if line.trim().is_empty() {
-            continue;
+        if let Some(row) = LogMinerRow::try_from_line(&line)? {
+            out.push(row);
         }
-        out.push(LogMinerRow::from_line(&line)?);
     }
     Ok(out)
 }
 
 impl LogMinerRow {
+    fn try_from_line(line: &str) -> anyhow::Result<Option<Self>> {
+        if line.trim().is_empty() {
+            return Ok(None);
+        }
+        if line.matches('|').count() < 5 {
+            return Ok(None);
+        }
+        Ok(Some(Self::from_line(line)?))
+    }
+
     fn from_line(line: &str) -> anyhow::Result<Self> {
         let parts: Vec<&str> = line.split('|').collect();
         if parts.len() != 6 {
@@ -140,4 +146,3 @@ fn build_seg_owner_table_predicate(captured: &[(String, String)]) -> anyhow::Res
 fn escape_sql_string(s: &str) -> String {
     s.replace('\'', "''")
 }
-

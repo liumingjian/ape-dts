@@ -192,9 +192,15 @@ impl OracleLogMinerCdcExtractor {
         }
 
         let start_scn = last_scn + 1;
-        logminer::start_logminer_session(&self.client, redo_logs, start_scn, end_scn).await?;
-        let rows = logminer::fetch_logmnr_rows(&self.client, captured, limit).await?;
-        logminer::end_logminer_session(&self.client).await?;
+        let rows = logminer::fetch_logmnr_rows_in_range(
+            &self.client,
+            redo_logs,
+            start_scn,
+            end_scn,
+            captured,
+            limit,
+        )
+        .await?;
 
         if rows.is_empty() {
             return Ok(PollOutcome::Idle { end_scn });
