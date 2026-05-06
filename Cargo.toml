@@ -79,6 +79,8 @@ prometheus-parse = "0.2.5"
 csnmp = "0.6.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+sha2 = "0.10"
+base64 = "0.22"
 
 [profile.release]
 panic = 'unwind'

@@ -102,10 +102,11 @@ impl actix_web::ResponseError for ApiError {
 
             codes::CANNOT_DEMOTE_SELF => StatusCode::UNPROCESSABLE_ENTITY,
 
-            codes::CONFLICT
-            | codes::LICENSE_LIMIT_EXCEEDED
-            | codes::LAST_ADMIN_PROTECTED
-            | codes::USERNAME_TAKEN => StatusCode::CONFLICT,
+            codes::CONFLICT | codes::LAST_ADMIN_PROTECTED | codes::USERNAME_TAKEN => {
+                StatusCode::CONFLICT
+            }
+
+            codes::LICENSE_LIMIT_EXCEEDED => StatusCode::UNPROCESSABLE_ENTITY,
 
             codes::LICENSE_EXPIRED | codes::INVALID_LICENSE_CODE => StatusCode::BAD_REQUEST,
 

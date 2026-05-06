@@ -9,8 +9,8 @@ impl LicenseRepository {
     /// Create (activate) a license.
     pub async fn create(pool: &SqlitePool, license: &License) -> Result<License, sqlx::Error> {
         sqlx::query(
-            "INSERT INTO licenses (id, sku, max_tasks, expire_at, activated_at, activation_code_hash, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO licenses (id, sku, max_tasks, expire_at, activated_at, activation_code_hash, granted_to, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind(&license.id)
         .bind(&license.sku)
@@ -18,6 +18,7 @@ impl LicenseRepository {
         .bind(&license.expire_at)
         .bind(&license.activated_at)
         .bind(&license.activation_code_hash)
+        .bind(&license.granted_to)
         .bind(&license.created_at)
         .bind(&license.updated_at)
         .execute(pool)
@@ -45,7 +46,7 @@ impl LicenseRepository {
     pub async fn update(pool: &SqlitePool, license: &License) -> Result<License, sqlx::Error> {
         sqlx::query(
             "UPDATE licenses SET sku = ?, max_tasks = ?, expire_at = ?, activated_at = ?,
-             activation_code_hash = ?, updated_at = ?
+             activation_code_hash = ?, granted_to = ?, updated_at = ?
              WHERE id = ?",
         )
         .bind(&license.sku)
@@ -53,6 +54,7 @@ impl LicenseRepository {
         .bind(&license.expire_at)
         .bind(&license.activated_at)
         .bind(&license.activation_code_hash)
+        .bind(&license.granted_to)
         .bind(&license.updated_at)
         .bind(&license.id)
         .execute(pool)

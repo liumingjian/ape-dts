@@ -400,6 +400,7 @@ async fn license_repository_crud() {
         expire_at: Some("2027-01-01T00:00:00Z".to_string()),
         activated_at: Some(now()),
         activation_code_hash: Some("hashed_code".to_string()),
+        granted_to: "acme-corp".to_string(),
         created_at: now(),
         updated_at: now(),
     };

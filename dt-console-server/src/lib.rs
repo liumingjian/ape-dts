@@ -3,6 +3,7 @@ pub mod auth_handlers;
 pub mod db;
 pub mod error;
 pub mod health;
+pub mod license_handlers;
 pub mod middleware;
 pub mod models;
 pub mod operate_log_handlers;
@@ -33,7 +34,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(user_handlers::get_user)
             .service(user_handlers::update_user)
             .service(user_handlers::delete_user)
-            .service(operate_log_handlers::list_operate_logs),
+            .service(operate_log_handlers::list_operate_logs)
+            .service(license_handlers::get_license)
+            .service(license_handlers::activate_license),
     );
 }
 

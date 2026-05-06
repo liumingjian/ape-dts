@@ -167,8 +167,47 @@ pub struct License {
     pub expire_at: Option<String>,
     pub activated_at: Option<String>,
     pub activation_code_hash: Option<String>,
+    pub granted_to: String,
     pub created_at: String,
     pub updated_at: String,
+}
+
+/// Request body for POST /api/license/activate.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActivateLicenseRequest {
+    pub code: String,
+}
+
+/// Response body for GET /api/license.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LicenseResponse {
+    pub sku: String,
+    pub max_tasks: i64,
+    pub expire_at: Option<String>,
+    pub status: String,
+    pub granted_to: String,
+    pub activated_at: Option<String>,
+    pub current_tasks: i64,
+}
+
+/// Decoded activation code payload (internal use only).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActivationPayload {
+    pub sku: String,
+    pub max_tasks: i64,
+    pub expire_at: String,
+    pub granted_to: String,
+    pub sig: String,
+}
+
+/// Request body for minimal POST /api/tasks (used for license cap enforcement).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateTaskRequest {
+    pub name: String,
+    pub kind: String,
 }
 
 // ─── Alert ───────────────────────────────────────────────────────────────
