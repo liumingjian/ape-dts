@@ -88,7 +88,10 @@ pub fn validate_task(
     }
 
     // ── GaussDB sub-mode enforcement (must come before db_type validation) ──
-    if is_gaussdb(db_type_source) || is_gaussdb(db_type_target) {
+    // Only enforce on POST (is_create=true). On PATCH, the db_type is already
+    // resolved (e.g. "gaussdb_pg") so sub_mode is not required; if provided it
+    // is still validated.
+    if is_create && (is_gaussdb(db_type_source) || is_gaussdb(db_type_target)) {
         match sub_mode {
             None => {
                 errors.push(ValidationError {
@@ -534,13 +537,12 @@ fn extract_type_is(config: &serde_json::Value, expected: &str) -> bool {
     config.get("extract_type").and_then(|v| v.as_str()) == Some(expected)
 }
 
-/// Is this db_type a GaussDB variant?
+/// Is this db_type the unresolved "gaussdb" type (needs sub_mode to resolve)?
+///
+/// Returns `true` only for the bare `"gaussdb"` string — not for already-resolved
+/// types like `"gaussdb_pg"`, `"gaussdb_mysql"`, or `"gaussdb_oracle"`.
 fn is_gaussdb(db_type: &str) -> bool {
     db_type == "gaussdb"
-        || db_type.starts_with("gaussdb_")
-        || db_type == "gaussdb_pg"
-        || db_type == "gaussdb_mysql"
-        || db_type == "gaussdb_oracle"
 }
 
 /// Validate all sandboxed path fields in the task JSON.
@@ -695,6 +697,79 @@ mod tests {
             true,
         );
         assert!(!errors.iter().any(|e| e.error.contains("gaussdb")));
+    }
+
+    // ─── PATCH (is_create=false) on resolved GaussDB type ────────────
+
+    #[test]
+    fn patch_gaussdb_resolved_no_sub_mode_ok() {
+        // PATCH on an existing GaussDB task (db_type already resolved) does
+        // NOT require sub_mode — it should not trigger gaussdb_sub_mode_required.
+        let errors = validate_task(
+            "snapshot",
+            "gaussdb_pg",
+            "mysql",
+            "postgres://host/db",
+            "mysql://host/db",
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+            None,  // no sub_mode
+            false, // is_create = false (PATCH)
+        );
+        assert!(!errors
+            .iter()
+            .any(|e| e.error == "gaussdb_sub_mode_required"));
+    }
+
+    #[test]
+    fn patch_gaussdb_mysql_resolved_no_sub_mode_ok() {
+        let errors = validate_task(
+            "cdc",
+            "gaussdb_mysql",
+            "mysql",
+            "mysql://host/db",
+            "mysql://host/db",
+            &serde_json::json!({"server_id": "1"}),
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+            None,
+            false,
+        );
+        assert!(!errors
+            .iter()
+            .any(|e| e.error == "gaussdb_sub_mode_required"));
+    }
+
+    #[test]
+    fn patch_gaussdb_oracle_resolved_no_sub_mode_ok() {
+        let errors = validate_task(
+            "snapshot",
+            "gaussdb_oracle",
+            "oracle",
+            "oracle://host/db",
+            "oracle://host/db",
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+            None,
+            false,
+        );
+        assert!(!errors
+            .iter()
+            .any(|e| e.error == "gaussdb_sub_mode_required"));
+    }
+
+    #[test]
+    fn is_gaussdb_only_matches_unresolved() {
+        // is_gaussdb() should only match the bare "gaussdb" string, not
+        // resolved types like "gaussdb_pg", "gaussdb_mysql", etc.
+        assert!(is_gaussdb("gaussdb"));
+        assert!(!is_gaussdb("gaussdb_pg"));
+        assert!(!is_gaussdb("gaussdb_mysql"));
+        assert!(!is_gaussdb("gaussdb_oracle"));
+        assert!(!is_gaussdb("mysql"));
+        assert!(!is_gaussdb("pg"));
     }
 
     // ─── Snapshot kind rejects cdc extract_type ──────────────────────

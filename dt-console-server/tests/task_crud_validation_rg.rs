@@ -699,6 +699,54 @@ async fn gaussdb_oracle_mode_201() {
 }
 
 #[actix_web::test]
+async fn patch_gaussdb_task_without_sub_mode_200() {
+    // PATCH on an existing GaussDB task should NOT require sub_mode.
+    // The bug was that is_gaussdb() matched resolved types like "gaussdb_pg",
+    // causing PATCH to always fail with 422 gaussdb_sub_mode_required.
+    let pool = setup().await;
+    let app = test::init_service(build_test_app(pool.clone())).await;
+    let cookies = do_login!(app, "admin", "admin123");
+
+    // Create a GaussDB pg-mode snapshot task
+    let body = serde_json::json!({
+        "kind": "snapshot",
+        "engineSource": "gaussdb",
+        "engineTarget": "mysql",
+        "subMode": "pg-mode",
+        "sourceEndpoint": {"url": "postgres://203.0.113.1:5432/db"},
+        "targetEndpoint": {"url": "mysql://203.0.113.2:3306/db"},
+    });
+
+    let req = add_auth(
+        test::TestRequest::post().uri("/api/tasks").set_json(body),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::CREATED);
+
+    let created: serde_json::Value = test::read_body_json(resp).await;
+    let id = created["id"].as_str().unwrap().to_string();
+    assert_eq!(created["dbTypeSource"], "gaussdb_pg");
+
+    // PATCH without sub_mode — should succeed (not 422)
+    let req = add_auth(
+        test::TestRequest::patch()
+            .uri(&format!("/api/tasks/{id}"))
+            .set_json(serde_json::json!({
+                "filter": {"do_tbs": ["db1.tbl_*"]}
+            })),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let patched: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(patched["dbTypeSource"], "gaussdb_pg");
+}
+
+#[actix_web::test]
 async fn snapshot_rejects_cdc_extract_type_422() {
     let pool = setup().await;
     let app = test::init_service(build_test_app(pool.clone())).await;
