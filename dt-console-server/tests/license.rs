@@ -28,8 +28,9 @@ use dt_console_server::error;
 use dt_console_server::health;
 use dt_console_server::license_handlers;
 use dt_console_server::middleware::csrf::{Csrf, XSRF_COOKIE_NAME, XSRF_HEADER_NAME};
-use dt_console_server::models::{ActivationPayload, LoginRequest};
+use dt_console_server::models::{ActivationPayload, LoginRequest, ResourceGroup};
 use dt_console_server::rate_limit::{RateLimitConfig, RateLimiter};
+use dt_console_server::repositories::resource_group_repository::ResourceGroupRepository;
 use dt_console_server::repositories::task_repository::TaskRepository;
 use dt_console_server::user_handlers;
 use sqlx::SqlitePool;
@@ -135,8 +136,28 @@ async fn seed_user(
     user_id
 }
 
+/// Seed the default resource group and return its id.
+async fn seed_default_rg(pool: &SqlitePool) -> String {
+    let existing = ResourceGroupRepository::list(pool).await.unwrap();
+    if let Some(rg) = existing.iter().find(|rg| rg.is_default) {
+        return rg.id.clone();
+    }
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let rg = ResourceGroup {
+        id: uuid::Uuid::new_v4().to_string(),
+        name: "default".to_string(),
+        is_default: true,
+        created_at: now.clone(),
+        updated_at: now,
+    };
+    let id = rg.id.clone();
+    ResourceGroupRepository::create(pool, &rg).await.unwrap();
+    id
+}
+
 /// Seed a task directly in the DB and return task_id.
 async fn seed_task(pool: &SqlitePool, name: &str) -> String {
+    let rg_id = seed_default_rg(pool).await;
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let id = uuid::Uuid::new_v4().to_string();
     let task = dt_console_server::models::Task {
@@ -149,6 +170,7 @@ async fn seed_task(pool: &SqlitePool, name: &str) -> String {
         source_endpoint: "{}".to_string(),
         target_endpoint: "{}".to_string(),
         extractor_config: "{}".to_string(),
+        sinker_config: "{}".to_string(),
         filter_config: "{}".to_string(),
         router_config: "{}".to_string(),
         parallelizer_config: "{}".to_string(),
@@ -157,7 +179,7 @@ async fn seed_task(pool: &SqlitePool, name: &str) -> String {
         processor_config: "{}".to_string(),
         runtime_config: "{}".to_string(),
         metrics_config: "{}".to_string(),
-        resource_group_id: "default".to_string(),
+        resource_group_id: rg_id,
         owner_user_id: None,
         status: "draft".to_string(),
         created_at: now.clone(),

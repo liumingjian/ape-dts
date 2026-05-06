@@ -203,8 +203,8 @@ mod tests {
             .fetch_one(&pool)
             .await
             .unwrap();
-        // 16 migrations, each applied exactly once.
-        assert_eq!(count.0, 16);
+        // 17 migrations, each applied exactly once.
+        assert_eq!(count.0, 17);
     }
 
     #[tokio::test]
@@ -258,7 +258,7 @@ mod tests {
             .fetch_one(&pool)
             .await
             .unwrap();
-        assert_eq!(count_before.0, 16, "all 16 migrations should be recorded");
+        assert_eq!(count_before.0, 17, "all 17 migrations should be recorded");
 
         // Mark the first applied migration as dirty (success = false).
         // Migration versions are timestamps like 20260507000001, not sequential.
@@ -318,7 +318,7 @@ mod tests {
         run_migrations(&pool).await.unwrap();
 
         // Delete the last migration entry to simulate a torn migration.
-        sqlx::query("DELETE FROM _sqlx_migrations WHERE version = 16")
+        sqlx::query("DELETE FROM _sqlx_migrations WHERE version = 17")
             .execute(&pool)
             .await
             .unwrap();
@@ -333,11 +333,11 @@ mod tests {
             result.err()
         );
 
-        // Verify that all 16 migrations are now recorded.
+        // Verify that all 17 migrations are now recorded.
         let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM _sqlx_migrations")
             .fetch_one(&pool)
             .await
             .unwrap();
-        assert_eq!(count.0, 16);
+        assert_eq!(count.0, 17);
     }
 }

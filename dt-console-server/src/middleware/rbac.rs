@@ -39,6 +39,12 @@ pub enum RbacAction {
 
     // Audit
     OperateLogsList,
+
+    // Resource groups
+    ResourceGroupCreate,
+    ResourceGroupRead,
+    ResourceGroupUpdate,
+    ResourceGroupDelete,
 }
 
 impl std::fmt::Display for RbacAction {
@@ -59,6 +65,10 @@ impl std::fmt::Display for RbacAction {
             RbacAction::LicenseActivate => "license.activate",
             RbacAction::AlertClear => "alert.clear",
             RbacAction::OperateLogsList => "operate_logs.list",
+            RbacAction::ResourceGroupCreate => "resource_group.create",
+            RbacAction::ResourceGroupRead => "resource_group.read",
+            RbacAction::ResourceGroupUpdate => "resource_group.update",
+            RbacAction::ResourceGroupDelete => "resource_group.delete",
         };
         write!(f, "{s}")
     }
@@ -79,8 +89,12 @@ pub fn is_allowed(role: &str, action: RbacAction) -> bool {
                 | RbacAction::TaskStop
                 | RbacAction::AlertClear
                 | RbacAction::LicenseRead
+                | RbacAction::ResourceGroupRead
         ),
-        "viewer" => matches!(action, RbacAction::TaskRead | RbacAction::LicenseRead),
+        "viewer" => matches!(
+            action,
+            RbacAction::TaskRead | RbacAction::LicenseRead | RbacAction::ResourceGroupRead
+        ),
         _ => false, // unknown role → deny all
     }
 }
@@ -141,6 +155,10 @@ mod tests {
             RbacAction::LicenseActivate,
             RbacAction::AlertClear,
             RbacAction::OperateLogsList,
+            RbacAction::ResourceGroupCreate,
+            RbacAction::ResourceGroupRead,
+            RbacAction::ResourceGroupUpdate,
+            RbacAction::ResourceGroupDelete,
         ] {
             assert!(
                 is_allowed("admin", action),
@@ -167,6 +185,7 @@ mod tests {
             RbacAction::TaskStop,
             RbacAction::AlertClear,
             RbacAction::LicenseRead,
+            RbacAction::ResourceGroupRead,
         ];
         for action in &allowed {
             assert!(
@@ -188,6 +207,9 @@ mod tests {
             RbacAction::UsersDelete,
             RbacAction::LicenseActivate,
             RbacAction::OperateLogsList,
+            RbacAction::ResourceGroupCreate,
+            RbacAction::ResourceGroupUpdate,
+            RbacAction::ResourceGroupDelete,
         ];
         let op = user_context("operator");
         for action in &denied {
@@ -214,7 +236,11 @@ mod tests {
 
     #[test]
     fn viewer_allowed_actions() {
-        let allowed = [RbacAction::TaskRead, RbacAction::LicenseRead];
+        let allowed = [
+            RbacAction::TaskRead,
+            RbacAction::LicenseRead,
+            RbacAction::ResourceGroupRead,
+        ];
         for action in &allowed {
             assert!(
                 is_allowed("viewer", *action),
@@ -240,6 +266,9 @@ mod tests {
             RbacAction::LicenseActivate,
             RbacAction::AlertClear,
             RbacAction::OperateLogsList,
+            RbacAction::ResourceGroupCreate,
+            RbacAction::ResourceGroupUpdate,
+            RbacAction::ResourceGroupDelete,
         ];
         let viewer = user_context("viewer");
         for action in &denied {
@@ -305,6 +334,18 @@ mod tests {
         }
     }
 
+    // ─── All roles can read resource groups ───────────────────────────
+
+    #[test]
+    fn all_roles_can_read_resource_groups() {
+        for role in &["admin", "operator", "viewer"] {
+            assert!(
+                is_allowed(role, RbacAction::ResourceGroupRead),
+                "{role} should be allowed resource_group.read"
+            );
+        }
+    }
+
     // ─── Action name serialization ─────────────────────────────────────
 
     #[test]
@@ -318,6 +359,22 @@ mod tests {
         assert_eq!(RbacAction::LicenseActivate.to_string(), "license.activate");
         assert_eq!(RbacAction::AlertClear.to_string(), "alert.clear");
         assert_eq!(RbacAction::OperateLogsList.to_string(), "operate_logs.list");
+        assert_eq!(
+            RbacAction::ResourceGroupCreate.to_string(),
+            "resource_group.create"
+        );
+        assert_eq!(
+            RbacAction::ResourceGroupRead.to_string(),
+            "resource_group.read"
+        );
+        assert_eq!(
+            RbacAction::ResourceGroupUpdate.to_string(),
+            "resource_group.update"
+        );
+        assert_eq!(
+            RbacAction::ResourceGroupDelete.to_string(),
+            "resource_group.delete"
+        );
     }
 
     // ─── Full (role, action) matrix test ───────────────────────────────
@@ -375,6 +432,19 @@ mod tests {
             ("admin", RbacAction::OperateLogsList, true),
             ("operator", RbacAction::OperateLogsList, false),
             ("viewer", RbacAction::OperateLogsList, false),
+            // Resource groups
+            ("admin", RbacAction::ResourceGroupCreate, true),
+            ("admin", RbacAction::ResourceGroupRead, true),
+            ("admin", RbacAction::ResourceGroupUpdate, true),
+            ("admin", RbacAction::ResourceGroupDelete, true),
+            ("operator", RbacAction::ResourceGroupCreate, false),
+            ("operator", RbacAction::ResourceGroupRead, true),
+            ("operator", RbacAction::ResourceGroupUpdate, false),
+            ("operator", RbacAction::ResourceGroupDelete, false),
+            ("viewer", RbacAction::ResourceGroupCreate, false),
+            ("viewer", RbacAction::ResourceGroupRead, true),
+            ("viewer", RbacAction::ResourceGroupUpdate, false),
+            ("viewer", RbacAction::ResourceGroupDelete, false),
         ];
 
         for (role, action, expected) in matrix {

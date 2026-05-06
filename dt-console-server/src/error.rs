@@ -13,6 +13,7 @@ pub mod codes {
     // Parse / validation
     pub const PARSE_ERROR: &str = "PARSE_ERROR";
     pub const VALIDATION_FAILED: &str = "VALIDATION_FAILED";
+    pub const TASK_VALIDATION_FAILED: &str = "TASK_VALIDATION_FAILED";
 
     // Auth
     pub const UNAUTHENTICATED: &str = "UNAUTHENTICATED";
@@ -39,6 +40,28 @@ pub mod codes {
     pub const LICENSE_LIMIT_EXCEEDED: &str = "LICENSE_LIMIT_EXCEEDED";
     pub const LICENSE_EXPIRED: &str = "LICENSE_EXPIRED";
     pub const INVALID_LICENSE_CODE: &str = "INVALID_LICENSE_CODE";
+
+    // Task
+    pub const TASK_NOT_FOUND: &str = "task_not_found";
+    pub const TASK_KIND_IMMUTABLE: &str = "task_kind_immutable";
+    pub const TASK_HAS_ACTIVE_RUN: &str = "task_has_active_run";
+
+    // Task validation
+    pub const GAUSSDB_SUB_MODE_REQUIRED: &str = "gaussdb_sub_mode_required";
+    pub const UNKNOWN_GAUSSDB_SUB_MODE: &str = "unknown_gaussdb_sub_mode";
+    pub const SYNC_MODE_INVALID_FOR_CATEGORY: &str = "sync_mode_invalid_for_category";
+    pub const STRUCT_FILTER_REQUIRED: &str = "struct_filter_required";
+    pub const INVALID_URL_SCHEME: &str = "invalid_url_scheme";
+    pub const URL_SCHEME_ENGINE_MISMATCH: &str = "url_scheme_engine_mismatch";
+    pub const PATH_OUTSIDE_SANDBOX: &str = "path_outside_sandbox";
+    pub const ENDPOINT_HOST_BLOCKED: &str = "endpoint_host_blocked";
+    pub const UNKNOWN_RESOURCE_GROUP: &str = "unknown_resource_group";
+
+    // Resource Group
+    pub const RESOURCE_GROUP_NAME_TAKEN: &str = "resource_group_name_taken";
+    pub const DEFAULT_RESOURCE_GROUP_PROTECTED: &str = "default_resource_group_protected";
+    pub const RESOURCE_GROUP_HAS_TASKS: &str = "resource_group_has_tasks";
+    pub const RESOURCE_GROUP_NOT_FOUND: &str = "resource_group_not_found";
 
     // Schema / migration
     pub const SCHEMA_MISMATCH: &str = "schema_mismatch";
@@ -96,17 +119,33 @@ impl actix_web::ResponseError for ApiError {
                 StatusCode::FORBIDDEN
             }
 
-            codes::NOT_FOUND => StatusCode::NOT_FOUND,
+            codes::NOT_FOUND | codes::TASK_NOT_FOUND | codes::RESOURCE_GROUP_NOT_FOUND => {
+                StatusCode::NOT_FOUND
+            }
 
             codes::PARSE_ERROR | codes::VALIDATION_FAILED => StatusCode::BAD_REQUEST,
 
-            codes::CANNOT_DEMOTE_SELF => StatusCode::UNPROCESSABLE_ENTITY,
+            codes::CANNOT_DEMOTE_SELF
+            | codes::LICENSE_LIMIT_EXCEEDED
+            | codes::GAUSSDB_SUB_MODE_REQUIRED
+            | codes::UNKNOWN_GAUSSDB_SUB_MODE
+            | codes::SYNC_MODE_INVALID_FOR_CATEGORY
+            | codes::STRUCT_FILTER_REQUIRED
+            | codes::INVALID_URL_SCHEME
+            | codes::URL_SCHEME_ENGINE_MISMATCH
+            | codes::PATH_OUTSIDE_SANDBOX
+            | codes::ENDPOINT_HOST_BLOCKED
+            | codes::UNKNOWN_RESOURCE_GROUP
+            | codes::TASK_KIND_IMMUTABLE
+            | codes::TASK_VALIDATION_FAILED => StatusCode::UNPROCESSABLE_ENTITY,
 
-            codes::CONFLICT | codes::LAST_ADMIN_PROTECTED | codes::USERNAME_TAKEN => {
-                StatusCode::CONFLICT
-            }
-
-            codes::LICENSE_LIMIT_EXCEEDED => StatusCode::UNPROCESSABLE_ENTITY,
+            codes::CONFLICT
+            | codes::LAST_ADMIN_PROTECTED
+            | codes::USERNAME_TAKEN
+            | codes::TASK_HAS_ACTIVE_RUN
+            | codes::RESOURCE_GROUP_NAME_TAKEN
+            | codes::DEFAULT_RESOURCE_GROUP_PROTECTED
+            | codes::RESOURCE_GROUP_HAS_TASKS => StatusCode::CONFLICT,
 
             codes::LICENSE_EXPIRED | codes::INVALID_LICENSE_CODE => StatusCode::BAD_REQUEST,
 

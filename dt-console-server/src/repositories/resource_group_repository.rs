@@ -34,6 +34,21 @@ impl ResourceGroupRepository {
             .await
     }
 
+    /// Find a resource group by name.
+    pub async fn find_by_name(pool: &SqlitePool, name: &str) -> Result<ResourceGroup, sqlx::Error> {
+        sqlx::query_as("SELECT * FROM resource_groups WHERE name = ?")
+            .bind(name)
+            .fetch_one(pool)
+            .await
+    }
+
+    /// Get the default resource group.
+    pub async fn get_default(pool: &SqlitePool) -> Result<ResourceGroup, sqlx::Error> {
+        sqlx::query_as("SELECT * FROM resource_groups WHERE is_default = 1 LIMIT 1")
+            .fetch_one(pool)
+            .await
+    }
+
     /// List all resource groups.
     pub async fn list(pool: &SqlitePool) -> Result<Vec<ResourceGroup>, sqlx::Error> {
         sqlx::query_as("SELECT * FROM resource_groups ORDER BY created_at ASC")

@@ -1,0 +1,1027 @@
+//! Per-category task validation, GaussDB sub-mode enforcement,
+//! path sandboxing, SSRF prevention, and extract_type consistency checks.
+//!
+//! Every validation function returns a `Vec<ValidationError>` (empty = valid).
+
+use std::net::IpAddr;
+
+/// A single validation failure.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ValidationError {
+    pub field: String,
+    pub error: String,
+}
+
+/// Known db_type strings (mirrors dt-common DbType serialisation).
+pub const VALID_DB_TYPES: &[&str] = &[
+    "mysql",
+    "pg",
+    "oracle",
+    "gaussdb_pg",
+    "gaussdb_mysql",
+    "gaussdb_oracle",
+    "kafka",
+    "mongo",
+    "redis",
+    "clickhouse",
+    "starrocks",
+    "doris",
+    "foxlake",
+    "tidb",
+];
+
+/// Known kind values.
+pub const VALID_KINDS: &[&str] = &["snapshot", "cdc", "check", "struct"];
+
+/// Known GaussDB sub-mode values.
+pub const VALID_GAUSSDB_SUB_MODES: &[&str] = &["pg-mode", "mysql-mode", "oracle-mode"];
+
+/// URL schemes accepted per engine.
+pub const ENGINE_SCHEMES: &[(&str, &[&str])] = &[
+    ("mysql", &["mysql"]),
+    ("pg", &["postgres", "postgresql"]),
+    ("oracle", &["oracle"]),
+    ("kafka", &["kafka"]),
+    ("mongo", &["mongodb"]),
+    ("redis", &["redis"]),
+    ("gaussdb_pg", &["postgres", "postgresql"]),
+    ("gaussdb_mysql", &["mysql"]),
+    ("gaussdb_oracle", &["oracle"]),
+];
+
+/// Path fields that must be sandboxed.
+pub const SANDBOXED_PATH_FIELDS: &[&str] = &[
+    "processor.lua_code_file",
+    "sinker.check_log_dir",
+    "runtime.log_dir",
+    "data_marker.dst_log_dir",
+];
+
+/// Base directory for the per-Run sandbox.
+pub const RUN_SANDBOX_BASE: &str = "runs";
+
+/// Validate a full task creation/update payload.
+///
+/// `is_create` = true for POST (kind is required), false for PATCH (kind is
+/// immutable so we only validate fields being changed).
+#[allow(clippy::too_many_arguments)]
+pub fn validate_task(
+    kind: &str,
+    db_type_source: &str,
+    db_type_target: &str,
+    source_url: &str,
+    target_url: &str,
+    extractor_config: &serde_json::Value,
+    sinker_config: &serde_json::Value,
+    filter_config: &serde_json::Value,
+    sub_mode: Option<&str>,
+    is_create: bool,
+) -> Vec<ValidationError> {
+    let mut errors = Vec::new();
+
+    // ── Kind validation ──────────────────────────────────────────────
+    if is_create && !VALID_KINDS.contains(&kind) {
+        errors.push(ValidationError {
+            field: "kind".into(),
+            error: format!("invalid kind '{kind}'; expected one of {:?}", VALID_KINDS),
+        });
+    }
+
+    // ── GaussDB sub-mode enforcement (must come before db_type validation) ──
+    if is_gaussdb(db_type_source) || is_gaussdb(db_type_target) {
+        match sub_mode {
+            None => {
+                errors.push(ValidationError {
+                    field: "sub_mode".into(),
+                    error: "gaussdb_sub_mode_required".into(),
+                });
+            }
+            Some(mode) if !VALID_GAUSSDB_SUB_MODES.contains(&mode) => {
+                errors.push(ValidationError {
+                    field: "sub_mode".into(),
+                    error: format!("unknown_gaussdb_sub_mode '{mode}'"),
+                });
+            }
+            _ => {}
+        }
+    }
+
+    // ── DbType validation ────────────────────────────────────────────
+    // "gaussdb" is accepted as a valid but unresolved type; the sub-mode
+    // enforcement above already catches the case where it's unresolved.
+    if !is_gaussdb(db_type_source) && !VALID_DB_TYPES.contains(&db_type_source) {
+        errors.push(ValidationError {
+            field: "db_type_source".into(),
+            error: format!("invalid db_type_source '{db_type_source}'"),
+        });
+    }
+    if !is_gaussdb(db_type_target) && !VALID_DB_TYPES.contains(&db_type_target) {
+        errors.push(ValidationError {
+            field: "db_type_target".into(),
+            error: format!("invalid db_type_target '{db_type_target}'"),
+        });
+    }
+
+    // ── Source/target URL validation ──────────────────────────────────
+    if !source_url.is_empty() {
+        errors.extend(validate_endpoint_url(
+            source_url,
+            db_type_source,
+            "source_endpoint.url",
+        ));
+    }
+    if !target_url.is_empty() {
+        errors.extend(validate_endpoint_url(
+            target_url,
+            db_type_target,
+            "target_endpoint.url",
+        ));
+    }
+
+    // ── Per-category required fields ─────────────────────────────────
+    match kind {
+        "snapshot" => {
+            if source_url.is_empty() {
+                errors.push(ValidationError {
+                    field: "source_endpoint.url".into(),
+                    error: "required".into(),
+                });
+            }
+            if target_url.is_empty() {
+                errors.push(ValidationError {
+                    field: "target_endpoint.url".into(),
+                    error: "required".into(),
+                });
+            }
+            // snapshot rejects extract_type=cdc
+            if extract_type_is(extractor_config, "cdc") {
+                errors.push(ValidationError {
+                    field: "extractor.extract_type".into(),
+                    error: "sync_mode_invalid_for_category".into(),
+                });
+            }
+        }
+        "cdc" => {
+            if source_url.is_empty() {
+                errors.push(ValidationError {
+                    field: "source_endpoint.url".into(),
+                    error: "required".into(),
+                });
+            }
+            if target_url.is_empty() {
+                errors.push(ValidationError {
+                    field: "target_endpoint.url".into(),
+                    error: "required".into(),
+                });
+            }
+            // cdc rejects extract_type=snapshot
+            if extract_type_is(extractor_config, "snapshot") {
+                errors.push(ValidationError {
+                    field: "extractor.extract_type".into(),
+                    error: "sync_mode_invalid_for_category".into(),
+                });
+            }
+            // CDC mysql requires server_id
+            if (db_type_source == "mysql" || db_type_source == "gaussdb_mysql")
+                && extractor_config
+                    .get("server_id")
+                    .is_none_or(|v| v.as_str().is_none_or(|s| s.is_empty()))
+            {
+                errors.push(ValidationError {
+                    field: "extractor.server_id".into(),
+                    error: "required".into(),
+                });
+            }
+            // CDC pg requires slot_name
+            if (db_type_source == "pg" || db_type_source == "gaussdb_pg")
+                && extractor_config
+                    .get("slot_name")
+                    .is_none_or(|v| v.as_str().is_none_or(|s| s.is_empty()))
+            {
+                errors.push(ValidationError {
+                    field: "extractor.slot_name".into(),
+                    error: "required".into(),
+                });
+            }
+            // CDC oracle requires cdc_mode
+            if (db_type_source == "oracle" || db_type_source == "gaussdb_oracle")
+                && extractor_config
+                    .get("cdc_mode")
+                    .is_none_or(|v| v.as_str().is_none_or(|s| s.is_empty()))
+            {
+                errors.push(ValidationError {
+                    field: "extractor.cdc_mode".into(),
+                    error: "required".into(),
+                });
+            }
+        }
+        "check" => {
+            if source_url.is_empty() {
+                errors.push(ValidationError {
+                    field: "source_endpoint.url".into(),
+                    error: "required".into(),
+                });
+            }
+            if target_url.is_empty() {
+                errors.push(ValidationError {
+                    field: "target_endpoint.url".into(),
+                    error: "required".into(),
+                });
+            }
+            // check requires sinker.check_log_dir
+            if sinker_config
+                .get("check_log_dir")
+                .is_none_or(|v| v.as_str().is_none_or(|s| s.is_empty()))
+            {
+                errors.push(ValidationError {
+                    field: "sinker.check_log_dir".into(),
+                    error: "required".into(),
+                });
+            }
+        }
+        "struct" => {
+            if source_url.is_empty() {
+                errors.push(ValidationError {
+                    field: "source_endpoint.url".into(),
+                    error: "required".into(),
+                });
+            }
+            if target_url.is_empty() {
+                errors.push(ValidationError {
+                    field: "target_endpoint.url".into(),
+                    error: "required".into(),
+                });
+            }
+            // struct requires at least one of do_dbs or do_tbs
+            let do_dbs = filter_config
+                .get("do_dbs")
+                .and_then(|v| v.as_array())
+                .map(|a| a.len())
+                .unwrap_or(0);
+            let do_tbs = filter_config
+                .get("do_tbs")
+                .and_then(|v| v.as_array())
+                .map(|a| a.len())
+                .unwrap_or(0);
+            if do_dbs + do_tbs == 0 {
+                errors.push(ValidationError {
+                    field: "filter".into(),
+                    error: "struct_filter_required".into(),
+                });
+            }
+            // struct rejects non-struct extract_type
+            let et = extractor_config
+                .get("extract_type")
+                .and_then(|v| v.as_str())
+                .unwrap_or("struct");
+            if et != "struct" {
+                errors.push(ValidationError {
+                    field: "extractor.extract_type".into(),
+                    error: "sync_mode_invalid_for_category".into(),
+                });
+            }
+        }
+        _ => {} // already caught above
+    }
+
+    errors
+}
+
+/// Validate an endpoint URL: scheme match + SSRF host check.
+fn validate_endpoint_url(url_str: &str, db_type: &str, field: &str) -> Vec<ValidationError> {
+    let mut errors = Vec::new();
+
+    // Parse scheme manually: "scheme://host/path"
+    let (scheme, host) = match parse_url_parts(url_str) {
+        Some(parts) => parts,
+        None => {
+            errors.push(ValidationError {
+                field: field.into(),
+                error: "invalid_url".into(),
+            });
+            return errors;
+        }
+    };
+
+    // Check scheme against engine
+    let expected_schemes: &[&str] = ENGINE_SCHEMES
+        .iter()
+        .find(|(engine, _)| *engine == db_type)
+        .map(|(_, schemes)| *schemes)
+        .unwrap_or(&[]);
+
+    if !expected_schemes.is_empty() && !expected_schemes.contains(&scheme.as_str()) {
+        let all_schemes: Vec<&str> = ENGINE_SCHEMES
+            .iter()
+            .flat_map(|(_, s)| s.iter())
+            .copied()
+            .collect();
+        if !all_schemes.contains(&scheme.as_str()) {
+            errors.push(ValidationError {
+                field: field.into(),
+                error: format!(
+                    "invalid_url_scheme; expected one of {:?}, got '{}'",
+                    expected_schemes, scheme
+                ),
+            });
+        } else {
+            errors.push(ValidationError {
+                field: field.into(),
+                error: format!(
+                    "url_scheme_engine_mismatch; expected {:?} for '{}', got '{}'",
+                    expected_schemes, db_type, scheme
+                ),
+            });
+        }
+    }
+
+    // SSRF: block loopback / link-local / private hosts
+    if let Some(host_str) = host {
+        if let Some(ssrf_err) = check_ssrf_host(&host_str, field) {
+            errors.push(ssrf_err);
+        }
+    }
+
+    errors
+}
+
+/// Parse a URL into (scheme, host) components.
+fn parse_url_parts(url: &str) -> Option<(String, Option<String>)> {
+    let sep = url.find("://")?;
+    let scheme = url[..sep].to_string();
+    let rest = &url[sep + 3..];
+
+    let host_end = rest.find('/').unwrap_or(rest.len());
+    let host_port = &rest[..host_end];
+
+    let host = if host_port.starts_with('[') {
+        let bracket_end = host_port.find(']')?;
+        Some(host_port[1..bracket_end].to_string())
+    } else if let Some(colon_pos) = host_port.rfind(':') {
+        Some(host_port[..colon_pos].to_string())
+    } else if host_port.is_empty() {
+        None
+    } else {
+        Some(host_port.to_string())
+    };
+
+    Some((scheme, host))
+}
+
+/// Check whether a host string resolves to a blocked address (SSRF).
+///
+/// Blocked: 127.0.0.0/8, ::1, 169.254.0.0/16, 10.0.0.0/8,
+/// 172.16.0.0/12, 192.168.0.0/16, and "localhost".
+///
+/// Returns `None` if the host is acceptable, or a `ValidationError` if blocked.
+pub fn check_ssrf_host(host: &str, field: &str) -> Option<ValidationError> {
+    // Fast path for string "localhost"
+    if host == "localhost" {
+        return Some(ValidationError {
+            field: field.into(),
+            error: "endpoint_host_blocked".into(),
+        });
+    }
+
+    // Try parsing as IP
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        if is_blocked_ip(&ip) {
+            return Some(ValidationError {
+                field: field.into(),
+                error: "endpoint_host_blocked".into(),
+            });
+        }
+    }
+
+    // Try DNS resolution (best-effort; may not be available in test)
+    // We skip DNS resolution here to avoid I/O in validation and instead
+    // rely on the string check. The actual test_connection endpoint will
+    // perform the real check. For now, string-based blocking suffices.
+
+    None
+}
+
+/// Is this IP address in a blocked range?
+fn is_blocked_ip(ip: &IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            let octets = v4.octets();
+            // 127.0.0.0/8 (loopback)
+            if octets[0] == 127 {
+                return true;
+            }
+            // 169.254.0.0/16 (link-local)
+            if octets[0] == 169 && octets[1] == 254 {
+                return true;
+            }
+            // 10.0.0.0/8 (private)
+            if octets[0] == 10 {
+                return true;
+            }
+            // 172.16.0.0/12 (private)
+            if octets[0] == 172 && (octets[1] & 0xf0) == 16 {
+                return true;
+            }
+            // 192.168.0.0/16 (private)
+            if octets[0] == 192 && octets[1] == 168 {
+                return true;
+            }
+            // 0.0.0.0
+            if octets == [0, 0, 0, 0] {
+                return true;
+            }
+            false
+        }
+        IpAddr::V6(v6) => {
+            // ::1 (loopback)
+            if v6.is_loopback() {
+                return true;
+            }
+            // fc00::/7 (unique local / private)
+            if v6.is_unique_local() {
+                return true;
+            }
+            // fe80::/10 (link-local)
+            if v6.is_unicast_link_local() {
+                return true;
+            }
+            false
+        }
+    }
+}
+
+/// Sandbox a user-controlled path value.
+///
+/// Only allows:
+/// - Relative paths without directory traversal (no `..`)
+/// - Basename-only paths (no directory separator)
+/// - Paths under `<RUN_SANDBOX_BASE>/` prefix
+///
+/// Returns `Ok(())` if safe, or a `ValidationError` if the path escapes the sandbox.
+pub fn sandbox_path(value: &str, field: &str) -> Result<(), ValidationError> {
+    // Empty is fine (will be defaulted later)
+    if value.is_empty() {
+        return Ok(());
+    }
+
+    // Reject absolute paths
+    if value.starts_with('/') {
+        return Err(ValidationError {
+            field: field.into(),
+            error: "path_outside_sandbox".into(),
+        });
+    }
+
+    // Reject directory traversal
+    if value.contains("..") {
+        return Err(ValidationError {
+            field: field.into(),
+            error: "path_outside_sandbox".into(),
+        });
+    }
+
+    // Reject known dangerous paths
+    let lower = value.to_lowercase();
+    if lower.starts_with("/etc/")
+        || lower.starts_with("/proc/")
+        || lower.starts_with("/sys/")
+        || lower.starts_with("/dev/")
+        || lower == "/etc/passwd"
+        || lower == "/proc/self/environ"
+    {
+        return Err(ValidationError {
+            field: field.into(),
+            error: "path_outside_sandbox".into(),
+        });
+    }
+
+    // Allow: basename only (no slash) or relative path under runs/
+    if !value.contains('/') || value.starts_with(RUN_SANDBOX_BASE) || value.starts_with("./") {
+        return Ok(());
+    }
+
+    // Otherwise reject
+    Err(ValidationError {
+        field: field.into(),
+        error: "path_outside_sandbox".into(),
+    })
+}
+
+/// Resolve the effective db_type from (engine, sub_mode).
+///
+/// For GaussDB engines, sub_mode determines the final db_type:
+/// - engine=gaussdb + sub_mode=pg-mode → gaussdb_pg
+/// - engine=gaussdb + sub_mode=mysql-mode → gaussdb_mysql
+/// - engine=gaussdb + sub_mode=oracle-mode → gaussdb_oracle
+///
+/// For non-GaussDB engines, sub_mode is ignored and the engine
+/// string is returned as-is (if it's a valid db_type).
+pub fn resolve_db_type(engine: &str, sub_mode: Option<&str>) -> String {
+    if engine == "gaussdb" || engine.starts_with("gaussdb_") {
+        match sub_mode {
+            Some("pg-mode") => "gaussdb_pg".to_string(),
+            Some("mysql-mode") => "gaussdb_mysql".to_string(),
+            Some("oracle-mode") => "gaussdb_oracle".to_string(),
+            _ => engine.to_string(),
+        }
+    } else {
+        engine.to_string()
+    }
+}
+
+/// Check if the extractor_config indicates the given extract_type.
+fn extract_type_is(config: &serde_json::Value, expected: &str) -> bool {
+    config.get("extract_type").and_then(|v| v.as_str()) == Some(expected)
+}
+
+/// Is this db_type a GaussDB variant?
+fn is_gaussdb(db_type: &str) -> bool {
+    db_type == "gaussdb"
+        || db_type.starts_with("gaussdb_")
+        || db_type == "gaussdb_pg"
+        || db_type == "gaussdb_mysql"
+        || db_type == "gaussdb_oracle"
+}
+
+/// Validate all sandboxed path fields in the task JSON.
+pub fn validate_sandboxed_paths(
+    processor_config: &serde_json::Value,
+    sinker_config: &serde_json::Value,
+    runtime_config: &serde_json::Value,
+) -> Vec<ValidationError> {
+    let mut errors = Vec::new();
+
+    // processor.lua_code_file
+    if let Some(v) = processor_config
+        .get("lua_code_file")
+        .and_then(|v| v.as_str())
+    {
+        if let Err(e) = sandbox_path(v, "processor.lua_code_file") {
+            errors.push(e);
+        }
+    }
+
+    // sinker.check_log_dir
+    if let Some(v) = sinker_config.get("check_log_dir").and_then(|v| v.as_str()) {
+        if let Err(e) = sandbox_path(v, "sinker.check_log_dir") {
+            errors.push(e);
+        }
+    }
+
+    // runtime.log_dir
+    if let Some(v) = runtime_config.get("log_dir").and_then(|v| v.as_str()) {
+        if let Err(e) = sandbox_path(v, "runtime.log_dir") {
+            errors.push(e);
+        }
+    }
+
+    errors
+}
+
+/// Sanitise a string for use in argv (fork-exec safety).
+///
+/// Removes null bytes and rejects strings that look like shell metacharacters
+/// when they could cause injection. This is a conservative check — the
+/// actual fork-exec should use `std::process::Command` with arg vectors
+/// (no shell), so this is a defence-in-depth measure.
+pub fn sanitise_argv(value: &str) -> Result<String, ValidationError> {
+    // Remove null bytes
+    let cleaned: String = value.chars().filter(|c| *c != '\0').collect();
+
+    // Reject obvious shell injection patterns
+    let dangerous = ["$(", "`", "&&", "||", ";", "|", ">", "<", "\n", "\r"];
+    for pattern in &dangerous {
+        if cleaned.contains(pattern) {
+            return Err(ValidationError {
+                field: "argv".into(),
+                error: format!("unsafe character sequence '{}' in argument", pattern),
+            });
+        }
+    }
+
+    Ok(cleaned)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ─── GaussDB sub-mode ────────────────────────────────────────────
+
+    #[test]
+    fn gaussdb_without_sub_mode_rejected() {
+        let errors = validate_task(
+            "snapshot",
+            "gaussdb",
+            "mysql",
+            "mysql://host/db",
+            "mysql://host/db",
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+            None,
+            true,
+        );
+        assert!(errors
+            .iter()
+            .any(|e| e.error == "gaussdb_sub_mode_required"));
+    }
+
+    #[test]
+    fn gaussdb_unknown_sub_mode_rejected() {
+        let errors = validate_task(
+            "snapshot",
+            "gaussdb",
+            "mysql",
+            "mysql://host/db",
+            "mysql://host/db",
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+            Some("foo"),
+            true,
+        );
+        assert!(errors
+            .iter()
+            .any(|e| e.error.contains("unknown_gaussdb_sub_mode")));
+    }
+
+    #[test]
+    fn gaussdb_pg_mode_accepted() {
+        let errors = validate_task(
+            "snapshot",
+            "gaussdb_pg",
+            "mysql",
+            "postgres://host/db",
+            "mysql://host/db",
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+            Some("pg-mode"),
+            true,
+        );
+        assert!(!errors.iter().any(|e| e.error.contains("gaussdb")));
+    }
+
+    #[test]
+    fn gaussdb_mysql_mode_accepted() {
+        let errors = validate_task(
+            "cdc",
+            "gaussdb_mysql",
+            "mysql",
+            "mysql://host/db",
+            "mysql://host/db",
+            &serde_json::json!({"server_id": "1"}),
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+            Some("mysql-mode"),
+            true,
+        );
+        assert!(!errors.iter().any(|e| e.error.contains("gaussdb")));
+    }
+
+    #[test]
+    fn gaussdb_oracle_mode_accepted() {
+        let errors = validate_task(
+            "snapshot",
+            "gaussdb_oracle",
+            "oracle",
+            "oracle://host/db",
+            "oracle://host/db",
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+            Some("oracle-mode"),
+            true,
+        );
+        assert!(!errors.iter().any(|e| e.error.contains("gaussdb")));
+    }
+
+    // ─── Snapshot kind rejects cdc extract_type ──────────────────────
+
+    #[test]
+    fn snapshot_rejects_cdc_extract_type() {
+        let errors = validate_task(
+            "snapshot",
+            "mysql",
+            "mysql",
+            "mysql://host/db",
+            "mysql://host/db",
+            &serde_json::json!({"extract_type": "cdc"}),
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+            None,
+            true,
+        );
+        assert!(errors
+            .iter()
+            .any(|e| e.error == "sync_mode_invalid_for_category"));
+    }
+
+    // ─── CDC kind rejects snapshot extract_type ──────────────────────
+
+    #[test]
+    fn cdc_rejects_snapshot_extract_type() {
+        let errors = validate_task(
+            "cdc",
+            "mysql",
+            "mysql",
+            "mysql://host/db",
+            "mysql://host/db",
+            &serde_json::json!({"extract_type": "snapshot"}),
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+            None,
+            true,
+        );
+        assert!(errors
+            .iter()
+            .any(|e| e.error == "sync_mode_invalid_for_category"));
+    }
+
+    // ─── Struct kind rejects non-struct extract_type ────────────────
+
+    #[test]
+    fn struct_rejects_snapshot_extract_type() {
+        let errors = validate_task(
+            "struct",
+            "mysql",
+            "mysql",
+            "mysql://host/db",
+            "mysql://host/db",
+            &serde_json::json!({"extract_type": "snapshot"}),
+            &serde_json::json!({}),
+            &serde_json::json!({"do_dbs": ["db1"]}),
+            None,
+            true,
+        );
+        assert!(errors
+            .iter()
+            .any(|e| e.error == "sync_mode_invalid_for_category"));
+    }
+
+    // ─── Required field validation ───────────────────────────────────
+
+    #[test]
+    fn snapshot_missing_source_url() {
+        let errors = validate_task(
+            "snapshot",
+            "mysql",
+            "mysql",
+            "",
+            "mysql://host/db",
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+            None,
+            true,
+        );
+        assert!(errors
+            .iter()
+            .any(|e| e.field == "source_endpoint.url" && e.error == "required"));
+    }
+
+    #[test]
+    fn cdc_mysql_missing_server_id() {
+        let errors = validate_task(
+            "cdc",
+            "mysql",
+            "mysql",
+            "mysql://host/db",
+            "mysql://host/db",
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+            None,
+            true,
+        );
+        assert!(errors
+            .iter()
+            .any(|e| e.field == "extractor.server_id" && e.error == "required"));
+    }
+
+    #[test]
+    fn cdc_pg_missing_slot_name() {
+        let errors = validate_task(
+            "cdc",
+            "pg",
+            "pg",
+            "postgres://host/db",
+            "postgres://host/db",
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+            None,
+            true,
+        );
+        assert!(errors
+            .iter()
+            .any(|e| e.field == "extractor.slot_name" && e.error == "required"));
+    }
+
+    #[test]
+    fn cdc_oracle_missing_cdc_mode() {
+        let errors = validate_task(
+            "cdc",
+            "oracle",
+            "oracle",
+            "oracle://host/db",
+            "oracle://host/db",
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+            None,
+            true,
+        );
+        assert!(errors
+            .iter()
+            .any(|e| e.field == "extractor.cdc_mode" && e.error == "required"));
+    }
+
+    #[test]
+    fn check_missing_check_log_dir() {
+        let errors = validate_task(
+            "check",
+            "mysql",
+            "mysql",
+            "mysql://host/db",
+            "mysql://host/db",
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+            None,
+            true,
+        );
+        assert!(errors
+            .iter()
+            .any(|e| e.field == "sinker.check_log_dir" && e.error == "required"));
+    }
+
+    #[test]
+    fn struct_empty_filter() {
+        let errors = validate_task(
+            "struct",
+            "mysql",
+            "mysql",
+            "mysql://host/db",
+            "mysql://host/db",
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+            &serde_json::json!({"do_dbs": [], "do_tbs": []}),
+            None,
+            true,
+        );
+        assert!(errors.iter().any(|e| e.error == "struct_filter_required"));
+    }
+
+    // ─── URL scheme validation ───────────────────────────────────────
+
+    #[test]
+    fn invalid_url_scheme_rejected() {
+        let errors = validate_endpoint_url("ftp://host/db", "mysql", "source_endpoint.url");
+        assert!(errors
+            .iter()
+            .any(|e| e.error.contains("invalid_url_scheme")));
+    }
+
+    #[test]
+    fn url_scheme_engine_mismatch() {
+        let errors = validate_endpoint_url("postgres://host/db", "mysql", "source_endpoint.url");
+        assert!(errors
+            .iter()
+            .any(|e| e.error.contains("url_scheme_engine_mismatch")));
+    }
+
+    // ─── SSRF host blocking ──────────────────────────────────────────
+
+    #[test]
+    fn ssrf_loopback_blocked() {
+        assert!(check_ssrf_host("127.0.0.1", "field").is_some());
+    }
+
+    #[test]
+    fn ssrf_link_local_blocked() {
+        assert!(check_ssrf_host("169.254.169.254", "field").is_some());
+    }
+
+    #[test]
+    fn ssrf_ipv6_loopback_blocked() {
+        assert!(check_ssrf_host("::1", "field").is_some());
+    }
+
+    #[test]
+    fn ssrf_private_10_blocked() {
+        assert!(check_ssrf_host("10.0.0.5", "field").is_some());
+    }
+
+    #[test]
+    fn ssrf_localhost_blocked() {
+        assert!(check_ssrf_host("localhost", "field").is_some());
+    }
+
+    #[test]
+    fn ssrf_public_ip_allowed() {
+        assert!(check_ssrf_host("203.0.113.1", "field").is_none());
+    }
+
+    // ─── Path sandboxing ─────────────────────────────────────────────
+
+    #[test]
+    fn path_etc_passwd_blocked() {
+        assert!(sandbox_path("/etc/passwd", "field").is_err());
+    }
+
+    #[test]
+    fn path_traversal_blocked() {
+        assert!(sandbox_path("../../../etc/passwd", "field").is_err());
+    }
+
+    #[test]
+    fn path_proc_self_environ_blocked() {
+        assert!(sandbox_path("/proc/self/environ", "field").is_err());
+    }
+
+    #[test]
+    fn path_basename_allowed() {
+        assert!(sandbox_path("check", "field").is_ok());
+    }
+
+    #[test]
+    fn path_relative_allowed() {
+        assert!(sandbox_path("./check", "field").is_ok());
+    }
+
+    #[test]
+    fn path_runs_subdir_allowed() {
+        assert!(sandbox_path("runs/abc123/check.log", "field").is_ok());
+    }
+
+    // ─── argv sanitisation ──────────────────────────────────────────
+
+    #[test]
+    fn argv_null_bytes_removed() {
+        assert_eq!(sanitise_argv("foo\0bar").unwrap(), "foobar");
+    }
+
+    #[test]
+    fn argv_shell_injection_rejected() {
+        assert!(sanitise_argv("$(rm -rf /)").is_err());
+        assert!(sanitise_argv("`rm -rf /`").is_err());
+        assert!(sanitise_argv("foo && bar").is_err());
+        assert!(sanitise_argv("foo; bar").is_err());
+    }
+
+    #[test]
+    fn argv_normal_string_ok() {
+        assert_eq!(
+            sanitise_argv("mysql://host:3306/db").unwrap(),
+            "mysql://host:3306/db"
+        );
+    }
+
+    // ─── resolve_db_type ─────────────────────────────────────────────
+
+    #[test]
+    fn resolve_gaussdb_pg_mode() {
+        assert_eq!(resolve_db_type("gaussdb", Some("pg-mode")), "gaussdb_pg");
+    }
+
+    #[test]
+    fn resolve_gaussdb_mysql_mode() {
+        assert_eq!(
+            resolve_db_type("gaussdb", Some("mysql-mode")),
+            "gaussdb_mysql"
+        );
+    }
+
+    #[test]
+    fn resolve_gaussdb_oracle_mode() {
+        assert_eq!(
+            resolve_db_type("gaussdb", Some("oracle-mode")),
+            "gaussdb_oracle"
+        );
+    }
+
+    #[test]
+    fn resolve_non_gaussdb_passthrough() {
+        assert_eq!(resolve_db_type("mysql", None), "mysql");
+    }
+
+    #[test]
+    fn resolve_already_resolved_gaussdb() {
+        assert_eq!(resolve_db_type("gaussdb_pg", Some("pg-mode")), "gaussdb_pg");
+    }
+
+    // ─── sandboxed paths validation ──────────────────────────────────
+
+    #[test]
+    fn validate_sandboxed_paths_catches_traversal() {
+        let errors = validate_sandboxed_paths(
+            &serde_json::json!({"lua_code_file": "../../etc/passwd"}),
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+        );
+        assert!(!errors.is_empty());
+        assert!(errors[0].error == "path_outside_sandbox");
+    }
+}

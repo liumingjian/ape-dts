@@ -1,7 +1,9 @@
 use actix_web::cookie::Key;
 use dt_console_server::auth;
 use dt_console_server::db::{self, DbError, SCHEMA_MISMATCH_CODE};
+use dt_console_server::models::ResourceGroup;
 use dt_console_server::rate_limit::{RateLimitConfig, RateLimiter};
+use dt_console_server::repositories::resource_group_repository::ResourceGroupRepository;
 use tracing_subscriber::EnvFilter;
 
 const DEFAULT_BIND_ADDR: &str = "127.0.0.1:8080";
@@ -38,6 +40,12 @@ async fn main() -> std::io::Result<()> {
         std::process::exit(1);
     }
 
+    // Seed the default resource group if the resource_groups table is empty.
+    if let Err(e) = seed_default_resource_group(&pool).await {
+        tracing::error!("default resource group seeding failed: {e}");
+        std::process::exit(1);
+    }
+
     // Read idle timeout from env, or use default.
     let idle_timeout_secs = std::env::var("CONSOLE_IDLE_TIMEOUT_SECS")
         .ok()
@@ -63,4 +71,31 @@ async fn main() -> std::io::Result<()> {
     .bind(&bind_addr)?
     .run()
     .await
+}
+
+/// Seed the default resource group if none exist.
+async fn seed_default_resource_group(pool: &sqlx::SqlitePool) -> Result<(), String> {
+    let existing = ResourceGroupRepository::list(pool)
+        .await
+        .map_err(|e| format!("resource group list failed: {e}"))?;
+
+    if !existing.is_empty() {
+        return Ok(());
+    }
+
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let rg = ResourceGroup {
+        id: uuid::Uuid::new_v4().to_string(),
+        name: "default".to_string(),
+        is_default: true,
+        created_at: now.clone(),
+        updated_at: now,
+    };
+
+    ResourceGroupRepository::create(pool, &rg)
+        .await
+        .map_err(|e| format!("default resource group seed failed: {e}"))?;
+
+    tracing::info!("seeded default resource group");
+    Ok(())
 }

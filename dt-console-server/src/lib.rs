@@ -9,7 +9,10 @@ pub mod models;
 pub mod operate_log_handlers;
 pub mod rate_limit;
 pub mod repositories;
+pub mod resource_group_handlers;
+pub mod task_handlers;
 pub mod user_handlers;
+pub mod validation;
 
 use actix_cors::Cors;
 use actix_session::storage::CookieSessionStore;
@@ -34,6 +37,16 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(user_handlers::get_user)
             .service(user_handlers::update_user)
             .service(user_handlers::delete_user)
+            .service(task_handlers::create_task)
+            .service(task_handlers::list_tasks)
+            .service(task_handlers::get_task)
+            .service(task_handlers::update_task)
+            .service(task_handlers::delete_task)
+            .service(resource_group_handlers::list_resource_groups)
+            .service(resource_group_handlers::create_resource_group)
+            .service(resource_group_handlers::get_resource_group)
+            .service(resource_group_handlers::update_resource_group)
+            .service(resource_group_handlers::delete_resource_group)
             .service(operate_log_handlers::list_operate_logs)
             .service(license_handlers::get_license)
             .service(license_handlers::activate_license),
