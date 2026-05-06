@@ -1,0 +1,31 @@
+[package]
+name = "dt-console-server"
+version = "0.1.0"
+edition = "2021"
+
+[lints]
+workspace = true
+
+[features]
+metrics = ["dt-common/metrics"]
+
+[dependencies]
+dt-common = { path = "../dt-common", version = "0.1.0" }
+
+actix-web = { workspace = true }
+actix-session = { workspace = true }
+actix-cors = { workspace = true }
+actix-files = { workspace = true }
+actix-web-lab = { workspace = true }
+sqlx = { workspace = true }
+bcrypt = { workspace = true }
+cookie = { workspace = true }
+prometheus-parse = { workspace = true }
+csnmp = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+tokio = { workspace = true }
+uuid = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

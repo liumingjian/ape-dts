@@ -9,11 +9,13 @@ members = [
     "dt-pipeline",
     "dt-task",
     "dt-main",
-    "dt-tests"
+    "dt-tests",
+    "dt-console-server"
 ]
 
 [workspace.lints.clippy]
 assigning_clones = "allow"
+module_inception = "allow"
 
 [workspace.dependencies]
 sqlx = {git = "https://github.com/apecloud/sqlx", features = ["runtime-async-std-rustls", "mysql", "postgres", "bigdecimal", "ipnetwork", "mac_address", "bit-vec", "time", "chrono", "json", "uuid"]}
@@ -67,6 +69,16 @@ percent-encoding = "2.3.1"
 urlencoding = "2.1.3"
 opendal = { version = "0.54.1", features = ["services-s3"] }
 governor = "0.10.4"
+actix-session = "0.11.0"
+actix-cors = "0.7.1"
+actix-files = "0.6.10"
+actix-web-lab = "0.24.3"
+bcrypt = "0.19.1"
+cookie = "0.18.1"
+prometheus-parse = "0.2.5"
+csnmp = "0.6.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [profile.release]
 panic = 'unwind'
