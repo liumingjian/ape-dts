@@ -11,6 +11,7 @@ use sqlx::SqlitePool;
 
 use crate::auth;
 use crate::error::{codes, ApiError};
+use crate::middleware::rbac::{self, RbacAction};
 use crate::models::OperateLog;
 use crate::models::{CreateUserRequest, UpdateUserRequest, UserContext, UserResponse};
 use crate::repositories::operate_log_repository::OperateLogRepository;
@@ -96,14 +97,9 @@ async fn write_user_audit_log_with_details(
 /// Admin-only. Returns array of UserResponse (no password fields).
 #[get("/users")]
 pub async fn list_users(pool: web::Data<SqlitePool>, user: UserContext) -> HttpResponse {
-    // Admin-only check
-    if user.role != "admin" {
-        return ApiError::with_details(
-            codes::FORBIDDEN,
-            "Insufficient permissions",
-            serde_json::json!({ "required_action": "users.list" }),
-        )
-        .error_response();
+    // RBAC: admin-only
+    if let Err(e) = rbac::require_action(&user, RbacAction::UsersList) {
+        return e.error_response();
     }
 
     let users = match UserRepository::list(&pool).await {
@@ -129,14 +125,9 @@ pub async fn create_user(
     body: web::Json<CreateUserRequest>,
     req: actix_web::HttpRequest,
 ) -> HttpResponse {
-    // Admin-only check
-    if user.role != "admin" {
-        return ApiError::with_details(
-            codes::FORBIDDEN,
-            "Insufficient permissions",
-            serde_json::json!({ "required_action": "users.create" }),
-        )
-        .error_response();
+    // RBAC: admin-only
+    if let Err(e) = rbac::require_action(&user, RbacAction::UsersCreate) {
+        return e.error_response();
     }
 
     // Validate role value
@@ -219,14 +210,9 @@ pub async fn get_user(
     user: UserContext,
     path: web::Path<String>,
 ) -> HttpResponse {
-    // Admin-only check
-    if user.role != "admin" {
-        return ApiError::with_details(
-            codes::FORBIDDEN,
-            "Insufficient permissions",
-            serde_json::json!({ "required_action": "users.read" }),
-        )
-        .error_response();
+    // RBAC: admin-only
+    if let Err(e) = rbac::require_action(&user, RbacAction::UsersRead) {
+        return e.error_response();
     }
 
     let id = path.into_inner();
@@ -256,14 +242,9 @@ pub async fn update_user(
     body: web::Json<UpdateUserRequest>,
     req: actix_web::HttpRequest,
 ) -> HttpResponse {
-    // Admin-only check
-    if user.role != "admin" {
-        return ApiError::with_details(
-            codes::FORBIDDEN,
-            "Insufficient permissions",
-            serde_json::json!({ "required_action": "users.update" }),
-        )
-        .error_response();
+    // RBAC: admin-only
+    if let Err(e) = rbac::require_action(&user, RbacAction::UsersUpdate) {
+        return e.error_response();
     }
 
     let id = path.into_inner();
@@ -370,14 +351,9 @@ pub async fn delete_user(
     path: web::Path<String>,
     req: actix_web::HttpRequest,
 ) -> HttpResponse {
-    // Admin-only check
-    if user.role != "admin" {
-        return ApiError::with_details(
-            codes::FORBIDDEN,
-            "Insufficient permissions",
-            serde_json::json!({ "required_action": "users.delete" }),
-        )
-        .error_response();
+    // RBAC: admin-only
+    if let Err(e) = rbac::require_action(&user, RbacAction::UsersDelete) {
+        return e.error_response();
     }
 
     let id = path.into_inner();

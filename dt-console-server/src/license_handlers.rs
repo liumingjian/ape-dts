@@ -13,6 +13,7 @@ use sha2::{Digest, Sha256};
 use sqlx::SqlitePool;
 
 use crate::error::{codes, ApiError};
+use crate::middleware::rbac::{self, RbacAction};
 use crate::models::{
     ActivateLicenseRequest, ActivationPayload, License, LicenseResponse, OperateLog, UserContext,
 };
@@ -77,14 +78,9 @@ pub async fn activate_license(
     body: web::Json<ActivateLicenseRequest>,
     req: actix_web::HttpRequest,
 ) -> HttpResponse {
-    // Admin-only check
-    if user.role != "admin" {
-        return ApiError::with_details(
-            codes::FORBIDDEN,
-            "Insufficient permissions",
-            serde_json::json!({ "required_action": "license.activate" }),
-        )
-        .error_response();
+    // RBAC: admin-only
+    if let Err(e) = rbac::require_action(&user, RbacAction::LicenseActivate) {
+        return e.error_response();
     }
 
     let ip = req

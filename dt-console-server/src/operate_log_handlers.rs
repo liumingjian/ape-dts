@@ -10,6 +10,7 @@ use actix_web::{get, web, HttpResponse, ResponseError};
 use sqlx::SqlitePool;
 
 use crate::error::{codes, ApiError};
+use crate::middleware::rbac::{self, RbacAction};
 use crate::models::{OperateLog, UserContext};
 use crate::repositories::operate_log_repository::OperateLogRepository;
 
@@ -102,13 +103,8 @@ pub async fn list_operate_logs(
     query: web::Query<OperateLogQuery>,
 ) -> HttpResponse {
     // RBAC: admin-only
-    if user.role != "admin" {
-        return ApiError::with_details(
-            codes::FORBIDDEN,
-            "Insufficient permissions",
-            serde_json::json!({ "required_action": "operate_logs.list" }),
-        )
-        .error_response();
+    if let Err(e) = rbac::require_action(&user, RbacAction::OperateLogsList) {
+        return e.error_response();
     }
 
     let page = query.page.unwrap_or(1).max(1);
