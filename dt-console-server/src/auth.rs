@@ -263,7 +263,10 @@ pub async fn reset_password(
     Ok(saved)
 }
 
-/// Disable a user account and invalidate all their sessions.
+/// Disable a user account. Existing sessions will be rejected on next
+/// request because `validate_session` checks the `disabled` flag.
+/// Sessions are NOT deleted here so that the next request returns
+/// `ACCOUNT_DISABLED` instead of `UNAUTHENTICATED`.
 pub async fn disable_user(pool: &SqlitePool, user_id: &str) -> Result<User, ApiError> {
     let mut user = UserRepository::find_by_id(pool, user_id)
         .await
@@ -275,9 +278,6 @@ pub async fn disable_user(pool: &SqlitePool, user_id: &str) -> Result<User, ApiE
     let saved = UserRepository::update(pool, &user)
         .await
         .map_err(|e| ApiError::new(codes::INTERNAL_ERROR, format!("user update failed: {e}")))?;
-
-    // Invalidate all sessions for this user
-    invalidate_user_sessions(pool, user_id).await?;
 
     Ok(saved)
 }

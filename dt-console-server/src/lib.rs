@@ -7,6 +7,7 @@ pub mod middleware;
 pub mod models;
 pub mod rate_limit;
 pub mod repositories;
+pub mod user_handlers;
 
 use actix_cors::Cors;
 use actix_session::storage::CookieSessionStore;
@@ -25,7 +26,12 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(health::healthz)
             .service(auth_handlers::login)
             .service(auth_handlers::logout)
-            .service(auth_handlers::me),
+            .service(auth_handlers::me)
+            .service(user_handlers::list_users)
+            .service(user_handlers::create_user)
+            .service(user_handlers::get_user)
+            .service(user_handlers::update_user)
+            .service(user_handlers::delete_user),
     );
 }
 

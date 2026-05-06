@@ -23,6 +23,45 @@ pub struct AuthResponse {
     pub role: String,
 }
 
+// ─── User DTOs ──────────────────────────────────────────────────────────
+
+/// Request body for POST /api/users (create user).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateUserRequest {
+    pub username: String,
+    pub password: String,
+    pub role: String,
+    #[serde(default)]
+    pub display_name: String,
+}
+
+/// Request body for PATCH /api/users/:id (update user).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateUserRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disabled: Option<bool>,
+}
+
+/// Response body for user endpoints — never includes password or password_hash.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UserResponse {
+    pub id: String,
+    pub username: String,
+    pub display_name: String,
+    pub role: String,
+    pub disabled: bool,
+    pub created_at: String,
+}
+
 /// UserContext extracted from a validated session. Stored in request extensions
 /// so handlers and middleware can access the authenticated user.
 #[derive(Debug, Clone)]
