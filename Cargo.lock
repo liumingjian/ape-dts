@@ -1760,6 +1760,7 @@ dependencies = [
  "cookie 0.18.1",
  "csnmp",
  "dt-common",
+ "futures",
  "prometheus-parse",
  "serde",
  "serde_json",
