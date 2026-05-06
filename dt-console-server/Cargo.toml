@@ -17,7 +17,8 @@ actix-session = { workspace = true, features = ["cookie-session"] }
 actix-cors = { workspace = true }
 actix-files = { workspace = true }
 actix-web-lab = { workspace = true }
-sqlx = { workspace = true }
+sqlx = { workspace = true, features = ["sqlite"] }
+thiserror = { workspace = true }
 bcrypt = { workspace = true }
 cookie = { workspace = true }
 prometheus-parse = { workspace = true }

@@ -34,6 +34,9 @@ pub mod codes {
     pub const LICENSE_EXPIRED: &str = "LICENSE_EXPIRED";
     pub const INVALID_LICENSE_CODE: &str = "INVALID_LICENSE_CODE";
 
+    // Schema / migration
+    pub const SCHEMA_MISMATCH: &str = "schema_mismatch";
+
     // Internal
     pub const INTERNAL_ERROR: &str = "INTERNAL_ERROR";
 }

@@ -18,6 +18,7 @@ Session.vim
 
 ## Build
 /target
+/data
 /images/**/ape-dts
 /images/**/dt-struct
 /images/**/dt-precheck
@@ -42,6 +43,8 @@ Session.vim
 .cursor
 .claude
 context_portal
+.factory/sdd-cache/
+.factory/.simplify-ignore-cache/
 
 ## cc-connect
 .cc-connect/

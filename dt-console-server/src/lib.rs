@@ -1,6 +1,9 @@
+pub mod db;
 pub mod error;
 pub mod health;
 pub mod middleware;
+pub mod models;
+pub mod repositories;
 
 use actix_cors::Cors;
 use actix_session::storage::CookieSessionStore;
