@@ -59,6 +59,38 @@ async fn write_user_audit_log(
     Ok(())
 }
 
+/// Write an audit log with details for user management actions.
+async fn write_user_audit_log_with_details(
+    pool: &SqlitePool,
+    actor: &str,
+    action: &str,
+    result: &str,
+    target: &str,
+    ip: &str,
+    details: &str,
+) -> Result<(), ApiError> {
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let log = OperateLog {
+        id: 0,
+        actor: actor.to_string(),
+        action: action.to_string(),
+        result: result.to_string(),
+        target: Some(target.to_string()),
+        details: Some(details.to_string()),
+        ip: Some(ip.to_string()),
+        created_at: now,
+    };
+    OperateLogRepository::create(pool, &log)
+        .await
+        .map_err(|e| {
+            ApiError::new(
+                codes::INTERNAL_ERROR,
+                format!("audit log write failed: {e}"),
+            )
+        })?;
+    Ok(())
+}
+
 /// GET /api/users — list all users.
 ///
 /// Admin-only. Returns array of UserResponse (no password fields).
@@ -112,11 +144,30 @@ pub async fn create_user(
         return ApiError::new(codes::VALIDATION_FAILED, "Invalid role value").error_response();
     }
 
+    // Extract IP early for audit logging
+    let ip = req
+        .connection_info()
+        .peer_addr()
+        .map(|a| a.to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
     // Check for duplicate username
     if UserRepository::find_by_username(&pool, &body.username)
         .await
         .is_ok()
     {
+        // Write failure audit log
+        let _ = write_user_audit_log_with_details(
+            &pool,
+            &user.username,
+            "users.create",
+            "failure",
+            &body.username,
+            &ip,
+            r#"{"reason":"duplicate_username"}"#,
+        )
+        .await;
+
         return ApiError::new(codes::USERNAME_TAKEN, "Username already exists").error_response();
     }
 
@@ -154,11 +205,6 @@ pub async fn create_user(
     };
 
     // Audit log
-    let ip = req
-        .connection_info()
-        .peer_addr()
-        .map(|a| a.to_string())
-        .unwrap_or_else(|| "unknown".to_string());
     let _ = write_user_audit_log(&pool, &user.username, "users.create", "success", &id, &ip).await;
 
     HttpResponse::Created().json(user_to_response(&saved))

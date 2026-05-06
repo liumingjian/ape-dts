@@ -5,6 +5,7 @@ pub mod error;
 pub mod health;
 pub mod middleware;
 pub mod models;
+pub mod operate_log_handlers;
 pub mod rate_limit;
 pub mod repositories;
 pub mod user_handlers;
@@ -31,7 +32,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(user_handlers::create_user)
             .service(user_handlers::get_user)
             .service(user_handlers::update_user)
-            .service(user_handlers::delete_user),
+            .service(user_handlers::delete_user)
+            .service(operate_log_handlers::list_operate_logs),
     );
 }
 

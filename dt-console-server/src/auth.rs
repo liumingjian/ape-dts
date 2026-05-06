@@ -331,6 +331,9 @@ pub async fn delete_user(pool: &SqlitePool, user_id: &str) -> Result<(), ApiErro
 }
 
 /// Helper: write an auth operate_log row.
+///
+/// For failure results, `details` includes a `reason` field but never
+/// includes the password or session token.
 async fn write_auth_log(
     pool: &SqlitePool,
     username: &str,
@@ -338,13 +341,18 @@ async fn write_auth_log(
     ip: &str,
 ) -> Result<(), ApiError> {
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let details = match result {
+        "failure" => Some(r#"{"reason":"invalid_credentials"}"#.to_string()),
+        "rate_limited" => Some(r#"{"reason":"rate_limited"}"#.to_string()),
+        _ => None,
+    };
     let log = OperateLog {
         id: 0,
         actor: username.to_string(),
         action: "auth.login".to_string(),
         result: result.to_string(),
         target: None,
-        details: None,
+        details,
         ip: Some(ip.to_string()),
         created_at: now,
     };

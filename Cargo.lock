@@ -1763,6 +1763,7 @@ dependencies = [
  "dt-common",
  "futures",
  "prometheus-parse",
+ "regex",
  "serde",
  "serde_json",
  "sqlx",
