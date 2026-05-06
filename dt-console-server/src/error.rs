@@ -63,6 +63,9 @@ pub mod codes {
     pub const RESOURCE_GROUP_HAS_TASKS: &str = "resource_group_has_tasks";
     pub const RESOURCE_GROUP_NOT_FOUND: &str = "resource_group_not_found";
 
+    // Export
+    pub const UNSUPPORTED_EXPORT_FORMAT: &str = "unsupported_export_format";
+
     // Schema / migration
     pub const SCHEMA_MISMATCH: &str = "schema_mismatch";
 
@@ -147,7 +150,9 @@ impl actix_web::ResponseError for ApiError {
             | codes::DEFAULT_RESOURCE_GROUP_PROTECTED
             | codes::RESOURCE_GROUP_HAS_TASKS => StatusCode::CONFLICT,
 
-            codes::LICENSE_EXPIRED | codes::INVALID_LICENSE_CODE => StatusCode::BAD_REQUEST,
+            codes::LICENSE_EXPIRED
+            | codes::INVALID_LICENSE_CODE
+            | codes::UNSUPPORTED_EXPORT_FORMAT => StatusCode::BAD_REQUEST,
 
             codes::TOO_MANY_ATTEMPTS => StatusCode::TOO_MANY_REQUESTS,
 

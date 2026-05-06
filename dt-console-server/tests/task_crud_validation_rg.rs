@@ -1082,3 +1082,399 @@ async fn struct_empty_filter_422() {
     let body: serde_json::Value = test::read_body_json(resp).await;
     assert_eq!(body["code"], "struct_filter_required");
 }
+
+// ── preview_ini, export, import, clone integration tests ────────────────────
+
+#[actix_web::test]
+async fn preview_ini_returns_ini_text() {
+    let pool = setup().await;
+    let app = test::init_service(build_test_app(pool.clone())).await;
+    let cookies = do_login!(app, "admin", "admin123");
+
+    // Create a task first
+    let body = snapshot_task_body();
+    let req = add_auth(
+        test::TestRequest::post().uri("/api/tasks").set_json(body),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let task: serde_json::Value = test::read_body_json(resp).await;
+    let task_id = task["id"].as_str().unwrap();
+
+    // GET preview_ini
+    let req = add_auth(
+        test::TestRequest::get().uri(&format!("/api/tasks/{task_id}/preview_ini")),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .unwrap()
+        .to_str()
+        .unwrap();
+    assert!(content_type.contains("text/plain"));
+
+    let body = test::read_body(resp).await;
+    let ini_text = String::from_utf8(body.to_vec()).unwrap();
+    assert!(ini_text.contains("[global]"));
+    assert!(ini_text.contains("[extractor]"));
+    assert!(ini_text.contains("[sinker]"));
+    assert!(ini_text.contains("[filter]"));
+    assert!(ini_text.contains("[parallelizer]"));
+    assert!(ini_text.contains("[pipeline]"));
+    assert!(ini_text.contains("[runtime]"));
+    assert!(ini_text.contains("db_type=mysql"));
+    assert!(ini_text.contains("extract_type=snapshot"));
+}
+
+#[actix_web::test]
+async fn preview_ini_nonexistent_task_404() {
+    let pool = setup().await;
+    let app = test::init_service(build_test_app(pool.clone())).await;
+    let cookies = do_login!(app, "admin", "admin123");
+
+    let req = add_auth(
+        test::TestRequest::get().uri("/api/tasks/00000000-0000-0000-0000-000000000000/preview_ini"),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
+#[actix_web::test]
+async fn export_task_json() {
+    let pool = setup().await;
+    let app = test::init_service(build_test_app(pool.clone())).await;
+    let cookies = do_login!(app, "admin", "admin123");
+
+    let body = snapshot_task_body();
+    let req = add_auth(
+        test::TestRequest::post().uri("/api/tasks").set_json(body),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    let task: serde_json::Value = test::read_body_json(resp).await;
+    let task_id = task["id"].as_str().unwrap();
+
+    // GET export?format=json
+    let req = add_auth(
+        test::TestRequest::get().uri(&format!("/api/tasks/{task_id}/export?format=json")),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let exported: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(exported["kind"], "snapshot");
+    // Password should be redacted
+    if let Some(pwd) = exported["sourceEndpoint"].get("password") {
+        assert_eq!(pwd.as_str().unwrap(), "<redacted>");
+    }
+}
+
+#[actix_web::test]
+async fn export_task_ini() {
+    let pool = setup().await;
+    let app = test::init_service(build_test_app(pool.clone())).await;
+    let cookies = do_login!(app, "admin", "admin123");
+
+    let body = snapshot_task_body();
+    let req = add_auth(
+        test::TestRequest::post().uri("/api/tasks").set_json(body),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    let task: serde_json::Value = test::read_body_json(resp).await;
+    let task_id = task["id"].as_str().unwrap();
+
+    // GET export?format=ini
+    let req = add_auth(
+        test::TestRequest::get().uri(&format!("/api/tasks/{task_id}/export?format=ini")),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body = test::read_body(resp).await;
+    let ini_text = String::from_utf8(body.to_vec()).unwrap();
+    assert!(ini_text.contains("[extractor]"));
+    assert!(ini_text.contains("db_type=mysql"));
+}
+
+#[actix_web::test]
+async fn export_unsupported_format_400() {
+    let pool = setup().await;
+    let app = test::init_service(build_test_app(pool.clone())).await;
+    let cookies = do_login!(app, "admin", "admin123");
+
+    let body = snapshot_task_body();
+    let req = add_auth(
+        test::TestRequest::post().uri("/api/tasks").set_json(body),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    let task: serde_json::Value = test::read_body_json(resp).await;
+    let task_id = task["id"].as_str().unwrap();
+
+    let req = add_auth(
+        test::TestRequest::get().uri(&format!("/api/tasks/{task_id}/export?format=yaml")),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    let err: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(err["code"], "unsupported_export_format");
+}
+
+#[actix_web::test]
+async fn import_task_from_json() {
+    let pool = setup().await;
+    let app = test::init_service(build_test_app(pool.clone())).await;
+    let cookies = do_login!(app, "admin", "admin123");
+
+    let import_body = serde_json::json!({
+        "kind": "snapshot",
+        "engineSource": "mysql",
+        "engineTarget": "mysql",
+        "sourceEndpoint": {"url": "mysql://203.0.113.1:3306/db"},
+        "targetEndpoint": {"url": "mysql://203.0.113.2:3306/db"},
+        "extractor": {},
+        "sinker": {},
+        "filter": {"do_tbs": "test_db.*"},
+    });
+
+    let req = add_auth(
+        test::TestRequest::post()
+            .uri("/api/tasks/import")
+            .set_json(import_body),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let task: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(task["kind"], "snapshot");
+    assert_eq!(task["status"], "draft");
+}
+
+#[actix_web::test]
+async fn import_task_validates_per_category() {
+    let pool = setup().await;
+    let app = test::init_service(build_test_app(pool.clone())).await;
+    let cookies = do_login!(app, "admin", "admin123");
+
+    // Missing server_id for CDC mysql
+    let import_body = serde_json::json!({
+        "kind": "cdc",
+        "engineSource": "mysql",
+        "engineTarget": "mysql",
+        "sourceEndpoint": {"url": "mysql://203.0.113.1:3306/db"},
+        "targetEndpoint": {"url": "mysql://203.0.113.2:3306/db"},
+        "extractor": {"extract_type": "cdc"},
+        "sinker": {},
+    });
+
+    let req = add_auth(
+        test::TestRequest::post()
+            .uri("/api/tasks/import")
+            .set_json(import_body),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[actix_web::test]
+async fn import_batch_partial_report() {
+    let pool = setup().await;
+    let app = test::init_service(build_test_app(pool.clone())).await;
+    let cookies = do_login!(app, "admin", "admin123");
+
+    // Batch: first valid, second invalid (struct without filter)
+    let batch = serde_json::json!([
+        {
+            "kind": "snapshot",
+            "engineSource": "mysql",
+            "engineTarget": "mysql",
+            "sourceEndpoint": {"url": "mysql://203.0.113.1:3306/db"},
+            "targetEndpoint": {"url": "mysql://203.0.113.2:3306/db"},
+            "filter": {"do_tbs": "test.*"},
+        },
+        {
+            "kind": "struct",
+            "engineSource": "mysql",
+            "engineTarget": "mysql",
+            "sourceEndpoint": {"url": "mysql://203.0.113.1:3306/db"},
+            "targetEndpoint": {"url": "mysql://203.0.113.2:3306/db"},
+            "filter": {"do_dbs": [], "do_tbs": []},
+        }
+    ]);
+
+    let req = add_auth(
+        test::TestRequest::post()
+            .uri("/api/tasks/import")
+            .set_json(batch),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let result: serde_json::Value = test::read_body_json(resp).await;
+    assert!(!result["successes"].as_array().unwrap().is_empty());
+    assert!(!result["failures"].as_array().unwrap().is_empty());
+}
+
+#[actix_web::test]
+async fn clone_task_creates_independent_copy() {
+    let pool = setup().await;
+    let app = test::init_service(build_test_app(pool.clone())).await;
+    let cookies = do_login!(app, "admin", "admin123");
+
+    // Create original
+    let body = snapshot_task_body();
+    let req = add_auth(
+        test::TestRequest::post().uri("/api/tasks").set_json(body),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    let original: serde_json::Value = test::read_body_json(resp).await;
+    let original_id = original["id"].as_str().unwrap();
+
+    // Clone
+    let req = add_auth(
+        test::TestRequest::post().uri(&format!("/api/tasks/{original_id}/clone")),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let cloned: serde_json::Value = test::read_body_json(resp).await;
+
+    // Different id
+    assert_ne!(cloned["id"], original["id"]);
+    // Different task_id (has _copy_ suffix)
+    assert!(cloned["taskId"].as_str().unwrap().contains("_copy_"));
+    // Name has (copy) suffix
+    assert!(cloned["name"].as_str().unwrap().contains("(copy)"));
+    // Status is draft
+    assert_eq!(cloned["status"], "draft");
+    // Same kind
+    assert_eq!(cloned["kind"], original["kind"]);
+}
+
+#[actix_web::test]
+async fn clone_honours_license_cap() {
+    let pool = setup().await;
+    let app = test::init_service(build_test_app(pool.clone())).await;
+    let cookies = do_login!(app, "admin", "admin123");
+
+    // Activate a license with maxTasks=1
+    let expire = chrono::Utc::now() + chrono::Duration::days(365);
+    let expire_str = expire.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let sig = dt_console_server::license_handlers::compute_signature(
+        "professional",
+        1,
+        &expire_str,
+        "test-org",
+    );
+    let payload = dt_console_server::models::ActivationPayload {
+        sku: "professional".into(),
+        max_tasks: 1,
+        expire_at: expire_str,
+        granted_to: "test-org".into(),
+        sig,
+    };
+    let code = dt_console_server::license_handlers::generate_activation_code(&payload);
+    let req = add_auth(
+        test::TestRequest::post()
+            .uri("/api/license/activate")
+            .set_json(serde_json::json!({"code": code})),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // Create one task (fills the cap)
+    let body = snapshot_task_body();
+    let req = add_auth(
+        test::TestRequest::post().uri("/api/tasks").set_json(body),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let task: serde_json::Value = test::read_body_json(resp).await;
+
+    // Clone should fail
+    let task_id = task["id"].as_str().unwrap();
+    let req = add_auth(
+        test::TestRequest::post().uri(&format!("/api/tasks/{task_id}/clone")),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status() == StatusCode::CONFLICT || resp.status() == StatusCode::UNPROCESSABLE_ENTITY,
+        "clone at cap should return 409 or 422, got {}",
+        resp.status()
+    );
+    let err: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(err["code"], "LICENSE_LIMIT_EXCEEDED");
+}
+
+#[actix_web::test]
+async fn preview_ini_matches_renderer_output() {
+    let pool = setup().await;
+    let app = test::init_service(build_test_app(pool.clone())).await;
+    let cookies = do_login!(app, "admin", "admin123");
+
+    // Create a task
+    let body = snapshot_task_body();
+    let req = add_auth(
+        test::TestRequest::post().uri("/api/tasks").set_json(body),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    let task_resp: serde_json::Value = test::read_body_json(resp).await;
+    let task_id = task_resp["id"].as_str().unwrap();
+
+    // Load the task from DB and render in-process
+    let db_task = dt_console_server::repositories::task_repository::TaskRepository::find_by_id(
+        &pool, task_id,
+    )
+    .await
+    .unwrap();
+    let expected_ini = dt_console_server::ini_renderer::render(&db_task);
+
+    // GET preview_ini
+    let req = add_auth(
+        test::TestRequest::get().uri(&format!("/api/tasks/{task_id}/preview_ini")),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    let body = test::read_body(resp).await;
+    let actual_ini = String::from_utf8(body.to_vec()).unwrap();
+
+    assert_eq!(
+        actual_ini, expected_ini,
+        "preview_ini must match IniRenderer::render output byte-for-byte"
+    );
+}

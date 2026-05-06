@@ -3,6 +3,7 @@ pub mod auth_handlers;
 pub mod db;
 pub mod error;
 pub mod health;
+pub mod ini_renderer;
 pub mod license_handlers;
 pub mod middleware;
 pub mod models;
@@ -42,6 +43,10 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(task_handlers::get_task)
             .service(task_handlers::update_task)
             .service(task_handlers::delete_task)
+            .service(task_handlers::preview_ini)
+            .service(task_handlers::export_task)
+            .service(task_handlers::import_tasks)
+            .service(task_handlers::clone_task)
             .service(resource_group_handlers::list_resource_groups)
             .service(resource_group_handlers::create_resource_group)
             .service(resource_group_handlers::get_resource_group)

@@ -6,6 +6,7 @@
 //! - PATCH  /api/tasks/:id      — update a task
 //! - DELETE /api/tasks/:id      — delete a task
 
+use actix_web::http::StatusCode;
 use actix_web::{delete, get, patch, post, web, HttpResponse, ResponseError};
 use sqlx::SqlitePool;
 
@@ -607,4 +608,506 @@ pub struct TaskListQuery {
     pub resource_group: Option<String>,
     pub page: Option<i64>,
     pub page_size: Option<i64>,
+}
+
+// ── preview_ini, export, import, clone ─────────────────────────────────────
+
+/// GET /api/tasks/:id/preview_ini — render a Task to INI text.
+///
+/// Returns `Content-Type: text/plain; charset=utf-8` with body byte-identical
+/// to what `IniRenderer::render(task)` produces in-process.
+#[get("/tasks/{id}/preview_ini")]
+pub async fn preview_ini(
+    pool: web::Data<SqlitePool>,
+    user: UserContext,
+    path: web::Path<String>,
+) -> HttpResponse {
+    if let Err(e) = rbac::require_action(&user, RbacAction::TaskRead) {
+        return e.error_response();
+    }
+
+    let id = path.into_inner();
+    match TaskRepository::find_by_id(&pool, &id).await {
+        Ok(task) => {
+            let ini = crate::ini_renderer::render(&task);
+            HttpResponse::Ok()
+                .content_type("text/plain; charset=utf-8")
+                .body(ini)
+        }
+        Err(_) => ApiError::with_details(
+            codes::TASK_NOT_FOUND,
+            "Task not found",
+            serde_json::json!({ "id": id }),
+        )
+        .error_response(),
+    }
+}
+
+/// Query parameters for GET /api/tasks/:id/export.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct ExportQuery {
+    pub format: Option<String>,
+}
+
+/// GET /api/tasks/:id/export?format=json|ini — export a Task.
+///
+/// - `format=json` (default): returns the full Task DTO as JSON with sensitive fields redacted.
+/// - `format=ini`: returns INI text byte-equal to `preview_ini`.
+#[get("/tasks/{id}/export")]
+pub async fn export_task(
+    pool: web::Data<SqlitePool>,
+    user: UserContext,
+    path: web::Path<String>,
+    query: web::Query<ExportQuery>,
+) -> HttpResponse {
+    if let Err(e) = rbac::require_action(&user, RbacAction::TaskRead) {
+        return e.error_response();
+    }
+
+    let id = path.into_inner();
+    let format = query.format.as_deref().unwrap_or("json");
+
+    let task = match TaskRepository::find_by_id(&pool, &id).await {
+        Ok(t) => t,
+        Err(_) => {
+            return ApiError::with_details(
+                codes::TASK_NOT_FOUND,
+                "Task not found",
+                serde_json::json!({ "id": id }),
+            )
+            .error_response();
+        }
+    };
+
+    match format {
+        "json" => {
+            let mut resp = task_to_response(&task);
+            // Redact sensitive fields in endpoints
+            redact_passwords(&mut resp.source_endpoint);
+            redact_passwords(&mut resp.target_endpoint);
+            HttpResponse::Ok().json(resp)
+        }
+        "ini" => {
+            let ini = crate::ini_renderer::render(&task);
+            HttpResponse::Ok()
+                .content_type("text/plain; charset=utf-8")
+                .body(ini)
+        }
+        _ => ApiError::with_details(
+            codes::UNSUPPORTED_EXPORT_FORMAT,
+            "Unsupported export format",
+            serde_json::json!({ "format": format, "supported": ["json", "ini"] }),
+        )
+        .error_response(),
+    }
+}
+
+/// Redact password fields in a JSON value (mutates in-place).
+fn redact_passwords(value: &mut serde_json::Value) {
+    if let serde_json::Value::Object(map) = value {
+        if let Some(serde_json::Value::String(s)) = map.get_mut("password") {
+            if !s.is_empty() {
+                *s = "<redacted>".to_string();
+            }
+        }
+    }
+}
+
+/// Request body for POST /api/tasks/import (single Task import from JSON).
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportTaskRequest {
+    #[serde(default)]
+    pub name: String,
+    pub kind: String,
+    pub engine_source: String,
+    #[serde(default)]
+    pub engine_target: String,
+    #[serde(default)]
+    pub sub_mode: Option<String>,
+    #[serde(default)]
+    pub source_endpoint: serde_json::Value,
+    #[serde(default)]
+    pub target_endpoint: serde_json::Value,
+    #[serde(default)]
+    pub extractor: serde_json::Value,
+    #[serde(default)]
+    pub sinker: serde_json::Value,
+    #[serde(default)]
+    pub filter: serde_json::Value,
+    #[serde(default)]
+    pub router: serde_json::Value,
+    #[serde(default)]
+    pub parallelizer: serde_json::Value,
+    #[serde(default)]
+    pub pipeline: serde_json::Value,
+    #[serde(default)]
+    pub resumer: serde_json::Value,
+    #[serde(default)]
+    pub processor: serde_json::Value,
+    #[serde(default)]
+    pub runtime: serde_json::Value,
+    #[serde(default)]
+    pub metrics: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resource_group_id: Option<String>,
+}
+
+/// POST /api/tasks/import — import one or more Tasks from JSON.
+///
+/// Accepts either a single Task DTO or an array of Task DTOs.
+/// Returns 201 for single import; 200 with per-row outcomes for batch.
+#[post("/tasks/import")]
+pub async fn import_tasks(
+    pool: web::Data<SqlitePool>,
+    user: UserContext,
+    body: web::Json<serde_json::Value>,
+    req: actix_web::HttpRequest,
+) -> HttpResponse {
+    if let Err(e) = rbac::require_action(&user, RbacAction::TaskCreate) {
+        return e.error_response();
+    }
+
+    let ip = req
+        .connection_info()
+        .peer_addr()
+        .map(|a| a.to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    // Determine single vs batch
+    if body.is_array() {
+        // Batch import
+        let items = body.as_array().unwrap();
+        let mut successes: Vec<serde_json::Value> = Vec::new();
+        let mut failures: Vec<serde_json::Value> = Vec::new();
+
+        for (idx, item) in items.iter().enumerate() {
+            match import_single_task(&pool, &user, item, &ip).await {
+                Ok(task_resp) => {
+                    successes.push(serde_json::json!({
+                        "idx": idx,
+                        "id": task_resp.id
+                    }));
+                }
+                Err(err_body) => {
+                    failures.push(serde_json::json!({
+                        "idx": idx,
+                        "code": err_body.get("code").and_then(|v| v.as_str()).unwrap_or("INTERNAL_ERROR"),
+                        "message": err_body.get("message").and_then(|v| v.as_str()).unwrap_or("import failed")
+                    }));
+                }
+            }
+        }
+
+        HttpResponse::Ok().json(serde_json::json!({
+            "successes": successes,
+            "failures": failures
+        }))
+    } else {
+        // Single import
+        match import_single_task(&pool, &user, &body, &ip).await {
+            Ok(task_resp) => HttpResponse::Created().json(task_resp),
+            Err(err_body) => {
+                let status = match err_body.get("code").and_then(|v| v.as_str()) {
+                    Some("LICENSE_LIMIT_EXCEEDED") => StatusCode::CONFLICT,
+                    Some("TASK_VALIDATION_FAILED")
+                    | Some("gaussdb_sub_mode_required")
+                    | Some("unknown_gaussdb_sub_mode")
+                    | Some("sync_mode_invalid_for_category")
+                    | Some("struct_filter_required")
+                    | Some("path_outside_sandbox")
+                    | Some("endpoint_host_blocked")
+                    | Some("invalid_url_scheme")
+                    | Some("url_scheme_engine_mismatch") => StatusCode::UNPROCESSABLE_ENTITY,
+                    _ => StatusCode::BAD_REQUEST,
+                };
+                HttpResponse::build(status).json(err_body)
+            }
+        }
+    }
+}
+
+/// Import a single task from a JSON value. Returns the TaskResponse or error envelope.
+async fn import_single_task(
+    pool: &SqlitePool,
+    user: &UserContext,
+    body: &serde_json::Value,
+    ip: &str,
+) -> Result<TaskResponse, serde_json::Value> {
+    let import_req: ImportTaskRequest = serde_json::from_value(body.clone()).map_err(|e| {
+        serde_json::json!({
+            "code": "PARSE_ERROR",
+            "message": e.to_string()
+        })
+    })?;
+
+    // Resolve db_type
+    let db_type_source =
+        validation::resolve_db_type(&import_req.engine_source, import_req.sub_mode.as_deref());
+    let db_type_target =
+        validation::resolve_db_type(&import_req.engine_target, import_req.sub_mode.as_deref());
+
+    // Validate
+    let source_url = import_req
+        .source_endpoint
+        .get("url")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let target_url = import_req
+        .target_endpoint
+        .get("url")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let errors = validation::validate_task(
+        &import_req.kind,
+        &db_type_source,
+        &db_type_target,
+        &source_url,
+        &target_url,
+        &import_req.extractor,
+        &import_req.sinker,
+        &import_req.filter,
+        import_req.sub_mode.as_deref(),
+        true,
+    );
+
+    if !errors.is_empty() {
+        let details: Vec<serde_json::Value> = errors
+            .iter()
+            .map(|e| serde_json::json!({ "field": e.field, "error": e.error }))
+            .collect();
+        return Err(serde_json::json!({
+            "code": "TASK_VALIDATION_FAILED",
+            "message": "Validation failed",
+            "details": { "errors": details }
+        }));
+    }
+
+    // Path sandboxing
+    let path_errors = validation::validate_sandboxed_paths(
+        &import_req.processor,
+        &import_req.sinker,
+        &import_req.runtime,
+    );
+    if !path_errors.is_empty() {
+        let details: Vec<serde_json::Value> = path_errors
+            .iter()
+            .map(|e| serde_json::json!({ "field": e.field, "error": e.error }))
+            .collect();
+        return Err(serde_json::json!({
+            "code": "TASK_VALIDATION_FAILED",
+            "message": "Validation failed",
+            "details": { "errors": details }
+        }));
+    }
+
+    // License cap
+    if let Err(e) = check_license_cap(pool).await {
+        return Err(serde_json::json!({
+            "code": e.code,
+            "message": e.message,
+        }));
+    }
+
+    // Resource group
+    let rg_id = match &import_req.resource_group_id {
+        Some(rg_id) => match ResourceGroupRepository::find_by_id(pool, rg_id).await {
+            Ok(_) => rg_id.clone(),
+            Err(_) => {
+                return Err(serde_json::json!({
+                    "code": "unknown_resource_group",
+                    "message": "Unknown resource group"
+                }));
+            }
+        },
+        None => match ResourceGroupRepository::get_default(pool).await {
+            Ok(rg) => rg.id,
+            Err(_) => {
+                return Err(serde_json::json!({
+                    "code": "INTERNAL_ERROR",
+                    "message": "Default resource group not found"
+                }));
+            }
+        },
+    };
+
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let id = uuid::Uuid::new_v4().to_string();
+    let task_id = format!(
+        "{}_{}_{}_{}",
+        import_req.kind,
+        db_type_source,
+        db_type_target,
+        &id[..8]
+    );
+
+    let task = crate::models::Task {
+        id: id.clone(),
+        task_id: task_id.clone(),
+        name: if import_req.name.is_empty() {
+            task_id.clone()
+        } else {
+            import_req.name.clone()
+        },
+        kind: import_req.kind.clone(),
+        db_type_source,
+        db_type_target,
+        source_endpoint: import_req.source_endpoint.to_string(),
+        target_endpoint: import_req.target_endpoint.to_string(),
+        extractor_config: import_req.extractor.to_string(),
+        sinker_config: import_req.sinker.to_string(),
+        filter_config: import_req.filter.to_string(),
+        router_config: import_req.router.to_string(),
+        parallelizer_config: import_req.parallelizer.to_string(),
+        pipeline_config: import_req.pipeline.to_string(),
+        resumer_config: import_req.resumer.to_string(),
+        processor_config: import_req.processor.to_string(),
+        runtime_config: import_req.runtime.to_string(),
+        metrics_config: import_req.metrics.to_string(),
+        resource_group_id: rg_id,
+        owner_user_id: Some(user.user_id.clone()),
+        status: "draft".to_string(),
+        created_at: now.clone(),
+        updated_at: now,
+    };
+
+    let saved = TaskRepository::create(pool, &task).await.map_err(|e| {
+        serde_json::json!({
+            "code": "INTERNAL_ERROR",
+            "message": format!("task creation failed: {e}")
+        })
+    })?;
+
+    let _ = write_task_audit_log(
+        pool,
+        &user.username,
+        "tasks.import",
+        "success",
+        &id,
+        ip,
+        None,
+    )
+    .await;
+
+    Ok(task_to_response(&saved))
+}
+
+/// POST /api/tasks/:id/clone — clone a Task.
+///
+/// Creates a new Task with a new `id`, `task_id` (suffixed `_copy_<n>`),
+/// `name` (suffixed `(copy)`), and fresh timestamps. Status starts `draft`.
+/// Honours the license cap.
+#[post("/tasks/{id}/clone")]
+pub async fn clone_task(
+    pool: web::Data<SqlitePool>,
+    user: UserContext,
+    path: web::Path<String>,
+    req: actix_web::HttpRequest,
+) -> HttpResponse {
+    if let Err(e) = rbac::require_action(&user, RbacAction::TaskCreate) {
+        return e.error_response();
+    }
+
+    let id = path.into_inner();
+    let original = match TaskRepository::find_by_id(&pool, &id).await {
+        Ok(t) => t,
+        Err(_) => {
+            return ApiError::with_details(
+                codes::TASK_NOT_FOUND,
+                "Task not found",
+                serde_json::json!({ "id": id }),
+            )
+            .error_response();
+        }
+    };
+
+    // License cap
+    if let Err(e) = check_license_cap(&pool).await {
+        return e.error_response();
+    }
+
+    let ip = req
+        .connection_info()
+        .peer_addr()
+        .map(|a| a.to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let new_id = uuid::Uuid::new_v4().to_string();
+
+    // Find next copy number
+    let copy_n = find_next_copy_number(&pool, &original.task_id).await;
+    let new_task_id = format!("{}_copy_{copy_n}", original.task_id);
+    let new_name = if original.name.is_empty() {
+        new_task_id.clone()
+    } else {
+        format!("{} (copy)", original.name)
+    };
+
+    let cloned = crate::models::Task {
+        id: new_id.clone(),
+        task_id: new_task_id,
+        name: new_name,
+        kind: original.kind.clone(),
+        db_type_source: original.db_type_source.clone(),
+        db_type_target: original.db_type_target.clone(),
+        source_endpoint: original.source_endpoint.clone(),
+        target_endpoint: original.target_endpoint.clone(),
+        extractor_config: original.extractor_config.clone(),
+        sinker_config: original.sinker_config.clone(),
+        filter_config: original.filter_config.clone(),
+        router_config: original.router_config.clone(),
+        parallelizer_config: original.parallelizer_config.clone(),
+        pipeline_config: original.pipeline_config.clone(),
+        resumer_config: original.resumer_config.clone(),
+        processor_config: original.processor_config.clone(),
+        runtime_config: original.runtime_config.clone(),
+        metrics_config: original.metrics_config.clone(),
+        resource_group_id: original.resource_group_id.clone(),
+        owner_user_id: Some(user.user_id.clone()),
+        status: "draft".to_string(),
+        created_at: now.clone(),
+        updated_at: now,
+    };
+
+    let saved = match TaskRepository::create(&pool, &cloned).await {
+        Ok(t) => t,
+        Err(e) => {
+            return ApiError::new(codes::INTERNAL_ERROR, format!("task clone failed: {e}"))
+                .error_response();
+        }
+    };
+
+    let _ = write_task_audit_log(
+        &pool,
+        &user.username,
+        "tasks.clone",
+        "success",
+        &new_id,
+        &ip,
+        None,
+    )
+    .await;
+
+    HttpResponse::Created().json(task_to_response(&saved))
+}
+
+/// Find the next available copy number for a task_id.
+async fn find_next_copy_number(pool: &SqlitePool, base_task_id: &str) -> u32 {
+    let all_tasks = TaskRepository::list(pool).await.unwrap_or_default();
+    let mut max_n: u32 = 0;
+    for t in &all_tasks {
+        if t.task_id.starts_with(&format!("{base_task_id}_copy_")) {
+            let suffix = t.task_id.strip_prefix(&format!("{base_task_id}_copy_"));
+            if let Some(n_str) = suffix {
+                if let Ok(n) = n_str.parse::<u32>() {
+                    max_n = max_n.max(n);
+                }
+            }
+        }
+    }
+    max_n + 1
 }
