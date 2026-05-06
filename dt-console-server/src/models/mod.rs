@@ -6,6 +6,34 @@
 
 use serde::{Deserialize, Serialize};
 
+// ─── Auth DTOs ───────────────────────────────────────────────────────────
+
+/// Request body for POST /api/auth/login.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoginRequest {
+    pub username: String,
+    pub password: String,
+}
+
+/// Response body for POST /api/auth/login and GET /api/auth/me.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthResponse {
+    pub username: String,
+    pub display_name: String,
+    pub role: String,
+}
+
+/// UserContext extracted from a validated session. Stored in request extensions
+/// so handlers and middleware can access the authenticated user.
+#[derive(Debug, Clone)]
+pub struct UserContext {
+    pub user_id: String,
+    pub username: String,
+    pub display_name: String,
+    pub role: String,
+    pub disabled: bool,
+}
+
 // ─── User ────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]

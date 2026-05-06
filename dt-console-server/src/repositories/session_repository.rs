@@ -41,6 +41,25 @@ impl SessionRepository {
             .await
     }
 
+    /// Update a session (e.g. to refresh idle expiry).
+    pub async fn update(pool: &SqlitePool, session: &Session) -> Result<Session, sqlx::Error> {
+        sqlx::query(
+            "UPDATE sessions SET user_id = ?, token = ?, created_at = ?, expires_at = ?, ip = ?, user_agent = ?
+             WHERE id = ?",
+        )
+        .bind(&session.user_id)
+        .bind(&session.token)
+        .bind(&session.created_at)
+        .bind(&session.expires_at)
+        .bind(&session.ip)
+        .bind(&session.user_agent)
+        .bind(&session.id)
+        .execute(pool)
+        .await?;
+
+        Self::find_by_id(pool, &session.id).await
+    }
+
     /// Delete a session by id (logout).
     pub async fn delete(pool: &SqlitePool, id: &str) -> Result<(), sqlx::Error> {
         sqlx::query("DELETE FROM sessions WHERE id = ?")
@@ -54,6 +73,15 @@ impl SessionRepository {
     pub async fn delete_by_user(pool: &SqlitePool, user_id: &str) -> Result<(), sqlx::Error> {
         sqlx::query("DELETE FROM sessions WHERE user_id = ?")
             .bind(user_id)
+            .execute(pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Delete a session by token.
+    pub async fn delete_by_token(pool: &SqlitePool, token: &str) -> Result<(), sqlx::Error> {
+        sqlx::query("DELETE FROM sessions WHERE token = ?")
+            .bind(token)
             .execute(pool)
             .await?;
         Ok(())

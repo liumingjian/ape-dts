@@ -1,8 +1,11 @@
+pub mod auth;
+pub mod auth_handlers;
 pub mod db;
 pub mod error;
 pub mod health;
 pub mod middleware;
 pub mod models;
+pub mod rate_limit;
 pub mod repositories;
 
 use actix_cors::Cors;
@@ -13,10 +16,17 @@ use actix_web::web::{self, JsonConfig};
 use actix_web::App;
 
 use middleware::csrf::Csrf;
+use rate_limit::RateLimiter;
 
 /// Configure all API routes.
 pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::scope("/api").service(health::healthz));
+    cfg.service(
+        web::scope("/api")
+            .service(health::healthz)
+            .service(auth_handlers::login)
+            .service(auth_handlers::logout)
+            .service(auth_handlers::me),
+    );
 }
 
 /// Build the complete actix-web App with all HTTP scaffolding middleware wired.
@@ -31,6 +41,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 /// 5. `JsonConfig` — parse errors mapped to `{ code: "PARSE_ERROR" }` envelope
 pub fn build_app(
     key: Key,
+    pool: sqlx::SqlitePool,
+    rate_limiter: RateLimiter,
+    idle_timeout_secs: i64,
 ) -> App<
     impl actix_web::dev::ServiceFactory<
         actix_web::dev::ServiceRequest,
@@ -56,5 +69,8 @@ pub fn build_app(
         .app_data(JsonConfig::default().error_handler(|err, _req| {
             error::ApiError::new(error::codes::PARSE_ERROR, err.to_string()).into()
         }))
+        .app_data(web::Data::new(pool))
+        .app_data(web::Data::new(rate_limiter))
+        .app_data(web::Data::new(idle_timeout_secs))
         .configure(configure)
 }

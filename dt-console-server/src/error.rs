@@ -25,9 +25,13 @@ pub mod codes {
     pub const CSRF_TOKEN_MISSING: &str = "CSRF_TOKEN_MISSING";
     pub const CSRF_TOKEN_MISMATCH: &str = "CSRF_TOKEN_MISMATCH";
 
+    // Rate limit
+    pub const TOO_MANY_ATTEMPTS: &str = "TOO_MANY_ATTEMPTS";
+
     // Resource
     pub const NOT_FOUND: &str = "NOT_FOUND";
     pub const CONFLICT: &str = "CONFLICT";
+    pub const LAST_ADMIN_PROTECTED: &str = "LAST_ADMIN_PROTECTED";
 
     // License
     pub const LICENSE_LIMIT_EXCEEDED: &str = "LICENSE_LIMIT_EXCEEDED";
@@ -94,9 +98,13 @@ impl actix_web::ResponseError for ApiError {
 
             codes::PARSE_ERROR | codes::VALIDATION_FAILED => StatusCode::BAD_REQUEST,
 
-            codes::CONFLICT | codes::LICENSE_LIMIT_EXCEEDED => StatusCode::CONFLICT,
+            codes::CONFLICT | codes::LICENSE_LIMIT_EXCEEDED | codes::LAST_ADMIN_PROTECTED => {
+                StatusCode::CONFLICT
+            }
 
             codes::LICENSE_EXPIRED | codes::INVALID_LICENSE_CODE => StatusCode::BAD_REQUEST,
+
+            codes::TOO_MANY_ATTEMPTS => StatusCode::TOO_MANY_REQUESTS,
 
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
