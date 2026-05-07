@@ -14,28 +14,28 @@ import {
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 const POLL_INTERVAL_MS = 5_000;
 
-/* ---- API response shapes (snake_case from backend) ---- */
+/* ---- API response shapes (camelCase from backend) ---- */
 interface TaskRow {
   id: string;
   name: string;
   kind: string;
   status: string;
-  db_type?: string;
-  source_endpoint?: { url?: string };
-  target_endpoint?: { url?: string };
-  created_at: string;
-  updated_at: string;
+  dbTypeSource?: string;
+  sourceEndpoint?: { url?: string };
+  targetEndpoint?: { url?: string };
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface AlertRow {
   id: string;
-  task_id: string;
+  taskId?: string | null;
   severity: string;
   status: string;
-  fired_at: string;
-  recovered_at?: string;
-  cleared_at?: string;
-  metric?: string;
+  firedAt: string;
+  recoveredAt?: string | null;
+  clearedAt?: string | null;
+  metricName?: string | null;
   value?: number;
   threshold?: number;
 }
@@ -253,7 +253,7 @@ export function useDashboardData() {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayAlertCount = allAlerts.filter(
-      (a) => new Date(a.fired_at).getTime() >= todayStart.getTime(),
+      (a) => new Date(a.firedAt).getTime() >= todayStart.getTime(),
     ).length;
     const alertDelta = todayAlertCount - prevAlertCount.value;
 
@@ -271,7 +271,7 @@ export function useDashboardData() {
     // Engine distribution
     const engineBuckets: Record<string, number> = {};
     for (const t of allTasks) {
-      const eng = engineFromUrl(t.source_endpoint?.url);
+      const eng = engineFromUrl(t.sourceEndpoint?.url);
       engineBuckets[eng] = (engineBuckets[eng] ?? 0) + 1;
     }
     const engineDist = Object.entries(engineBuckets).map(([engine, count]) => ({
@@ -292,7 +292,7 @@ export function useDashboardData() {
       d.setDate(d.getDate() - i);
       const dateStr = d.toISOString().slice(0, 10);
       const dayAlerts = allAlerts.filter(
-        (a) => a.fired_at.slice(0, 10) === dateStr,
+        (a) => a.firedAt.slice(0, 10) === dateStr,
       );
       alertTrend.push({
         date: dateStr,
@@ -313,7 +313,7 @@ export function useDashboardData() {
         title: t.name || t.id,
         taskId: t.id,
         taskCategory: normalizeCategory(t.kind),
-        occurredAt: t.updated_at,
+        occurredAt: t.updatedAt,
       })),
       ...allAlerts.slice(0, 5).map((a) => ({
         id: `alert-${a.id}`,
@@ -321,9 +321,9 @@ export function useDashboardData() {
         category: 'alert' as const,
         tone: 'danger' as const,
         title: `Alert ${a.severity}`,
-        taskId: a.task_id,
+        taskId: a.taskId ?? '',
         alertLevel: a.severity as AlertLevel,
-        occurredAt: a.fired_at,
+        occurredAt: a.firedAt,
       })),
     ].sort(
       (a, b) =>
@@ -336,8 +336,8 @@ export function useDashboardData() {
       name: t.name || t.id,
       category: normalizeCategory(t.kind),
       status: normalizeStatus(t.status) as 'running',
-      sourceEngine: engineFromUrl(t.source_endpoint?.url) as keyof typeof ENGINE_LABELS,
-      targetEngine: engineFromUrl(t.target_endpoint?.url) as keyof typeof ENGINE_LABELS,
+      sourceEngine: engineFromUrl(t.sourceEndpoint?.url) as keyof typeof ENGINE_LABELS,
+      targetEngine: engineFromUrl(t.targetEndpoint?.url) as keyof typeof ENGINE_LABELS,
       rps: 0,
       latencyMs: 0,
       spark: [],
@@ -390,7 +390,7 @@ export function useDashboardData() {
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
         prevAlertCount.value = alerts.value.filter(
-          (a) => new Date(a.fired_at).getTime() >= todayStart.getTime(),
+          (a) => new Date(a.firedAt).getTime() >= todayStart.getTime(),
         ).length;
 
         load();

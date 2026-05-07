@@ -218,7 +218,7 @@
               <div>
                 <label class="required">{{ t('wizard.source.rg') }}</label>
                 <el-select v-model="form.resourceGroup" style="width: 100%">
-                  <el-option v-for="g in resourceGroups" :key="g" :label="g" :value="g" />
+                  <el-option v-for="g in resourceGroups" :key="g.id" :label="g.name" :value="g.id" />
                 </el-select>
               </div>
               <div>
@@ -731,7 +731,21 @@ const showSyncMode = computed(() => category.value === 'snapshot');
 const engineOptions = (Object.keys(ENGINE_LABELS) as EngineType[]).map((k) => ({
   value: k, label: ENGINE_LABELS[k],
 }));
-const resourceGroups = ['default', 'production', 'staging', 'dev'];
+const resourceGroups = ref<{ id: string; name: string }[]>([]);
+
+async function loadResourceGroups() {
+  try {
+    const data = await api.get<{ id: string; name: string; isDefault?: boolean }[]>('/resource_groups');
+    resourceGroups.value = data;
+    // If form.resourceGroup is still the default name 'default', resolve it to the actual UUID
+    const defaultRg = data.find((g) => g.name === 'default' || g.isDefault === true);
+    if (defaultRg && form.resourceGroup === 'default') {
+      form.resourceGroup = defaultRg.id;
+    }
+  } catch {
+    /* fallback — keep empty list; submit will fail with 422 */
+  }
+}
 
 /* ---------- parallelizers / resume options ---------- */
 const parallelizers: { value: ParallelType; label: string }[] = [
@@ -790,6 +804,7 @@ const form = reactive<WizardDraftForm>(defaultForm());
 
 /* ---------- load draft from store ---------- */
 onMounted(() => {
+  loadResourceGroups();
   const saved = draftStore.load(category.value);
   if (saved) {
     Object.assign(form, saved);

@@ -574,6 +574,84 @@ function resolveResumeType(resumer: Record<string, unknown> | null): ResumeType 
   return 'from_log';
 }
 
+/* ----- API response types for alerts (backend camelCase) ----- */
+
+/** Raw shape returned by GET /api/alerts from the Rust backend. */
+export interface ApiAlert {
+  id: string;
+  taskId?: string | null;
+  runId?: string | null;
+  ruleId?: string | null;
+  metricName?: string | null;
+  operator?: string | null;
+  threshold?: number;
+  severity: string;
+  value?: number;
+  status: string;
+  silenced?: boolean;
+  firedAt: string;
+  recoveredAt?: string | null;
+  clearedAt?: string | null;
+  deliveredAt?: string | null;
+  clearedBy?: string | null;
+  lastError?: string | null;
+  createdAt: string;
+}
+
+/** Map a backend ApiAlert to the frontend Alert type. */
+export function mapApiAlert(raw: ApiAlert): Alert {
+  return {
+    id: raw.id,
+    level: (raw.severity ?? 'info') as AlertLevel,
+    status: raw.status === 'firing' ? 'active' : (raw.status as AlertStatus),
+    source: (raw.metricName ?? 'custom') as AlertSource,
+    message: raw.lastError ?? raw.metricName ?? '',
+    taskId: raw.taskId ?? '',
+    taskName: '',
+    engine: 'mysql' as EngineType,
+    instanceIp: '',
+    service: raw.metricName ?? '',
+    firstAt: raw.firedAt,
+    lastAt: raw.recoveredAt ?? raw.firedAt,
+    clearedAt: raw.clearedAt ?? undefined,
+    count: 1,
+  };
+}
+
+/** Raw shape returned by GET /api/alert_rules from the Rust backend. */
+export interface ApiAlertRule {
+  id: string;
+  name: string;
+  metricName: string;
+  operator: string;
+  threshold: number;
+  recoveryThreshold?: number;
+  severity: string;
+  dwellSecs: number;
+  channelIds?: string[];
+  enabled: boolean;
+  resourceGroupId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Map a backend ApiAlertRule to the frontend MetricRule type. */
+export function mapApiAlertRule(raw: ApiAlertRule): MetricRule {
+  return {
+    id: raw.id,
+    name: raw.name,
+    metric: raw.metricName,
+    operator: raw.operator as MetricRule['operator'],
+    threshold: raw.threshold,
+    level: (raw.severity ?? 'info') as AlertLevel,
+    status: raw.enabled ? 'enabled' : 'disabled',
+    periodMin: Math.max(1, Math.round(raw.dwellSecs / 60)),
+    triggerCount: 1,
+    recoveryThreshold: raw.recoveryThreshold ?? raw.threshold,
+    description: '',
+  };
+}
+
 export function mapApiTask(raw: ApiTask): Task {
   const srcRaw = raw.sourceEndpoint?.url ?? '';
   const tgtRaw = raw.targetEndpoint?.url ?? '';

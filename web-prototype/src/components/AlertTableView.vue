@@ -305,6 +305,8 @@ import { useRbac } from '@/composables/useRbac';
 import {
   ENGINE_LABELS,
   type Alert,
+  type ApiAlert,
+  mapApiAlert,
   type AlertLevel,
   type AlertSource,
   type EngineType,
@@ -358,9 +360,12 @@ const summaryTotal = computed(
 async function refreshSummary() {
   if (props.mode !== 'active') return;
   try {
-    const data = await api.get<Paginated<Alert>>('/alerts?status=firing&page_size=200');
+    const data = await api.get<Paginated<ApiAlert>>('/alerts?status=firing&page_size=200');
     const s: Record<AlertLevel, number> = { critical: 0, major: 0, minor: 0, info: 0 };
-    for (const a of data.items) s[a.level] += 1;
+    for (const raw of data.items) {
+      const a = mapApiAlert(raw);
+      s[a.level] += 1;
+    }
     summary.value = s;
   } catch {
     /* noop */
@@ -386,8 +391,8 @@ async function loadList() {
       if (from) params.set('from', from);
       if (to) params.set('to', to);
     }
-    const data = await api.get<Paginated<Alert>>(`/alerts?${params.toString()}`);
-    let items = data.items;
+    const data = await api.get<Paginated<ApiAlert>>(`/alerts?${params.toString()}`);
+    let items = data.items.map(mapApiAlert);
     // client-side refinement for fields not handled server-side
     if (filter.alertId) items = items.filter((a) => a.id.includes(filter.alertId));
     if (filter.ip) items = items.filter((a) => a.instanceIp.includes(filter.ip));

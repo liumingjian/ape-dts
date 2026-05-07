@@ -215,7 +215,8 @@ import PageHeader from '@/components/PageHeader.vue';
 import LevelBadge from '@/components/LevelBadge.vue';
 import { api } from '@/api/client';
 import { useRbac } from '@/composables/useRbac';
-import type { MetricRule, AlertLevel, Paginated } from '@/types/domain';
+import type { MetricRule, ApiAlertRule, AlertLevel, Paginated } from '@/types/domain';
+import { mapApiAlertRule } from '@/types/domain';
 
 const { t } = useI18n();
 const { can } = useRbac();
@@ -255,8 +256,8 @@ async function loadList() {
     const params = new URLSearchParams({ page: String(page.value), size: String(pageSize.value) });
     if (filter.status) params.set('status', filter.status);
     if (filter.q) params.set('q', filter.q);
-    const data = await api.get<Paginated<MetricRule>>(`/alert_rules?${params.toString()}`);
-    list.value = data.items;
+    const data = await api.get<Paginated<ApiAlertRule>>(`/alert_rules?${params.toString()}`);
+    list.value = data.items.map(mapApiAlertRule);
     total.value = data.total;
   } catch {
     ElMessage.error('加载失败');

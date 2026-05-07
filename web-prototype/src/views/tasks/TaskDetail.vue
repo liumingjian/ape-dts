@@ -360,8 +360,8 @@ import { api } from '@/api/client';
 import { useRbac } from '@/composables/useRbac';
 import { useDocumentVisibility } from '@/composables/useDocumentVisibility';
 import { useLogStream, type LogLine, type LogStreamHandle } from '@/composables/useLogStream';
-import type { Task, Alert, MetricQueryResponse, Run, RunPosition, ApiTask } from '@/types/domain';
-import { mapApiTask } from '@/types/domain';
+import type { Task, Alert, ApiAlert, MetricQueryResponse, Run, RunPosition, ApiTask } from '@/types/domain';
+import { mapApiTask, mapApiAlert } from '@/types/domain';
 import KpiCard from '@/components/KpiCard.vue';
 import ChartCard from '@/components/ChartCard.vue';
 import LevelBadge from '@/components/LevelBadge.vue';
@@ -652,8 +652,8 @@ const alerts = ref<Alert[]>([]);
 
 async function loadAlerts() {
   try {
-    const res = await api.get<{ items: Alert[] }>(`/alerts?taskId=${taskId.value}`);
-    alerts.value = res.items ?? [];
+    const res = await api.get<{ items: ApiAlert[] }>(`/alerts?taskId=${taskId.value}`);
+    alerts.value = (res.items ?? []).map(mapApiAlert);
   } catch { /* ignore */ }
 }
 
