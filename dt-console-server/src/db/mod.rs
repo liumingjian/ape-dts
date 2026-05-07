@@ -172,6 +172,7 @@ mod tests {
             "control_logs",
             "global_params",
             "licenses",
+            "downsampled_metric_points",
             "metric_points",
             "operate_logs",
             "resource_groups",
@@ -203,8 +204,8 @@ mod tests {
             .fetch_one(&pool)
             .await
             .unwrap();
-        // 18 migrations, each applied exactly once.
-        assert_eq!(count.0, 18);
+        // 19 migrations, each applied exactly once.
+        assert_eq!(count.0, 19);
     }
 
     #[tokio::test]
@@ -258,7 +259,7 @@ mod tests {
             .fetch_one(&pool)
             .await
             .unwrap();
-        assert_eq!(count_before.0, 18, "all 18 migrations should be recorded");
+        assert_eq!(count_before.0, 19, "all 19 migrations should be recorded");
 
         // Mark the first applied migration as dirty (success = false).
         // Migration versions are timestamps like 20260507000001, not sequential.
@@ -341,11 +342,11 @@ mod tests {
             result.err()
         );
 
-        // Verify that all 18 migrations are now recorded.
+        // Verify that all 19 migrations are now recorded.
         let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM _sqlx_migrations")
             .fetch_one(&pool)
             .await
             .unwrap();
-        assert_eq!(count.0, 18);
+        assert_eq!(count.0, 19);
     }
 }

@@ -14,6 +14,7 @@ use tokio::sync::Mutex;
 use crate::error::{codes, ApiError};
 use crate::executor::{self, ChildStatus, ExitStatus, RunHandle};
 use crate::ini_renderer;
+use crate::metrics_scraper::{self, ScraperState};
 use crate::middleware::rbac::{self, RbacAction};
 use crate::models::{
     is_legal_transition, run_status, ControlLog, Run, RunResponse, StartRunResponse, UserContext,
@@ -159,6 +160,7 @@ pub async fn start_task(
     user: UserContext,
     path: web::Path<String>,
     active_runs: web::Data<ActiveRuns>,
+    scraper_state: web::Data<ScraperState>,
     req: actix_web::HttpRequest,
 ) -> HttpResponse {
     if let Err(e) = rbac::require_action(&user, RbacAction::TaskStart) {
@@ -320,6 +322,12 @@ pub async fn start_task(
         active.insert(task_id.clone(), handle);
     }
 
+    // Register the Run as a scrape target for the MetricsScraper.
+    {
+        let target = metrics_scraper::scrape_target_from_run(&task_id, &run_id);
+        scraper_state.add_target(target).await;
+    }
+
     // Update the Task status to "running".
     let _ = update_task_status(&pool, &task_id, "running").await;
 
@@ -356,6 +364,7 @@ pub async fn stop_task(
     user: UserContext,
     path: web::Path<String>,
     active_runs: web::Data<ActiveRuns>,
+    scraper_state: web::Data<ScraperState>,
     req: actix_web::HttpRequest,
 ) -> HttpResponse {
     if let Err(e) = rbac::require_action(&user, RbacAction::TaskStop) {
@@ -447,6 +456,9 @@ pub async fn stop_task(
         }
     };
 
+    // Remove the scrape target.
+    scraper_state.remove_target(&task_id).await;
+
     // Update the Run with final state.
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     run.status = run_status::STOPPED.to_string();
@@ -492,6 +504,7 @@ pub async fn pause_task(
     user: UserContext,
     path: web::Path<String>,
     _active_runs: web::Data<ActiveRuns>,
+    scraper_state: web::Data<ScraperState>,
     req: actix_web::HttpRequest,
 ) -> HttpResponse {
     if let Err(e) = rbac::require_action(&user, RbacAction::TaskStart) {
@@ -548,6 +561,9 @@ pub async fn pause_task(
     run.status = run_status::PAUSED.to_string();
     run.updated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
+    // Pause metric ingestion.
+    scraper_state.pause(&run_id).await;
+
     if let Err(e) = RunRepository::update(&pool, &run).await {
         let _ =
             write_control_result(&pool, &task_id, &run_id, "pause", "error", &user.username).await;
@@ -586,6 +602,7 @@ pub async fn resume_task(
     user: UserContext,
     path: web::Path<String>,
     _active_runs: web::Data<ActiveRuns>,
+    scraper_state: web::Data<ScraperState>,
     req: actix_web::HttpRequest,
 ) -> HttpResponse {
     if let Err(e) = rbac::require_action(&user, RbacAction::TaskStart) {
@@ -641,6 +658,9 @@ pub async fn resume_task(
     // Transition to running.
     run.status = run_status::RUNNING.to_string();
     run.updated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+    // Resume metric ingestion.
+    scraper_state.resume(&run_id).await;
 
     if let Err(e) = RunRepository::update(&pool, &run).await {
         let _ =

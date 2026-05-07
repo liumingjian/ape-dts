@@ -564,12 +564,14 @@ mod tests {
         let pool_clone = pool.clone();
         let rate_limiter = RateLimiter::new(Default::default());
         let active_runs = new_active_runs();
+        let scraper_state = crate::metrics_scraper::ScraperState::new();
         crate::build_app(
             Key::from(&master_bytes),
             pool_clone,
             rate_limiter,
             3600,
             active_runs,
+            scraper_state,
         )
     }
 

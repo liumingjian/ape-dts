@@ -7,6 +7,8 @@ pub mod executor;
 pub mod health;
 pub mod ini_renderer;
 pub mod license_handlers;
+pub mod metrics_handlers;
+pub mod metrics_scraper;
 pub mod middleware;
 pub mod models;
 pub mod operate_log_handlers;
@@ -16,6 +18,7 @@ pub mod repositories;
 pub mod resource_group_handlers;
 pub mod run_handlers;
 pub mod task_handlers;
+pub mod time_series_store;
 pub mod user_handlers;
 pub mod validation;
 
@@ -26,6 +29,7 @@ use actix_web::cookie::Key;
 use actix_web::web::{self, JsonConfig};
 use actix_web::App;
 
+use metrics_scraper::ScraperState;
 use middleware::csrf::Csrf;
 use rate_limit::RateLimiter;
 use run_handlers::ActiveRuns;
@@ -72,7 +76,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(precheck_handlers::test_connection)
             .service(precheck_handlers::preview_test_connection)
             .service(precheck_handlers::precheck)
-            .service(precheck_handlers::preview_precheck),
+            .service(precheck_handlers::preview_precheck)
+            // Metrics query
+            .service(metrics_handlers::get_metrics),
     );
 }
 
@@ -92,6 +98,7 @@ pub fn build_app(
     rate_limiter: RateLimiter,
     idle_timeout_secs: i64,
     active_runs: ActiveRuns,
+    scraper_state: ScraperState,
 ) -> App<
     impl actix_web::dev::ServiceFactory<
         actix_web::dev::ServiceRequest,
@@ -121,5 +128,6 @@ pub fn build_app(
         .app_data(web::Data::new(rate_limiter))
         .app_data(web::Data::new(idle_timeout_secs))
         .app_data(web::Data::new(active_runs))
+        .app_data(web::Data::new(scraper_state))
         .configure(configure)
 }

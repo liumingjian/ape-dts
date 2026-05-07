@@ -595,6 +595,40 @@ pub struct MetricPoint {
     pub value: f64,
 }
 
+// ─── DownsampledMetricPoint ──────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct DownsampledMetricPoint {
+    pub id: i64,
+    pub task_id: String,
+    pub run_id: String,
+    pub metric_name: String,
+    pub bucket_ts: String,
+    pub bucket_secs: i64,
+    pub value_mean: f64,
+    pub value_min: f64,
+    pub value_max: f64,
+    pub sample_count: i64,
+}
+
+/// Response DTO for GET /api/runs/:id/metrics.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MetricSeriesResponse {
+    pub metric: String,
+    pub data: Vec<MetricDataPoint>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<Vec<String>>,
+}
+
+/// A single point in a metric series response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MetricDataPoint {
+    pub ts: String,
+    pub value: f64,
+}
+
 // ─── SystemHost ──────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]

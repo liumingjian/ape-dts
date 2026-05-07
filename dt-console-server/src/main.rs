@@ -1,15 +1,18 @@
 use actix_web::cookie::Key;
 use dt_console_server::auth;
 use dt_console_server::db::{self, DbError, SCHEMA_MISMATCH_CODE};
+use dt_console_server::metrics_scraper;
 use dt_console_server::models::ResourceGroup;
 use dt_console_server::rate_limit::{RateLimitConfig, RateLimiter};
 use dt_console_server::repositories::resource_group_repository::ResourceGroupRepository;
 use dt_console_server::run_handlers;
+use dt_console_server::time_series_store;
 use tracing_subscriber::EnvFilter;
 
 const DEFAULT_BIND_ADDR: &str = "127.0.0.1:8080";
 const DEFAULT_DB_PATH: &str = "./data/console.db";
 const DEFAULT_IDLE_TIMEOUT_SECS: i64 = 3600;
+const DEFAULT_SCRAPE_INTERVAL_SECS: u64 = 10;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -62,6 +65,21 @@ async fn main() -> std::io::Result<()> {
     // Create the active runs registry.
     let active_runs = run_handlers::new_active_runs();
 
+    // Create the scraper state for metrics scraping.
+    let scraper_state = metrics_scraper::ScraperState::new();
+
+    // Read scrape interval from env, or use default.
+    let scrape_interval_secs = std::env::var("CONSOLE_SCRAPE_INTERVAL_SECS")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(DEFAULT_SCRAPE_INTERVAL_SECS);
+
+    // Spawn the background scraper loop.
+    metrics_scraper::spawn_scraper(pool.clone(), scraper_state.clone(), scrape_interval_secs);
+
+    // Spawn the background retention sweep loop.
+    time_series_store::spawn_retention_loop(pool.clone());
+
     // Generate the session encryption key once; clone the master bytes for each
     // worker thread so sessions are valid across all workers.
     let key = Key::generate();
@@ -74,12 +92,14 @@ async fn main() -> std::io::Result<()> {
         let pool_clone = pool.clone();
         let rate_limiter_clone = rate_limiter.clone();
         let active_runs_clone = active_runs.clone();
+        let scraper_state_clone = scraper_state.clone();
         dt_console_server::build_app(
             key,
             pool_clone,
             rate_limiter_clone,
             idle_timeout_secs,
             active_runs_clone,
+            scraper_state_clone,
         )
     })
     .bind(&bind_addr)?
