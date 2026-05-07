@@ -509,32 +509,18 @@ async fn alert_repository_list_filtered_status_no_match() {
     AlertRepository::create(&pool, &alert).await.unwrap();
 
     // Query with status="active" — no alerts match, but must NOT error
-    let (items, total) = AlertRepository::list_filtered(
-        &pool,
-        Some("active"),
-        None,
-        None,
-        None,
-        1,
-        20,
-    )
-    .await
-    .expect("list_filtered must not fail for non-matching status");
+    let (items, total) =
+        AlertRepository::list_filtered(&pool, Some("active"), None, None, None, 1, 20)
+            .await
+            .expect("list_filtered must not fail for non-matching status");
     assert_eq!(total, 0, "no alerts should match status=active");
     assert!(items.is_empty());
 
     // Query with status="firing" — should match the inserted alert
-    let (items, total) = AlertRepository::list_filtered(
-        &pool,
-        Some("firing"),
-        None,
-        None,
-        None,
-        1,
-        20,
-    )
-    .await
-    .expect("list_filtered must work for matching status");
+    let (items, total) =
+        AlertRepository::list_filtered(&pool, Some("firing"), None, None, None, 1, 20)
+            .await
+            .expect("list_filtered must work for matching status");
     assert_eq!(total, 1);
     assert_eq!(items.len(), 1);
     assert_eq!(items[0].status, "firing");
@@ -568,32 +554,18 @@ async fn alert_repository_list_filtered_multiple_filters() {
     AlertRepository::create(&pool, &alert).await.unwrap();
 
     // Both status and level filter
-    let (items, total) = AlertRepository::list_filtered(
-        &pool,
-        Some("firing"),
-        Some("critical"),
-        None,
-        None,
-        1,
-        20,
-    )
-    .await
-    .unwrap();
+    let (items, total) =
+        AlertRepository::list_filtered(&pool, Some("firing"), Some("critical"), None, None, 1, 20)
+            .await
+            .unwrap();
     assert_eq!(total, 1);
     assert_eq!(items.len(), 1);
 
     // Status matches but level doesn't
-    let (items, total) = AlertRepository::list_filtered(
-        &pool,
-        Some("firing"),
-        Some("info"),
-        None,
-        None,
-        1,
-        20,
-    )
-    .await
-    .unwrap();
+    let (items, total) =
+        AlertRepository::list_filtered(&pool, Some("firing"), Some("info"), None, None, 1, 20)
+            .await
+            .unwrap();
     assert_eq!(total, 0);
     assert!(items.is_empty());
 }

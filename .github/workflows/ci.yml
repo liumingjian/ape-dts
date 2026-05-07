@@ -57,8 +57,7 @@ jobs:
 
       - name: Run lint checks (clippy)
         id: lint
-        # Assuming 'make lint' runs 'cargo clippy'
-        run: make lint
+        run: cargo clippy --workspace --all-targets --all-features --exclude dt-tests -- -D warnings
 
       # - name: Check for typos
       #   id: typos
@@ -67,7 +66,7 @@ jobs:
 
       - name: Run cargo check
         id: check
-        run: cargo check --workspace --all-targets --all-features
+        run: cargo check --workspace --all-targets --all-features --exclude dt-tests
 
       - name: Summarize lint issues
         if: always()
@@ -126,8 +125,9 @@ jobs:
           cargo nextest run \
             --workspace \
             --exclude dt-tests \
+            --all-features \
             --lib --bins \
             --no-fail-fast
 
       - name: Run doc tests
-        run: cargo test --workspace --doc --exclude dt-tests
+        run: cargo test --workspace --doc --all-features --exclude dt-tests
