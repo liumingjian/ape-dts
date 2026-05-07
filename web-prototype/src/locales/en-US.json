@@ -456,6 +456,11 @@
     "wip": "Under construction",
     "wipDesc": "Pages are being delivered in P0/P1/P2 tiers."
   },
+  "forbidden": {
+    "title": "Access Denied",
+    "desc": "You do not have permission to view this page. Contact your administrator.",
+    "back": "Back to Dashboard"
+  },
   "license": {
     "title": "License",
     "subtitle": "Authorization status, ESN, capacity and expiry. Activate codes to extend.",

@@ -2,8 +2,8 @@
   <div class="monitor-setting">
     <PageHeader :title="t('monitor.setting.title')" :subtitle="t('monitor.setting.subtitle')" />
 
-    <div class="drs-page monitor-setting__body">
-      <div v-loading="loading" class="drs-card monitor-setting__panel">
+    <div class="ape-dts-console-page monitor-setting__body">
+      <div v-loading="loading" class="ape-dts-console-card monitor-setting__panel">
         <el-form
           v-if="form"
           ref="formRef"

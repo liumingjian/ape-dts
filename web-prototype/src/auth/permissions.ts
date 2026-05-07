@@ -40,7 +40,7 @@ export type NavModule =
   | 'dashboard'
   | 'tasks'
   | 'alerts'
-  | 'alert-monitor'
+  | 'alertMonitor'
   | 'system'
   | 'license'
   | 'ops';
@@ -48,7 +48,7 @@ export type NavModule =
 export function visibleNavItems(role: Role | null | undefined): NavModule[] {
   if (!role) return [];
   const base: NavModule[] = ['dashboard', 'tasks', 'alerts'];
-  if (role === 'admin') return [...base, 'alert-monitor', 'system', 'license', 'ops'];
+  if (role === 'admin') return [...base, 'alertMonitor', 'system', 'license', 'ops'];
   if (role === 'operator') return [...base, 'ops'];
   return base;
 }

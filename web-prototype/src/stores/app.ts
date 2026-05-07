@@ -30,7 +30,7 @@ export const useAppStore = defineStore(
   },
   {
     persist: {
-      key: 'drs.app',
+      key: 'console.app',
       pick: ['sidebarCollapsed', 'locale', 'resourceGroup', 'timeRange'],
     },
   },

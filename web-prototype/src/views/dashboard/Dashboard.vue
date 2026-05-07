@@ -14,7 +14,7 @@
       </template>
     </PageHeader>
 
-    <div class="drs-page dashboard__body">
+    <div class="ape-dts-console-page dashboard__body">
       <!-- License warning banner -->
       <el-alert
         v-if="summary && summary.licenseWarnCount > 0"
@@ -169,7 +169,7 @@
           <span class="dashboard__section-hint">{{ t('dashboard.section.recentHint') }}</span>
         </div>
         <div class="dashboard__grid dashboard__grid--recent">
-          <div class="drs-card dashboard__activity-wrap">
+          <div class="ape-dts-console-card dashboard__activity-wrap">
             <ActivityTimeline
               :title="t('dashboard.activity.title')"
               :subtitle="t('dashboard.activity.sub')"
@@ -178,7 +178,7 @@
               @select="goToActivity"
             />
           </div>
-          <div class="drs-card dashboard__activity-wrap">
+          <div class="ape-dts-console-card dashboard__activity-wrap">
             <RunningTaskGrid
               :title="t('dashboard.top.title')"
               :subtitle="t('dashboard.top.sub')"

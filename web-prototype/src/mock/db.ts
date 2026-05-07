@@ -54,7 +54,7 @@ function buildEndpoint(engine: EngineType) {
     engine,
     host: `10.${intBetween(10, 250)}.${intBetween(0, 250)}.${intBetween(1, 254)}`,
     port: portMap[engine],
-    username: pick(['root', 'admin', 'app_user', 'drs_repl']),
+    username: pick(['root', 'admin', 'app_user', 'ape_dts_repl']),
     password: '********',
     database: ['mysql', 'postgres', 'gaussdb', 'oracle'].includes(engine) ? pick(['app_db', 'orders', 'crm', 'core']) : undefined,
     ssl: Math.random() > 0.6,
@@ -188,7 +188,7 @@ function buildAlert(idx: number, tasks: Task[], active: boolean): Alert {
     taskName: task.name,
     engine: task.source.engine,
     instanceIp: task.instanceIp,
-    service: pick(['drs-engine', 'drs-metrics', 'drs-resumer', 'drs-checker']),
+    service: pick(['ape-dts-engine', 'ape-dts-metrics', 'ape-dts-resumer', 'ape-dts-checker']),
     firstAt: isoMinus(firstMin),
     lastAt: isoMinus(lastMin),
     clearedAt: active ? undefined : isoMinus(intBetween(0, 30)),
@@ -204,7 +204,7 @@ function buildEvent(_idx: number): SysEvent {
     category: pick(['task', 'system', 'security']),
     level: pick(['critical', 'major', 'minor', 'info']),
     status: Math.random() > 0.1 ? 'enabled' : 'disabled',
-    source: pick(['drs-engine', 'drs-metrics', 'drs-resumer', 'drs-controller']),
+    source: pick(['ape-dts-engine', 'ape-dts-metrics', 'ape-dts-resumer', 'ape-dts-controller']),
     periodMin: pick([1, 5, 10, 30]),
     triggerCount: intBetween(1, 10),
     validUntil: new Date(Date.now() + intBetween(1, 90) * 86400_000).toISOString(),
@@ -285,7 +285,7 @@ function buildLicense(status: License['status']): License {
 function buildHost(idx: number): SystemHost {
   return {
     id: id('host'),
-    hostname: `drs-${pick(['node', 'work', 'ctrl'])}-${String(idx + 1).padStart(2, '0')}`,
+    hostname: `ape-dts-${pick(['node', 'work', 'ctrl'])}-${String(idx + 1).padStart(2, '0')}`,
     ip: `10.250.0.${intBetween(10, 250)}`,
     role: pick(['master', 'worker', 'worker', 'worker', 'manager']),
     nodeType: pick(['physical', 'virtual', 'container']),
@@ -349,7 +349,7 @@ function seed(): Db {
     {
       id: id('chan'), name: '主 Kafka 通道', kind: 'kafka', enabled: true,
       startAt: new Date().toISOString(), endAt: '2099-12-31T23:59:59.000Z', periodMin: 1,
-      kafka: { brokers: '10.250.0.11:9092,10.250.0.12:9092', topic: 'drs-alarm', ssl: true, distinguishType: true },
+      kafka: { brokers: '10.250.0.11:9092,10.250.0.12:9092', topic: 'ape-dts-alarm', ssl: true, distinguishType: true },
     },
     {
       id: id('chan'), name: '备 SNMP 通道', kind: 'snmp', enabled: false,
@@ -382,11 +382,11 @@ function seed(): Db {
   }));
 
   const users: User[] = [
-    { id: id('u'), username: 'admin', displayName: '超级管理员', role: 'admin', email: 'admin@drs.local', lastLoginAt: new Date().toISOString() },
-    { id: id('u'), username: 'alice', displayName: 'Alice', role: 'operator', email: 'alice@drs.local', lastLoginAt: isoMinus(60) },
-    { id: id('u'), username: 'bob', displayName: 'Bob', role: 'operator', email: 'bob@drs.local', lastLoginAt: isoMinus(360) },
-    { id: id('u'), username: 'carol', displayName: 'Carol', role: 'viewer', email: 'carol@drs.local', lastLoginAt: isoMinus(1440) },
-    { id: id('u'), username: 'dave', displayName: 'Dave', role: 'viewer', email: 'dave@drs.local', lastLoginAt: isoMinus(2880) },
+    { id: id('u'), username: 'admin', displayName: '超级管理员', role: 'admin', email: 'admin@ape-dts.local', lastLoginAt: new Date().toISOString() },
+    { id: id('u'), username: 'alice', displayName: 'Alice', role: 'operator', email: 'alice@ape-dts.local', lastLoginAt: isoMinus(60) },
+    { id: id('u'), username: 'bob', displayName: 'Bob', role: 'operator', email: 'bob@ape-dts.local', lastLoginAt: isoMinus(360) },
+    { id: id('u'), username: 'carol', displayName: 'Carol', role: 'viewer', email: 'carol@ape-dts.local', lastLoginAt: isoMinus(1440) },
+    { id: id('u'), username: 'dave', displayName: 'Dave', role: 'viewer', email: 'dave@ape-dts.local', lastLoginAt: isoMinus(2880) },
   ];
 
   const hosts: SystemHost[] = Array.from({ length: 6 }, (_, i) => buildHost(i));

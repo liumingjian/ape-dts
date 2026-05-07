@@ -222,12 +222,12 @@ export const taskHandlers = [
     const level = q(url, 'level');
     const lines: { t: string; level: string; source: string; message: string }[] = [];
     const templates = [
-      { level: 'INFO', source: 'drs-engine', message: 'snapshot batch finished, rows=%N% elapsed=%E%ms' },
-      { level: 'INFO', source: 'drs-engine', message: 'checkpoint committed at offset=%O%' },
-      { level: 'WARN', source: 'drs-extractor', message: 'source table %T% column charset mismatch, falling back to utf8' },
-      { level: 'INFO', source: 'drs-sinker', message: 'batched %N% records into target in %E%ms' },
-      { level: 'ERROR', source: 'drs-sinker', message: 'retrying failed write for table %T% attempt=%N%' },
-      { level: 'DEBUG', source: 'drs-resumer', message: 'resume state updated, position=%O%' },
+      { level: 'INFO', source: 'ape-dts-engine', message: 'snapshot batch finished, rows=%N% elapsed=%E%ms' },
+      { level: 'INFO', source: 'ape-dts-engine', message: 'checkpoint committed at offset=%O%' },
+      { level: 'WARN', source: 'ape-dts-extractor', message: 'source table %T% column charset mismatch, falling back to utf8' },
+      { level: 'INFO', source: 'ape-dts-sinker', message: 'batched %N% records into target in %E%ms' },
+      { level: 'ERROR', source: 'ape-dts-sinker', message: 'retrying failed write for table %T% attempt=%N%' },
+      { level: 'DEBUG', source: 'ape-dts-resumer', message: 'resume state updated, position=%O%' },
     ];
     const count = 80;
     for (let i = 0; i < count; i++) {

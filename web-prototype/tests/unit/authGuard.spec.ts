@@ -45,7 +45,7 @@ describe('AuthGuard (frontend projection)', () => {
       const items = visibleNavItems('viewer');
       expect(items).not.toContain('system');
       expect(items).not.toContain('license');
-      expect(items).not.toContain('alert-monitor');
+      expect(items).not.toContain('alertMonitor');
     });
 
     it('every role sees a non-empty navigation', () => {

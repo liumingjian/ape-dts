@@ -9,7 +9,7 @@
       </template>
     </PageHeader>
 
-    <div class="drs-page alert-view__body">
+    <div class="ape-dts-console-page alert-view__body">
       <!-- summary cards (active mode only) -->
       <div v-if="mode === 'active'" class="alert-view__summary">
         <button
@@ -31,7 +31,7 @@
         </div>
       </div>
 
-      <div class="drs-card alert-view__panel">
+      <div class="ape-dts-console-card alert-view__panel">
         <!-- toolbar row -->
         <div class="alert-view__toolbar">
           <div class="alert-view__actions">

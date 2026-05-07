@@ -9,7 +9,7 @@ export const SUPPORTED_LOCALES = [
 
 export type LocaleCode = (typeof SUPPORTED_LOCALES)[number]['code'];
 
-const STORAGE_KEY = 'drs.locale';
+const STORAGE_KEY = 'console.locale';
 const initial = (localStorage.getItem(STORAGE_KEY) as LocaleCode) || 'zh-CN';
 
 export const i18n = createI18n({

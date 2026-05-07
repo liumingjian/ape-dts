@@ -13,11 +13,11 @@
       </template>
     </PageHeader>
 
-    <div v-loading="loading" class="drs-page alarm-setting__body">
+    <div v-loading="loading" class="ape-dts-console-page alarm-setting__body">
       <article
         v-for="ch in channels"
         :key="ch.id"
-        class="drs-card alarm-setting__card"
+        class="ape-dts-console-card alarm-setting__card"
       >
         <header class="alarm-setting__head">
           <div class="alarm-setting__title">
@@ -125,7 +125,7 @@
             <el-input v-model="form.kafka!.brokers" placeholder="host:9092,host2:9092" />
           </el-form-item>
           <el-form-item :label="t('monitor.channel.field.topic')">
-            <el-input v-model="form.kafka!.topic" placeholder="drs-alarm" />
+            <el-input v-model="form.kafka!.topic" placeholder="ape-dts-alarm" />
           </el-form-item>
           <el-form-item :label="t('monitor.channel.field.distinguish')">
             <el-switch v-model="form.kafka!.distinguishType" />

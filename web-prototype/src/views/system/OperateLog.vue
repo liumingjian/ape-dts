@@ -2,8 +2,8 @@
   <div class="op-log">
     <PageHeader :title="t('system.operateLog.title')" :subtitle="t('system.operateLog.subtitle')" />
 
-    <div class="drs-page op-log__body">
-      <div v-loading="loading" class="drs-card op-log__panel">
+    <div class="ape-dts-console-page op-log__body">
+      <div v-loading="loading" class="ape-dts-console-card op-log__panel">
         <div class="op-log__filters">
           <div class="op-log__field">
             <span class="op-log__label">{{ t('system.operateLog.action') }}：</span>

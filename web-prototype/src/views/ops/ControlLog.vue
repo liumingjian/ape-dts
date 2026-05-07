@@ -2,8 +2,8 @@
   <div class="ctrl-log">
     <PageHeader :title="t('ops.controlLog.title')" :subtitle="t('ops.controlLog.subtitle')" />
 
-    <div class="drs-page ctrl-log__body">
-      <div v-loading="loading" class="drs-card ctrl-log__panel">
+    <div class="ape-dts-console-page ctrl-log__body">
+      <div v-loading="loading" class="ape-dts-console-card ctrl-log__panel">
         <div class="ctrl-log__filters">
           <div class="ctrl-log__field">
             <span class="ctrl-log__label">{{ t('ops.controlLog.filter.scope') }}：</span>
@@ -96,7 +96,7 @@ async function loadList() {
     files.value = Array.from(buckets.entries()).map(([key, items]) => {
       const day = key.split('_')[0];
       return {
-        file: `drs-${scope.value}-${day}.log`,
+        file: `ape-dts-${scope.value}-${day}.log`,
         date: day,
         size: items.length * 1240 + Math.floor(Math.random() * 4096),
         body: items.map((l) =>

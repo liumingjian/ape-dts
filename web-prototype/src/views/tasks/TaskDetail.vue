@@ -40,8 +40,8 @@
       </div>
     </header>
 
-    <div v-if="task" class="detail__body drs-page">
-      <section class="detail__flow drs-card">
+    <div v-if="task" class="detail__body ape-dts-console-page">
+      <section class="detail__flow ape-dts-console-card">
         <div class="detail__flow-side">
           <span class="detail__flow-label">源端</span>
           <EngineTag :engine="task.source.engine" />
@@ -71,7 +71,7 @@
         </div>
       </section>
 
-      <el-tabs v-model="activeTab" class="detail__tabs drs-card">
+      <el-tabs v-model="activeTab" class="detail__tabs ape-dts-console-card">
         <!-- Overview -->
         <el-tab-pane :label="t('taskDetail.tab.overview')" name="overview">
           <div class="detail__kpi">

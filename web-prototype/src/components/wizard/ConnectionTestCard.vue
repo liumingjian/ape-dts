@@ -1,5 +1,5 @@
 <template>
-  <section class="conn-card drs-card">
+  <section class="conn-card ape-dts-console-card">
     <header class="conn-card__head">
       <h3>{{ title }}</h3>
       <span class="conn-card__badge">{{ t('wizard.source.editable') }}</span>

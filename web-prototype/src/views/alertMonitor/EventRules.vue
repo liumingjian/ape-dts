@@ -9,8 +9,8 @@
       </template>
     </PageHeader>
 
-    <div class="drs-page event-rules__body">
-      <div class="drs-card event-rules__panel">
+    <div class="ape-dts-console-page event-rules__body">
+      <div class="ape-dts-console-card event-rules__panel">
         <div class="event-rules__filters">
           <el-select
             v-model="filter.category"

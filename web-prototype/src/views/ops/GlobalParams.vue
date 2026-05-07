@@ -9,8 +9,8 @@
       </template>
     </PageHeader>
 
-    <div class="drs-page gparams__body">
-      <div v-loading="loading" class="drs-card gparams__panel">
+    <div class="ape-dts-console-page gparams__body">
+      <div v-loading="loading" class="ape-dts-console-card gparams__panel">
         <div class="gparams__filters">
           <el-select
             v-model="filter.category"

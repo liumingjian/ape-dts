@@ -9,7 +9,7 @@
       </template>
     </PageHeader>
 
-    <div class="drs-page sys-mon__body">
+    <div class="ape-dts-console-page sys-mon__body">
       <div class="sys-mon__summary">
         <div class="sys-mon__sum sys-mon__sum--healthy">
           <div class="sys-mon__sum-label"><IconCircleCheck /> {{ t('system.monitor.status.healthy') }}</div>
@@ -29,7 +29,7 @@
         </div>
       </div>
 
-      <div v-loading="loading" class="drs-card sys-mon__panel">
+      <div v-loading="loading" class="ape-dts-console-card sys-mon__panel">
         <div class="sys-mon__filters">
           <el-input
             v-model="filter.host"

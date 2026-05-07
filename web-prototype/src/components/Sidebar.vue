@@ -12,7 +12,7 @@
         active-text-color="var(--color-primary-700)"
         router
       >
-        <template v-for="item in menu" :key="item.key">
+        <template v-for="item in visibleMenu" :key="item.key">
           <el-sub-menu v-if="item.children?.length" :index="item.key">
             <template #title>
               <component :is="resolveIcon(item.icon)" class="sidebar__icon" />
@@ -51,6 +51,8 @@ import { useI18n } from 'vue-i18n';
 import BrandMark from './BrandMark.vue';
 import { menu } from '@/config/menu';
 import { useAppStore } from '@/stores/app';
+import { useRbac } from '@/composables/useRbac';
+import type { NavModule } from '@/auth/permissions';
 
 import IconLayoutDashboard from '~icons/tabler/layout-dashboard';
 import IconArrowsExchange from '~icons/tabler/arrows-exchange';
@@ -65,9 +67,15 @@ import IconChevronRight from '~icons/tabler/chevron-right';
 const { t } = useI18n();
 const route = useRoute();
 const appStore = useAppStore();
+const { visibleNav } = useRbac();
 
 const collapsed = computed(() => appStore.sidebarCollapsed);
 const activeKey = computed(() => route.path);
+
+/** Filter menu items by RBAC — v-if ensures zero DOM presence for hidden items. */
+const visibleMenu = computed(() =>
+  menu.filter((item) => visibleNav.value.includes(item.key as NavModule)),
+);
 
 const iconMap: Record<string, any> = {
   'tabler:layout-dashboard': IconLayoutDashboard,

@@ -13,8 +13,8 @@
       </template>
     </PageHeader>
 
-    <div class="drs-page task-list__body">
-      <div class="drs-card task-list__panel">
+    <div class="ape-dts-console-page task-list__body">
+      <div class="ape-dts-console-card task-list__panel">
         <!-- toolbar row -->
         <div class="task-list__toolbar">
           <div class="task-list__actions">
@@ -631,7 +631,7 @@ function onExport() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `drs-${props.viewKind}-tasks.json`;
+  a.download = `ape-dts-${props.viewKind}-tasks.json`;
   a.click();
   URL.revokeObjectURL(url);
   ElMessage.success(t('taskList.toast.exported'));
@@ -649,7 +649,7 @@ function onExportTemplate() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `drs-${sample.id}.ini`;
+    a.download = `ape-dts-${sample.id}.ini`;
     a.click();
     URL.revokeObjectURL(url);
   });
@@ -661,7 +661,7 @@ function onDownloadTemplate() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `drs-${props.viewKind}-template.ini`;
+  a.download = `ape-dts-${props.viewKind}-template.ini`;
   a.click();
   URL.revokeObjectURL(url);
 }

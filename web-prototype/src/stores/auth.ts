@@ -32,6 +32,6 @@ export const useAuthStore = defineStore(
     return { user, isAuthenticated, login, logout };
   },
   {
-    persist: { key: 'drs.auth', pick: ['user'] },
+    persist: { key: 'console.auth', pick: ['user'] },
   },
 );

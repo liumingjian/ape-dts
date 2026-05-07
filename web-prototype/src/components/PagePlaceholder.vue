@@ -1,7 +1,7 @@
 <template>
-  <div class="drs-page">
+  <div class="ape-dts-console-page">
     <PageHeader :title="title" :subtitle="subtitle" />
-    <div class="drs-card placeholder">
+    <div class="ape-dts-console-card placeholder">
       <div class="placeholder__icon">
         <IconTool />
       </div>

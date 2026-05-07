@@ -13,8 +13,8 @@
       </template>
     </PageHeader>
 
-    <div class="drs-page metric-rules__body">
-      <div class="drs-card metric-rules__panel">
+    <div class="ape-dts-console-page metric-rules__body">
+      <div class="ape-dts-console-card metric-rules__panel">
         <div class="metric-rules__filters">
           <el-select
             v-model="filter.status"

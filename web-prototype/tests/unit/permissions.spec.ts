@@ -46,7 +46,7 @@ describe('permissions · visibleNavItems', () => {
       'dashboard',
       'tasks',
       'alerts',
-      'alert-monitor',
+      'alertMonitor',
       'system',
       'license',
       'ops',

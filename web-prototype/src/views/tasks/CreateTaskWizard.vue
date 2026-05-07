@@ -38,7 +38,7 @@
         </el-alert>
 
         <div class="wizard__grid wizard__grid--2">
-          <section class="drs-card wizard__card">
+          <section class="ape-dts-console-card wizard__card">
             <header class="wizard__card-head">
               <h3>{{ t('wizard.source.section.source') }}</h3>
               <span class="wizard__card-tag wizard__card-tag--locked">{{ t('wizard.source.notEditable') }}</span>
@@ -100,7 +100,7 @@
             </div>
           </section>
 
-          <section class="drs-card wizard__card">
+          <section class="ape-dts-console-card wizard__card">
             <header class="wizard__card-head">
               <h3>{{ t('wizard.source.section.target') }}</h3>
               <span class="wizard__card-tag">{{ t('wizard.source.editable') }}</span>
@@ -154,7 +154,7 @@
           </section>
         </div>
 
-        <section class="drs-card wizard__card">
+        <section class="ape-dts-console-card wizard__card">
           <header class="wizard__card-head">
             <h3>{{ t('wizard.source.section.basic') }}</h3>
             <span class="wizard__card-tag wizard__card-tag--locked">{{ t('wizard.source.notEditable') }}</span>
@@ -166,10 +166,10 @@
                 <el-input v-model="form.name" />
               </div>
               <div>
-                <label>{{ t('wizard.source.drsType._label') }}</label>
+                <label>{{ t('wizard.source.topology._label') }}</label>
                 <el-radio-group v-model="form.taskType">
-                  <el-radio-button label="standalone">{{ t('wizard.source.drsType.standalone') }}</el-radio-button>
-                  <el-radio-button label="primary_backup">{{ t('wizard.source.drsType.primary_backup') }}</el-radio-button>
+                  <el-radio-button label="standalone">{{ t('wizard.source.topology.standalone') }}</el-radio-button>
+                  <el-radio-button label="primary_backup">{{ t('wizard.source.topology.primary_backup') }}</el-radio-button>
                 </el-radio-group>
               </div>
             </div>
@@ -200,7 +200,7 @@
           </div>
         </section>
 
-        <section class="drs-card wizard__card wizard__mode">
+        <section class="ape-dts-console-card wizard__card wizard__mode">
           <header class="wizard__card-head">
             <h3>{{ t('wizard.source.section.mode') }}</h3>
           </header>
@@ -241,7 +241,7 @@
             @test="runTest('target')"
           />
         </div>
-        <section class="drs-card wizard__card">
+        <section class="ape-dts-console-card wizard__card">
           <header class="wizard__card-head"><h3>{{ t('wizard.test.network') }}</h3></header>
           <div class="wizard__network">
             <div class="wizard__network-row">
@@ -254,7 +254,7 @@
 
       <!-- STEP 3: Objects -->
       <template v-else-if="currentStep?.key === 'objects'">
-        <section class="drs-card wizard__card">
+        <section class="ape-dts-console-card wizard__card">
           <header class="wizard__card-head"><h3>{{ t('wizard.objects.section.rate') }}</h3></header>
           <div class="wizard__form">
             <div class="wizard__row wizard__row--inline">
@@ -271,7 +271,7 @@
           </div>
         </section>
 
-        <section class="drs-card wizard__card">
+        <section class="ape-dts-console-card wizard__card">
           <header class="wizard__card-head"><h3>{{ t('wizard.objects.section.sync') }}</h3></header>
           <div class="wizard__form">
             <label>{{ t('wizard.objects.fullType._label') }}</label>
@@ -292,7 +292,7 @@
           </div>
         </section>
 
-        <section class="drs-card wizard__card">
+        <section class="ape-dts-console-card wizard__card">
           <header class="wizard__card-head">
             <h3>{{ t('wizard.objects.pickerTitle') }}</h3>
             <el-tabs v-model="form.objects.pickerMode" class="wizard__picker-tabs">
@@ -357,7 +357,7 @@
 
       <!-- STEP 4: Processing -->
       <template v-else-if="currentStep?.key === 'processing'">
-        <section class="drs-card wizard__card">
+        <section class="ape-dts-console-card wizard__card">
           <div class="wizard__proc-head">
             <div class="wizard__proc-left">
               <el-button @click="removeInvalidRules">
@@ -427,7 +427,7 @@
 
       <!-- STEP 5: Advanced -->
       <template v-else-if="currentStep?.key === 'advanced'">
-        <section class="drs-card wizard__card">
+        <section class="ape-dts-console-card wizard__card">
           <header class="wizard__card-head"><h3>{{ t('wizard.advanced.section.runtime') }}</h3></header>
           <div class="wizard__form wizard__form--2col">
             <div>
@@ -473,7 +473,7 @@
 
       <!-- STEP 6: Precheck -->
       <template v-else-if="currentStep?.key === 'precheck'">
-        <section class="drs-card wizard__card">
+        <section class="ape-dts-console-card wizard__card">
           <div class="wizard__precheck-head">
             <div class="wizard__precheck-title">
               <IconSearch class="wizard__precheck-icon" />
@@ -525,7 +525,7 @@
 
       <!-- STEP 7: Confirm -->
       <template v-else-if="currentStep?.key === 'confirm'">
-        <section class="drs-card wizard__card">
+        <section class="ape-dts-console-card wizard__card">
           <header class="wizard__card-head">
             <h3>{{ t('wizard.confirm.section.basic') }}</h3>
           </header>
@@ -556,7 +556,7 @@
           </div>
         </section>
 
-        <section class="drs-card wizard__card">
+        <section class="ape-dts-console-card wizard__card">
           <header class="wizard__card-head">
             <h3>{{ t('wizard.confirm.section.taskInfo') }}</h3>
             <el-button link type="primary" @click="togglePreview">
@@ -584,7 +584,7 @@
                 <h4>{{ t('wizard.confirm.taskInfo') }}</h4>
                 <p><span>{{ t('wizard.source.name') }}</span><strong>{{ form.name }}</strong></p>
                 <p><span>{{ t('wizard.source.desc._label') }}</span><strong>{{ form.description || '—' }}</strong></p>
-                <p><span>{{ t('wizard.source.drsType._label') }}</span><strong>{{ t(`wizard.source.drsType.${form.taskType}`) }}</strong></p>
+                <p><span>{{ t('wizard.source.topology._label') }}</span><strong>{{ t(`wizard.source.topology.${form.taskType}`) }}</strong></p>
                 <h4>{{ t('wizard.confirm.syncObjects') }}</h4>
                 <p><span>{{ t('wizard.confirm.syncScope') }}</span><strong>{{ t('wizard.objects.tableLevel') }}</strong></p>
                 <p><span>{{ t('wizard.confirm.syncObjectsCount') }}</span><strong>{{ selectedTree.reduce((n, db) => n + (db.children?.length ?? 0), 0) }}</strong></p>

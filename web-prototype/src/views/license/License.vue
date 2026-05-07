@@ -13,7 +13,7 @@
       </template>
     </PageHeader>
 
-    <div v-loading="loading" class="drs-page license__body">
+    <div v-loading="loading" class="ape-dts-console-page license__body">
       <div class="license__summary">
         <div class="license__sum license__sum--active">
           <div class="license__sum-label">{{ t('license.summary.active') }}</div>
@@ -33,7 +33,7 @@
         </div>
       </div>
 
-      <div class="drs-card license__panel">
+      <div class="ape-dts-console-card license__panel">
         <div class="license__filters">
           <label class="license__esn">
             <span>{{ t('license.esn') }}：</span>
@@ -176,7 +176,7 @@ function tasksInUse(row: License) {
   return Math.min(row.maxTasks, Math.floor(row.maxTasks * (0.2 + idx * 0.15)));
 }
 function fileNameOf(row: License) {
-  return `drs-${row.sku.toLowerCase()}-${row.id}.lic`;
+  return `ape-dts-${row.sku.toLowerCase()}-${row.id}.lic`;
 }
 function formatExpire(s: string) {
   if (s.startsWith('2099')) return '永久';

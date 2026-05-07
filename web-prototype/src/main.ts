@@ -8,6 +8,7 @@ import zhCn from 'element-plus/es/locale/lang/zh-cn';
 import App from './App.vue';
 import router from './router';
 import { i18n } from './locales';
+import { useCrossTabLogout } from './composables/useCrossTabLogout';
 
 import './styles/main.css';
 
@@ -37,6 +38,9 @@ async function bootstrap() {
   app.use(ElementPlus, { locale: zhCn });
 
   app.mount('#app');
+
+  // Cross-tab logout: when another tab clears the session, force this tab to /login
+  useCrossTabLogout(router);
 }
 
 bootstrap();

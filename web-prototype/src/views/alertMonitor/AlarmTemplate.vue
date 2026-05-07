@@ -9,8 +9,8 @@
       </template>
     </PageHeader>
 
-    <div v-loading="loading" class="drs-page alarm-template__body">
-      <div class="drs-card alarm-template__panel">
+    <div v-loading="loading" class="ape-dts-console-page alarm-template__body">
+      <div class="ape-dts-console-card alarm-template__panel">
         <el-form label-width="120px" class="alarm-template__form">
           <el-form-item :label="t('monitor.template.field.kind')">
             <el-radio-group v-model="state.kind" @change="onKindChange">
@@ -40,7 +40,7 @@
         </el-form>
       </div>
 
-      <div class="drs-card alarm-template__list">
+      <div class="ape-dts-console-card alarm-template__list">
         <header class="alarm-template__list-head">
           <h3>已保存模板</h3>
           <span class="alarm-template__list-hint">点击切换查看 / 编辑</span>

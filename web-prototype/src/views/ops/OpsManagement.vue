@@ -2,8 +2,8 @@
   <div class="ops-mgmt">
     <PageHeader :title="t('ops.management.title')" :subtitle="t('ops.management.subtitle')" />
 
-    <div class="drs-page ops-mgmt__body">
-      <div class="drs-card ops-mgmt__panel">
+    <div class="ape-dts-console-page ops-mgmt__body">
+      <div class="ape-dts-console-card ops-mgmt__panel">
         <el-tabs v-model="active" class="ops-mgmt__tabs" @tab-change="onTabChange">
           <el-tab-pane name="sync" :label="t('ops.management.tab.sync')" />
           <el-tab-pane name="check" :label="t('ops.management.tab.check')" />
