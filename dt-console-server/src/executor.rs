@@ -180,6 +180,11 @@ impl LocalExecutor {
         std::fs::write(&ini_path, ini_content)
             .map_err(|e| format!("failed to write INI file {:?}: {e}", ini_path))?;
 
+        // Canonicalize the INI path to absolute so the child process can find it
+        // even though current_dir is changed to run_dir.
+        let ini_path_abs = std::fs::canonicalize(&ini_path)
+            .map_err(|e| format!("failed to canonicalize INI path {:?}: {e}", ini_path))?;
+
         // Resolve engine binary path.
         let engine_binary = binary_override
             .map(|s| s.to_string())
@@ -187,7 +192,7 @@ impl LocalExecutor {
 
         // Spawn the child process.
         let child = tokio::process::Command::new(&engine_binary)
-            .arg(ini_path.to_string_lossy().as_ref())
+            .arg(ini_path_abs.to_string_lossy().as_ref())
             .current_dir(&run_dir)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())

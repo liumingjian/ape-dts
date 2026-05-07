@@ -10,12 +10,16 @@ delete process.env.HTTPS_PROXY;
 delete process.env.http_proxy;
 delete process.env.https_proxy;
 
-const PORT = Number(process.env.E2E_PORT ?? 4173);
+// E2E_REAL_BACKEND=1 → connect to already-running Vite on :5173 with
+// VITE_USE_MOCK=false. Used for full-happy-path tests that require the
+// real dt-console-server + docker stack. Default (unset) → MSW mode on :4173.
+const REAL_BACKEND = !!process.env.E2E_REAL_BACKEND;
+const PORT = Number(process.env.E2E_PORT ?? (REAL_BACKEND ? 5173 : 4173));
 const baseURL = `http://127.0.0.1:${PORT}`;
 
 export default defineConfig({
   testDir: './e2e',
-  timeout: 60_000,
+  timeout: REAL_BACKEND ? 120_000 : 60_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
@@ -31,13 +35,21 @@ export default defineConfig({
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
   ],
-  webServer: {
-    command: `pnpm exec vite --host 127.0.0.1 --port ${PORT} --strictPort`,
-    url: baseURL,
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-    stdout: 'pipe',
-    stderr: 'pipe',
-    env: { VITE_USE_MOCK: 'true' },
-  },
+  webServer: REAL_BACKEND
+    ? {
+        // Real-backend mode: connect to an already-running dev server.
+        // The test runner will NOT start its own server.
+        url: baseURL,
+        reuseExistingServer: true,
+      }
+    : {
+        // Default MSW mode: start a preview server with mock service worker.
+        command: `pnpm exec vite --host 127.0.0.1 --port ${PORT} --strictPort`,
+        url: baseURL,
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+        stdout: 'pipe',
+        stderr: 'pipe',
+        env: { VITE_USE_MOCK: 'true' },
+      },
 });
