@@ -209,13 +209,17 @@ pub async fn log_stream(
 
     // Register this SSE connection with the session tracker so it can be
     // closed when the session is invalidated (logout, expiry, disable).
+    // The tracker returns a cancellation handle; the producer checks
+    // its receiver to know when to stop.
     let session_token = session
         .get::<String>(crate::auth::SESSION_TOKEN_KEY)
         .ok()
         .flatten();
-    if let Some(ref token) = session_token {
-        sse_tracker.register(token, event_tx.clone()).await;
-    }
+    let cancel_handle = if let Some(ref token) = session_token {
+        Some(sse_tracker.register(token).await)
+    } else {
+        None
+    };
 
     // Spawn the stream producer task
     let producer_run_id = run_id.clone();
@@ -223,6 +227,7 @@ pub async fn log_stream(
     let producer_sse_state = sse_state.get_ref().clone();
     let producer_sse_tracker = sse_tracker.get_ref().clone();
     let producer_session_token = session_token.clone();
+    let producer_cancel_rx = cancel_handle.as_ref().map(|h| h.receiver());
     tokio::spawn(async move {
         produce_sse_events(
             producer_run_id,
@@ -232,6 +237,7 @@ pub async fn log_stream(
             last_event_id,
             producer_sse_state,
             event_tx,
+            producer_cancel_rx,
         )
         .await;
 
@@ -409,6 +415,10 @@ async fn enforce_rg_ownership(
 }
 
 /// Produce SSE events from a log file and send them through the channel.
+///
+/// If a cancellation receiver is provided, the producer checks it on each
+/// iteration and stops when cancellation is signalled (e.g. on logout).
+#[allow(clippy::too_many_arguments)]
 async fn produce_sse_events(
     run_id: String,
     file_name: String,
@@ -417,6 +427,7 @@ async fn produce_sse_events(
     last_event_id: Option<u64>,
     sse_state: LogSseState,
     event_tx: tokio::sync::mpsc::Sender<SseEvent>,
+    cancel_rx: Option<tokio::sync::watch::Receiver<bool>>,
 ) {
     let poll_interval = Duration::from_millis(log_tailer::DEFAULT_POLL_INTERVAL_MS);
 
@@ -490,6 +501,14 @@ async fn produce_sse_events(
     let mut pending_lines: Vec<String> = Vec::new();
 
     loop {
+        // Check if the session was invalidated (logout, expiry, disable).
+        // The producer should stop immediately when cancelled.
+        if let Some(ref rx) = cancel_rx {
+            if *rx.borrow() {
+                break;
+            }
+        }
+
         // Check for new chunks with timeout for heartbeat
         match tokio::time::timeout(
             Duration::from_secs(DEFAULT_HEARTBEAT_INTERVAL_SECS),

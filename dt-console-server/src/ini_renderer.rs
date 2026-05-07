@@ -657,10 +657,30 @@ fn push_opt_string(
     json_key: &str,
     ini_key: &str,
 ) {
-    if let Some(val) = json.get(json_key).and_then(|v| v.as_str()) {
-        if !val.is_empty() {
-            kv.push((ini_key.into(), val.into()));
+    let val = match json.get(json_key) {
+        Some(v) => v,
+        None => return,
+    };
+
+    match val {
+        serde_json::Value::String(s) => {
+            if !s.is_empty() {
+                kv.push((ini_key.into(), s.clone()));
+            }
         }
+        serde_json::Value::Array(arr) => {
+            // Join array elements with commas (e.g. do_dbs=["db1","db2"] → "db1,db2")
+            let joined: String = arr
+                .iter()
+                .filter_map(|el| el.as_str())
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<_>>()
+                .join(",");
+            if !joined.is_empty() {
+                kv.push((ini_key.into(), joined));
+            }
+        }
+        _ => {}
     }
 }
 
@@ -702,8 +722,17 @@ fn push_opt_u64(
     json_key: &str,
     ini_key: &str,
 ) {
-    if let Some(val) = json.get(json_key).and_then(|v| v.as_u64()) {
-        kv.push((ini_key.into(), val.to_string()));
+    let val = match json.get(json_key) {
+        Some(v) => v,
+        None => return,
+    };
+
+    // Accept u64 directly or as a string (e.g. server_id may be "2000")
+    let n = val
+        .as_u64()
+        .or_else(|| val.as_str().and_then(|s| s.parse::<u64>().ok()));
+    if let Some(n) = n {
+        kv.push((ini_key.into(), n.to_string()));
     }
 }
 
@@ -1172,5 +1201,122 @@ mod tests {
             !ini.contains("do_events=insert"),
             "struct task with empty do_events should not get forced insert"
         );
+    }
+
+    // ── Bug fix tests: array values and string-to-u64 conversion ────────
+
+    #[test]
+    fn test_filter_do_dbs_as_json_array_joined_with_commas() {
+        // When filter fields like do_dbs contain JSON arrays, the renderer
+        // must join elements with commas instead of silently dropping them.
+        let mut task = make_task(
+            "snapshot",
+            "mysql",
+            "mysql",
+            r#"{"extractType":"snapshot","url":"mysql://src:3306/db"}"#,
+            r#"{"sinkType":"write","url":"mysql://dst:3306/db"}"#,
+        );
+        task.filter_config =
+            r#"{"do_dbs":["db1","db2"],"ignore_dbs":[],"do_tbs":["db1.tbl_*","db2.tbl_*"],"ignore_tbs":""}"#
+                .into();
+        let ini = render(&task);
+        assert!(
+            ini.contains("do_dbs=db1,db2"),
+            "array do_dbs must be joined with commas, got: {ini}"
+        );
+        assert!(
+            ini.contains("do_tbs=db1.tbl_*,db2.tbl_*"),
+            "array do_tbs must be joined with commas, got: {ini}"
+        );
+        // Empty arrays should not produce a value (ensure_key_present adds empty)
+        assert!(
+            ini.contains("ignore_dbs="),
+            "empty array ignore_dbs should result in empty value"
+        );
+    }
+
+    #[test]
+    fn test_filter_string_do_dbs_still_works() {
+        // String values for do_dbs (the original format) should still work.
+        let mut task = make_task(
+            "snapshot",
+            "mysql",
+            "mysql",
+            r#"{"extractType":"snapshot","url":"mysql://src:3306/db"}"#,
+            r#"{"sinkType":"write","url":"mysql://dst:3306/db"}"#,
+        );
+        task.filter_config =
+            r#"{"do_dbs":"db1,db2","ignore_dbs":"","do_tbs":"test_db.*","ignore_tbs":""}"#.into();
+        let ini = render(&task);
+        assert!(
+            ini.contains("do_dbs=db1,db2"),
+            "string do_dbs must still render correctly"
+        );
+    }
+
+    #[test]
+    fn test_push_opt_string_empty_array_produces_no_value() {
+        // An empty JSON array should not produce a value in the INI.
+        let mut kv = Vec::new();
+        let json = serde_json::json!({"items": []});
+        push_opt_string(&mut kv, &json, "items", "items");
+        assert!(
+            kv.is_empty(),
+            "empty array should not produce a key-value pair"
+        );
+    }
+
+    #[test]
+    fn test_push_opt_string_array_with_non_string_elements_filters_them() {
+        // Non-string array elements (numbers, bools) should be filtered out.
+        let mut kv = Vec::new();
+        let json = serde_json::json!({"items": ["valid", 42, true, "also_valid"]});
+        push_opt_string(&mut kv, &json, "items", "items");
+        assert_eq!(kv.len(), 1);
+        assert_eq!(kv[0], ("items".into(), "valid,also_valid".into()));
+    }
+
+    #[test]
+    fn test_server_id_as_string_converted_to_u64() {
+        // When server_id is provided as a string "2000", it should be converted
+        // to u64 and written as server_id=2000 in the INI.
+        let task = make_task(
+            "cdc",
+            "mysql",
+            "mysql",
+            r#"{"extractType":"cdc","url":"mysql://src:3306/db","server_id":"2000"}"#,
+            r#"{"sinkType":"write","url":"mysql://dst:3306/db"}"#,
+        );
+        let ini = render(&task);
+        assert!(
+            ini.contains("server_id=2000"),
+            "string server_id must be converted to u64, got: {ini}"
+        );
+    }
+
+    #[test]
+    fn test_server_id_as_number_still_works() {
+        // Numeric server_id (the original format) should still work.
+        let task = make_task(
+            "cdc",
+            "mysql",
+            "mysql",
+            r#"{"extractType":"cdc","url":"mysql://src:3306/db","server_id":2000}"#,
+            r#"{"sinkType":"write","url":"mysql://dst:3306/db"}"#,
+        );
+        let ini = render(&task);
+        assert!(
+            ini.contains("server_id=2000"),
+            "numeric server_id must still render correctly"
+        );
+    }
+
+    #[test]
+    fn test_push_opt_u64_invalid_string_ignored() {
+        // Non-numeric strings should be silently ignored (no crash).
+        let mut kv = Vec::new();
+        let json = serde_json::json!({"count": "not_a_number"});
+        push_opt_u64(&mut kv, &json, "count", "count");
+        assert!(kv.is_empty(), "invalid string should not produce a value");
     }
 }

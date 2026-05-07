@@ -374,6 +374,10 @@ pub async fn preview_test_connection(
 }
 
 /// POST /api/tasks/:id/precheck — run prerequisite checks for a persisted task.
+///
+/// Wraps the precheck call in `tokio::spawn` so that panics inside the
+/// prechecker are caught and returned as 422 PRECHECK_BLOCKING_FAILED
+/// instead of dropping the HTTP connection.
 #[post("/tasks/{id}/precheck")]
 pub async fn precheck(
     pool: web::Data<sqlx::SqlitePool>,
@@ -390,10 +394,41 @@ pub async fn precheck(
         Err(_) => return ApiError::new(codes::TASK_NOT_FOUND, "Task not found").error_response(),
     };
 
-    do_precheck(&task).await
+    // Spawn the precheck in a separate task so panics are caught
+    // (mirrors the pattern in run_handlers::start_task).
+    let handle = tokio::spawn(async move { run_precheck(&task).await });
+
+    match handle.await {
+        Ok(Ok(resp)) => HttpResponse::Ok().json(resp),
+        Ok(Err(e)) => e.error_response(),
+        Err(join_err) => {
+            // Task panicked — extract the panic message
+            let panic_msg = if join_err.is_panic() {
+                let payload = join_err.into_panic();
+                match payload.downcast_ref::<String>() {
+                    Some(s) => s.clone(),
+                    None => match payload.downcast_ref::<&str>() {
+                        Some(s) => s.to_string(),
+                        None => "precheck panicked with unknown cause".to_string(),
+                    },
+                }
+            } else {
+                "precheck task was cancelled".to_string()
+            };
+            ApiError::with_details(
+                codes::PRECHECK_BLOCKING_FAILED,
+                "Precheck panicked",
+                serde_json::json!({ "panicMessage": panic_msg }),
+            )
+            .error_response()
+        }
+    }
 }
 
 /// POST /api/tasks/preview/precheck — draft mode (no persistence).
+///
+/// Wraps the precheck call in `tokio::spawn` so panics are caught
+/// and returned as 422 PRECHECK_BLOCKING_FAILED.
 #[post("/tasks/preview/precheck")]
 pub async fn preview_precheck(
     user: UserContext,
@@ -408,7 +443,33 @@ pub async fn preview_precheck(
         Err(e) => return e.error_response(),
     };
 
-    do_precheck(&task).await
+    // Spawn the precheck in a separate task so panics are caught.
+    let handle = tokio::spawn(async move { run_precheck(&task).await });
+
+    match handle.await {
+        Ok(Ok(resp)) => HttpResponse::Ok().json(resp),
+        Ok(Err(e)) => e.error_response(),
+        Err(join_err) => {
+            let panic_msg = if join_err.is_panic() {
+                let payload = join_err.into_panic();
+                match payload.downcast_ref::<String>() {
+                    Some(s) => s.clone(),
+                    None => match payload.downcast_ref::<&str>() {
+                        Some(s) => s.to_string(),
+                        None => "precheck panicked with unknown cause".to_string(),
+                    },
+                }
+            } else {
+                "precheck task was cancelled".to_string()
+            };
+            ApiError::with_details(
+                codes::PRECHECK_BLOCKING_FAILED,
+                "Precheck panicked",
+                serde_json::json!({ "panicMessage": panic_msg }),
+            )
+            .error_response()
+        }
+    }
 }
 
 // ─── Core logic (shared between persisted and draft modes) ──────────────
@@ -453,6 +514,8 @@ async fn do_test_connection(task: &Task) -> HttpResponse {
 
 /// Core precheck logic. Runs all applicable checks and returns per-item results.
 /// A single failing check does NOT panic the orchestrator.
+/// Only used in tests — handlers now use run_precheck via tokio::spawn.
+#[cfg(test)]
 async fn do_precheck(task: &Task) -> HttpResponse {
     match run_precheck(task).await {
         Ok(resp) => HttpResponse::Ok().json(resp),

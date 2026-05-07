@@ -432,13 +432,17 @@ pub async fn alert_stream(
 
     // Register this SSE connection with the session tracker so it can be
     // closed when the session is invalidated (logout, expiry, disable).
+    // The tracker returns a cancellation handle; the producer checks
+    // its receiver to know when to stop.
     let session_token = session
         .get::<String>(crate::auth::SESSION_TOKEN_KEY)
         .ok()
         .flatten();
-    if let Some(ref token) = session_token {
-        sse_tracker.register(token, event_tx.clone()).await;
-    }
+    let cancel_handle = if let Some(ref token) = session_token {
+        Some(sse_tracker.register(token).await)
+    } else {
+        None
+    };
 
     // Subscribe to the broadcast channel.
     let bcast_rx = {
@@ -455,8 +459,9 @@ pub async fn alert_stream(
     // Spawn the stream producer.
     let producer_sse_tracker = sse_tracker.get_ref().clone();
     let producer_session_token = session_token.clone();
+    let producer_cancel_rx = cancel_handle.as_ref().map(|h| h.receiver());
     tokio::spawn(async move {
-        produce_alert_sse_events(bcast_rx, event_tx).await;
+        produce_alert_sse_events(bcast_rx, event_tx, producer_cancel_rx).await;
 
         // Unregister from the session tracker when the stream ends
         if let Some(ref token) = producer_session_token {
@@ -553,13 +558,24 @@ pub fn escape_xss(input: &str) -> String {
 }
 
 /// Produce SSE events from the alert broadcast channel.
+///
+/// If a cancellation receiver is provided, the producer checks it on each
+/// iteration and stops when cancellation is signalled (e.g. on logout).
 async fn produce_alert_sse_events(
     mut bcast_rx: tokio::sync::broadcast::Receiver<AlertSseEvent>,
     event_tx: tokio::sync::mpsc::Sender<SseEvent>,
+    cancel_rx: Option<tokio::sync::watch::Receiver<bool>>,
 ) {
     let mut event_id: u64 = 0;
 
     loop {
+        // Check if the session was invalidated (logout, expiry, disable).
+        if let Some(ref rx) = cancel_rx {
+            if *rx.borrow() {
+                break;
+            }
+        }
+
         match bcast_rx.recv().await {
             Ok(alert_event) => {
                 event_id += 1;
