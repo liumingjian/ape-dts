@@ -48,12 +48,18 @@ export const routes: RouteRecordRaw[] = [
         component: () => import('@/views/dashboard/Dashboard.vue'),
         meta: { title: 'nav.dashboard', module: 'dashboard', breadcrumb: ['nav.dashboard'], roles: ALL_ROLES },
       },
-      // Task management — unified "同步任务" merges snapshot + cdc
+      // Task management — per-category canonical paths
       {
-        path: 'tasks/sync',
-        name: 'SyncTasks',
-        component: () => import('@/views/tasks/SyncTaskList.vue'),
-        meta: { title: 'nav.tasks.sync', module: 'tasks', breadcrumb: ['nav.tasks._label', 'nav.tasks.sync'], roles: ALL_ROLES },
+        path: 'tasks/snapshot',
+        name: 'SnapshotTasks',
+        component: () => import('@/views/tasks/SnapshotTaskList.vue'),
+        meta: { title: 'nav.tasks.snapshot', module: 'tasks', breadcrumb: ['nav.tasks._label', 'nav.tasks.snapshot'], roles: ALL_ROLES },
+      },
+      {
+        path: 'tasks/cdc',
+        name: 'CdcTasks',
+        component: () => import('@/views/tasks/CdcTaskList.vue'),
+        meta: { title: 'nav.tasks.cdc', module: 'tasks', breadcrumb: ['nav.tasks._label', 'nav.tasks.cdc'], roles: ALL_ROLES },
       },
       {
         path: 'tasks/check',
@@ -68,10 +74,13 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: 'nav.tasks.struct', module: 'tasks', breadcrumb: ['nav.tasks._label', 'nav.tasks.struct'], roles: ALL_ROLES },
       },
       // Legacy taxonomy redirects (ADR-0006). Preserve any query / hash payload.
-      // snapshot/cdc are now sub-modes of /tasks/sync — preserve the mode filter via query.
-      { path: 'tasks/snapshot', redirect: (to) => ({ path: '/tasks/sync', query: { ...to.query, mode: 'snapshot' } }) },
-      { path: 'tasks/cdc', redirect: (to) => ({ path: '/tasks/sync', query: { ...to.query, mode: 'cdc' } }) },
-      { path: 'tasks/replay', redirect: { path: '/tasks/sync' } },
+      // /tasks/sync now redirects to /tasks/snapshot (or /tasks/cdc based on ?mode=)
+      { path: 'tasks/sync', redirect: (to) => {
+        const mode = to.query.mode as string | undefined;
+        if (mode === 'cdc') return { path: '/tasks/cdc', query: { ...to.query, mode: undefined } };
+        return { path: '/tasks/snapshot', query: { ...to.query, mode: undefined } };
+      }},
+      { path: 'tasks/replay', redirect: { path: '/tasks/snapshot' } },
       { path: 'tasks/verify', redirect: { path: '/tasks/check' } },
       {
         path: 'tasks/create/:type(snapshot|cdc|check|struct)',

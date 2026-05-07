@@ -34,7 +34,7 @@ export const ENGINE_LABELS: Record<EngineType, string> = {
 };
 
 export type TaskCategory = 'snapshot' | 'cdc' | 'check' | 'struct';
-export type TaskStatus = 'running' | 'paused' | 'failed' | 'completed' | 'creating' | 'pending';
+export type TaskStatus = 'draft' | 'ready' | 'running' | 'paused' | 'stopping' | 'stopped' | 'failed' | 'completed' | 'creating' | 'pending';
 
 export type ExtractType =
   | 'snapshot'
@@ -392,6 +392,39 @@ export interface TaskFixture {
   resumer?: { type: 'from_log' | 'from_target' | 'from_db' | 'dummy' };
   processor?: { luaCode?: string; luaCodeFile?: string };
   metrics?: { httpHost: string; httpPort: number };
+}
+
+/* ----- Run (execution) type ----- */
+export type RunStatus = 'pending' | 'running' | 'paused' | 'stopping' | 'stopped' | 'failed' | 'orphaned';
+
+export interface Run {
+  id: string;
+  taskId: string;
+  status: RunStatus;
+  startedAt: string | null;
+  stoppedAt: string | null;
+  exitStatus: number | null;
+  logDir: string | null;
+  iniPath: string | null;
+  pid: number | null;
+  position: RunPosition | null;
+  createdAt: string;
+}
+
+export type RunPosition =
+  | { kind: 'binlog'; file: string; pos: number; gtid?: string }
+  | { kind: 'lsn'; lsn: string; slot?: string }
+  | { kind: 'scn'; scn: string }
+  | { kind: 'resume_token'; token: string }
+  | { kind: 'repl'; replId: string; offset: number }
+  | { kind: 'offset'; partition: number; offset: number }
+  | { kind: 'unknown'; raw: string };
+
+/* ----- Metrics query response from /api/runs/:id/metrics ----- */
+export interface MetricQueryResponse {
+  metric: string;
+  data: { ts: number; value: number }[];
+  details?: { source?: string[]; hint?: string };
 }
 
 /* ----- time-series point for downsample / query utilities ----- */

@@ -129,7 +129,7 @@ export const taskHandlers = [
     const action = body.action;
     const now = new Date().toISOString();
     const transition: Record<string, TaskStatus> = {
-      start: 'running', resume: 'running', pause: 'paused', stop: 'paused',
+      start: 'running', resume: 'running', pause: 'paused', stop: 'stopped',
       retry: 'running', fail: 'failed', complete: 'completed',
     };
     if (action && transition[action]) {

@@ -5,6 +5,8 @@ export type Action =
   | 'task.delete'
   | 'task.start'
   | 'task.stop'
+  | 'task.pause'
+  | 'task.resume'
   | 'task.read'
   | 'user.manage'
   | 'license.activate'
@@ -16,6 +18,8 @@ const MATRIX: Record<Role, ReadonlySet<Action>> = {
     'task.delete',
     'task.start',
     'task.stop',
+    'task.pause',
+    'task.resume',
     'task.read',
     'user.manage',
     'license.activate',
@@ -25,6 +29,8 @@ const MATRIX: Record<Role, ReadonlySet<Action>> = {
     'task.create',
     'task.start',
     'task.stop',
+    'task.pause',
+    'task.resume',
     'task.read',
     'alert.clear',
   ]),

@@ -1,5 +1,6 @@
 <template>
   <div class="detail">
+    <!-- persistent action bar -->
     <header class="detail__header">
       <div class="detail__header-left">
         <el-button link @click="onBack">
@@ -11,91 +12,85 @@
       </div>
       <div class="detail__header-right">
         <el-button
-          v-if="task?.status === 'running'"
-          @click="doAction('pause')"
+          v-if="rbac.can('task.start') && canStart"
+          type="success"
+          @click="doLifecycle('start')"
+        >
+          <template #icon><IconPlayerPlay /></template>
+          {{ t('taskDetail.action.start') }}
+        </el-button>
+        <el-button
+          v-if="rbac.can('task.pause') && task?.status === 'running'"
+          @click="doLifecycle('pause')"
         >
           <template #icon><IconPlayerPause /></template>
           {{ t('taskDetail.action.pause') }}
         </el-button>
         <el-button
-          v-else-if="task?.status === 'paused' || task?.status === 'failed'"
+          v-if="rbac.can('task.resume') && (task?.status === 'paused')"
           type="primary"
-          @click="doAction('resume')"
+          @click="doLifecycle('resume')"
         >
           <template #icon><IconPlayerPlay /></template>
           {{ t('taskDetail.action.resume') }}
         </el-button>
-        <el-button v-if="task && task.status !== 'completed'" @click="doAction('stop')">
+        <el-button
+          v-if="rbac.can('task.stop') && canStop"
+          @click="confirmStop"
+        >
           <template #icon><IconPlayerStop /></template>
           {{ t('taskDetail.action.stop') }}
         </el-button>
-        <el-button type="primary" plain @click="editorVisible = true">
-          <template #icon><IconEdit /></template>
-          {{ t('taskDetail.action.edit') }}
-        </el-button>
-        <el-button type="danger" plain @click="confirmDelete">
+        <el-button
+          v-if="rbac.can('task.delete')"
+          type="danger"
+          plain
+          @click="confirmDelete"
+        >
           <template #icon><IconTrash /></template>
           {{ t('taskDetail.action.delete') }}
+        </el-button>
+        <el-button
+          v-if="rbac.can('task.create')"
+          type="primary"
+          plain
+          @click="editorVisible = true"
+        >
+          <template #icon><IconEdit /></template>
+          {{ t('taskDetail.action.edit') }}
         </el-button>
       </div>
     </header>
 
     <div v-if="task" class="detail__body ape-dts-console-page">
+      <!-- KPI strip + flow diagram -->
       <section class="detail__flow ape-dts-console-card">
-        <div class="detail__flow-side">
-          <span class="detail__flow-label">源端</span>
-          <EngineTag :engine="task.source.engine" />
-          <code>{{ task.source.host }}:{{ task.source.port }}</code>
-          <small>{{ task.source.database || '—' }}</small>
-        </div>
-        <div class="detail__flow-mid">
-          <span class="detail__flow-rate">{{ formatShort(task.metrics.rpsLatest) }} rows/s</span>
-          <div class="detail__flow-line">
-            <span class="detail__flow-dot" />
-            <span class="detail__flow-dot" />
-            <span class="detail__flow-dot" />
-          </div>
-          <span class="detail__flow-lag">lag {{ task.metrics.latencyMs }} ms</span>
-        </div>
-        <div class="detail__flow-side">
-          <span class="detail__flow-label">目标端</span>
-          <EngineTag :engine="task.target.engine" />
-          <code>{{ task.target.host }}:{{ task.target.port }}</code>
-          <small>{{ task.target.database || '—' }}</small>
-        </div>
-        <div class="detail__flow-meta">
-          <div><span>模式</span><strong>{{ t(`taskList.mode.${task.syncMode}`) }}</strong></div>
-          <div><span>资源组</span><strong>{{ task.resourceGroup }}</strong></div>
-          <div><span>实例 IP</span><strong>{{ task.instanceIp }}</strong></div>
-          <div><span>创建于</span><strong>{{ dayjs(task.createdAt).format('YYYY-MM-DD HH:mm') }}</strong></div>
+        <div class="detail__kpi-row">
+          <KpiCard :label="t('taskDetail.kpi.status')" :value="0" :badge="t(`task.status.${task.status}`)" :icon-comp="IconActivity" />
+          <KpiCard :label="t('taskDetail.kpi.rps')" :value="task.metrics.rpsLatest" unit="rows/s" :icon-comp="IconBolt" />
+          <KpiCard :label="t('taskDetail.kpi.latency')" :value="task.metrics.latencyMs" unit="ms" inverse :icon-comp="IconClock" :tone="task.metrics.latencyMs > 3000 ? 'warning' : 'default'" />
+          <KpiCard :label="t('taskDetail.kpi.progress')" :value="Math.round(task.progressPercent)" unit="%" :icon-comp="IconChartBar" />
         </div>
       </section>
 
-      <el-tabs v-model="activeTab" class="detail__tabs ape-dts-console-card">
-        <!-- Overview -->
-        <el-tab-pane :label="t('taskDetail.tab.overview')" name="overview">
-          <div class="detail__kpi">
-            <KpiCard :label="t('taskDetail.kpi.rps')" :value="task.metrics.rpsLatest" unit="rows/s" :icon-comp="IconBolt" />
-            <KpiCard :label="t('taskDetail.kpi.sinkRps')" :value="task.metrics.sinkerRpsLatest" unit="rows/s" :icon-comp="IconArrowDown" />
-            <KpiCard :label="t('taskDetail.kpi.latency')" :value="task.metrics.latencyMs" unit="ms" inverse :icon-comp="IconClock" :tone="task.metrics.latencyMs > 3000 ? 'warning' : 'default'" />
-            <KpiCard :label="t('taskDetail.kpi.buffer')" :value="task.metrics.bufferSize" :icon-comp="IconStack" />
-            <KpiCard :label="t('taskDetail.kpi.processed')" :value="task.metrics.processedRecords" :icon-comp="IconDatabase" />
-            <KpiCard :label="t('taskDetail.kpi.errors')" :value="task.metrics.errorCount" :icon-comp="IconAlertTriangle" :tone="task.metrics.errorCount > 0 ? 'danger' : 'default'" />
-          </div>
+      <!-- 3 charts -->
+      <section class="detail__charts ape-dts-console-card">
+        <ChartCard :title="'extractor_rps_avg'" :height="200">
+          <v-chart v-if="rpsOption" :option="rpsOption" autoresize class="detail__chart" />
+          <el-empty v-else :description="t('common.empty')" :image-size="40" />
+        </ChartCard>
+        <ChartCard :title="'sinker_record_count_avg_by_sec'" :height="200">
+          <v-chart v-if="sinkRpsOption" :option="sinkRpsOption" autoresize class="detail__chart" />
+          <el-empty v-else :description="t('common.empty')" :image-size="40" />
+        </ChartCard>
+        <ChartCard :title="'pipeline_buffer_size_avg'" :height="200">
+          <v-chart v-if="bufferOption" :option="bufferOption" autoresize class="detail__chart" />
+          <el-empty v-else :description="t('common.empty')" :image-size="40" />
+        </ChartCard>
+      </section>
 
-          <div class="detail__charts">
-            <ChartCard :title="t('taskDetail.chart.rps')" :height="240">
-              <v-chart v-if="rpsOption" :option="rpsOption" autoresize class="detail__chart" />
-            </ChartCard>
-            <ChartCard :title="t('taskDetail.chart.latency')" :height="240">
-              <v-chart v-if="latencyOption" :option="latencyOption" autoresize class="detail__chart" />
-            </ChartCard>
-            <ChartCard :title="t('taskDetail.chart.buffer')" :height="240">
-              <v-chart v-if="bufferOption" :option="bufferOption" autoresize class="detail__chart" />
-            </ChartCard>
-          </div>
-        </el-tab-pane>
-
+      <!-- 6 tabs -->
+      <el-tabs v-model="activeTab" class="detail__tabs ape-dts-console-card" @tab-change="onTabChange as any">
         <!-- Config -->
         <el-tab-pane :label="t('taskDetail.tab.config')" name="config">
           <div class="detail__config">
@@ -136,30 +131,88 @@
           </el-table>
         </el-tab-pane>
 
-        <!-- Logs -->
+        <!-- Logs (SSE) -->
         <el-tab-pane :label="t('taskDetail.tab.logs')" name="logs">
-          <div class="detail__log-filters">
-            <el-segmented v-model="logLevel" :options="logLevelOptions" />
-            <div class="detail__log-refresh">
-              <el-switch v-model="logAuto" :active-text="t('taskDetail.log.autoRefresh')" />
-              <el-button :loading="loading" @click="loadLogs">
-                <template #icon><IconRefresh /></template>
-                {{ t('common.refresh') }}
+          <div class="detail__log-toolbar">
+            <div class="detail__log-toolbar-left">
+              <el-select v-model="logFile" class="detail__log-file-select" @change="reopenLogStream">
+                <el-option v-for="f in logFiles" :key="f" :label="f" :value="f" />
+              </el-select>
+              <el-select v-model="logLevelFilter" class="detail__log-level-select">
+                <el-option label="ALL" value="ALL" />
+                <el-option label="ERROR" value="error" />
+                <el-option label="WARN" value="warn" />
+                <el-option label="INFO" value="info" />
+                <el-option label="DEBUG" value="debug" />
+              </el-select>
+              <span
+                class="detail__log-status-pill"
+                :class="`detail__log-status-pill--${sseState}`"
+              >
+                {{ sseStateLabel }}
+              </span>
+              <el-button
+                v-if="sseState === 'disconnected'"
+                size="small"
+                @click="reopenLogStream"
+              >
+                {{ t('taskDetail.log.reconnect') }}
+              </el-button>
+            </div>
+            <div class="detail__log-toolbar-right">
+              <el-button
+                size="small"
+                :type="logPaused ? 'primary' : 'default'"
+                @click="logPaused = !logPaused"
+              >
+                {{ logPaused ? t('taskDetail.log.resume') : t('taskDetail.log.pause') }}
               </el-button>
             </div>
           </div>
-          <div class="detail__log-view">
+          <div ref="logPaneRef" class="detail__log-view" @scroll="onLogScroll">
             <div
-              v-for="(ln, i) in filteredLogs"
+              v-for="(ln, i) in filteredLogLines"
               :key="i"
               class="detail__log-line"
-              :class="`detail__log-line--${ln.level.toLowerCase()}`"
+              :class="`detail__log-line--${ln.level}`"
             >
-              <span class="detail__log-time">{{ dayjs(ln.t).format('HH:mm:ss') }}</span>
-              <span class="detail__log-level">{{ ln.level }}</span>
-              <span class="detail__log-source">{{ ln.source }}</span>
+              <span class="detail__log-time">{{ formatLogTime(ln.ts) }}</span>
+              <span class="detail__log-level">{{ ln.level.toUpperCase() }}</span>
               <span class="detail__log-msg">{{ ln.message }}</span>
             </div>
+          </div>
+          <div v-if="showFollowBtn" class="detail__log-follow">
+            <el-button size="small" type="primary" @click="scrollToBottom">
+              {{ t('taskDetail.log.follow') }}
+            </el-button>
+          </div>
+        </el-tab-pane>
+
+        <!-- Monitor -->
+        <el-tab-pane :label="t('taskDetail.tab.monitor')" name="monitor">
+          <div class="detail__monitor-toolbar">
+            <el-button-group>
+              <el-button
+                v-for="r in monitorRanges"
+                :key="r.value"
+                :type="monitorRange === r.value ? 'primary' : 'default'"
+                size="small"
+                @click="setMonitorRange(r.value)"
+              >
+                {{ r.label }}
+              </el-button>
+            </el-button-group>
+          </div>
+          <div v-if="monitorLoading" class="detail__monitor-loading">
+            <el-skeleton :rows="3" animated />
+          </div>
+          <div v-else-if="monitorSeries.length === 0" class="detail__monitor-empty">
+            <el-empty :description="t('common.empty')" />
+          </div>
+          <div v-else class="detail__monitor-charts">
+            <ChartCard v-for="ms in monitorSeries" :key="ms.metric" :title="ms.metric" :height="200">
+              <v-chart :option="monitorChartOption(ms)" autoresize class="detail__chart" />
+            </ChartCard>
           </div>
         </el-tab-pane>
 
@@ -181,6 +234,50 @@
           </el-table>
           <el-empty v-else :description="t('taskDetail.alerts.none')" />
         </el-tab-pane>
+
+        <!-- History -->
+        <el-tab-pane :label="t('taskDetail.tab.history')" name="history">
+          <el-table v-loading="historyLoading" :data="historyRuns" class="detail__history">
+            <el-table-column label="Run ID" width="200" prop="id" />
+            <el-table-column label="状态" width="120">
+              <template #default="{ row }">
+                <StatusBadge :status="row.status" />
+              </template>
+            </el-table-column>
+            <el-table-column label="开始时间" width="170">
+              <template #default="{ row }">{{ row.startedAt ? dayjs(row.startedAt).format('YYYY-MM-DD HH:mm:ss') : '—' }}</template>
+            </el-table-column>
+            <el-table-column label="结束时间" width="170">
+              <template #default="{ row }">{{ row.stoppedAt ? dayjs(row.stoppedAt).format('YYYY-MM-DD HH:mm:ss') : '—' }}</template>
+            </el-table-column>
+            <el-table-column label="Exit Status" width="120" align="center">
+              <template #default="{ row }">{{ row.exitStatus ?? '—' }}</template>
+            </el-table-column>
+            <el-table-column label="断点续传状态" min-width="200">
+              <template #default="{ row }">
+                <span v-if="row.position" class="detail__mono detail__position">{{ formatPosition(row.position) }}</span>
+                <span v-else class="detail__muted">—</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="120" fixed="right">
+              <template #default="{ row }">
+                <el-button link type="primary" @click="viewArchivedLogs(row)">
+                  {{ t('taskDetail.history.viewLogs') }}
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <footer v-if="historyTotal > historyPageSize" class="detail__history-footer">
+            <el-pagination
+              v-model:current-page="historyPage"
+              :page-size="historyPageSize"
+              :total="historyTotal"
+              layout="prev, pager, next"
+              background
+              @current-change="loadHistory"
+            />
+          </footer>
+        </el-tab-pane>
       </el-tabs>
     </div>
 
@@ -194,10 +291,10 @@
       :title="t('taskDetail.editor.title')"
       size="520px"
       direction="rtl"
+      @close="onEditorClose"
     >
       <div v-if="task" class="detail__editor">
         <el-alert type="info" :closable="false" show-icon>{{ t('taskDetail.editor.tip') }}</el-alert>
-
         <div class="detail__editor-form">
           <label>任务名称</label>
           <el-input v-model="editForm.name" disabled />
@@ -228,47 +325,79 @@
         <el-button type="primary" :loading="saving" @click="saveEdit">保存</el-button>
       </template>
     </el-drawer>
+
+    <!-- Archived logs dialog -->
+    <el-dialog v-model="archivedDialogVisible" :title="t('taskDetail.history.archivedLogs')" width="70%">
+      <div v-loading="archivedLoading" class="detail__archived-log-view">
+        <div
+          v-for="(ln, i) in archivedLines"
+          :key="i"
+          class="detail__log-line"
+          :class="`detail__log-line--${ln.level ?? 'info'}`"
+        >
+          <span class="detail__log-time">{{ formatLogTime(ln.ts) }}</span>
+          <span class="detail__log-level">{{ (ln.level ?? 'info').toUpperCase() }}</span>
+          <span class="detail__log-msg">{{ ln.message }}</span>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="archivedDialogVisible = false">{{ t('common.close') }}</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref, unref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import dayjs from 'dayjs';
 import { api } from '@/api/client';
-import type { Task, Alert, MetricSeries } from '@/types/domain';
+import { useRbac } from '@/composables/useRbac';
+import { useDocumentVisibility } from '@/composables/useDocumentVisibility';
+import { useLogStream, type LogLine, type LogStreamHandle } from '@/composables/useLogStream';
+import type { Task, Alert, MetricQueryResponse, Run, RunPosition } from '@/types/domain';
 import KpiCard from '@/components/KpiCard.vue';
 import ChartCard from '@/components/ChartCard.vue';
 import LevelBadge from '@/components/LevelBadge.vue';
 import StatusBadge from '@/components/StatusBadge.vue';
-import EngineTag from '@/components/EngineTag.vue';
 import '@/composables/useEcharts';
 import { BRAND_PALETTE, AXIS_BASE } from '@/composables/useEcharts';
 import IconBolt from '~icons/tabler/bolt';
-import IconArrowDown from '~icons/tabler/arrow-down';
 import IconClock from '~icons/tabler/clock';
-import IconStack from '~icons/tabler/stack-2';
-import IconDatabase from '~icons/tabler/database';
-import IconAlertTriangle from '~icons/tabler/alert-triangle';
+import IconChartBar from '~icons/tabler/chart-bar';
+import IconActivity from '~icons/tabler/activity';
 
 const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
+const rbac = useRbac();
+const { isVisible } = useDocumentVisibility();
+
+const VALID_TABS = ['config', 'objects', 'logs', 'monitor', 'alerts', 'history'] as const;
+type TabName = (typeof VALID_TABS)[number];
 
 const taskId = computed(() => String(route.params.id));
+const taskCategory = computed(() => String(route.params.category ?? 'snapshot'));
 
 const task = ref<Task | null>(null);
-const series = ref<MetricSeries[]>([]);
-const alerts = ref<Alert[]>([]);
-const logs = ref<{ t: string; level: string; source: string; message: string }[]>([]);
-const loading = ref(false);
-const activeTab = ref<string>((route.query.tab as string) || 'overview');
-const editorVisible = ref(false);
+const activeTab = ref<TabName>((route.query.tab as TabName) || 'config');
+const editorVisible = ref(Boolean(route.query.edit === '1'));
 const saving = ref(false);
 const resourceGroups = ['default', 'production', 'staging', 'dev'];
 
+/* ---------- computed helpers ---------- */
+const canStart = computed(() => {
+  const s = task.value?.status;
+  return s === 'draft' || s === 'ready' || s === 'stopped' || s === 'failed' || s === 'completed';
+});
+const canStop = computed(() => {
+  const s = task.value?.status;
+  return s === 'running' || s === 'paused' || s === 'stopping';
+});
+
+/* ---------- edit form ---------- */
 const editForm = reactive({
   name: '',
   description: '',
@@ -276,19 +405,19 @@ const editForm = reactive({
   config: { parallelSize: 4, bufferSize: 16000, checkpointIntervalSecs: 10, maxRps: 0, resumeType: 'from_log' as Task['config']['resumeType'] },
 });
 
-watch(task, (t) => {
-  if (!t) return;
-  editForm.name = t.name;
-  editForm.description = t.description ?? '';
-  editForm.resourceGroup = t.resourceGroup;
-  editForm.config.parallelSize = t.config.parallelSize;
-  editForm.config.bufferSize = t.config.bufferSize;
-  editForm.config.checkpointIntervalSecs = t.config.checkpointIntervalSecs;
-  editForm.config.maxRps = t.config.maxRps;
-  editForm.config.resumeType = t.config.resumeType;
+watch(task, (v) => {
+  if (!v) return;
+  editForm.name = v.name;
+  editForm.description = v.description ?? '';
+  editForm.resourceGroup = v.resourceGroup;
+  editForm.config.parallelSize = v.config.parallelSize;
+  editForm.config.bufferSize = v.config.bufferSize;
+  editForm.config.checkpointIntervalSecs = v.config.checkpointIntervalSecs;
+  editForm.config.maxRps = v.config.maxRps;
+  editForm.config.resumeType = v.config.resumeType;
 }, { immediate: true });
 
-/* load */
+/* ---------- load task ---------- */
 async function loadTask() {
   try {
     task.value = await api.get<Task>(`/tasks/${taskId.value}`);
@@ -299,109 +428,31 @@ async function loadTask() {
 }
 
 function backToListPath(): string {
-  const cat = task.value?.category ?? (route.params.category as string | undefined);
+  const cat = taskCategory.value;
   if (cat === 'check') return '/tasks/check';
   if (cat === 'struct') return '/tasks/struct';
-  return '/tasks/sync';
+  if (cat === 'cdc') return '/tasks/cdc';
+  return '/tasks/snapshot';
 }
 
-async function loadMetrics() {
+/* ---------- lifecycle actions ---------- */
+async function doLifecycle(action: string) {
   try {
-    const res = await api.get<{ series: MetricSeries[] }>(`/tasks/${taskId.value}/metrics`);
-    series.value = res.series ?? [];
-  } catch { /* ignore */ }
-}
-
-async function loadAlerts() {
-  try {
-    const res = await api.get<{ items: Alert[] }>(`/alerts/active?taskId=${taskId.value}`);
-    alerts.value = res.items ?? [];
-  } catch { /* ignore */ }
-}
-
-async function loadLogs() {
-  loading.value = true;
-  try {
-    const url = logLevel.value === 'ALL' ? `/tasks/${taskId.value}/logs` : `/tasks/${taskId.value}/logs?level=${logLevel.value}`;
-    const res = await api.get<{ lines: typeof logs.value }>(url);
-    logs.value = res.lines ?? [];
-  } finally { loading.value = false; }
-}
-
-/* charts */
-function baseLine(title: string, xs: string[], series: { name: string; data: number[]; color: string }[]) {
-  return {
-    grid: { left: 36, right: 16, top: 18, bottom: 22 },
-    tooltip: { trigger: 'axis' as const },
-    legend: { bottom: 0, icon: 'roundRect', itemWidth: 8, itemHeight: 8, textStyle: { color: '#64748B', fontSize: 11 } },
-    xAxis: { type: 'category', data: xs, axisLine: AXIS_BASE.axisLine, axisLabel: { ...AXIS_BASE.axisLabel, fontSize: 10 }, axisTick: { show: false } },
-    yAxis: { type: 'value', axisLine: { show: false }, axisLabel: AXIS_BASE.axisLabel, splitLine: AXIS_BASE.splitLine },
-    series: series.map((s) => ({
-      name: s.name,
-      type: 'line' as const,
-      data: s.data,
-      smooth: true,
-      symbol: 'none',
-      lineStyle: { width: 1.6, color: s.color },
-      areaStyle: { color: s.color, opacity: 0.08 },
-    })),
-  };
-}
-
-const rpsOption = computed(() => {
-  const ex = series.value.find((s) => s.metric === 'extractor_pushed_rps_avg');
-  const sk = series.value.find((s) => s.metric === 'sinker_record_count_avg_by_sec');
-  if (!ex) return null;
-  const xs = ex.points.map((p) => dayjs(p.t).format('HH:mm'));
-  return baseLine('RPS', xs, [
-    { name: '抽取 RPS', data: ex.points.map((p) => p.v), color: BRAND_PALETTE[0] },
-    ...(sk ? [{ name: '写入 RPS', data: sk.points.map((p) => p.v), color: BRAND_PALETTE[1] }] : []),
-  ]);
-});
-
-const latencyOption = computed(() => {
-  const la = series.value.find((s) => s.metric === 'latency_ms');
-  if (!la) return null;
-  const xs = la.points.map((p) => dayjs(p.t).format('HH:mm'));
-  return baseLine('Latency', xs, [{ name: '延迟', data: la.points.map((p) => p.v), color: BRAND_PALETTE[2] }]);
-});
-
-const bufferOption = computed(() => {
-  const bf = series.value.find((s) => s.metric === 'pipeline_buffer_size_avg');
-  if (!bf) return null;
-  const xs = bf.points.map((p) => dayjs(p.t).format('HH:mm'));
-  return baseLine('Buffer', xs, [{ name: '缓冲队列', data: bf.points.map((p) => p.v), color: BRAND_PALETTE[4] }]);
-});
-
-/* objects sample */
-const objectRows = computed(() => {
-  if (!task.value) return [];
-  const n = task.value.syncObjects.selectedTables;
-  const tables = ['orders', 'users', 'payments', 'products', 'shipments', 'inventory', 'logs'];
-  return Array.from({ length: Math.min(n, 8) }, (_, i) => ({
-    name: `${task.value!.source.database ?? 'app_db'}.${tables[i % tables.length]}`,
-    type: '表',
-    rows: Math.round(100_000 * Math.random() * (i + 1)),
-    status: task.value!.status === 'completed' ? '已完成'
-      : task.value!.status === 'running' ? '同步中'
-      : task.value!.status === 'failed' ? '失败' : '等待中',
-  }));
-});
-
-/* logs */
-const logLevel = ref('ALL');
-const logLevelOptions = ['ALL', 'INFO', 'WARN', 'ERROR', 'DEBUG'].map((v) => ({ label: v, value: v }));
-const logAuto = ref(true);
-const filteredLogs = computed(() => logs.value.slice(0, 200));
-watch(logLevel, loadLogs);
-
-/* actions */
-async function doAction(action: string) {
-  try {
-    await api.post(`/tasks/${taskId.value}/action`, { action });
+    await api.post(`/tasks/${taskId.value}/${action}`);
     ElMessage.success('操作成功');
     await loadTask();
-  } catch { ElMessage.error('操作失败'); }
+  } catch {
+    ElMessage.error('操作失败');
+  }
+}
+
+function confirmStop() {
+  if (!task.value) return;
+  ElMessageBox.confirm(
+    `确定停止任务「${task.value.name}」？`,
+    '停止任务',
+    { type: 'warning' },
+  ).then(() => doLifecycle('stop')).catch(() => {});
 }
 
 function confirmDelete() {
@@ -438,32 +489,314 @@ async function saveEdit() {
   } finally { saving.value = false; }
 }
 
-function onBack() {
-  router.push(backToListPath());
+function onEditorClose() {
+  router.replace({ query: { ...route.query, edit: undefined } });
 }
 
-function formatShort(v: number) {
-  if (v >= 1000) return `${(v / 1000).toFixed(1)}k`;
-  return String(v);
+/* ---------- tab deep link ---------- */
+function onTabChange(tab: string | number) {
+  const tabStr = String(tab);
+  const query: Record<string, string | undefined> = { ...route.query, tab: tabStr };
+  if (tabStr !== 'config') delete (query as Partial<typeof query>).edit;
+  router.replace({ query });
 }
 
-/* lifecycle */
+watch(() => route.query.tab, (v) => {
+  if (v && VALID_TABS.includes(v as TabName)) activeTab.value = v as TabName;
+});
+
+watch(() => route.query.edit, (v) => {
+  editorVisible.value = v === '1';
+});
+
+/* ---------- KPI charts (detail overview) ---------- */
+async function loadDetailMetrics() {
+  try {
+    const now = Date.now();
+    const from = now - 3600_000; // last 1h
+    const metrics = ['extractor_rps_avg', 'sinker_record_count_avg_by_sec', 'pipeline_buffer_size_avg'];
+    const results: MetricQueryResponse[] = [];
+    for (const m of metrics) {
+      try {
+        const res = await api.get<MetricQueryResponse>(`/runs/${currentRunId.value}/metrics?metric=${m}&from=${from}&to=${now}&step=60`);
+        results.push(res);
+      } catch { /* ignore individual metric errors */ }
+    }
+    detailMetricSeries.value = results;
+  } catch { /* ignore */ }
+}
+
+const detailMetricSeries = ref<MetricQueryResponse[]>([]);
+const currentRunId = ref('');
+
+function baseLine(name: string, xs: string[], sData: { name: string; data: number[]; color: string }[]) {
+  return {
+    grid: { left: 36, right: 16, top: 18, bottom: 22 },
+    tooltip: { trigger: 'axis' as const },
+    legend: { bottom: 0, icon: 'roundRect', itemWidth: 8, itemHeight: 8, textStyle: { color: '#64748B', fontSize: 11 } },
+    xAxis: { type: 'category', data: xs, axisLine: AXIS_BASE.axisLine, axisLabel: { ...AXIS_BASE.axisLabel, fontSize: 10 }, axisTick: { show: false } },
+    yAxis: { type: 'value', name: name, axisLine: { show: false }, axisLabel: AXIS_BASE.axisLabel, splitLine: AXIS_BASE.splitLine },
+    series: sData.map((s) => ({
+      name: s.name,
+      type: 'line' as const,
+      data: s.data,
+      smooth: true,
+      symbol: 'none',
+      lineStyle: { width: 1.6, color: s.color },
+      areaStyle: { color: s.color, opacity: 0.08 },
+    })),
+  };
+}
+
+const rpsOption = computed(() => {
+  const ms = detailMetricSeries.value.find((s) => s.metric === 'extractor_rps_avg');
+  if (!ms || ms.data.length === 0) return null;
+  const xs = ms.data.map((p) => dayjs(p.ts).format('HH:mm'));
+  return baseLine('extractor_rps_avg', xs, [{ name: 'extractor_rps_avg', data: ms.data.map((p) => p.value), color: BRAND_PALETTE[0] }]);
+});
+
+const sinkRpsOption = computed(() => {
+  const ms = detailMetricSeries.value.find((s) => s.metric === 'sinker_record_count_avg_by_sec');
+  if (!ms || ms.data.length === 0) return null;
+  const xs = ms.data.map((p) => dayjs(p.ts).format('HH:mm'));
+  return baseLine('sinker_record_count_avg_by_sec', xs, [{ name: 'sinker_record_count_avg_by_sec', data: ms.data.map((p) => p.value), color: BRAND_PALETTE[1] }]);
+});
+
+const bufferOption = computed(() => {
+  const ms = detailMetricSeries.value.find((s) => s.metric === 'pipeline_buffer_size_avg');
+  if (!ms || ms.data.length === 0) return null;
+  const xs = ms.data.map((p) => dayjs(p.ts).format('HH:mm'));
+  return baseLine('pipeline_buffer_size_avg', xs, [{ name: 'pipeline_buffer_size_avg', data: ms.data.map((p) => p.value), color: BRAND_PALETTE[4] }]);
+});
+
+/* ---------- objects sample ---------- */
+const objectRows = computed(() => {
+  if (!task.value) return [];
+  const n = task.value.syncObjects.selectedTables;
+  const tables = ['orders', 'users', 'payments', 'products', 'shipments', 'inventory', 'logs'];
+  return Array.from({ length: Math.min(n, 8) }, (_, i) => ({
+    name: `${task.value!.source.database ?? 'app_db'}.${tables[i % tables.length]}`,
+    type: '表',
+    rows: Math.round(100_000 * Math.random() * (i + 1)),
+    status: task.value!.status === 'stopped' || task.value!.status === 'completed' ? '已完成'
+      : task.value!.status === 'running' ? '同步中'
+      : task.value!.status === 'failed' ? '失败' : '等待中',
+  }));
+});
+
+/* ---------- Logs tab (SSE) ---------- */
+const logFile = ref('default');
+const logFiles = ['default', 'position', 'monitor', 'commit', 'finished', 'task', 'http'];
+const logLevelFilter = ref('ALL');
+const logPaused = ref(false);
+const sseState = ref<'connected' | 'reconnecting' | 'disconnected'>('connected');
+const logPaneRef = ref<HTMLElement | null>(null);
+const showFollowBtn = ref(false);
+const logStreamHandle = ref<LogStreamHandle | null>(null);
+
+const sseStateLabel = computed(() => {
+  if (sseState.value === 'connected') return t('taskDetail.log.connected');
+  if (sseState.value === 'reconnecting') return t('taskDetail.log.reconnecting');
+  return t('taskDetail.log.disconnected');
+});
+
+const filteredLogLines = computed<LogLine[]>(() => {
+  const handle = logStreamHandle.value;
+  if (!handle) return [];
+  // handle.lines is Ref<LogLine[]>, need .value to unwrap
+  const rawLines: LogLine[] = unref(handle.lines);
+  if (logLevelFilter.value === 'ALL') return rawLines;
+  return rawLines.filter((l: LogLine) => l.level === logLevelFilter.value);
+});
+
+function formatLogTime(ts: number): string {
+  return dayjs(ts).format('HH:mm:ss');
+}
+
+function reopenLogStream() {
+  logStreamHandle.value?.close();
+  if (!currentRunId.value) return;
+  sseState.value = 'connected';
+  logStreamHandle.value = useLogStream({
+    runId: currentRunId.value,
+    file: logFile.value,
+    level: logLevelFilter.value !== 'ALL' ? logLevelFilter.value as 'debug' | 'info' | 'warn' | 'error' : undefined,
+    bufferLimit: 500,
+    onError: () => { sseState.value = 'reconnecting'; },
+  });
+}
+
+function onLogScroll() {
+  if (!logPaneRef.value) return;
+  const el = logPaneRef.value;
+  const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+  showFollowBtn.value = !atBottom;
+}
+
+function scrollToBottom() {
+  if (!logPaneRef.value) return;
+  logPaneRef.value.scrollTop = logPaneRef.value.scrollHeight;
+  showFollowBtn.value = false;
+}
+
+/* ---------- Alerts tab ---------- */
+const alerts = ref<Alert[]>([]);
+
+async function loadAlerts() {
+  try {
+    const res = await api.get<{ items: Alert[] }>(`/alerts?taskId=${taskId.value}`);
+    alerts.value = res.items ?? [];
+  } catch { /* ignore */ }
+}
+
+/* ---------- Monitor tab ---------- */
+const monitorRange = ref<'1h' | '6h' | '24h'>('1h');
+const monitorRanges = [
+  { value: '1h' as const, label: '1h' },
+  { value: '6h' as const, label: '6h' },
+  { value: '24h' as const, label: '24h' },
+];
+const monitorSeries = ref<MetricQueryResponse[]>([]);
+const monitorLoading = ref(false);
+
+const MONITOR_METRICS = [
+  'extractor_rps_avg',
+  'sinker_record_count_avg_by_sec',
+  'pipeline_buffer_size_avg',
+  'sinker_rt_per_query_avg',
+];
+
+async function loadMonitorMetrics() {
+  if (!currentRunId.value) return;
+  monitorLoading.value = true;
+  try {
+    const now = Date.now();
+    const rangeMs = monitorRange.value === '1h' ? 3600_000 : monitorRange.value === '6h' ? 6 * 3600_000 : 24 * 3600_000;
+    const from = now - rangeMs;
+    const step = monitorRange.value === '1h' ? 60 : monitorRange.value === '6h' ? 300 : 600;
+    const results: MetricQueryResponse[] = [];
+    for (const m of MONITOR_METRICS) {
+      try {
+        const res = await api.get<MetricQueryResponse>(`/runs/${currentRunId.value}/metrics?metric=${m}&from=${from}&to=${now}&step=${step}`);
+        if (res.data.length > 0) results.push(res);
+      } catch { /* ignore individual metric errors */ }
+    }
+    monitorSeries.value = results;
+  } catch { /* ignore */ }
+  finally { monitorLoading.value = false; }
+}
+
+function setMonitorRange(r: '1h' | '6h' | '24h') {
+  monitorRange.value = r;
+  loadMonitorMetrics();
+}
+
+function monitorChartOption(ms: MetricQueryResponse) {
+  const xs = ms.data.map((p) => dayjs(p.ts).format('HH:mm'));
+  return {
+    grid: { left: 36, right: 16, top: 18, bottom: 22 },
+    tooltip: { trigger: 'axis' as const },
+    xAxis: { type: 'category', data: xs, axisLine: AXIS_BASE.axisLine, axisLabel: { ...AXIS_BASE.axisLabel, fontSize: 10 }, axisTick: { show: false } },
+    yAxis: { type: 'value', name: ms.metric, axisLine: { show: false }, axisLabel: AXIS_BASE.axisLabel, splitLine: AXIS_BASE.splitLine },
+    series: [{
+      name: ms.metric,
+      type: 'line' as const,
+      data: ms.data.map((p) => p.value),
+      smooth: true,
+      symbol: 'none',
+      lineStyle: { width: 1.6, color: BRAND_PALETTE[0] },
+      areaStyle: { color: BRAND_PALETTE[0], opacity: 0.08 },
+    }],
+  };
+}
+
+/* ---------- History tab ---------- */
+const historyRuns = ref<Run[]>([]);
+const historyTotal = ref(0);
+const historyPage = ref(1);
+const historyPageSize = 25;
+const historyLoading = ref(false);
+
+async function loadHistory() {
+  historyLoading.value = true;
+  try {
+    const res = await api.get<{ items: Run[]; total: number }>(`/tasks/${taskId.value}/runs?page=${historyPage.value}&size=${historyPageSize}`);
+    historyRuns.value = res.items ?? [];
+    historyTotal.value = res.total ?? 0;
+  } catch { /* ignore */ }
+  finally { historyLoading.value = false; }
+}
+
+function formatPosition(pos: RunPosition): string {
+  if (pos.kind === 'binlog') return `${pos.file}:${pos.pos}${pos.gtid ? ` gtid=${pos.gtid}` : ''}`;
+  if (pos.kind === 'lsn') return `LSN ${pos.lsn}${pos.slot ? ` slot=${pos.slot}` : ''}`;
+  if (pos.kind === 'scn') return `SCN ${pos.scn}`;
+  if (pos.kind === 'resume_token') return `token=${pos.token}`;
+  if (pos.kind === 'unknown') return pos.raw ?? '—';
+  return JSON.stringify(pos);
+}
+
+/* archived logs dialog */
+const archivedDialogVisible = ref(false);
+const archivedLines = ref<LogLine[]>([]);
+const archivedLoading = ref(false);
+
+async function viewArchivedLogs(run: Run) {
+  archivedDialogVisible.value = true;
+  archivedLoading.value = true;
+  try {
+    const res = await api.get<{ lines: LogLine[] }>(`/runs/${run.id}/logs?file=default`);
+    archivedLines.value = res.lines ?? [];
+  } catch { archivedLines.value = []; }
+  finally { archivedLoading.value = false; }
+}
+
+/* ---------- load current run ---------- */
+async function loadCurrentRunId() {
+  try {
+    const res = await api.get<{ items: Run[] }>(`/tasks/${taskId.value}/runs?page=1&size=1`);
+    const runs = res.items ?? [];
+    if (runs.length > 0 && (runs[0].status === 'running' || runs[0].status === 'paused')) {
+      currentRunId.value = runs[0].id;
+    } else {
+      currentRunId.value = '';
+    }
+  } catch { currentRunId.value = ''; }
+}
+
+/* ---------- lifecycle ---------- */
 let pollId: ReturnType<typeof setInterval> | null = null;
-let logPollId: ReturnType<typeof setInterval> | null = null;
+const POLL_INTERVAL_MS = 5_000;
 
 onMounted(async () => {
   await loadTask();
-  loadMetrics();
+  await loadCurrentRunId();
+  loadDetailMetrics();
   loadAlerts();
-  loadLogs();
-  pollId = setInterval(() => { loadTask(); loadMetrics(); }, 5000);
-  logPollId = setInterval(() => { if (logAuto.value) loadLogs(); }, 8000);
+  loadHistory();
+
+  // open SSE if on logs tab
+  if (activeTab.value === 'logs' && currentRunId.value) reopenLogStream();
+
+  pollId = setInterval(() => {
+    if (isVisible.value) {
+      loadTask();
+      loadCurrentRunId();
+      if (activeTab.value === 'monitor') loadMonitorMetrics();
+      if (activeTab.value === 'alerts') loadAlerts();
+    }
+  }, POLL_INTERVAL_MS);
 });
 
 onUnmounted(() => {
   if (pollId) clearInterval(pollId);
-  if (logPollId) clearInterval(logPollId);
+  logStreamHandle.value?.close();
 });
+
+/* ---------- navigation ---------- */
+function onBack() {
+  router.push(backToListPath());
+}
 </script>
 
 <style scoped>
@@ -505,111 +838,27 @@ onUnmounted(() => {
   gap: 16px;
 }
 .detail__flow {
-  display: grid;
-  grid-template-columns: 1fr 1.4fr 1fr;
-  gap: 16px;
   padding: 16px 20px;
 }
-.detail__flow-side {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-  padding: 12px 16px;
-  background: var(--color-primary-50);
-  border: 1px solid var(--color-primary-200);
-  border-radius: var(--radius-md);
-}
-.detail__flow-label {
-  font-size: 11px;
-  color: var(--color-primary-700);
-  font-weight: 500;
-}
-.detail__flow-side code {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--color-ink);
-}
-.detail__flow-side small {
-  font-size: 12px;
-  color: var(--color-ink-subtle);
-}
-.detail__flow-mid {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  position: relative;
-}
-.detail__flow-rate {
-  font-size: 13px;
-  color: var(--color-primary-700);
-  font-weight: 500;
-}
-.detail__flow-line {
-  width: 100%;
-  height: 2px;
-  background: linear-gradient(to right, var(--color-primary-500), var(--color-accent));
-  display: flex;
-  align-items: center;
-  justify-content: space-around;
-  position: relative;
-}
-.detail__flow-dot {
-  width: 6px;
-  height: 6px;
-  background: var(--color-accent);
-  border-radius: 50%;
-  animation: flow 1.6s infinite ease-in-out;
-}
-.detail__flow-dot:nth-child(2) { animation-delay: 0.3s; }
-.detail__flow-dot:nth-child(3) { animation-delay: 0.6s; }
-@keyframes flow {
-  0% { transform: translateX(-10px) scale(0.8); opacity: 0.5; }
-  50% { transform: translateX(0) scale(1); opacity: 1; }
-  100% { transform: translateX(10px) scale(0.8); opacity: 0.5; }
-}
-.detail__flow-lag {
-  font-size: 12px;
-  color: var(--color-ink-subtle);
-}
-.detail__flow-meta {
-  grid-column: 1 / -1;
+.detail__kpi-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--color-border);
 }
-.detail__flow-meta > div {
-  display: flex;
-  gap: 8px;
-  font-size: 12px;
-}
-.detail__flow-meta span { color: var(--color-ink-subtle); }
-.detail__flow-meta strong { color: var(--color-ink); font-weight: 500; }
-.detail__tabs {
-  padding: 8px 20px 20px;
-}
-.detail__kpi {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 12px;
-  padding: 8px 0 16px;
-}
-@media (max-width: 1400px) { .detail__kpi { grid-template-columns: repeat(3, 1fr); } }
-@media (max-width: 800px) { .detail__kpi { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 800px) { .detail__kpi-row { grid-template-columns: repeat(2, 1fr); } }
 .detail__charts {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 12px;
+  padding: 0 0 0 0;
 }
-.detail__charts :nth-child(3) {
-  grid-column: 1 / -1;
-}
+@media (max-width: 1200px) { .detail__charts { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 800px) { .detail__charts { grid-template-columns: 1fr; } }
 .detail__chart {
   height: 100%;
+}
+.detail__tabs {
+  padding: 8px 20px 20px;
 }
 .detail__config dl {
   display: grid;
@@ -618,29 +867,44 @@ onUnmounted(() => {
   padding: 12px 0;
   margin: 0;
 }
-.detail__config dt {
-  color: var(--color-ink-subtle);
-  font-size: 13px;
-}
-.detail__config dd {
-  margin: 0;
-  color: var(--color-ink);
-  font-size: 13px;
-  font-family: var(--font-mono);
-}
+.detail__config dt { color: var(--color-ink-subtle); font-size: 13px; }
+.detail__config dd { margin: 0; color: var(--color-ink); font-size: 13px; font-family: var(--font-mono); }
 .detail__mono { font-family: var(--font-mono); font-size: 12px; }
-.detail__log-filters {
+.detail__muted { color: var(--color-ink-subtle); font-size: 12px; }
+.detail__position { font-size: 11px; word-break: break-all; }
+
+/* logs */
+.detail__log-toolbar {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   padding: 8px 0;
   gap: 12px;
   flex-wrap: wrap;
 }
-.detail__log-refresh {
+.detail__log-toolbar-left {
   display: inline-flex;
-  gap: 12px;
+  gap: 8px;
   align-items: center;
 }
+.detail__log-toolbar-right {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+.detail__log-file-select { width: 140px; }
+.detail__log-level-select { width: 100px; }
+.detail__log-status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.detail__log-status-pill--connected { background: #ECFDF5; color: #0F766E; }
+.detail__log-status-pill--reconnecting { background: #FEF3C7; color: #92400E; }
+.detail__log-status-pill--disconnected { background: #FEF2F2; color: #991B1B; }
 .detail__log-view {
   background: #0F172A;
   color: #CBD5E1;
@@ -650,10 +914,11 @@ onUnmounted(() => {
   font-size: 12px;
   max-height: 480px;
   overflow: auto;
+  position: relative;
 }
 .detail__log-line {
   display: grid;
-  grid-template-columns: 80px 60px 120px 1fr;
+  grid-template-columns: 80px 60px 1fr;
   gap: 10px;
   padding: 3px 0;
 }
@@ -662,8 +927,53 @@ onUnmounted(() => {
 .detail__log-line--info .detail__log-level { color: #67E8F9; }
 .detail__log-line--debug .detail__log-level { color: #94A3B8; }
 .detail__log-time { color: #64748B; }
-.detail__log-source { color: #A78BFA; }
 .detail__log-msg { color: #E2E8F0; overflow-wrap: anywhere; }
+.detail__log-follow {
+  position: sticky;
+  bottom: 8px;
+  text-align: center;
+  z-index: 10;
+  margin-top: 4px;
+}
+
+/* monitor */
+.detail__monitor-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 0;
+}
+.detail__monitor-charts {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+@media (max-width: 800px) { .detail__monitor-charts { grid-template-columns: 1fr; } }
+.detail__monitor-loading,
+.detail__monitor-empty {
+  padding: 40px 0;
+}
+
+/* history */
+.detail__history-footer {
+  display: flex;
+  justify-content: center;
+  padding-top: 12px;
+}
+
+/* archived logs */
+.detail__archived-log-view {
+  background: #0F172A;
+  color: #CBD5E1;
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  max-height: 480px;
+  overflow: auto;
+}
+
+/* editor */
 .detail__editor {
   display: flex;
   flex-direction: column;

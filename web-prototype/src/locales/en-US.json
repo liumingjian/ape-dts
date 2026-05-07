@@ -28,7 +28,8 @@
     "disable": "Disable",
     "yes": "Yes",
     "no": "No",
-    "more": "More"
+    "more": "More",
+    "close": "Close"
   },
   "auth": {
     "loginTitle": "Sign in to ape-dts Console",
@@ -156,8 +157,12 @@
   },
   "task": {
     "status": {
+      "draft": "Draft",
+      "ready": "Ready",
       "running": "Running",
       "paused": "Paused",
+      "stopping": "Stopping",
+      "stopped": "Stopped",
       "failed": "Failed",
       "completed": "Completed",
       "creating": "Creating",
@@ -184,19 +189,18 @@
   "taskDetail": {
     "back": "Back to list",
     "tab": {
-      "overview": "Overview",
       "config": "Sync config",
       "objects": "Sync objects",
       "logs": "Logs",
-      "alerts": "Alerts"
+      "monitor": "Monitor",
+      "alerts": "Alerts",
+      "history": "Run history"
     },
     "kpi": {
+      "status": "Status",
       "rps": "Extract RPS",
-      "sinkRps": "Sink RPS",
       "latency": "Sync latency",
-      "buffer": "Buffer queue",
-      "processed": "Records processed",
-      "errors": "Errors"
+      "progress": "Progress"
     },
     "chart": {
       "rps": "Extract / sink RPS",
@@ -221,7 +225,14 @@
         "source": "Source",
         "msg": "Message"
       },
-      "autoRefresh": "Auto-refresh"
+      "autoRefresh": "Auto-refresh",
+      "connected": "Connected",
+      "reconnecting": "Reconnecting",
+      "disconnected": "Disconnected",
+      "reconnect": "Reconnect",
+      "pause": "Pause scroll",
+      "resume": "Resume scroll",
+      "follow": "Follow"
     },
     "editor": {
       "title": "Edit task configuration",
@@ -230,7 +241,12 @@
     "alerts": {
       "none": "No alerts for this task."
     },
+    "history": {
+      "viewLogs": "View logs",
+      "archivedLogs": "Archived logs"
+    },
     "action": {
+      "start": "Start",
       "pause": "Pause",
       "resume": "Resume",
       "stop": "Stop",
@@ -689,7 +705,8 @@
       "title": "Operations",
       "subtitle": "Cross-task operational view with batch actions.",
       "tab": {
-        "sync": "Sync tasks",
+        "sync": "Snapshot",
+        "cdc": "CDC",
         "check": "Check",
         "struct": "Struct"
       }
@@ -970,6 +987,7 @@
     "batch": {
       "pause": "Pause selected",
       "resume": "Resume selected",
+      "start": "Start selected",
       "stop": "Stop selected",
       "delete": "Delete selected"
     },
@@ -978,7 +996,8 @@
       "engine": "All engines",
       "status": "All statuses",
       "search": "Search name / ID / instance IP",
-      "mode": "All modes"
+      "mode": "All modes",
+      "clearAll": "Clear all"
     },
     "col": {
       "name": "Name / ID",

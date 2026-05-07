@@ -1,5 +1,5 @@
 <template>
-  <TaskListView view-kind="snapshot" />
+  <TaskListView view-kind="cdc" />
 </template>
 
 <script setup lang="ts">

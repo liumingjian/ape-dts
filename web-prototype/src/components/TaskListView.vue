@@ -26,16 +26,19 @@
               </el-button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item command="pause">
+                  <el-dropdown-item v-if="can('task.start')" command="start">
+                    <IconPlayerPlay /> {{ t('taskList.batch.start') }}
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="can('task.pause')" command="pause">
                     <IconPlayerPause /> {{ t('taskList.batch.pause') }}
                   </el-dropdown-item>
-                  <el-dropdown-item command="resume">
+                  <el-dropdown-item v-if="can('task.resume')" command="resume">
                     <IconPlayerPlay /> {{ t('taskList.batch.resume') }}
                   </el-dropdown-item>
-                  <el-dropdown-item command="stop" divided>
+                  <el-dropdown-item v-if="can('task.stop')" command="stop" divided>
                     <IconPlayerStop /> {{ t('taskList.batch.stop') }}
                   </el-dropdown-item>
-                  <el-dropdown-item command="delete" divided>
+                  <el-dropdown-item v-if="can('task.delete')" command="delete" divided>
                     <IconTrash /> {{ t('taskList.batch.delete') }}
                   </el-dropdown-item>
                 </el-dropdown-menu>
@@ -113,21 +116,6 @@
         <!-- filters row -->
         <div class="task-list__filters">
           <el-select
-            v-if="viewKind === 'sync'"
-            v-model="filter.mode"
-            :placeholder="t('taskList.filter.mode')"
-            clearable
-            class="task-list__filter task-list__filter--sm"
-            @change="applyFilter"
-          >
-            <el-option
-              v-for="m in syncModeOptions"
-              :key="m"
-              :label="t(`taskList.mode.${m}`)"
-              :value="m"
-            />
-          </el-select>
-          <el-select
             v-model="filter.resourceGroup"
             :placeholder="t('taskList.filter.rg')"
             clearable
@@ -181,6 +169,22 @@
           </el-input>
         </div>
 
+        <!-- filter chips -->
+        <div v-if="activeChips.length" class="task-list__chips">
+          <el-tag
+            v-for="chip in activeChips"
+            :key="chip.key"
+            closable
+            class="task-list__chip"
+            @close="removeChip(chip.key)"
+          >
+            {{ chip.label }}: {{ chip.value }}
+          </el-tag>
+          <el-button link type="primary" size="small" @click="clearAllChips">
+            {{ t('taskList.filter.clearAll') }}
+          </el-button>
+        </div>
+
         <!-- table -->
         <el-table
           v-loading="loading"
@@ -191,6 +195,7 @@
           :size="density === 'compact' ? 'small' : 'default'"
           stripe
           @selection-change="onSelectionChange"
+          @sort-change="onSortChange"
         >
           <el-table-column type="selection" width="44" align="center" />
           <el-table-column :label="t('taskList.col.name')" min-width="240" header-align="left">
@@ -215,7 +220,7 @@
               </span>
             </template>
           </el-table-column>
-          <el-table-column :label="t('taskList.col.source')" width="148" header-align="left">
+          <el-table-column :label="t('taskList.col.source')" width="148" header-align="left" sortable="custom" sort-by="source.engine">
             <template #default="{ row }">
               <EngineTag :engine="row.source.engine" />
             </template>
@@ -225,9 +230,14 @@
               <EngineTag :engine="row.target.engine" />
             </template>
           </el-table-column>
-          <el-table-column :label="t('taskList.col.status')" width="120" header-align="left" align="left">
+          <el-table-column :label="t('taskList.col.status')" width="120" header-align="left" align="left" sortable="custom" sort-by="status">
             <template #default="{ row }">
               <StatusBadge :status="row.status" />
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('taskList.col.rps')" width="100" header-align="right" align="right" sortable="custom" sort-by="metrics.rpsLatest">
+            <template #default="{ row }">
+              <span class="task-list__rps tabular-nums">{{ row.metrics?.rpsLatest ?? 0 }}</span>
             </template>
           </el-table-column>
           <el-table-column :label="t('taskList.col.progress')" width="160" header-align="left">
@@ -304,7 +314,7 @@
                   {{ t('task.action.view') }}
                 </el-button>
                 <el-button
-                  v-if="row.status === 'running'"
+                  v-if="can('task.pause') && row.status === 'running'"
                   link
                   type="warning"
                   @click="doAction(row, 'pause')"
@@ -312,7 +322,7 @@
                   {{ t('task.action.pause') }}
                 </el-button>
                 <el-button
-                  v-else-if="row.status === 'paused' || row.status === 'failed'"
+                  v-if="can('task.resume') && (row.status === 'paused' || row.status === 'failed')"
                   link
                   type="success"
                   @click="doAction(row, 'resume')"
@@ -320,7 +330,7 @@
                   {{ t('task.action.resume') }}
                 </el-button>
                 <el-button
-                  v-else-if="row.status === 'pending' || row.status === 'creating'"
+                  v-if="can('task.start') && (row.status === 'draft' || row.status === 'ready' || row.status === 'stopped' || row.status === 'pending' || row.status === 'creating')"
                   link
                   type="success"
                   @click="doAction(row, 'start')"
@@ -328,23 +338,23 @@
                   {{ t('task.action.start') }}
                 </el-button>
                 <el-button
-                  v-if="row.status !== 'completed'"
+                  v-if="can('task.stop') && row.status !== 'stopped' && row.status !== 'completed' && row.status !== 'draft' && row.status !== 'ready'"
                   link
                   type="danger"
                   @click="confirmStop(row)"
                 >
                   {{ t('task.action.stop') }}
                 </el-button>
-                <el-dropdown trigger="click" @command="(cmd: string) => onRowMore(row, cmd)">
+                <el-dropdown v-if="can('task.delete') || can('task.create')" trigger="click" @command="(cmd: string) => onRowMore(row, cmd)">
                   <el-button link>
                     <IconDotsVertical />
                   </el-button>
                   <template #dropdown>
                     <el-dropdown-menu>
-                      <el-dropdown-item command="edit">
+                      <el-dropdown-item v-if="can('task.create')" command="edit">
                         <IconEdit /> {{ t('task.action.edit') }}
                       </el-dropdown-item>
-                      <el-dropdown-item command="delete" divided>
+                      <el-dropdown-item v-if="can('task.delete')" command="delete" divided>
                         <IconTrash /> {{ t('task.action.delete') }}
                       </el-dropdown-item>
                     </el-dropdown-menu>
@@ -391,21 +401,24 @@ import { useI18n } from 'vue-i18n';
 import { useRouter, useRoute } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { api } from '@/api/client';
+import { useRbac } from '@/composables/useRbac';
+import { useDocumentVisibility } from '@/composables/useDocumentVisibility';
 import type {
-  Task, TaskCategory, TaskStatus, EngineType, SyncMode, Paginated,
+  Task, TaskCategory, TaskStatus, EngineType, Paginated,
 } from '@/types/domain';
 import { ENGINE_LABELS } from '@/types/domain';
 
-type ViewKind = TaskCategory | 'sync';
+type ViewKind = TaskCategory;
 
 const props = defineProps<{ viewKind: ViewKind }>();
 const { t } = useI18n();
 const router = useRouter();
 const route = useRoute();
+const { can } = useRbac();
+const { isVisible } = useDocumentVisibility();
 
-const isSync = computed(() => props.viewKind === 'sync');
-const showModeCol = computed(() => isSync.value);
-const apiCategory = computed(() => props.viewKind);            // backend filter param
+const showModeCol = computed(() => false);
+const apiCategory = computed(() => props.viewKind);
 
 const title = computed(() => t(`nav.tasks.${props.viewKind}`));
 const subtitle = computed(() => t(`taskList.subtitle.${props.viewKind}`));
@@ -419,12 +432,13 @@ const page = ref(1);
 const pageSize = ref(10);
 const loading = ref(false);
 const selected = ref<Task[]>([]);
+const sortKey = ref<string>('');
+const sortDir = ref<'asc' | 'desc'>('asc');
 
 const filter = reactive({
   resourceGroup: '',
   engine: '' as EngineType | '',
   status: '' as TaskStatus | '',
-  mode: '' as SyncMode | '',
   q: '',
 });
 
@@ -493,8 +507,52 @@ function setDensity(d: Density) {
 const resourceGroups = ['default', 'production', 'staging', 'dev'];
 const engineOptions = (Object.keys(ENGINE_LABELS) as EngineType[])
   .map((k) => ({ value: k, label: ENGINE_LABELS[k] }));
-const statusOptions: TaskStatus[] = ['running', 'paused', 'failed', 'completed', 'creating', 'pending'];
-const syncModeOptions: SyncMode[] = ['snapshot_cdc', 'snapshot', 'cdc'];
+const statusOptions: TaskStatus[] = ['draft', 'ready', 'running', 'paused', 'stopping', 'stopped', 'failed'];
+
+/* ---------- filter chips ---------- */
+const activeChips = computed(() => {
+  const chips: { key: string; label: string; value: string }[] = [];
+  if (filter.status) {
+    chips.push({ key: 'status', label: t('taskList.filter.status'), value: t(`task.status.${filter.status}`) });
+  }
+  if (filter.engine) {
+    const eng = ENGINE_LABELS[filter.engine as EngineType];
+    chips.push({ key: 'engine', label: t('taskList.filter.engine'), value: eng ?? filter.engine });
+  }
+  if (filter.q) {
+    chips.push({ key: 'q', label: t('taskList.filter.search'), value: filter.q });
+  }
+  return chips;
+});
+
+function removeChip(key: string) {
+  if (key === 'status') filter.status = '';
+  else if (key === 'engine') filter.engine = '';
+  else if (key === 'q') filter.q = '';
+  applyFilter();
+}
+
+function clearAllChips() {
+  filter.status = '';
+  filter.engine = '';
+  filter.q = '';
+  applyFilter();
+}
+
+/* ---------- URL sync ---------- */
+function syncFiltersToUrl() {
+  const query: Record<string, string> = {};
+  if (filter.status) query.status = filter.status;
+  if (filter.engine) query.engine = filter.engine;
+  if (filter.q) query.q = filter.q;
+  router.replace({ query });
+}
+
+function readFiltersFromUrl() {
+  if (route.query.status) filter.status = route.query.status as TaskStatus;
+  if (route.query.engine) filter.engine = route.query.engine as EngineType;
+  if (route.query.q) filter.q = String(route.query.q);
+}
 
 async function loadList() {
   loading.value = true;
@@ -507,8 +565,11 @@ async function loadList() {
     if (filter.resourceGroup) params.set('resourceGroup', filter.resourceGroup);
     if (filter.engine) params.set('engine', filter.engine);
     if (filter.status) params.set('status', filter.status);
-    if (filter.mode) params.set('mode', filter.mode);
     if (filter.q) params.set('q', filter.q);
+    if (sortKey.value) {
+      params.set('sort', sortKey.value);
+      params.set('order', sortDir.value);
+    }
     const data = await api.get<Paginated<Task>>(`/tasks?${params.toString()}`);
     list.value = data.items;
     total.value = data.total;
@@ -521,6 +582,7 @@ async function loadList() {
 
 function applyFilter() {
   page.value = 1;
+  syncFiltersToUrl();
   loadList();
 }
 
@@ -561,7 +623,16 @@ function goDetail(row: Task) {
 
 async function doAction(row: Task, action: string) {
   try {
-    await api.post(`/tasks/${row.id}/action`, { action });
+    const lifecycleMap: Record<string, string> = {
+      start: 'start',
+      stop: 'stop',
+      pause: 'pause',
+      resume: 'resume',
+    };
+    const endpoint = lifecycleMap[action];
+    if (endpoint) {
+      await api.post(`/tasks/${row.id}/${endpoint}`);
+    }
     ElMessage.success(t(`taskList.toast.action.${mapToastKey(action)}`));
     loadList();
   } catch {
@@ -618,8 +689,16 @@ async function onBatch(cmd: string) {
     }).catch(() => {});
     return;
   }
+  const lifecycleMap: Record<string, string> = {
+    start: 'start',
+    pause: 'pause',
+    resume: 'resume',
+    stop: 'stop',
+  };
+  const endpoint = lifecycleMap[cmd];
+  if (!endpoint) return;
   await Promise.all(
-    selected.value.map((row) => api.post(`/tasks/${row.id}/action`, { action: cmd })),
+    selected.value.map((row) => api.post(`/tasks/${row.id}/${endpoint}`)),
   );
   ElMessage.success(t(`taskList.toast.action.${mapToastKey(cmd)}`));
   loadList();
@@ -667,22 +746,30 @@ function onDownloadTemplate() {
 }
 
 function onCreate() {
-  // Sync view: enter wizard with snapshot route (mode is selected inside the wizard).
-  // check / struct: enter the wizard for that category directly.
-  const cat: TaskCategory = isSync.value ? 'snapshot' : (props.viewKind as TaskCategory);
-  router.push({ path: `/tasks/create/${cat}` });
+  router.push({ path: `/tasks/create/${props.viewKind}` });
+}
+
+/* ---------- sorting ---------- */
+function onSortChange({ prop, order }: { prop: string; order: string | null }) {
+  if (!order) {
+    sortKey.value = '';
+    sortDir.value = 'asc';
+  } else {
+    sortKey.value = prop;
+    sortDir.value = order === 'ascending' ? 'asc' : 'desc';
+  }
+  loadList();
 }
 
 let pollId: ReturnType<typeof setInterval> | null = null;
+const POLL_INTERVAL_MS = 5_000;
 
 onMounted(() => {
-  // honor query coming from dashboard / legacy redirects
-  if (route.query.status) filter.status = route.query.status as TaskStatus;
-  if (route.query.engine) filter.engine = route.query.engine as EngineType;
-  if (route.query.mode) filter.mode = route.query.mode as SyncMode;
-  if (route.query.q) filter.q = String(route.query.q);
+  readFiltersFromUrl();
   loadList();
-  pollId = setInterval(loadList, 8000);
+  pollId = setInterval(() => {
+    if (isVisible.value) loadList();
+  }, POLL_INTERVAL_MS);
 });
 onUnmounted(() => {
   if (pollId) clearInterval(pollId);
@@ -692,6 +779,10 @@ watch(() => props.viewKind, () => {
   page.value = 1;
   visibleCols.value = loadVisible();
   loadList();
+});
+
+watch(() => route.query, () => {
+  readFiltersFromUrl();
 });
 </script>
 
@@ -756,6 +847,20 @@ watch(() => props.viewKind, () => {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
+.task-list__chips {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.task-list__chip {
+  font-size: 12px;
+}
+.task-list__rps {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-ink-muted);
 }
 
 .task-list__cols-pop {
