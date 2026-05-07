@@ -21,7 +21,7 @@
         </div>
         <div class="license__sum license__sum--expiring">
           <div class="license__sum-label">{{ t('license.summary.expiring') }}</div>
-          <div class="license__sum-value tabular-nums">{{ counters.expiring }}</div>
+          <div class="license__sum-value tabular-nums">{{ counters.expiring_soon }}</div>
         </div>
         <div class="license__sum license__sum--expired">
           <div class="license__sum-label">{{ t('license.summary.expired') }}</div>
@@ -90,7 +90,7 @@
           <el-table-column :label="t('license.col.actions')" width="180" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" @click="downloadFile(row)">{{ t('license.action.download') }}</el-button>
-              <el-button link type="primary" @click="activateVisible = true">{{ t('license.action.activate') }}</el-button>
+              <el-button v-if="can('license.activate')" link type="primary" @click="activateVisible = true">{{ t('license.action.activate') }}</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -138,7 +138,7 @@ import type { License } from '@/types/domain';
 const { t } = useI18n();
 const { can } = useRbac();
 
-const STATUSES: License['status'][] = ['active', 'expiring', 'expired', 'perpetual'];
+const STATUSES: License['status'][] = ['active', 'expiring_soon', 'expired', 'perpetual'];
 
 const list = ref<License[]>([]);
 const loading = ref(false);
@@ -156,8 +156,11 @@ const filteredList = computed(() => {
 });
 
 const counters = computed(() => {
-  const c = { active: 0, expiring: 0, expired: 0, perpetual: 0 };
-  for (const l of list.value) c[l.status] += 1;
+  const c = { active: 0, expiring_soon: 0, expired: 0, perpetual: 0 };
+  for (const l of list.value) {
+    const key = l.status === 'expiring' ? 'expiring_soon' : l.status;
+    if (key in c) c[key as keyof typeof c] += 1;
+  }
   return c;
 });
 const totalQuota = computed(() => list.value.reduce((s, l) => s + l.maxTasks, 0));
@@ -195,7 +198,7 @@ function formatExpire(s: string) {
 }
 function statusIcon(s: License['status']) {
   if (s === 'active') return IconCircleCheck;
-  if (s === 'expiring') return IconAlertTriangle;
+  if (s === 'expiring_soon' || s === 'expiring') return IconAlertTriangle;
   if (s === 'expired') return IconCircleX;
   return IconInfinity;
 }
@@ -272,6 +275,7 @@ onMounted(() => { loadList(); loadTaskCount(); });
 .license__status :deep(svg) { width: 14px; height: 14px; }
 .license__status--active    { color: var(--color-success); }
 .license__status--expiring  { color: var(--color-warning); }
+.license__status--expiring_soon  { color: var(--color-warning); }
 .license__status--expired   { color: var(--color-danger); }
 .license__status--perpetual { color: var(--color-primary-700); }
 .license__unit { font-size: 12px; color: var(--color-ink-subtle); }

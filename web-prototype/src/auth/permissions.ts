@@ -52,11 +52,12 @@ const MATRIX: Record<Role, ReadonlySet<Action>> = {
     'task.pause',
     'task.resume',
     'task.read',
+    'license.read',
     'alert.clear',
     'alert.read',
     'control.log.read',
   ]),
-  viewer: new Set<Action>(['task.read', 'alert.read']),
+  viewer: new Set<Action>(['task.read', 'alert.read', 'license.read']),
 };
 
 export function canPerform(role: Role | null | undefined, action: Action): boolean {
@@ -75,8 +76,8 @@ export type NavModule =
 
 export function visibleNavItems(role: Role | null | undefined): NavModule[] {
   if (!role) return [];
-  const base: NavModule[] = ['dashboard', 'tasks', 'alerts'];
-  if (role === 'admin') return [...base, 'alertMonitor', 'system', 'license', 'ops'];
+  const base: NavModule[] = ['dashboard', 'tasks', 'alerts', 'license'];
+  if (role === 'admin') return [...base, 'alertMonitor', 'system', 'ops'];
   if (role === 'operator') return [...base, 'ops'];
   return base;
 }

@@ -1081,20 +1081,97 @@ async function togglePreview() {
     // If we already have a created task, fetch preview_ini directly
     if (createdTaskId.value) {
       try {
-        iniPreview.value = await api.get<string>(`/tasks/${createdTaskId.value}/preview_ini`);
+        const text = await api.get<string>(`/tasks/${createdTaskId.value}/preview_ini`);
+        iniPreview.value = typeof text === 'string' ? text : String(text);
       } catch {
-        iniPreview.value = t('wizard.confirm.previewError');
+        iniPreview.value = generateLocalIniPreview();
       }
     } else {
       try {
         const res = await api.post<{ ini: string }>('/tasks/preview-ini', formToTaskDraft());
-        iniPreview.value = res.ini ?? res;
+        iniPreview.value = typeof res === 'string' ? res : (res?.ini ?? '');
+        if (!iniPreview.value) iniPreview.value = generateLocalIniPreview();
       } catch {
-        iniPreview.value = t('wizard.confirm.previewError');
+        iniPreview.value = generateLocalIniPreview();
       }
     }
   }
   showPreview.value = !showPreview.value;
+}
+
+/** Generate a basic INI preview from the current wizard draft form data.
+ *  Used as fallback when the backend preview endpoint is unavailable. */
+function generateLocalIniPreview(): string {
+  const extractType = syncModeToExtractType(form.syncMode, category.value);
+  const srcHost = form.source.host || 'localhost';
+  const srcPort = form.source.port || 3306;
+  const tgtHost = form.target.host || 'localhost';
+  const tgtPort = form.target.port || 3306;
+  const srcUser = form.source.username || 'root';
+  const tgtUser = form.target.username || 'root';
+  const srcDb = form.source.database || '';
+  const tgtDb = form.target.database || '';
+
+  // Resolve sub-modes to concrete db_type (same logic as formToTaskDraft)
+  const sourceSubMode = form.source.engine === 'gaussdb' ? form.source.subMode : undefined;
+  const targetSubMode = form.target.engine === 'gaussdb' ? form.target.subMode : undefined;
+  const sourceDb = sourceSubMode === 'pg-mode' ? 'gaussdb_pg'
+    : sourceSubMode === 'mysql-mode' ? 'gaussdb_mysql'
+    : sourceSubMode === 'oracle-mode' ? 'gaussdb_oracle'
+    : form.source.engine;
+  const targetDb = targetSubMode === 'pg-mode' ? 'gaussdb_pg'
+    : targetSubMode === 'mysql-mode' ? 'gaussdb_mysql'
+    : targetSubMode === 'oracle-mode' ? 'gaussdb_oracle'
+    : form.target.engine;
+
+  const srcScheme = sourceDb === 'mysql' || sourceDb === 'gaussdb_mysql' ? 'mysql'
+    : sourceDb === 'postgres' || sourceDb === 'gaussdb_pg' ? 'postgres'
+    : sourceDb === 'oracle' || sourceDb === 'gaussdb_oracle' ? 'oracle'
+    : 'mysql';
+  const tgtScheme = targetDb === 'mysql' || targetDb === 'gaussdb_mysql' ? 'mysql'
+    : targetDb === 'postgres' || targetDb === 'gaussdb_pg' ? 'postgres'
+    : targetDb === 'oracle' || targetDb === 'gaussdb_oracle' ? 'oracle'
+    : 'mysql';
+
+  const lines = [
+    `[extractor]`,
+    `db_type=${sourceDb}`,
+    `extract_type=${extractType}`,
+    `url=${srcScheme}://${srcUser}:***@${srcHost}:${srcPort}${srcDb ? '/' + srcDb : ''}`,
+    ``,
+    `[sinker]`,
+    `db_type=${targetDb}`,
+    `sink_type=write`,
+    `url=${tgtScheme}://${tgtUser}:***@${tgtHost}:${tgtPort}${tgtDb ? '/' + tgtDb : ''}`,
+    ``,
+    `[filter]`,
+    `do_dbs=${form.filter.doDbs?.trim() || '*'}`,
+    `do_tbs=*.*`,
+    `do_events=${form.filter.doEvents?.join(',') || 'insert,update,delete'}`,
+    ``,
+    `[parallelizer]`,
+    `parallel_type=${form.config.parallelizer ?? 'snapshot'}`,
+    `parallel_size=${form.config.parallelSize ?? 4}`,
+    ``,
+    `[pipeline]`,
+    `buffer_size=${form.config.bufferSize ?? 16000}`,
+    `max_rps_per_sinker=${form.config.maxRps ?? 0}`,
+    `checkpoint_interval_secs=${form.config.checkpointIntervalSecs ?? 10}`,
+    ``,
+    `[resumer]`,
+    `resume_from=${form.config.resumeType ?? 'from_log'}`,
+    ``,
+    `[runtime]`,
+    `log_level=info`,
+    `log_dir=./logs`,
+  ];
+  if (form.config.metricsEnabled) {
+    lines.push(``, `[metrics]`,
+      `http_host=${form.config.metricsHttpHost || '127.0.0.1'}`,
+      `http_port=${form.config.metricsHttpPort || 9090}`,
+    );
+  }
+  return lines.join('\n');
 }
 
 function modeLabel(m: SyncMode) {
@@ -1178,7 +1255,7 @@ function formToTaskDraft() {
   };
 }
 
-function buildUrl(ep: { host: string; port: number; username: string; password: string; database: string; ssl: boolean }, dbType: string) {
+function buildUrl(ep: { host?: string; port?: number; username?: string; password?: string; database?: string; ssl?: boolean }, dbType: string) {
   const scheme = dbType === 'mysql' || dbType === 'gaussdb_mysql' ? 'mysql'
     : dbType === 'postgres' || dbType === 'gaussdb_pg' ? 'postgres'
     : dbType === 'oracle' || dbType === 'gaussdb_oracle' ? 'oracle'
@@ -1187,10 +1264,10 @@ function buildUrl(ep: { host: string; port: number; username: string; password: 
     : dbType === 'kafka' ? 'kafka'
     : 'mysql';
   const dbPart = ep.database ? `/${ep.database}` : '';
-  return `${scheme}://${ep.username}:${ep.password}@${ep.host}:${ep.port}${dbPart}`;
+  return `${scheme}://${ep.username || 'root'}:${ep.password || ''}@${ep.host || 'localhost'}:${ep.port || 3306}${dbPart}`;
 }
 
-function parseMapField(dbMap: string, tbMap: string, colMap: string, topicMap: string) {
+function parseMapField(dbMap: string | undefined, tbMap: string | undefined, colMap: string | undefined, topicMap: string | undefined) {
   const router: Record<string, string> = {};
   if (dbMap) {
     router.db_map = dbMap.split('\n').filter((l) => l.includes(':')).map((l) => {

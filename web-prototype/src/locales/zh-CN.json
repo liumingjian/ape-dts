@@ -97,7 +97,8 @@
       "running": "运行中任务",
       "todayAlerts": "今日告警",
       "throughput": "总吞吐率",
-      "latency": "平均延迟"
+      "latency": "平均延迟",
+      "compareLabel": "对比昨日"
     },
     "section": {
       "timeseries": "关键时序",
@@ -612,6 +613,7 @@
     "status": {
       "active": "已激活",
       "expiring": "即将过期",
+      "expiring_soon": "即将过期",
       "expired": "已过期",
       "perpetual": "永久"
     },

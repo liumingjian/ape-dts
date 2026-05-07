@@ -311,7 +311,7 @@ async function save() {
 }
 
 async function onToggle(row: MetricRule, v: boolean) {
-  await api.patch(`/alert_rules/${row.id}`, { status: v ? 'enabled' : 'disabled' });
+  await api.patch(`/alert_rules/${row.id}`, { enabled: v });
   ElMessage.success(t('monitor.metric.toast.toggled'));
   loadList();
 }

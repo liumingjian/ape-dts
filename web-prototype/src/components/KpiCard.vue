@@ -72,7 +72,7 @@ const props = withDefaults(defineProps<{
   accent?: boolean;
 }>(), {
   tone: 'default',
-  compareLabel: '对比昨日',
+  compareLabel: '',
   unit: '',
   accent: false,
 });

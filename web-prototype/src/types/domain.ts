@@ -239,7 +239,7 @@ export interface License {
   maxTasks: number;
   issuedAt: string;
   expireAt: string;
-  status: 'active' | 'expiring' | 'expired' | 'perpetual';
+  status: 'active' | 'expiring' | 'expiring_soon' | 'expired' | 'perpetual';
 }
 
 export interface ResourceGroup {

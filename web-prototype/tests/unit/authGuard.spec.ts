@@ -44,8 +44,9 @@ describe('AuthGuard (frontend projection)', () => {
     it('viewer never sees admin-only groups', () => {
       const items = visibleNavItems('viewer');
       expect(items).not.toContain('system');
-      expect(items).not.toContain('license');
       expect(items).not.toContain('alertMonitor');
+      // license is now visible to all roles (read-only for non-admin)
+      expect(items).toContain('license');
     });
 
     it('every role sees a non-empty navigation', () => {

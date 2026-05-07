@@ -27,8 +27,10 @@ describe('permissions · canPerform', () => {
     expect(canPerform('operator', 'license.activate')).toBe(false);
   });
 
-  it('viewer is read-only', () => {
+  it('viewer is read-only (can read tasks, alerts, license)', () => {
     expect(canPerform('viewer', 'task.read')).toBe(true);
+    expect(canPerform('viewer', 'alert.read')).toBe(true);
+    expect(canPerform('viewer', 'license.read')).toBe(true);
     for (const a of ALL_ACTIONS.filter((x) => x !== 'task.read')) {
       expect(canPerform('viewer', a)).toBe(false);
     }
@@ -46,19 +48,19 @@ describe('permissions · visibleNavItems', () => {
       'dashboard',
       'tasks',
       'alerts',
+      'license',
       'alertMonitor',
       'system',
-      'license',
       'ops',
     ]);
   });
 
-  it('operator sees base + ops, not alert-monitor / system / license', () => {
-    expect(visibleNavItems('operator')).toEqual(['dashboard', 'tasks', 'alerts', 'ops']);
+  it('operator sees base + license + ops, not alert-monitor / system', () => {
+    expect(visibleNavItems('operator')).toEqual(['dashboard', 'tasks', 'alerts', 'license', 'ops']);
   });
 
-  it('viewer sees only base modules', () => {
-    expect(visibleNavItems('viewer')).toEqual(['dashboard', 'tasks', 'alerts']);
+  it('viewer sees base modules + license (read-only)', () => {
+    expect(visibleNavItems('viewer')).toEqual(['dashboard', 'tasks', 'alerts', 'license']);
   });
 
   it('null role sees nothing', () => {

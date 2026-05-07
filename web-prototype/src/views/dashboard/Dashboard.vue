@@ -26,6 +26,7 @@
           :icon-comp="IconActivity"
           :spark="summary?.kpiSparks?.running"
           tone="success"
+          :compare-label="t('dashboard.kpi.compareLabel')"
           class="dashboard__kpi-item"
           @click="go('/tasks/snapshot?status=running')"
         />
@@ -37,6 +38,7 @@
           inverse
           :spark="summary?.kpiSparks?.todayAlerts"
           :tone="(summary?.kpi.todayAlerts.total ?? 0) > 20 ? 'warning' : 'default'"
+          :compare-label="t('dashboard.kpi.compareLabel')"
           class="dashboard__kpi-item"
           @click="go('/alerts/current')"
         />
@@ -47,6 +49,7 @@
           :delta="summary?.kpi.totalRps.delta ?? 0"
           :icon-comp="IconBolt"
           :spark="summary?.kpiSparks?.totalRps"
+          :compare-label="t('dashboard.kpi.compareLabel')"
           class="dashboard__kpi-item"
         />
         <KpiCard
@@ -57,6 +60,7 @@
           :icon-comp="IconClock"
           inverse
           :spark="summary?.kpiSparks?.avgLatencyMs"
+          :compare-label="t('dashboard.kpi.compareLabel')"
           class="dashboard__kpi-item"
         />
       </section>

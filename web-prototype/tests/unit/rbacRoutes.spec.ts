@@ -71,10 +71,13 @@ describe('Route-level RBAC — meta.roles', () => {
     }
   });
 
-  it('operator cannot access license route', () => {
+  it('all authenticated roles can access license route (read-only for non-admin)', () => {
     const licenseRoute = leaves.find((r) => r.path === 'license');
     expect(licenseRoute).toBeDefined();
-    expect((licenseRoute!.meta?.roles as Role[])).not.toContain('operator');
+    const roles = licenseRoute!.meta?.roles as Role[];
+    expect(roles).toContain('admin');
+    expect(roles).toContain('operator');
+    expect(roles).toContain('viewer');
   });
 
   it('operator cannot access global-params route', () => {

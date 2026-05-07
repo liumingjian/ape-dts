@@ -97,7 +97,8 @@
       "running": "Running",
       "todayAlerts": "Today's Alerts",
       "throughput": "Total RPS",
-      "latency": "Avg Latency"
+      "latency": "Avg Latency",
+      "compareLabel": "vs. yesterday"
     },
     "section": {
       "timeseries": "Key Time Series",
@@ -612,6 +613,7 @@
     "status": {
       "active": "Active",
       "expiring": "Expiring",
+      "expiring_soon": "Expiring Soon",
       "expired": "Expired",
       "perpetual": "Perpetual"
     },

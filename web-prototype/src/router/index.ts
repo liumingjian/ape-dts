@@ -123,12 +123,12 @@ export const routes: RouteRecordRaw[] = [
         component: () => import('@/views/alerts/HistoryAlerts.vue'),
         meta: { title: 'nav.alerts.history', module: 'alerts', breadcrumb: ['nav.alerts._label', 'nav.alerts.history'], roles: ALL_ROLES },
       },
-      // License — admin only
+      // License — readable by all roles; activate restricted to admin via component
       {
         path: 'license',
         name: 'License',
         component: () => import('@/views/license/License.vue'),
-        meta: { title: 'nav.license', module: 'license', breadcrumb: ['nav.license'], roles: ['admin'] },
+        meta: { title: 'nav.license', module: 'license', breadcrumb: ['nav.license'], roles: ALL_ROLES },
       },
       // System — admin only
       {
