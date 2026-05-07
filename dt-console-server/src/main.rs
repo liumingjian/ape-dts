@@ -214,6 +214,15 @@ async fn reconcile_live_runs(
         if pid_alive {
             let pid = run.pid.unwrap() as u32;
 
+            // Active runs should always have a task_id; skip if orphaned.
+            let task_id = match &run.task_id {
+                Some(tid) => tid.clone(),
+                None => {
+                    tracing::warn!(run_id = %run.id, "skipping reattach: run has no task_id (task deleted?)");
+                    continue;
+                }
+            };
+
             tracing::info!(run_id = %run.id, pid = pid, "re-attaching to live run");
 
             // Derive run_dir from the Run's log_dir or ini_path.
@@ -240,21 +249,21 @@ async fn reconcile_live_runs(
             {
                 let mut active = active_runs.lock().await;
                 active.insert(
-                    run.task_id.clone(),
+                    task_id.clone(),
                     dt_console_server::executor::RunSlot::Active(handle.clone()),
                 );
             }
 
             // Register as a scrape target.
             {
-                let target = metrics_scraper::scrape_target_from_run(&run.task_id, &run.id);
+                let target = metrics_scraper::scrape_target_from_run(&task_id, &run.id);
                 scraper_state.add_target(target).await;
             }
 
             // Spawn a background supervise_run task.
             let bg_pool = pool.clone();
             let bg_active_runs = active_runs.clone();
-            let bg_task_id = run.task_id.clone();
+            let bg_task_id = task_id.clone();
             let bg_run_id = run.id.clone();
             tokio::spawn(async move {
                 run_handlers::supervise_run(bg_pool, bg_active_runs, bg_task_id, bg_run_id).await;

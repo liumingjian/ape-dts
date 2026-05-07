@@ -359,7 +359,7 @@ async fn run_repository_crud() {
 
     let run = Run {
         id: uuid::Uuid::new_v4().to_string(),
-        task_id: task.id.clone(),
+        task_id: Some(task.id.clone()),
         status: "running".to_string(),
         pid: Some(12345),
         ini_path: Some("/tmp/ini".to_string()),

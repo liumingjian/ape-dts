@@ -261,7 +261,7 @@ pub async fn start_task(
 
     let mut run = Run {
         id: run_id.clone(),
-        task_id: task_id.clone(),
+        task_id: Some(task_id.clone()),
         status: run_status::PENDING.to_string(),
         pid: None,
         ini_path: Some(ini_path_str),

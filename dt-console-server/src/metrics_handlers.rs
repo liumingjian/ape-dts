@@ -191,7 +191,7 @@ mod tests {
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let run = Run {
             id: run_id.to_string(),
-            task_id: task_id.to_string(),
+            task_id: Some(task_id.to_string()),
             status: status.to_string(),
             pid: Some(1234),
             ini_path: None,

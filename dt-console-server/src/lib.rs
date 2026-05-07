@@ -89,10 +89,12 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             // Control logs
             .service(control_log_handlers::list_control_logs)
             // Test connection & Precheck
-            .service(precheck_handlers::test_connection)
+            // Literal routes MUST come before parameterized ones to avoid
+            // /tasks/preview/... being captured by /tasks/{id}/...
             .service(precheck_handlers::preview_test_connection)
-            .service(precheck_handlers::precheck)
             .service(precheck_handlers::preview_precheck)
+            .service(precheck_handlers::test_connection)
+            .service(precheck_handlers::precheck)
             // Metrics query
             .service(metrics_handlers::get_metrics)
             // Log SSE stream + log file read

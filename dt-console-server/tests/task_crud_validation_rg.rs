@@ -13,8 +13,9 @@ use dt_console_server::error;
 use dt_console_server::log_sse_handlers;
 use dt_console_server::metrics_scraper;
 use dt_console_server::middleware::csrf::{Csrf, XSRF_COOKIE_NAME, XSRF_HEADER_NAME};
-use dt_console_server::models::{LoginRequest, ResourceGroup};
+use dt_console_server::models::{ControlLog, LoginRequest, ResourceGroup};
 use dt_console_server::rate_limit::{RateLimitConfig, RateLimiter};
+use dt_console_server::repositories::control_log_repository::ControlLogRepository;
 use dt_console_server::repositories::resource_group_repository::ResourceGroupRepository;
 use dt_console_server::repositories::run_repository::RunRepository;
 use sqlx::SqlitePool;
@@ -255,6 +256,34 @@ async fn setup() -> SqlitePool {
     seed_default_rg(&pool).await;
     activate_license(&pool, 100).await;
     pool
+}
+
+/// Seed a non-admin user directly into the DB (bypasses API).
+async fn seed_user(
+    pool: &SqlitePool,
+    username: &str,
+    password: &str,
+    role: &str,
+    disabled: bool,
+) -> String {
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let hash = bcrypt::hash(password, 10).unwrap();
+    let user = dt_console_server::models::User {
+        id: id.clone(),
+        username: username.to_string(),
+        password_hash: hash,
+        display_name: username.to_string(),
+        role: role.to_string(),
+        disabled,
+        created_at: now.clone(),
+        updated_at: now,
+        resource_group_id: None,
+    };
+    dt_console_server::repositories::user_repository::UserRepository::create(pool, &user)
+        .await
+        .unwrap();
+    id
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -519,7 +548,7 @@ async fn delete_task_active_run_409() {
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let run = dt_console_server::models::Run {
         id: uuid::Uuid::new_v4().to_string(),
-        task_id: task_id.clone(),
+        task_id: Some(task_id.clone()),
         status: "running".to_string(),
         pid: Some(1234),
         ini_path: None,
@@ -1540,5 +1569,330 @@ async fn preview_ini_matches_renderer_output() {
     assert_eq!(
         actual_ini, expected_ini,
         "preview_ini must match IniRenderer::render output byte-for-byte"
+    );
+}
+
+// ─── VAL-TASK-015: Task deletion with FK cascade ────────────────────────
+
+/// After deleting a task that has stopped runs and control_logs referencing it,
+/// deletion succeeds, run.task_id becomes NULL, and control_logs rows are
+/// still queryable by the old task_id (denormalised audit).
+#[actix_web::test]
+async fn task_delete_cascades_fk_set_null() {
+    let pool = setup().await;
+    let app = test::init_service(build_test_app(pool.clone())).await;
+    let cookies = do_login!(app, "admin", "admin123");
+
+    // Create a task
+    let body = snapshot_task_body();
+    let req = add_auth(
+        test::TestRequest::post().uri("/api/tasks").set_json(body),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    let task_resp: serde_json::Value = test::read_body_json(resp).await;
+    let task_id = task_resp["id"].as_str().unwrap().to_string();
+
+    // Insert a stopped run directly into the DB (no active run → deletion allowed)
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let run = dt_console_server::models::Run {
+        id: uuid::Uuid::new_v4().to_string(),
+        task_id: Some(task_id.clone()),
+        status: "stopped".to_string(),
+        pid: None,
+        ini_path: Some("/tmp/ini".to_string()),
+        log_dir: Some("/tmp/logs".to_string()),
+        started_at: Some(now.clone()),
+        stopped_at: Some(now.clone()),
+        exit_code: Some(0),
+        stop_method: Some("graceful".to_string()),
+        created_at: now.clone(),
+        updated_at: now,
+    };
+    RunRepository::create(&pool, &run).await.unwrap();
+    let run_id = run.id.clone();
+
+    // Insert a control_log referencing the task
+    let ctrl = ControlLog {
+        id: 0,
+        task_id: task_id.clone(),
+        run_id: Some(run_id.clone()),
+        action: "start".to_string(),
+        intent_or_result: "result:success".to_string(),
+        operator_id: Some("admin".to_string()),
+        created_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+    };
+    ControlLogRepository::create(&pool, &ctrl).await.unwrap();
+
+    // Delete the task → should succeed (no active run)
+    let req = add_auth(
+        test::TestRequest::delete().uri(&format!("/api/tasks/{task_id}")),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(
+        resp.status(),
+        StatusCode::NO_CONTENT,
+        "task deletion should succeed"
+    );
+
+    // GET /api/tasks/:id → 404
+    let req = add_auth(
+        test::TestRequest::get().uri(&format!("/api/tasks/{task_id}")),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(
+        resp.status(),
+        StatusCode::NOT_FOUND,
+        "deleted task should return 404"
+    );
+
+    // Verify run.task_id is now NULL (SET NULL cascade)
+    let updated_run = RunRepository::find_by_id(&pool, &run_id).await.unwrap();
+    assert!(
+        updated_run.task_id.is_none(),
+        "run.task_id should be NULL after task deletion (ON DELETE SET NULL)"
+    );
+
+    // Verify control_logs rows are still queryable by the old task_id (denormalised)
+    let (logs, total) = ControlLogRepository::list_filtered(
+        &pool,
+        &dt_console_server::repositories::control_log_repository::ControlLogFilter {
+            task_id: Some(&task_id),
+            action: None,
+            from: None,
+            to: None,
+            run_id: None,
+            page: 1,
+            page_size: 10,
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        total, 1,
+        "control_logs should still be queryable by old task_id"
+    );
+    assert_eq!(
+        logs[0].task_id, task_id,
+        "control_log.task_id preserved (denormalised)"
+    );
+}
+
+/// Deleting a task with a running run is still blocked (409).
+#[actix_web::test]
+async fn task_delete_blocked_by_active_run_unchanged() {
+    let pool = setup().await;
+    let app = test::init_service(build_test_app(pool.clone())).await;
+    let cookies = do_login!(app, "admin", "admin123");
+
+    // Create a task
+    let body = snapshot_task_body();
+    let req = add_auth(
+        test::TestRequest::post().uri("/api/tasks").set_json(body),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    let task_resp: serde_json::Value = test::read_body_json(resp).await;
+    let task_id = task_resp["id"].as_str().unwrap().to_string();
+
+    // Insert a RUNNING run directly
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let run = dt_console_server::models::Run {
+        id: uuid::Uuid::new_v4().to_string(),
+        task_id: Some(task_id.clone()),
+        status: "running".to_string(),
+        pid: Some(1234),
+        ini_path: Some("/tmp/ini".to_string()),
+        log_dir: Some("/tmp/logs".to_string()),
+        started_at: Some(now.clone()),
+        stopped_at: None,
+        exit_code: None,
+        stop_method: None,
+        created_at: now.clone(),
+        updated_at: now,
+    };
+    RunRepository::create(&pool, &run).await.unwrap();
+
+    // DELETE should fail with 409
+    let req = add_auth(
+        test::TestRequest::delete().uri(&format!("/api/tasks/{task_id}")),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(
+        resp.status(),
+        StatusCode::CONFLICT,
+        "active run should block deletion"
+    );
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(body["code"], "TASK_HAS_ACTIVE_RUN");
+}
+
+// ─── VAL-INTEG-004: Preview endpoints accept body without persistence ────
+
+/// POST /api/tasks/preview/test_connection with a CreateTaskRequest body
+/// returns per-side results without creating any DB rows.
+#[actix_web::test]
+async fn preview_test_connection_no_persistence() {
+    let pool = setup().await;
+    let app = test::init_service(build_test_app(pool.clone())).await;
+    let cookies = do_login!(app, "admin", "admin123");
+
+    // Count tasks before
+    let task_count_before =
+        dt_console_server::repositories::task_repository::TaskRepository::count(&pool)
+            .await
+            .unwrap();
+
+    // Call preview test_connection
+    let req = add_auth(
+        test::TestRequest::post()
+            .uri("/api/tasks/preview/test_connection")
+            .set_json(serde_json::json!({
+                "kind": "snapshot",
+                "engineSource": "mysql",
+                "engineTarget": "mysql",
+                "sourceEndpoint": { "url": "mysql://root:@127.0.0.1:19999/test" },
+                "targetEndpoint": { "url": "mysql://root:@127.0.0.1:19998/test" },
+                "extractor": { "extractType": "snapshot" },
+                "sinker": { "sinkType": "write" }
+            })),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    // 200 even on connection failure (per-side results)
+    assert_eq!(
+        resp.status(),
+        StatusCode::OK,
+        "preview test_connection should return 200"
+    );
+
+    // Verify no new rows in tasks
+    let task_count_after =
+        dt_console_server::repositories::task_repository::TaskRepository::count(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        task_count_before, task_count_after,
+        "preview test_connection must not persist tasks"
+    );
+}
+
+/// POST /api/tasks/preview/precheck with a CreateTaskRequest body
+/// returns precheck items without creating any DB rows.
+#[actix_web::test]
+async fn preview_precheck_no_persistence() {
+    let pool = setup().await;
+    let app = test::init_service(build_test_app(pool.clone())).await;
+    let cookies = do_login!(app, "admin", "admin123");
+
+    // Count tasks before
+    let task_count_before =
+        dt_console_server::repositories::task_repository::TaskRepository::count(&pool)
+            .await
+            .unwrap();
+
+    // Call preview precheck
+    let req = add_auth(
+        test::TestRequest::post()
+            .uri("/api/tasks/preview/precheck")
+            .set_json(serde_json::json!({
+                "kind": "snapshot",
+                "engineSource": "mysql",
+                "engineTarget": "mysql",
+                "sourceEndpoint": { "url": "mysql://root:@127.0.0.1:19999/test" },
+                "targetEndpoint": { "url": "mysql://root:@127.0.0.1:19998/test" },
+                "extractor": { "extractType": "snapshot" },
+                "sinker": { "sinkType": "write" }
+            })),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    // 200 even on check failure
+    assert_eq!(
+        resp.status(),
+        StatusCode::OK,
+        "preview precheck should return 200"
+    );
+
+    // Verify no new rows in tasks
+    let task_count_after =
+        dt_console_server::repositories::task_repository::TaskRepository::count(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        task_count_before, task_count_after,
+        "preview precheck must not persist tasks"
+    );
+}
+
+/// Viewer cannot use preview test_connection (403).
+#[actix_web::test]
+async fn preview_test_connection_viewer_forbidden() {
+    let pool = setup().await;
+    seed_user(&pool, "viewer1", "view123", "viewer", false).await;
+    let app = test::init_service(build_test_app(pool.clone())).await;
+    let cookies = do_login!(app, "viewer1", "view123");
+
+    let req = add_auth(
+        test::TestRequest::post()
+            .uri("/api/tasks/preview/test_connection")
+            .set_json(serde_json::json!({
+                "kind": "snapshot",
+                "engineSource": "mysql",
+                "engineTarget": "mysql",
+                "sourceEndpoint": { "url": "mysql://root:@127.0.0.1:19999/test" },
+                "targetEndpoint": { "url": "mysql://root:@127.0.0.1:19998/test" },
+                "extractor": { "extractType": "snapshot" },
+                "sinker": { "sinkType": "write" }
+            })),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(
+        resp.status(),
+        StatusCode::FORBIDDEN,
+        "viewer should be forbidden from preview test_connection"
+    );
+}
+
+/// Viewer cannot use preview precheck (403).
+#[actix_web::test]
+async fn preview_precheck_viewer_forbidden() {
+    let pool = setup().await;
+    seed_user(&pool, "viewer1", "view123", "viewer", false).await;
+    let app = test::init_service(build_test_app(pool.clone())).await;
+    let cookies = do_login!(app, "viewer1", "view123");
+
+    let req = add_auth(
+        test::TestRequest::post()
+            .uri("/api/tasks/preview/precheck")
+            .set_json(serde_json::json!({
+                "kind": "snapshot",
+                "engineSource": "mysql",
+                "engineTarget": "mysql",
+                "sourceEndpoint": { "url": "mysql://root:@127.0.0.1:19999/test" },
+                "targetEndpoint": { "url": "mysql://root:@127.0.0.1:19998/test" },
+                "extractor": { "extractType": "snapshot" },
+                "sinker": { "sinkType": "write" }
+            })),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(
+        resp.status(),
+        StatusCode::FORBIDDEN,
+        "viewer should be forbidden from preview precheck"
     );
 }

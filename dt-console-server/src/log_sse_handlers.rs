@@ -354,13 +354,23 @@ async fn enforce_rg_ownership(
     };
 
     // Look up the Task to check RG membership
-    let task = match TaskRepository::find_by_id(pool, &run.task_id).await {
+    let task_id_ref = match run.task_id.as_ref() {
+        Some(tid) => tid,
+        None => {
+            return Err(ApiError::with_details(
+                codes::FORBIDDEN,
+                "Run has no associated task (task was deleted)",
+                serde_json::json!({ "run_id": run.id }),
+            ));
+        }
+    };
+    let task = match TaskRepository::find_by_id(pool, task_id_ref).await {
         Ok(t) => t,
         Err(_) => {
             return Err(ApiError::with_details(
                 codes::FORBIDDEN,
                 "Cannot determine resource group ownership",
-                serde_json::json!({ "run_id": run.id, "task_id": run.task_id }),
+                serde_json::json!({ "run_id": run.id, "task_id": task_id_ref }),
             ));
         }
     };

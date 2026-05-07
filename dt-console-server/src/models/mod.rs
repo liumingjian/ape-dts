@@ -150,7 +150,8 @@ pub struct Task {
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Run {
     pub id: String,
-    pub task_id: String,
+    /// Nullable after task deletion (ON DELETE SET NULL on the FK).
+    pub task_id: Option<String>,
     pub status: String,
     pub pid: Option<i64>,
     pub ini_path: Option<String>,
@@ -168,7 +169,8 @@ pub struct Run {
 #[serde(rename_all = "camelCase")]
 pub struct RunResponse {
     pub id: String,
-    pub task_id: String,
+    /// Nullable after task deletion (ON DELETE SET NULL on the FK).
+    pub task_id: Option<String>,
     pub status: String,
     pub pid: Option<i64>,
     pub ini_path: Option<String>,
