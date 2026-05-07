@@ -111,14 +111,14 @@ fn validation_errors_to_response(errors: &[ValidationError]) -> HttpResponse {
 
     let code = if errors.len() == 1 {
         match errors[0].error.as_str() {
-            "gaussdb_sub_mode_required" => codes::GAUSSDB_SUB_MODE_REQUIRED,
-            s if s.starts_with("unknown_gaussdb_sub_mode") => codes::UNKNOWN_GAUSSDB_SUB_MODE,
-            "sync_mode_invalid_for_category" => codes::SYNC_MODE_INVALID_FOR_CATEGORY,
-            "struct_filter_required" => codes::STRUCT_FILTER_REQUIRED,
-            "path_outside_sandbox" => codes::PATH_OUTSIDE_SANDBOX,
-            "endpoint_host_blocked" => codes::ENDPOINT_HOST_BLOCKED,
-            s if s.contains("invalid_url_scheme") => codes::INVALID_URL_SCHEME,
-            s if s.contains("url_scheme_engine_mismatch") => codes::URL_SCHEME_ENGINE_MISMATCH,
+            "GAUSSDB_SUB_MODE_REQUIRED" => codes::GAUSSDB_SUB_MODE_REQUIRED,
+            s if s.starts_with("UNKNOWN_GAUSSDB_SUB_MODE") => codes::UNKNOWN_GAUSSDB_SUB_MODE,
+            "SYNC_MODE_INVALID_FOR_CATEGORY" => codes::SYNC_MODE_INVALID_FOR_CATEGORY,
+            "STRUCT_FILTER_REQUIRED" => codes::STRUCT_FILTER_REQUIRED,
+            "PATH_OUTSIDE_SANDBOX" => codes::PATH_OUTSIDE_SANDBOX,
+            "ENDPOINT_HOST_BLOCKED" => codes::ENDPOINT_HOST_BLOCKED,
+            s if s.contains("INVALID_URL_SCHEME") => codes::INVALID_URL_SCHEME,
+            s if s.contains("URL_SCHEME_ENGINE_MISMATCH") => codes::URL_SCHEME_ENGINE_MISMATCH,
             _ => codes::TASK_VALIDATION_FAILED,
         }
     } else {
@@ -811,14 +811,14 @@ pub async fn import_tasks(
                 let status = match err_body.get("code").and_then(|v| v.as_str()) {
                     Some("LICENSE_LIMIT_EXCEEDED") => StatusCode::CONFLICT,
                     Some("TASK_VALIDATION_FAILED")
-                    | Some("gaussdb_sub_mode_required")
-                    | Some("unknown_gaussdb_sub_mode")
-                    | Some("sync_mode_invalid_for_category")
-                    | Some("struct_filter_required")
-                    | Some("path_outside_sandbox")
-                    | Some("endpoint_host_blocked")
-                    | Some("invalid_url_scheme")
-                    | Some("url_scheme_engine_mismatch") => StatusCode::UNPROCESSABLE_ENTITY,
+                    | Some("GAUSSDB_SUB_MODE_REQUIRED")
+                    | Some("UNKNOWN_GAUSSDB_SUB_MODE")
+                    | Some("SYNC_MODE_INVALID_FOR_CATEGORY")
+                    | Some("STRUCT_FILTER_REQUIRED")
+                    | Some("PATH_OUTSIDE_SANDBOX")
+                    | Some("ENDPOINT_HOST_BLOCKED")
+                    | Some("INVALID_URL_SCHEME")
+                    | Some("URL_SCHEME_ENGINE_MISMATCH") => StatusCode::UNPROCESSABLE_ENTITY,
                     _ => StatusCode::BAD_REQUEST,
                 };
                 HttpResponse::build(status).json(err_body)
@@ -918,7 +918,7 @@ async fn import_single_task(
             Ok(_) => rg_id.clone(),
             Err(_) => {
                 return Err(serde_json::json!({
-                    "code": "unknown_resource_group",
+                    "code": "UNKNOWN_RESOURCE_GROUP",
                     "message": "Unknown resource group"
                 }));
             }

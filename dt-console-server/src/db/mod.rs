@@ -11,7 +11,7 @@ use std::str::FromStr;
 use thiserror::Error;
 
 /// Well-known error code for schema integrity failures.
-pub const SCHEMA_MISMATCH_CODE: &str = "schema_mismatch";
+pub const SCHEMA_MISMATCH_CODE: &str = "SCHEMA_MISMATCH";
 
 /// Errors that can occur during database initialisation.
 #[derive(Debug, Error)]
@@ -74,7 +74,7 @@ pub async fn create_pool(path: &str) -> Result<SqlitePool, DbError> {
 /// On success, all 15 tables exist and are up-to-date. On failure:
 /// - `DbError::SchemaMismatch` is returned when previously-applied migrations
 ///   have been tampered with (checksum mismatch, missing entries). The caller
-///   should refuse to boot with `code="schema_mismatch"`.
+///   should refuse to boot with `code="SCHEMA_MISMATCH"`.
 /// - `DbError::MigrationFailed` is returned for other migration errors.
 pub async fn run_migrations(pool: &SqlitePool) -> Result<(), DbError> {
     let migrator = sqlx::migrate!("./migrations");

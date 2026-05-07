@@ -299,6 +299,7 @@ pub async fn check_license_cap(pool: &SqlitePool) -> Result<License, ApiError> {
 /// Blocking conditions:
 /// - License is expired → 422 LICENSE_EXPIRED
 /// - No license → 422 LICENSE_EXPIRED
+/// - current_tasks >= max_tasks → 422 LICENSE_LIMIT_EXCEEDED
 pub async fn check_license_for_start(pool: &SqlitePool) -> Result<(), ApiError> {
     let current = LicenseRepository::get_current(pool)
         .await
@@ -318,6 +319,21 @@ pub async fn check_license_for_start(pool: &SqlitePool) -> Result<(), ApiError> 
             codes::LICENSE_EXPIRED,
             "License has expired; task start is not allowed",
             serde_json::json!({ "status": "expired" }),
+        ));
+    }
+
+    // Also check the max_tasks cap: if there are already as many tasks as
+    // the license allows, starting a new run is refused. This prevents
+    // starting runs for tasks that were created before a license downgrade.
+    let current_tasks = TaskRepository::count(pool)
+        .await
+        .map_err(|e| ApiError::new(codes::INTERNAL_ERROR, format!("task count failed: {e}")))?;
+
+    if current_tasks >= current.max_tasks {
+        return Err(ApiError::with_details(
+            codes::LICENSE_LIMIT_EXCEEDED,
+            "License task limit exceeded; cannot start a run",
+            serde_json::json!({ "maxTasks": current.max_tasks, "currentTasks": current_tasks }),
         ));
     }
 

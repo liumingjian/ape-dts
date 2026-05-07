@@ -376,7 +376,7 @@ async fn get_task_not_found_404() {
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
 
     let body: serde_json::Value = test::read_body_json(resp).await;
-    assert_eq!(body["code"], "task_not_found");
+    assert_eq!(body["code"], "TASK_NOT_FOUND");
 }
 
 #[actix_web::test]
@@ -445,7 +445,7 @@ async fn update_task_kind_immutable_422() {
     assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
     let body: serde_json::Value = test::read_body_json(resp).await;
-    assert_eq!(body["code"], "task_kind_immutable");
+    assert_eq!(body["code"], "TASK_KIND_IMMUTABLE");
 }
 
 #[actix_web::test]
@@ -531,7 +531,7 @@ async fn delete_task_active_run_409() {
     assert_eq!(resp.status(), StatusCode::CONFLICT);
 
     let body: serde_json::Value = test::read_body_json(resp).await;
-    assert_eq!(body["code"], "task_has_active_run");
+    assert_eq!(body["code"], "TASK_HAS_ACTIVE_RUN");
 }
 
 #[actix_web::test]
@@ -617,7 +617,7 @@ async fn gaussdb_without_sub_mode_422() {
     assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
     let body: serde_json::Value = test::read_body_json(resp).await;
-    assert_eq!(body["code"], "gaussdb_sub_mode_required");
+    assert_eq!(body["code"], "GAUSSDB_SUB_MODE_REQUIRED");
 }
 
 #[actix_web::test]
@@ -774,7 +774,7 @@ async fn snapshot_rejects_cdc_extract_type_422() {
     assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
     let body: serde_json::Value = test::read_body_json(resp).await;
-    assert_eq!(body["code"], "sync_mode_invalid_for_category");
+    assert_eq!(body["code"], "SYNC_MODE_INVALID_FOR_CATEGORY");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -850,7 +850,7 @@ async fn duplicate_rg_name_409() {
     assert_eq!(resp.status(), StatusCode::CONFLICT);
 
     let body: serde_json::Value = test::read_body_json(resp).await;
-    assert_eq!(body["code"], "resource_group_name_taken");
+    assert_eq!(body["code"], "RESOURCE_GROUP_NAME_TAKEN");
 }
 
 #[actix_web::test]
@@ -873,7 +873,7 @@ async fn default_rg_cannot_be_deleted() {
     assert_eq!(resp.status(), StatusCode::CONFLICT);
 
     let body: serde_json::Value = test::read_body_json(resp).await;
-    assert_eq!(body["code"], "default_resource_group_protected");
+    assert_eq!(body["code"], "DEFAULT_RESOURCE_GROUP_PROTECTED");
 }
 
 #[actix_web::test]
@@ -934,7 +934,7 @@ async fn rg_with_tasks_cannot_be_deleted() {
     assert_eq!(resp.status(), StatusCode::CONFLICT);
 
     let body: serde_json::Value = test::read_body_json(resp).await;
-    assert_eq!(body["code"], "resource_group_has_tasks");
+    assert_eq!(body["code"], "RESOURCE_GROUP_HAS_TASKS");
 }
 
 #[actix_web::test]
@@ -986,7 +986,7 @@ async fn unknown_rg_on_task_creation_422() {
     assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
     let body: serde_json::Value = test::read_body_json(resp).await;
-    assert_eq!(body["code"], "unknown_resource_group");
+    assert_eq!(body["code"], "UNKNOWN_RESOURCE_GROUP");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1011,7 +1011,7 @@ async fn path_traversal_blocked() {
     assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
     let body: serde_json::Value = test::read_body_json(resp).await;
-    assert_eq!(body["code"], "path_outside_sandbox");
+    assert_eq!(body["code"], "PATH_OUTSIDE_SANDBOX");
 }
 
 #[actix_web::test]
@@ -1032,7 +1032,7 @@ async fn ssrf_loopback_blocked() {
     assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
     let body: serde_json::Value = test::read_body_json(resp).await;
-    assert_eq!(body["code"], "endpoint_host_blocked");
+    assert_eq!(body["code"], "ENDPOINT_HOST_BLOCKED");
 }
 
 #[actix_web::test]
@@ -1132,7 +1132,7 @@ async fn struct_empty_filter_422() {
     assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
     let body: serde_json::Value = test::read_body_json(resp).await;
-    assert_eq!(body["code"], "struct_filter_required");
+    assert_eq!(body["code"], "STRUCT_FILTER_REQUIRED");
 }
 
 // ── preview_ini, export, import, clone integration tests ────────────────────
@@ -1288,7 +1288,7 @@ async fn export_unsupported_format_400() {
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     let err: serde_json::Value = test::read_body_json(resp).await;
-    assert_eq!(err["code"], "unsupported_export_format");
+    assert_eq!(err["code"], "UNSUPPORTED_EXPORT_FORMAT");
 }
 
 #[actix_web::test]

@@ -96,13 +96,13 @@ pub fn validate_task(
             None => {
                 errors.push(ValidationError {
                     field: "sub_mode".into(),
-                    error: "gaussdb_sub_mode_required".into(),
+                    error: "GAUSSDB_SUB_MODE_REQUIRED".into(),
                 });
             }
             Some(mode) if !VALID_GAUSSDB_SUB_MODES.contains(&mode) => {
                 errors.push(ValidationError {
                     field: "sub_mode".into(),
-                    error: format!("unknown_gaussdb_sub_mode '{mode}'"),
+                    error: format!("UNKNOWN_GAUSSDB_SUB_MODE '{mode}'"),
                 });
             }
             _ => {}
@@ -160,7 +160,7 @@ pub fn validate_task(
             if extract_type_is(extractor_config, "cdc") {
                 errors.push(ValidationError {
                     field: "extractor.extract_type".into(),
-                    error: "sync_mode_invalid_for_category".into(),
+                    error: "SYNC_MODE_INVALID_FOR_CATEGORY".into(),
                 });
             }
         }
@@ -181,7 +181,7 @@ pub fn validate_task(
             if extract_type_is(extractor_config, "snapshot") {
                 errors.push(ValidationError {
                     field: "extractor.extract_type".into(),
-                    error: "sync_mode_invalid_for_category".into(),
+                    error: "SYNC_MODE_INVALID_FOR_CATEGORY".into(),
                 });
             }
             // CDC mysql requires server_id
@@ -269,7 +269,7 @@ pub fn validate_task(
             if do_dbs + do_tbs == 0 {
                 errors.push(ValidationError {
                     field: "filter".into(),
-                    error: "struct_filter_required".into(),
+                    error: "STRUCT_FILTER_REQUIRED".into(),
                 });
             }
             // struct rejects non-struct extract_type
@@ -280,7 +280,7 @@ pub fn validate_task(
             if et != "struct" {
                 errors.push(ValidationError {
                     field: "extractor.extract_type".into(),
-                    error: "sync_mode_invalid_for_category".into(),
+                    error: "SYNC_MODE_INVALID_FOR_CATEGORY".into(),
                 });
             }
         }
@@ -323,7 +323,7 @@ fn validate_endpoint_url(url_str: &str, db_type: &str, field: &str) -> Vec<Valid
             errors.push(ValidationError {
                 field: field.into(),
                 error: format!(
-                    "invalid_url_scheme; expected one of {:?}, got '{}'",
+                    "INVALID_URL_SCHEME; expected one of {:?}, got '{}'",
                     expected_schemes, scheme
                 ),
             });
@@ -331,7 +331,7 @@ fn validate_endpoint_url(url_str: &str, db_type: &str, field: &str) -> Vec<Valid
             errors.push(ValidationError {
                 field: field.into(),
                 error: format!(
-                    "url_scheme_engine_mismatch; expected {:?} for '{}', got '{}'",
+                    "URL_SCHEME_ENGINE_MISMATCH; expected {:?} for '{}', got '{}'",
                     expected_schemes, db_type, scheme
                 ),
             });
@@ -382,7 +382,7 @@ pub fn check_ssrf_host(host: &str, field: &str) -> Option<ValidationError> {
     if host == "localhost" {
         return Some(ValidationError {
             field: field.into(),
-            error: "endpoint_host_blocked".into(),
+            error: "ENDPOINT_HOST_BLOCKED".into(),
         });
     }
 
@@ -391,7 +391,7 @@ pub fn check_ssrf_host(host: &str, field: &str) -> Option<ValidationError> {
         if is_blocked_ip(&ip) {
             return Some(ValidationError {
                 field: field.into(),
-                error: "endpoint_host_blocked".into(),
+                error: "ENDPOINT_HOST_BLOCKED".into(),
             });
         }
     }
@@ -471,7 +471,7 @@ pub fn sandbox_path(value: &str, field: &str) -> Result<(), ValidationError> {
     if value.starts_with('/') {
         return Err(ValidationError {
             field: field.into(),
-            error: "path_outside_sandbox".into(),
+            error: "PATH_OUTSIDE_SANDBOX".into(),
         });
     }
 
@@ -479,7 +479,7 @@ pub fn sandbox_path(value: &str, field: &str) -> Result<(), ValidationError> {
     if value.contains("..") {
         return Err(ValidationError {
             field: field.into(),
-            error: "path_outside_sandbox".into(),
+            error: "PATH_OUTSIDE_SANDBOX".into(),
         });
     }
 
@@ -494,7 +494,7 @@ pub fn sandbox_path(value: &str, field: &str) -> Result<(), ValidationError> {
     {
         return Err(ValidationError {
             field: field.into(),
-            error: "path_outside_sandbox".into(),
+            error: "PATH_OUTSIDE_SANDBOX".into(),
         });
     }
 
@@ -506,7 +506,7 @@ pub fn sandbox_path(value: &str, field: &str) -> Result<(), ValidationError> {
     // Otherwise reject
     Err(ValidationError {
         field: field.into(),
-        error: "path_outside_sandbox".into(),
+        error: "PATH_OUTSIDE_SANDBOX".into(),
     })
 }
 
@@ -626,7 +626,7 @@ mod tests {
         );
         assert!(errors
             .iter()
-            .any(|e| e.error == "gaussdb_sub_mode_required"));
+            .any(|e| e.error == "GAUSSDB_SUB_MODE_REQUIRED"));
     }
 
     #[test]
@@ -645,7 +645,7 @@ mod tests {
         );
         assert!(errors
             .iter()
-            .any(|e| e.error.contains("unknown_gaussdb_sub_mode")));
+            .any(|e| e.error.contains("UNKNOWN_GAUSSDB_SUB_MODE")));
     }
 
     #[test]
@@ -704,7 +704,7 @@ mod tests {
     #[test]
     fn patch_gaussdb_resolved_no_sub_mode_ok() {
         // PATCH on an existing GaussDB task (db_type already resolved) does
-        // NOT require sub_mode — it should not trigger gaussdb_sub_mode_required.
+        // NOT require sub_mode — it should not trigger GAUSSDB_SUB_MODE_REQUIRED.
         let errors = validate_task(
             "snapshot",
             "gaussdb_pg",
@@ -719,7 +719,7 @@ mod tests {
         );
         assert!(!errors
             .iter()
-            .any(|e| e.error == "gaussdb_sub_mode_required"));
+            .any(|e| e.error == "GAUSSDB_SUB_MODE_REQUIRED"));
     }
 
     #[test]
@@ -738,7 +738,7 @@ mod tests {
         );
         assert!(!errors
             .iter()
-            .any(|e| e.error == "gaussdb_sub_mode_required"));
+            .any(|e| e.error == "GAUSSDB_SUB_MODE_REQUIRED"));
     }
 
     #[test]
@@ -757,7 +757,7 @@ mod tests {
         );
         assert!(!errors
             .iter()
-            .any(|e| e.error == "gaussdb_sub_mode_required"));
+            .any(|e| e.error == "GAUSSDB_SUB_MODE_REQUIRED"));
     }
 
     #[test]
@@ -790,7 +790,7 @@ mod tests {
         );
         assert!(errors
             .iter()
-            .any(|e| e.error == "sync_mode_invalid_for_category"));
+            .any(|e| e.error == "SYNC_MODE_INVALID_FOR_CATEGORY"));
     }
 
     // ─── CDC kind rejects snapshot extract_type ──────────────────────
@@ -811,7 +811,7 @@ mod tests {
         );
         assert!(errors
             .iter()
-            .any(|e| e.error == "sync_mode_invalid_for_category"));
+            .any(|e| e.error == "SYNC_MODE_INVALID_FOR_CATEGORY"));
     }
 
     // ─── Struct kind rejects non-struct extract_type ────────────────
@@ -832,7 +832,7 @@ mod tests {
         );
         assert!(errors
             .iter()
-            .any(|e| e.error == "sync_mode_invalid_for_category"));
+            .any(|e| e.error == "SYNC_MODE_INVALID_FOR_CATEGORY"));
     }
 
     // ─── Required field validation ───────────────────────────────────
@@ -946,7 +946,7 @@ mod tests {
             None,
             true,
         );
-        assert!(errors.iter().any(|e| e.error == "struct_filter_required"));
+        assert!(errors.iter().any(|e| e.error == "STRUCT_FILTER_REQUIRED"));
     }
 
     // ─── URL scheme validation ───────────────────────────────────────
@@ -956,7 +956,7 @@ mod tests {
         let errors = validate_endpoint_url("ftp://host/db", "mysql", "source_endpoint.url");
         assert!(errors
             .iter()
-            .any(|e| e.error.contains("invalid_url_scheme")));
+            .any(|e| e.error.contains("INVALID_URL_SCHEME")));
     }
 
     #[test]
@@ -964,7 +964,7 @@ mod tests {
         let errors = validate_endpoint_url("postgres://host/db", "mysql", "source_endpoint.url");
         assert!(errors
             .iter()
-            .any(|e| e.error.contains("url_scheme_engine_mismatch")));
+            .any(|e| e.error.contains("URL_SCHEME_ENGINE_MISMATCH")));
     }
 
     // ─── SSRF host blocking ──────────────────────────────────────────
@@ -1097,6 +1097,6 @@ mod tests {
             &serde_json::json!({}),
         );
         assert!(!errors.is_empty());
-        assert!(errors[0].error == "path_outside_sandbox");
+        assert!(errors[0].error == "PATH_OUTSIDE_SANDBOX");
     }
 }

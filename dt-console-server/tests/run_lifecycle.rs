@@ -681,7 +681,7 @@ async fn test_get_run_not_found_returns_404() {
         eprintln!("Expected 404 but got {status}. Body: {body}");
     }
     assert_eq!(status, StatusCode::NOT_FOUND);
-    assert_eq!(body["code"], "run_not_found");
+    assert_eq!(body["code"], "RUN_NOT_FOUND");
 }
 
 #[actix_web::test]
@@ -911,7 +911,7 @@ async fn test_rg_reassignment_blocked_during_active_run() {
     assert_eq!(resp.status(), StatusCode::CONFLICT);
 
     let body: serde_json::Value = test::read_body_json(resp).await;
-    assert_eq!(body["code"], "task_has_active_run");
+    assert_eq!(body["code"], "TASK_HAS_ACTIVE_RUN");
 
     // Clean up.
     let req = add_auth(
@@ -1859,4 +1859,190 @@ async fn test_control_log_to_response() {
     assert_eq!(resp.result, Some("success".to_string()));
     assert_eq!(resp.operator_id, Some("admin".to_string()));
     assert_eq!(resp.ts, "2025-01-01T00:00:00.000Z");
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TOCTOU RACE TEST: concurrent start_task for the same task_id
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Two concurrent POST /api/tasks/:id/start requests for the same task
+/// must be serialized by the active_runs mutex so that exactly one
+/// succeeds (202) and the other gets 409 RUN_ALREADY_ACTIVE.
+#[actix_web::test]
+async fn test_concurrent_start_task_race_only_one_succeeds() {
+    let (pool, active_runs) = setup().await;
+    let app = test::init_service(build_test_app(pool.clone(), active_runs)).await;
+    let cookies = do_login!(app, "admin", "admin123");
+
+    // Create a task.
+    let req = add_auth(
+        test::TestRequest::post()
+            .uri("/api/tasks")
+            .set_json(serde_json::json!({
+                "kind": "snapshot",
+                "engineSource": "mysql",
+                "engineTarget": "mysql",
+                "sourceEndpoint": { "url": "mysql://db-src.example.com:3307/testdb" },
+                "targetEndpoint": { "url": "mysql://db-dst.example.com:3308/testdb" },
+                "filter": { "doDbs": ["testdb"] }
+            })),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let task_body: serde_json::Value = test::read_body_json(resp).await;
+    let task_id = task_body["id"].as_str().unwrap().to_string();
+
+    std::env::set_var("APE_DTS_BINARY_PATH", "sleep");
+
+    // Fire two concurrent start requests.
+    let req1 = add_auth(
+        test::TestRequest::post().uri(&format!("/api/tasks/{task_id}/start")),
+        &cookies,
+    )
+    .to_request();
+
+    let req2 = add_auth(
+        test::TestRequest::post().uri(&format!("/api/tasks/{task_id}/start")),
+        &cookies,
+    )
+    .to_request();
+
+    let (resp1, resp2) = tokio::join!(
+        test::call_service(&app, req1),
+        test::call_service(&app, req2),
+    );
+
+    let status1 = resp1.status();
+    let status2 = resp2.status();
+
+    // Exactly one must be 202 (ACCEPTED) and the other 409 (CONFLICT).
+    let accepted_count = [status1, status2]
+        .iter()
+        .filter(|s| **s == StatusCode::ACCEPTED)
+        .count();
+    let conflict_count = [status1, status2]
+        .iter()
+        .filter(|s| **s == StatusCode::CONFLICT)
+        .count();
+
+    assert_eq!(
+        accepted_count, 1,
+        "exactly one start should succeed (got statuses: {status1}, {status2})"
+    );
+    assert_eq!(
+        conflict_count, 1,
+        "exactly one start should be rejected with 409 (got statuses: {status1}, {status2})"
+    );
+
+    // The 409 response should have code RUN_ALREADY_ACTIVE.
+    let conflict_resp = if status1 == StatusCode::CONFLICT {
+        resp1
+    } else {
+        resp2
+    };
+    let conflict_body: serde_json::Value = test::read_body_json(conflict_resp).await;
+    assert_eq!(conflict_body["code"], "RUN_ALREADY_ACTIVE");
+
+    // Clean up: stop the running task.
+    let req = add_auth(
+        test::TestRequest::post().uri(&format!("/api/tasks/{task_id}/stop")),
+        &cookies,
+    )
+    .to_request();
+    let _ = test::call_service(&app, req).await;
+    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+
+    std::env::remove_var("APE_DTS_BINARY_PATH");
+    cleanup_run_dirs(&pool, &task_id).await;
+}
+
+/// When the license max_tasks cap is reached, POST /api/tasks/:id/start
+/// must return 422 LICENSE_LIMIT_EXCEEDED.
+#[actix_web::test]
+async fn test_start_task_blocked_by_license_cap() {
+    let (pool, active_runs) = setup().await;
+
+    // Overwrite the license to allow only 1 task.
+    let existing = LicenseRepository::get_current(&pool)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut lic = existing;
+    lic.max_tasks = 1;
+    LicenseRepository::update(&pool, &lic).await.unwrap();
+
+    let app = test::init_service(build_test_app(pool.clone(), active_runs)).await;
+    let cookies = do_login!(app, "admin", "admin123");
+
+    // Create the one allowed task.
+    let req = add_auth(
+        test::TestRequest::post()
+            .uri("/api/tasks")
+            .set_json(serde_json::json!({
+                "kind": "snapshot",
+                "engineSource": "mysql",
+                "engineTarget": "mysql",
+                "sourceEndpoint": { "url": "mysql://db-src.example.com:3307/testdb" },
+                "targetEndpoint": { "url": "mysql://db-dst.example.com:3308/testdb" },
+                "filter": { "doDbs": ["testdb"] }
+            })),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let task_body: serde_json::Value = test::read_body_json(resp).await;
+    let task_id = task_body["id"].as_str().unwrap().to_string();
+
+    // Create a second task (at cap, creation should be blocked).
+    let req = add_auth(
+        test::TestRequest::post()
+            .uri("/api/tasks")
+            .set_json(serde_json::json!({
+                "kind": "snapshot",
+                "engineSource": "mysql",
+                "engineTarget": "mysql",
+                "sourceEndpoint": { "url": "mysql://db-src2.example.com:3307/testdb2" },
+                "targetEndpoint": { "url": "mysql://db-dst2.example.com:3308/testdb2" },
+                "filter": { "doDbs": ["testdb2"] }
+            })),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    // Creation at cap is blocked — 422 LICENSE_LIMIT_EXCEEDED.
+    assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(body["code"], "LICENSE_LIMIT_EXCEEDED");
+
+    // Now try to start the one existing task — this should be blocked
+    // because we're at 1 task / 1 max, which is at the cap.
+    std::env::set_var("APE_DTS_BINARY_PATH", "sleep");
+    let req = add_auth(
+        test::TestRequest::post().uri(&format!("/api/tasks/{task_id}/start")),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    // At cap (1 task, max=1) — start blocked: current_tasks >= max_tasks.
+    assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(body["code"], "LICENSE_LIMIT_EXCEEDED");
+    assert_eq!(body["details"]["maxTasks"], 1);
+    assert_eq!(body["details"]["currentTasks"], 1);
+
+    // Restore a generous license so cleanup can proceed.
+    let existing = LicenseRepository::get_current(&pool)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut lic = existing;
+    lic.max_tasks = 100;
+    LicenseRepository::update(&pool, &lic).await.unwrap();
+
+    // Clean up.
+    std::env::remove_var("APE_DTS_BINARY_PATH");
+    cleanup_run_dirs(&pool, &task_id).await;
 }

@@ -51,6 +51,46 @@ impl Clone for RunHandle {
     }
 }
 
+/// Slot in the active-runs registry.
+///
+/// `Starting` means the start handler has claimed the slot but the engine
+/// subprocess has not yet been spawned. `Active` means the engine is
+/// running (or at least the child PID is known).
+#[derive(Debug)]
+pub enum RunSlot {
+    /// Slot claimed; engine subprocess not yet spawned.
+    Starting,
+    /// Engine subprocess is running (or was running).
+    Active(RunHandle),
+}
+
+impl Clone for RunSlot {
+    fn clone(&self) -> Self {
+        match self {
+            RunSlot::Starting => RunSlot::Starting,
+            RunSlot::Active(h) => RunSlot::Active(h.clone()),
+        }
+    }
+}
+
+impl RunSlot {
+    /// Return a reference to the inner `RunHandle`, if `Active`.
+    pub fn as_handle(&self) -> Option<&RunHandle> {
+        match self {
+            RunSlot::Starting => None,
+            RunSlot::Active(h) => Some(h),
+        }
+    }
+
+    /// Return the inner `RunHandle`, if `Active`.
+    pub fn into_handle(self) -> Option<RunHandle> {
+        match self {
+            RunSlot::Starting => None,
+            RunSlot::Active(h) => Some(h),
+        }
+    }
+}
+
 /// Child process exit status.
 #[derive(Debug, Clone)]
 pub enum ExitStatus {

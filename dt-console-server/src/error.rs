@@ -34,7 +34,7 @@ pub mod codes {
     pub const CONFLICT: &str = "CONFLICT";
     pub const USERNAME_TAKEN: &str = "USERNAME_TAKEN";
     pub const LAST_ADMIN_PROTECTED: &str = "LAST_ADMIN_PROTECTED";
-    pub const CANNOT_DEMOTE_SELF: &str = "cannot_demote_self";
+    pub const CANNOT_DEMOTE_SELF: &str = "CANNOT_DEMOTE_SELF";
 
     // License
     pub const LICENSE_LIMIT_EXCEEDED: &str = "LICENSE_LIMIT_EXCEEDED";
@@ -42,42 +42,42 @@ pub mod codes {
     pub const INVALID_LICENSE_CODE: &str = "INVALID_LICENSE_CODE";
 
     // Task
-    pub const TASK_NOT_FOUND: &str = "task_not_found";
-    pub const TASK_KIND_IMMUTABLE: &str = "task_kind_immutable";
-    pub const TASK_HAS_ACTIVE_RUN: &str = "task_has_active_run";
+    pub const TASK_NOT_FOUND: &str = "TASK_NOT_FOUND";
+    pub const TASK_KIND_IMMUTABLE: &str = "TASK_KIND_IMMUTABLE";
+    pub const TASK_HAS_ACTIVE_RUN: &str = "TASK_HAS_ACTIVE_RUN";
 
     // Run
     pub const RUN_ALREADY_ACTIVE: &str = "RUN_ALREADY_ACTIVE";
     pub const RUN_NOT_ACTIVE: &str = "RUN_NOT_ACTIVE";
     pub const ILLEGAL_TRANSITION: &str = "ILLEGAL_TRANSITION";
-    pub const RUN_NOT_FOUND: &str = "run_not_found";
+    pub const RUN_NOT_FOUND: &str = "RUN_NOT_FOUND";
 
     // Task validation
-    pub const GAUSSDB_SUB_MODE_REQUIRED: &str = "gaussdb_sub_mode_required";
-    pub const UNKNOWN_GAUSSDB_SUB_MODE: &str = "unknown_gaussdb_sub_mode";
-    pub const SYNC_MODE_INVALID_FOR_CATEGORY: &str = "sync_mode_invalid_for_category";
-    pub const STRUCT_FILTER_REQUIRED: &str = "struct_filter_required";
-    pub const INVALID_URL_SCHEME: &str = "invalid_url_scheme";
-    pub const URL_SCHEME_ENGINE_MISMATCH: &str = "url_scheme_engine_mismatch";
-    pub const PATH_OUTSIDE_SANDBOX: &str = "path_outside_sandbox";
-    pub const ENDPOINT_HOST_BLOCKED: &str = "endpoint_host_blocked";
-    pub const UNKNOWN_RESOURCE_GROUP: &str = "unknown_resource_group";
+    pub const GAUSSDB_SUB_MODE_REQUIRED: &str = "GAUSSDB_SUB_MODE_REQUIRED";
+    pub const UNKNOWN_GAUSSDB_SUB_MODE: &str = "UNKNOWN_GAUSSDB_SUB_MODE";
+    pub const SYNC_MODE_INVALID_FOR_CATEGORY: &str = "SYNC_MODE_INVALID_FOR_CATEGORY";
+    pub const STRUCT_FILTER_REQUIRED: &str = "STRUCT_FILTER_REQUIRED";
+    pub const INVALID_URL_SCHEME: &str = "INVALID_URL_SCHEME";
+    pub const URL_SCHEME_ENGINE_MISMATCH: &str = "URL_SCHEME_ENGINE_MISMATCH";
+    pub const PATH_OUTSIDE_SANDBOX: &str = "PATH_OUTSIDE_SANDBOX";
+    pub const ENDPOINT_HOST_BLOCKED: &str = "ENDPOINT_HOST_BLOCKED";
+    pub const UNKNOWN_RESOURCE_GROUP: &str = "UNKNOWN_RESOURCE_GROUP";
 
     // Resource Group
-    pub const RESOURCE_GROUP_NAME_TAKEN: &str = "resource_group_name_taken";
-    pub const DEFAULT_RESOURCE_GROUP_PROTECTED: &str = "default_resource_group_protected";
-    pub const RESOURCE_GROUP_HAS_TASKS: &str = "resource_group_has_tasks";
-    pub const RESOURCE_GROUP_NOT_FOUND: &str = "resource_group_not_found";
+    pub const RESOURCE_GROUP_NAME_TAKEN: &str = "RESOURCE_GROUP_NAME_TAKEN";
+    pub const DEFAULT_RESOURCE_GROUP_PROTECTED: &str = "DEFAULT_RESOURCE_GROUP_PROTECTED";
+    pub const RESOURCE_GROUP_HAS_TASKS: &str = "RESOURCE_GROUP_HAS_TASKS";
+    pub const RESOURCE_GROUP_NOT_FOUND: &str = "RESOURCE_GROUP_NOT_FOUND";
 
     // Export
-    pub const UNSUPPORTED_EXPORT_FORMAT: &str = "unsupported_export_format";
+    pub const UNSUPPORTED_EXPORT_FORMAT: &str = "UNSUPPORTED_EXPORT_FORMAT";
 
     // Log / SSE
-    pub const UNKNOWN_LOG_FILE: &str = "unknown_log_file";
-    pub const REPLAY_GAP: &str = "replay_gap";
+    pub const UNKNOWN_LOG_FILE: &str = "UNKNOWN_LOG_FILE";
+    pub const REPLAY_GAP: &str = "REPLAY_GAP";
 
     // Schema / migration
-    pub const SCHEMA_MISMATCH: &str = "schema_mismatch";
+    pub const SCHEMA_MISMATCH: &str = "SCHEMA_MISMATCH";
 
     // Internal
     pub const INTERNAL_ERROR: &str = "INTERNAL_ERROR";
@@ -165,9 +165,11 @@ impl actix_web::ResponseError for ApiError {
             | codes::DEFAULT_RESOURCE_GROUP_PROTECTED
             | codes::RESOURCE_GROUP_HAS_TASKS => StatusCode::CONFLICT,
 
-            codes::LICENSE_EXPIRED
-            | codes::INVALID_LICENSE_CODE
-            | codes::UNSUPPORTED_EXPORT_FORMAT => StatusCode::BAD_REQUEST,
+            codes::LICENSE_EXPIRED => StatusCode::UNPROCESSABLE_ENTITY,
+
+            codes::INVALID_LICENSE_CODE | codes::UNSUPPORTED_EXPORT_FORMAT => {
+                StatusCode::BAD_REQUEST
+            }
 
             codes::TOO_MANY_ATTEMPTS => StatusCode::TOO_MANY_REQUESTS,
 
