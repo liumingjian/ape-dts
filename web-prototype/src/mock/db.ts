@@ -313,6 +313,7 @@ interface Db {
   operateLogs: OperateLog[];
   controlLogs: ControlLog[];
   licenses: License[];
+  license: License | null;
   resourceGroups: ResourceGroup[];
   users: User[];
   hosts: SystemHost[];
@@ -426,7 +427,7 @@ function seed(): Db {
     snapshotTasks, cdcTasks, checkTasks, structTasks,
     activeAlerts, historyAlerts, events, metricRules,
     alarmChannels, alarmTemplates,
-    operateLogs, controlLogs, licenses, resourceGroups, users, hosts, globalParams,
+    operateLogs, controlLogs, licenses, license: licenses[0] ?? null, resourceGroups, users, hosts, globalParams,
     metricsByTask,
   };
 }

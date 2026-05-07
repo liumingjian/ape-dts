@@ -142,18 +142,19 @@ const filter = reactive({
 async function loadList() {
   loading.value = true;
   try {
-    const params = new URLSearchParams({ page: String(page.value), size: String(pageSize.value) });
-    if (filter.user) params.set('q', filter.user);
-    const data = await api.get<Paginated<OperateLog>>(`/logs/operate?${params.toString()}`);
-    let items = data.items;
-    if (filter.action) items = items.filter((l) => l.action === filter.action);
-    if (filter.result) items = items.filter((l) => l.result === filter.result);
-    if (filter.target) items = items.filter((l) => l.target.includes(filter.target));
-    if (filter.ip) items = items.filter((l) => l.ip.includes(filter.ip));
+    const params = new URLSearchParams({ page: String(page.value), page_size: String(pageSize.value) });
+    if (filter.user) params.set('actor', filter.user);
+    if (filter.action) params.set('action', filter.action);
+    if (filter.result) params.set('result', filter.result);
     if (filter.range) {
       const [from, to] = filter.range;
-      items = items.filter((l) => l.at >= from && l.at <= to);
+      if (from) params.set('from', from);
+      if (to) params.set('to', to);
     }
+    const data = await api.get<Paginated<OperateLog>>(`/operate_logs?${params.toString()}`);
+    let items = data.items;
+    if (filter.target) items = items.filter((l) => l.target.includes(filter.target));
+    if (filter.ip) items = items.filter((l) => l.ip.includes(filter.ip));
     list.value = items;
     total.value = items.length === data.items.length ? data.total : items.length;
   } finally {

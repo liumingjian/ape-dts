@@ -879,10 +879,12 @@
         "kind": "Channel kind",
         "format": "Format",
         "context": "Context",
-        "contextPh": "Template body. Use {{level}}, {{taskName}}, {{message}} placeholders."
+        "contextPh": "Template body. Use {{level}}, {{taskName}}, {{message}} placeholders.",
+        "preview": "Preview result"
       },
       "action": {
-        "init": "Reset"
+        "init": "Reset",
+        "preview": "Preview interpolation"
       },
       "toast": {
         "saved": "Template saved",
@@ -961,7 +963,8 @@
     },
     "toast": {
       "cleared": "Alert cleared",
-      "clearedBatch": "{n} alerts cleared"
+      "clearedBatch": "{n} alerts cleared",
+      "newAlert": "New alert"
     },
     "trend": {
       "title": "Alert trend (14d)"

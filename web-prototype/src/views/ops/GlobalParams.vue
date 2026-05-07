@@ -62,7 +62,7 @@
               <span class="gparams__time">{{ formatTime(row.updatedAt) }}</span>
             </template>
           </el-table-column>
-          <el-table-column :label="t('ops.globalParams.col.actions')" width="160" fixed="right">
+          <el-table-column v-if="can('global.param.manage')" :label="t('ops.globalParams.col.actions')" width="160" fixed="right">
             <template #default="{ row }">
               <template v-if="editingKey === row.key">
                 <el-button link type="primary" @click="save(row)">{{ t('common.save') }}</el-button>
@@ -90,9 +90,11 @@ import { ElMessage } from 'element-plus';
 import dayjs from 'dayjs';
 import PageHeader from '@/components/PageHeader.vue';
 import { api } from '@/api/client';
+import { useRbac } from '@/composables/useRbac';
 import type { GlobalParam } from '@/types/domain';
 
 const { t } = useI18n();
+const { can } = useRbac();
 
 const CATS: GlobalParam['category'][] = ['runtime', 'pipeline', 'security', 'alarm'];
 
@@ -110,7 +112,7 @@ const filteredList = computed(() => {
 async function loadList() {
   loading.value = true;
   try {
-    const res = await api.get<{ items: GlobalParam[] }>('/global-params');
+    const res = await api.get<{ items: GlobalParam[] }>('/global_params');
     list.value = res.items;
   } finally {
     loading.value = false;
@@ -128,7 +130,7 @@ function cancelEdit() {
   editingValue.value = '';
 }
 async function save(row: GlobalParam) {
-  await api.patch(`/global-params/${row.key}`, { value: editingValue.value });
+  await api.patch('/global_params', { key: row.key, value: editingValue.value });
   ElMessage.success(t('ops.globalParams.toast.saved'));
   editingKey.value = null;
   loadList();

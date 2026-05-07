@@ -6,7 +6,7 @@
           <template #icon><IconRefresh /></template>
           {{ t('common.refresh') }}
         </el-button>
-        <el-button type="primary" @click="activateVisible = true">
+        <el-button v-if="can('license.activate')" type="primary" @click="activateVisible = true">
           <template #icon><IconKey /></template>
           {{ t('license.action.activate') }}
         </el-button>
@@ -29,7 +29,7 @@
         </div>
         <div class="license__sum license__sum--quota">
           <div class="license__sum-label">{{ t('license.summary.maxTasks') }}</div>
-          <div class="license__sum-value tabular-nums">{{ totalQuota }}</div>
+          <div class="license__sum-value tabular-nums">{{ currentTasks }} / {{ totalQuota }}</div>
         </div>
       </div>
 
@@ -132,9 +132,11 @@ import IconCircleX from '~icons/tabler/circle-x';
 import IconInfinity from '~icons/tabler/infinity';
 import PageHeader from '@/components/PageHeader.vue';
 import { api } from '@/api/client';
+import { useRbac } from '@/composables/useRbac';
 import type { License } from '@/types/domain';
 
 const { t } = useI18n();
+const { can } = useRbac();
 
 const STATUSES: License['status'][] = ['active', 'expiring', 'expired', 'perpetual'];
 
@@ -159,12 +161,21 @@ const counters = computed(() => {
   return c;
 });
 const totalQuota = computed(() => list.value.reduce((s, l) => s + l.maxTasks, 0));
+const currentTasks = ref(0);
+
+async function loadTaskCount() {
+  try {
+    const res = await api.get<{ total: number }>('/tasks?page=1&page_size=1');
+    currentTasks.value = res.total;
+  } catch { /* noop */ }
+}
 
 async function loadList() {
   loading.value = true;
   try {
-    const res = await api.get<{ items: License[] }>('/licenses');
-    list.value = res.items;
+    const res = await api.get<License>('/license');
+    // Wrap single license into an array for the table view
+    list.value = res ? [res] : [];
   } finally {
     loading.value = false;
   }
@@ -207,21 +218,20 @@ async function activate() {
   if (!activateCode.value) return;
   activating.value = true;
   try {
-    const res = await api.post<{ ok: boolean; message: string }>('/licenses/activate', { key: activateCode.value });
-    if (res.ok) {
-      ElMessage.success(`${t('license.activate.toast.success')}：${res.message}`);
-      activateVisible.value = false;
-      activateCode.value = '';
-      loadList();
-    } else {
-      ElMessage.error(`${t('license.activate.toast.fail')}：${res.message}`);
-    }
+    await api.post<License>('/license/activate', { code: activateCode.value });
+    ElMessage.success(t('license.activate.toast.success'));
+    activateVisible.value = false;
+    activateCode.value = '';
+    loadList();
+  } catch (err: unknown) {
+    const apiErr = err as { message?: string; code?: string };
+    ElMessage.error(apiErr.message || t('license.activate.toast.fail'));
   } finally {
     activating.value = false;
   }
 }
 
-onMounted(loadList);
+onMounted(() => { loadList(); loadTaskCount(); });
 </script>
 
 <style scoped>

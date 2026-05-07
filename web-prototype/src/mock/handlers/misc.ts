@@ -5,7 +5,7 @@ import { http } from 'msw';
 import { pause, ok, notFound, parsePage, paginate, q } from './_shared';
 import { db } from '../db';
 import type { GlobalParam, User, ResourceGroup } from '@/types/domain';
-import { id } from '../fake';
+import { id, isoMinus } from '../fake';
 
 export const miscHandlers = [
   /* ---- Licenses ---- */
@@ -117,10 +117,25 @@ export const miscHandlers = [
     return ok(paginate(items, page, size));
   }),
 
+  http.get('/api/control_logs', async ({ request }) => {
+    await pause();
+    const url = new URL(request.url);
+    const key = q(url, 'q')?.toLowerCase();
+    let items = [...db.controlLogs].sort((a, b) => b.at.localeCompare(a.at));
+    if (key) items = items.filter((l) => l.taskName.toLowerCase().includes(key) || l.operator.includes(key));
+    const { page, size } = parsePage(url);
+    return ok(paginate(items, page, size));
+  }),
+
   /* ---- Global params ---- */
   http.get('/api/global-params', async () => {
     await pause();
     return ok({ items: db.globalParams, total: db.globalParams.length, page: 1, size: 50 });
+  }),
+
+  http.get('/api/global_params', async () => {
+    await pause();
+    return ok({ items: db.globalParams, total: db.globalParams.length, page: 1, page_size: 50 });
   }),
 
   http.patch('/api/global-params/:key', async ({ params, request }) => {
@@ -131,5 +146,54 @@ export const miscHandlers = [
     const patch = (await request.json().catch(() => ({}))) as Partial<GlobalParam>;
     Object.assign(p, patch, { updatedAt: new Date().toISOString() });
     return ok(p);
+  }),
+
+  http.patch('/api/global_params', async ({ request }) => {
+    await pause();
+    const body = (await request.json().catch(() => ({}))) as { key?: string; value?: string };
+    if (body.key && body.value !== undefined) {
+      const p = db.globalParams.find((x) => x.key === body.key);
+      if (p) {
+        p.value = body.value;
+        p.updatedAt = new Date().toISOString();
+      }
+    }
+    return ok({ items: db.globalParams });
+  }),
+
+  /* ---- System hosts ---- */
+  http.get('/api/system/hosts', async () => {
+    await pause();
+    return ok({ items: db.hosts, total: db.hosts.length, page: 1, page_size: 50 });
+  }),
+
+  /* ---- Operate logs (backend-style path) ---- */
+  http.get('/api/operate_logs', async ({ request }) => {
+    await pause();
+    const url = new URL(request.url);
+    const actor = q(url, 'actor');
+    const action = q(url, 'action');
+    const result = q(url, 'result');
+    let items = [...db.operateLogs].sort((a, b) => b.at.localeCompare(a.at));
+    if (actor) items = items.filter((l) => l.user.includes(actor));
+    if (action) items = items.filter((l) => l.action.toLowerCase().includes(action));
+    if (result) items = items.filter((l) => l.result === result);
+    const { page, size } = parsePage(url);
+    return ok(paginate(items, page, size));
+  }),
+
+  /* ---- License (backend-style path) ---- */
+  http.get('/api/license', async () => {
+    await pause();
+    return ok(db.license ?? { status: 'missing', maxTasks: 0, currentTasks: 0 });
+  }),
+  http.post('/api/license/activate', async ({ request }) => {
+    await pause();
+    const body = (await request.json().catch(() => ({}))) as { code?: string };
+    if (!body.code || body.code.length < 4) {
+      return new Response(JSON.stringify({ code: 'INVALID_LICENSE_CODE', message: 'Invalid license code' }), { status: 400 });
+    }
+    db.license = { id: 'lic-1', sku: 'Enterprise', issuedTo: 'Demo Corp', maxTasks: 100, issuedAt: new Date().toISOString(), expireAt: isoMinus(-365 * 86400_000), status: 'active' };
+    return ok(db.license);
   }),
 ];

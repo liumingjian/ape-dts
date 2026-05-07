@@ -6,7 +6,7 @@
           <template #icon><IconRefresh /></template>
           {{ t('common.refresh') }}
         </el-button>
-        <el-button type="primary" @click="openCreate">
+        <el-button v-if="can('alert.rule.manage')" type="primary" @click="openCreate">
           <template #icon><IconPlus /></template>
           {{ t('monitor.metric.action.create') }}
         </el-button>
@@ -91,6 +91,7 @@
             <template #default="{ row }">
               <el-switch
                 :model-value="row.status === 'enabled'"
+                :disabled="!can('alert.rule.manage')"
                 @change="(v: unknown) => onToggle(row, v as boolean)"
               />
             </template>
@@ -110,7 +111,7 @@
               <span class="tabular-nums">{{ formatNumber(row.recoveryThreshold) }}</span>
             </template>
           </el-table-column>
-          <el-table-column :label="t('monitor.metric.col.actions')" width="160" fixed="right">
+          <el-table-column v-if="can('alert.rule.manage')" :label="t('monitor.metric.col.actions')" width="160" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" @click="openEdit(row)">{{ t('common.edit') }}</el-button>
               <el-button link type="danger" @click="confirmDelete(row)">{{ t('common.delete') }}</el-button>
@@ -212,9 +213,11 @@ import IconBellRinging from '~icons/tabler/bell-ringing';
 import PageHeader from '@/components/PageHeader.vue';
 import LevelBadge from '@/components/LevelBadge.vue';
 import { api } from '@/api/client';
+import { useRbac } from '@/composables/useRbac';
 import type { MetricRule, AlertLevel, Paginated } from '@/types/domain';
 
 const { t } = useI18n();
+const { can } = useRbac();
 
 const LEVELS: AlertLevel[] = ['critical', 'major', 'minor', 'info'];
 const METRIC_OPTIONS = [
@@ -251,7 +254,7 @@ async function loadList() {
     const params = new URLSearchParams({ page: String(page.value), size: String(pageSize.value) });
     if (filter.status) params.set('status', filter.status);
     if (filter.q) params.set('q', filter.q);
-    const data = await api.get<Paginated<MetricRule>>(`/alert-monitor/metric-rules?${params.toString()}`);
+    const data = await api.get<Paginated<MetricRule>>(`/alert_rules?${params.toString()}`);
     list.value = data.items;
     total.value = data.total;
   } catch {
@@ -293,10 +296,10 @@ async function save() {
   if (!form.value) return;
   try {
     if (editing.value) {
-      await api.patch(`/alert-monitor/metric-rules/${editing.value.id}`, form.value);
+      await api.patch(`/alert_rules/${editing.value.id}`, form.value);
       ElMessage.success(t('monitor.metric.toast.updated'));
     } else {
-      await api.post('/alert-monitor/metric-rules', form.value);
+      await api.post('/alert_rules', form.value);
       ElMessage.success(t('monitor.metric.toast.created'));
     }
     drawerVisible.value = false;
@@ -307,7 +310,7 @@ async function save() {
 }
 
 async function onToggle(row: MetricRule, v: boolean) {
-  await api.patch(`/alert-monitor/metric-rules/${row.id}`, { status: v ? 'enabled' : 'disabled' });
+  await api.patch(`/alert_rules/${row.id}`, { status: v ? 'enabled' : 'disabled' });
   ElMessage.success(t('monitor.metric.toast.toggled'));
   loadList();
 }
@@ -315,7 +318,7 @@ async function onToggle(row: MetricRule, v: boolean) {
 function confirmDelete(row: MetricRule) {
   ElMessageBox.confirm(`确定删除规则「${row.name}」？`, t('common.delete'), { type: 'warning' })
     .then(async () => {
-      await api.del(`/alert-monitor/metric-rules/${row.id}`);
+      await api.del(`/alert_rules/${row.id}`);
       ElMessage.success(t('monitor.metric.toast.deleted'));
       loadList();
     })

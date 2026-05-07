@@ -187,4 +187,140 @@ export const alertMonitorHandlers = [
     const patch = await request.json().catch(() => ({}));
     return ok({ ...(patch as object), updatedAt: new Date().toISOString() });
   }),
+
+  /* ---- Backend-style API aliases (real backend paths) ---- */
+  http.get('/api/alert_rules', async ({ request }) => {
+    await pause();
+    const url = new URL(request.url);
+    const kind = q(url, 'kind');
+    const key = q(url, 'q')?.toLowerCase();
+    const items = kind === 'event'
+      ? [...db.events].filter((r) => key ? r.name.toLowerCase().includes(key) : true)
+      : [...db.metricRules].filter((r) => key ? r.name.toLowerCase().includes(key) : true);
+    return ok({ items });
+  }),
+  http.post('/api/alert_rules', async ({ request }) => {
+    await pause();
+    const body = (await request.json().catch(() => ({}))) as Partial<MetricRule>;
+    const rule: MetricRule = {
+      id: id('rule'), name: body.name ?? '未命名规则', metric: body.metric ?? 'extractor_pushed_rps_avg',
+      operator: body.operator ?? '>', threshold: body.threshold ?? 100, level: body.level ?? 'major',
+      status: 'enabled', periodMin: body.periodMin ?? 5, triggerCount: body.triggerCount ?? 1,
+      recoveryThreshold: body.recoveryThreshold ?? 80, description: body.description ?? '',
+    };
+    db.metricRules.push(rule);
+    return ok(rule);
+  }),
+  http.get('/api/alert_rules/:id', async ({ params }) => {
+    await pause();
+    const rule = db.metricRules.find((r) => r.id === String(params.id));
+    return rule ? ok(rule) : notFound();
+  }),
+  http.patch('/api/alert_rules/:id', async ({ params, request }) => {
+    await pause();
+    const patch = (await request.json().catch(() => ({}))) as Partial<MetricRule>;
+    const idx = db.metricRules.findIndex((r) => r.id === String(params.id));
+    if (idx < 0) return notFound();
+    Object.assign(db.metricRules[idx], patch);
+    return ok(db.metricRules[idx]);
+  }),
+  http.delete('/api/alert_rules/:id', async ({ params }) => {
+    await pause();
+    const idx = db.metricRules.findIndex((r) => r.id === String(params.id));
+    if (idx < 0) return notFound();
+    db.metricRules.splice(idx, 1);
+    return ok({});
+  }),
+
+  http.get('/api/alarm_channels', async () => {
+    await pause();
+    return ok({ items: db.alarmChannels });
+  }),
+  http.post('/api/alarm_channels', async ({ request }) => {
+    await pause();
+    const body = (await request.json().catch(() => ({}))) as Partial<AlarmChannel>;
+    const ch: AlarmChannel = {
+      id: id('ch'), name: body.name ?? '新建通道', kind: body.kind ?? 'kafka', enabled: true,
+      startAt: new Date().toISOString(), endAt: isoMinus(-365 * 86400_000),
+      periodMin: body.periodMin ?? 1, kafka: body.kafka, snmp: body.snmp,
+    };
+    db.alarmChannels.push(ch);
+    return ok(ch);
+  }),
+  http.get('/api/alarm_channels/:id', async ({ params }) => {
+    await pause();
+    const ch = db.alarmChannels.find((c) => c.id === String(params.id));
+    return ch ? ok(ch) : notFound();
+  }),
+  http.patch('/api/alarm_channels/:id', async ({ params, request }) => {
+    await pause();
+    const patch = (await request.json().catch(() => ({}))) as Partial<AlarmChannel>;
+    const idx = db.alarmChannels.findIndex((c) => c.id === String(params.id));
+    if (idx < 0) return notFound();
+    Object.assign(db.alarmChannels[idx], patch);
+    return ok(db.alarmChannels[idx]);
+  }),
+  http.delete('/api/alarm_channels/:id', async ({ params }) => {
+    await pause();
+    const idx = db.alarmChannels.findIndex((c) => c.id === String(params.id));
+    if (idx < 0) return notFound();
+    db.alarmChannels.splice(idx, 1);
+    return ok({});
+  }),
+  http.post('/api/alarm_channels/:id/test', async () => {
+    await pause();
+    return ok({ ok: true, message: 'Test alert dispatched successfully' });
+  }),
+
+  http.get('/api/alarm_templates', async () => {
+    await pause();
+    return ok({ items: db.alarmTemplates });
+  }),
+  http.post('/api/alarm_templates', async ({ request }) => {
+    await pause();
+    const body = (await request.json().catch(() => ({}))) as Partial<AlarmTemplate>;
+    const tpl: AlarmTemplate = {
+      id: id('tpl'), name: body.name ?? '新建模板', level: body.level ?? 'major',
+      subject: '', body: body.body ?? '', updatedAt: new Date().toISOString(),
+    };
+    db.alarmTemplates.push(tpl);
+    return ok(tpl);
+  }),
+  http.get('/api/alarm_templates/:id', async ({ params }) => {
+    await pause();
+    const tpl = db.alarmTemplates.find((t) => t.id === String(params.id));
+    return tpl ? ok(tpl) : notFound();
+  }),
+  http.patch('/api/alarm_templates/:id', async ({ params, request }) => {
+    await pause();
+    const patch = (await request.json().catch(() => ({}))) as Partial<AlarmTemplate>;
+    const idx = db.alarmTemplates.findIndex((t) => t.id === String(params.id));
+    if (idx < 0) return notFound();
+    Object.assign(db.alarmTemplates[idx], patch);
+    db.alarmTemplates[idx].updatedAt = new Date().toISOString();
+    return ok(db.alarmTemplates[idx]);
+  }),
+  http.delete('/api/alarm_templates/:id', async ({ params }) => {
+    await pause();
+    const idx = db.alarmTemplates.findIndex((t) => t.id === String(params.id));
+    if (idx < 0) return notFound();
+    db.alarmTemplates.splice(idx, 1);
+    return ok({});
+  }),
+  http.post('/api/alarm_templates/preview', async ({ request }) => {
+    await pause();
+    const body = (await request.json().catch(() => ({})) as { body?: string });
+    const rendered = (body.body ?? '')
+      .replace(/\{\{task_id\}\}/g, 'tsk_sample_001')
+      .replace(/\{\{taskName\}\}/g, 'Sample Task')
+      .replace(/\{\{metric\}\}/g, 'extractor_rps_avg')
+      .replace(/\{\{value\}\}/g, '150')
+      .replace(/\{\{threshold\}\}/g, '100')
+      .replace(/\{\{level\}\}/g, 'critical')
+      .replace(/\{\{source\}\}/g, 'rps')
+      .replace(/\{\{message\}\}/g, 'RPS exceeded threshold')
+      .replace(/\{\{firstAt\}\}/g, new Date().toISOString())
+      .replace(/\{\{lastAt\}\}/g, new Date().toISOString());
+    return ok({ rendered });
+  }),
 ];

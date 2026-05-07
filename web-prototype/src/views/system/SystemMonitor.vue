@@ -151,7 +151,7 @@ const counters = computed(() => {
 async function loadList() {
   loading.value = true;
   try {
-    const res = await api.get<Paginated<SystemHost>>('/hosts?page=1&size=100');
+    const res = await api.get<Paginated<SystemHost>>('/system/hosts?page=1&page_size=100');
     list.value = res.items;
   } finally {
     loading.value = false;

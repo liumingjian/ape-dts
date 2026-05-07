@@ -879,10 +879,12 @@
         "kind": "告警方式",
         "format": "类型",
         "context": "Context",
-        "contextPh": "请填写模板内容，可使用 {{level}}、{{taskName}}、{{message}} 等占位符"
+        "contextPh": "请填写模板内容，可使用 {{level}}、{{taskName}}、{{message}} 等占位符",
+        "preview": "预览结果"
       },
       "action": {
-        "init": "初始化"
+        "init": "初始化",
+        "preview": "预览插值"
       },
       "toast": {
         "saved": "模板已保存",
@@ -961,7 +963,8 @@
     },
     "toast": {
       "cleared": "告警已清除",
-      "clearedBatch": "已清除 {n} 条告警"
+      "clearedBatch": "已清除 {n} 条告警",
+      "newAlert": "新告警"
     },
     "trend": {
       "title": "近 14 天告警趋势"

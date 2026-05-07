@@ -10,7 +10,17 @@ export type Action =
   | 'task.read'
   | 'user.manage'
   | 'license.activate'
-  | 'alert.clear';
+  | 'license.read'
+  | 'alert.clear'
+  | 'alert.read'
+  | 'alert.rule.manage'
+  | 'alarm.channel.manage'
+  | 'alarm.template.manage'
+  | 'monitor.setting.manage'
+  | 'global.param.manage'
+  | 'system.monitor.read'
+  | 'operate.log.read'
+  | 'control.log.read';
 
 const MATRIX: Record<Role, ReadonlySet<Action>> = {
   admin: new Set<Action>([
@@ -23,7 +33,17 @@ const MATRIX: Record<Role, ReadonlySet<Action>> = {
     'task.read',
     'user.manage',
     'license.activate',
+    'license.read',
     'alert.clear',
+    'alert.read',
+    'alert.rule.manage',
+    'alarm.channel.manage',
+    'alarm.template.manage',
+    'monitor.setting.manage',
+    'global.param.manage',
+    'system.monitor.read',
+    'operate.log.read',
+    'control.log.read',
   ]),
   operator: new Set<Action>([
     'task.create',
@@ -33,8 +53,10 @@ const MATRIX: Record<Role, ReadonlySet<Action>> = {
     'task.resume',
     'task.read',
     'alert.clear',
+    'alert.read',
+    'control.log.read',
   ]),
-  viewer: new Set<Action>(['task.read']),
+  viewer: new Set<Action>(['task.read', 'alert.read']),
 };
 
 export function canPerform(role: Role | null | undefined, action: Action): boolean {

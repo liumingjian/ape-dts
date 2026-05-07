@@ -22,6 +22,17 @@ function filterAlerts(list: typeof db.activeAlerts, url: URL) {
 }
 
 export const alertHandlers = [
+  http.get('/api/alerts', async ({ request }) => {
+    await pause();
+    const url = new URL(request.url);
+    const status = q(url, 'status') ?? 'firing';
+    const pool = status === 'cleared' ? db.historyAlerts : db.activeAlerts;
+    const items = filterAlerts(pool, url);
+    const { page, size } = parsePage(url);
+    return ok(paginate(items.sort((a, b) => b.lastAt.localeCompare(a.lastAt)), page, size));
+  }),
+
+  // Legacy aliases for backward compatibility
   http.get('/api/alerts/active', async ({ request }) => {
     await pause();
     const url = new URL(request.url);
@@ -51,7 +62,7 @@ export const alertHandlers = [
     return ok(a);
   }),
 
-  http.post('/api/alerts/clear-batch', async ({ request }) => {
+  http.post('/api/alerts/clear_batch', async ({ request }) => {
     await pause();
     const body = (await request.json().catch(() => ({}))) as { ids?: string[] };
     const ids = body.ids ?? [];

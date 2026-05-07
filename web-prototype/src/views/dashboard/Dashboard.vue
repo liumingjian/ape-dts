@@ -30,7 +30,7 @@
           :spark="summary?.kpiSparks?.running"
           tone="success"
           class="dashboard__kpi-item"
-          @click="go('/tasks/sync?status=running')"
+          @click="go('/tasks/snapshot?status=running')"
         />
         <KpiCard
           :label="t('dashboard.kpi.todayAlerts')"

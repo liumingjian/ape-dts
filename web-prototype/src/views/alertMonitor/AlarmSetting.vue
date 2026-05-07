@@ -6,7 +6,7 @@
           <template #icon><IconRefresh /></template>
           {{ t('common.refresh') }}
         </el-button>
-        <el-button type="primary" @click="openCreate">
+        <el-button v-if="can('alarm.channel.manage')" type="primary" @click="openCreate">
           <template #icon><IconPlus /></template>
           {{ t('monitor.channel.create') }}
         </el-button>
@@ -26,15 +26,15 @@
             <span class="alarm-setting__kind">{{ ch.kind === 'kafka' ? 'Kafka' : 'SNMP' }}</span>
           </div>
           <div class="alarm-setting__actions">
-            <el-button link type="primary" @click="openEdit(ch)">{{ t('common.edit') }}</el-button>
-            <el-button link @click="onTest(ch)">{{ t('monitor.channel.action.test') }}</el-button>
-            <el-button link type="danger" @click="confirmDelete(ch)">{{ t('common.delete') }}</el-button>
+            <el-button v-if="can('alarm.channel.manage')" link type="primary" @click="openEdit(ch)">{{ t('common.edit') }}</el-button>
+            <el-button v-if="can('alarm.channel.manage')" link @click="onTest(ch)">{{ t('monitor.channel.action.test') }}</el-button>
+            <el-button v-if="can('alarm.channel.manage')" link type="danger" @click="confirmDelete(ch)">{{ t('common.delete') }}</el-button>
           </div>
         </header>
 
         <el-form label-width="120px" class="alarm-setting__form">
           <el-form-item :label="t('monitor.channel.field.enabled')">
-            <el-switch :model-value="ch.enabled" @change="(v: unknown) => onToggle(ch, v as boolean)" />
+            <el-switch :model-value="ch.enabled" :disabled="!can('alarm.channel.manage')" @change="(v: unknown) => onToggle(ch, v as boolean)" />
           </el-form-item>
           <el-form-item :label="t('monitor.channel.field.range')">
             <div class="alarm-setting__range">
@@ -168,9 +168,11 @@ import IconBrandKafka from '~icons/tabler/topology-star';
 import IconNetwork from '~icons/tabler/network';
 import PageHeader from '@/components/PageHeader.vue';
 import { api } from '@/api/client';
+import { useRbac } from '@/composables/useRbac';
 import type { AlarmChannel } from '@/types/domain';
 
 const { t } = useI18n();
+const { can } = useRbac();
 
 const channels = ref<AlarmChannel[]>([]);
 const loading = ref(false);
@@ -178,7 +180,7 @@ const loading = ref(false);
 async function loadList() {
   loading.value = true;
   try {
-    const res = await api.get<{ items: AlarmChannel[] }>('/alert-monitor/channels');
+    const res = await api.get<{ items: AlarmChannel[] }>('/alarm_channels');
     channels.value = res.items;
   } finally {
     loading.value = false;
@@ -234,10 +236,10 @@ function onRangeChange(v: [string, string] | null) {
 async function save() {
   if (!form.value) return;
   if (editing.value) {
-    await api.patch(`/alert-monitor/channels/${editing.value.id}`, form.value);
+    await api.patch(`/alarm_channels/${editing.value.id}`, form.value);
     ElMessage.success(t('monitor.channel.toast.saved'));
   } else {
-    await api.post('/alert-monitor/channels', form.value);
+    await api.post('/alarm_channels', form.value);
     ElMessage.success(t('monitor.channel.toast.saved'));
   }
   drawerVisible.value = false;
@@ -245,12 +247,12 @@ async function save() {
 }
 
 async function onToggle(ch: AlarmChannel, v: boolean) {
-  await api.patch(`/alert-monitor/channels/${ch.id}`, { enabled: v });
+  await api.patch(`/alarm_channels/${ch.id}`, { enabled: v });
   loadList();
 }
 
 async function onTest(ch: AlarmChannel) {
-  const res = await api.post<{ ok: boolean; message: string }>(`/alert-monitor/channels/${ch.id}/test`);
+  const res = await api.post<{ ok: boolean; message: string }>(`/alarm_channels/${ch.id}/test`);
   if (res.ok) ElMessage.success(t('monitor.channel.toast.testOk') + '：' + res.message);
   else ElMessage.error(t('monitor.channel.toast.testFail') + '：' + res.message);
 }
@@ -265,7 +267,7 @@ async function onTestForm() {
 function confirmDelete(ch: AlarmChannel) {
   ElMessageBox.confirm(`确定删除通道「${ch.name}」？`, t('common.delete'), { type: 'warning' })
     .then(async () => {
-      await api.del(`/alert-monitor/channels/${ch.id}`);
+      await api.del(`/alarm_channels/${ch.id}`);
       ElMessage.success(t('monitor.channel.toast.deleted'));
       loadList();
     })

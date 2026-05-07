@@ -78,6 +78,7 @@
             <template #default="{ row }">
               <el-switch
                 :model-value="row.status === 'enabled'"
+                :disabled="!can('alert.rule.manage')"
                 @change="(v: unknown) => onToggle(row, v as boolean)"
               />
             </template>
@@ -102,7 +103,7 @@
               <span class="event-rules__desc">{{ row.description }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="" width="120" fixed="right">
+          <el-table-column v-if="can('alert.rule.manage')" label="" width="120" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" @click="openEdit(row)">{{ t('common.edit') }}</el-button>
             </template>
@@ -170,9 +171,11 @@ import dayjs from 'dayjs';
 import PageHeader from '@/components/PageHeader.vue';
 import LevelBadge from '@/components/LevelBadge.vue';
 import { api } from '@/api/client';
+import { useRbac } from '@/composables/useRbac';
 import type { SysEvent, AlertLevel, Paginated } from '@/types/domain';
 
 const { t } = useI18n();
+const { can } = useRbac();
 
 const CATS = ['task', 'system', 'security'] as const;
 const LEVELS: AlertLevel[] = ['critical', 'major', 'minor', 'info'];
@@ -197,7 +200,7 @@ async function loadList() {
     const params = new URLSearchParams({ page: String(page.value), size: String(pageSize.value) });
     if (filter.category) params.set('category', filter.category);
     if (filter.q) params.set('q', filter.q);
-    const data = await api.get<Paginated<SysEvent>>(`/alert-monitor/events?${params.toString()}`);
+    const data = await api.get<Paginated<SysEvent>>(`/alert_rules?kind=event&${params.toString()}`);
     list.value = data.items;
     total.value = data.total;
   } finally {
@@ -218,14 +221,14 @@ function openEdit(row: SysEvent) {
 
 async function save() {
   if (!form.value || !editing.value) return;
-  await api.patch(`/alert-monitor/events/${editing.value.id}`, form.value);
+  await api.patch(`/alert_rules/${editing.value.id}`, form.value);
   ElMessage.success(t('common.save'));
   drawerVisible.value = false;
   loadList();
 }
 
 async function onToggle(row: SysEvent, v: boolean) {
-  await api.patch(`/alert-monitor/events/${row.id}`, { status: v ? 'enabled' : 'disabled' });
+  await api.patch(`/alert_rules/${row.id}`, { enabled: v });
   ElMessage.success(t('monitor.metric.toast.toggled'));
   loadList();
 }

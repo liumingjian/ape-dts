@@ -36,7 +36,7 @@
         <div class="alert-view__toolbar">
           <div class="alert-view__actions">
             <el-dropdown
-              v-if="mode === 'active'"
+              v-if="mode === 'active' && can('alert.clear')"
               trigger="click"
               :disabled="selected.length === 0"
               @command="onBatch"
@@ -177,7 +177,7 @@
           :default-sort="{ prop: 'lastAt', order: 'descending' }"
           @selection-change="onSelectionChange"
         >
-          <el-table-column v-if="mode === 'active'" type="selection" width="44" />
+          <el-table-column v-if="mode === 'active'" type="selection" :selectable="() => can('alert.clear')" />
           <el-table-column :label="t('alerts.col.id')" prop="id" sortable width="180">
             <template #default="{ row }">
               <span class="alert-view__id">{{ row.id }}</span>
@@ -256,7 +256,7 @@
               <el-button link type="primary" @click="goTask(row)">
                 {{ t('alerts.action.viewTask') }}
               </el-button>
-              <el-button link type="danger" @click="confirmClear(row)">
+              <el-button v-if="can('alert.clear')" link type="danger" @click="confirmClear(row)">
                 {{ t('alerts.action.clear') }}
               </el-button>
             </template>
@@ -301,6 +301,7 @@ import LevelBadge from './LevelBadge.vue';
 import EngineTag from './EngineTag.vue';
 import AlertSourceTag from './AlertSourceTag.vue';
 import { api } from '@/api/client';
+import { useRbac } from '@/composables/useRbac';
 import {
   ENGINE_LABELS,
   type Alert,
@@ -314,6 +315,7 @@ const props = defineProps<{ mode: 'active' | 'history' }>();
 const { t } = useI18n();
 const router = useRouter();
 const route = useRoute();
+const { can } = useRbac();
 
 const title = computed(() =>
   t(props.mode === 'active' ? 'nav.alerts.current' : 'nav.alerts.history'),
@@ -356,7 +358,7 @@ const summaryTotal = computed(
 async function refreshSummary() {
   if (props.mode !== 'active') return;
   try {
-    const data = await api.get<Paginated<Alert>>('/alerts/active?page=1&size=200');
+    const data = await api.get<Paginated<Alert>>('/alerts?status=firing&page_size=200');
     const s: Record<AlertLevel, number> = { critical: 0, major: 0, minor: 0, info: 0 };
     for (const a of data.items) s[a.level] += 1;
     summary.value = s;
@@ -370,25 +372,27 @@ async function loadList() {
   try {
     const params = new URLSearchParams({
       page: String(page.value),
-      size: String(pageSize.value),
+      page_size: String(pageSize.value),
     });
+    if (props.mode === 'active') params.set('status', 'firing');
+    else params.set('status', 'cleared');
     if (filter.level) params.set('level', filter.level);
     if (filter.source) params.set('source', filter.source);
     if (filter.engine) params.set('engine', filter.engine);
     if (filter.taskId) params.set('taskId', filter.taskId);
     if (filter.q) params.set('q', filter.q);
-    const path = props.mode === 'active' ? '/alerts/active' : '/alerts/history';
-    const data = await api.get<Paginated<Alert>>(`${path}?${params.toString()}`);
+    if (props.mode === 'history' && dateRange.value) {
+      const [from, to] = dateRange.value;
+      if (from) params.set('from', from);
+      if (to) params.set('to', to);
+    }
+    const data = await api.get<Paginated<Alert>>(`/alerts?${params.toString()}`);
     let items = data.items;
     // client-side refinement for fields not handled server-side
     if (filter.alertId) items = items.filter((a) => a.id.includes(filter.alertId));
     if (filter.ip) items = items.filter((a) => a.instanceIp.includes(filter.ip));
-    if (props.mode === 'history' && dateRange.value) {
-      const [from, to] = dateRange.value;
-      items = items.filter((a) => a.lastAt >= from && a.lastAt <= to);
-    }
     list.value = items;
-    total.value = filter.alertId || filter.ip || dateRange.value ? items.length : data.total;
+    total.value = filter.alertId || filter.ip ? items.length : data.total;
   } catch {
     ElMessage.error('加载告警失败');
   } finally {
@@ -450,7 +454,7 @@ async function onBatch(cmd: string) {
     t('alerts.batch.clear'),
     { type: 'warning' },
   ).then(async () => {
-    const res = await api.post<{ cleared: number }>('/alerts/clear-batch', { ids });
+    const res = await api.post<{ cleared: number }>('/alerts/clear_batch', { ids });
     ElMessage.success(t('alerts.toast.clearedBatch', { n: res.cleared }));
     loadList();
   }).catch(() => {});

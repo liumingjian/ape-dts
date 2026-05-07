@@ -84,7 +84,7 @@ const loading = ref(false);
 async function loadList() {
   loading.value = true;
   try {
-    const data = await api.get<Paginated<ControlLogEntry>>('/logs/control?page=1&size=100');
+    const data = await api.get<Paginated<ControlLogEntry>>('/control_logs?page=1&page_size=100');
     // Aggregate logs into virtual files (one per day, per scope).
     const buckets = new Map<string, ControlLogEntry[]>();
     for (const l of data.items) {

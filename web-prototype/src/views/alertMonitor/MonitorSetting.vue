@@ -8,6 +8,7 @@
           v-if="form"
           ref="formRef"
           :model="form"
+          :disabled="!can('monitor.setting.manage')"
           label-width="220px"
           class="monitor-setting__form"
         >
@@ -51,7 +52,7 @@
               style="width: 200px;"
             />
           </el-form-item>
-          <el-form-item label=" ">
+          <el-form-item v-if="can('monitor.setting.manage')" label=" ">
             <el-button type="primary" @click="save">{{ t('common.save') }}</el-button>
             <el-button @click="loadAll">{{ t('common.reset') }}</el-button>
           </el-form-item>
@@ -67,9 +68,11 @@ import { useI18n } from 'vue-i18n';
 import { ElMessage } from 'element-plus';
 import PageHeader from '@/components/PageHeader.vue';
 import { api } from '@/api/client';
+import { useRbac } from '@/composables/useRbac';
 import type { AlarmChannel, AlarmTemplate } from '@/types/domain';
 
 const { t } = useI18n();
+const { can } = useRbac();
 
 interface Setting {
   retentionDays: number;
@@ -99,9 +102,9 @@ async function loadAll() {
   loading.value = true;
   try {
     const [setting, ch, tpl] = await Promise.all([
-      api.get<RawSetting>('/alert-monitor/setting'),
-      api.get<{ items: AlarmChannel[] }>('/alert-monitor/channels'),
-      api.get<{ items: AlarmTemplate[] }>('/alert-monitor/templates'),
+      api.get<RawSetting>('/global_params?category=alarm'),
+      api.get<{ items: AlarmChannel[] }>('/alarm_channels'),
+      api.get<{ items: AlarmTemplate[] }>('/alarm_templates'),
     ]);
     form.value = {
       retentionDays: setting.retentionDays ?? 7,
@@ -120,7 +123,7 @@ async function loadAll() {
 
 async function save() {
   if (!form.value) return;
-  await api.patch('/alert-monitor/setting', form.value);
+  await api.patch('/global_params', { category: 'alarm', values: form.value });
   ElMessage.success(t('monitor.setting.toast.saved'));
 }
 

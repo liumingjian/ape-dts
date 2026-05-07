@@ -30,12 +30,17 @@
               type="textarea"
               :rows="14"
               :placeholder="t('monitor.template.field.contextPh')"
+              :disabled="!can('alarm.template.manage')"
               class="alarm-template__textarea"
             />
           </el-form-item>
-          <el-form-item label=" ">
+          <el-form-item v-if="can('alarm.template.manage')" label=" ">
             <el-button type="primary" @click="save">{{ t('common.confirm') }}</el-button>
             <el-button @click="resetToDefault">{{ t('monitor.template.action.init') }}</el-button>
+            <el-button @click="previewInterpolation">{{ t('monitor.template.action.preview') }}</el-button>
+          </el-form-item>
+          <el-form-item v-if="previewText" :label="t('monitor.template.field.preview')">
+            <pre class="alarm-template__preview">{{ previewText }}</pre>
           </el-form-item>
         </el-form>
       </div>
@@ -74,9 +79,11 @@ import dayjs from 'dayjs';
 import PageHeader from '@/components/PageHeader.vue';
 import LevelBadge from '@/components/LevelBadge.vue';
 import { api } from '@/api/client';
+import { useRbac } from '@/composables/useRbac';
 import type { AlarmTemplate } from '@/types/domain';
 
 const { t } = useI18n();
+const { can } = useRbac();
 
 const DEFAULTS: Record<'kafka' | 'snmp', Record<'json' | 'split', string>> = {
   kafka: {
@@ -110,11 +117,12 @@ const state = reactive({
 const templates = ref<AlarmTemplate[]>([]);
 const activeId = ref<string | null>(null);
 const loading = ref(false);
+const previewText = ref('');
 
 async function loadList() {
   loading.value = true;
   try {
-    const res = await api.get<{ items: AlarmTemplate[] }>('/alert-monitor/templates');
+    const res = await api.get<{ items: AlarmTemplate[] }>('/alarm_templates');
     templates.value = res.items;
     if (!activeId.value && templates.value.length > 0) selectTemplate(templates.value[0]);
   } finally {
@@ -141,9 +149,9 @@ function resetToDefault() {
 
 async function save() {
   if (activeId.value) {
-    await api.patch(`/alert-monitor/templates/${activeId.value}`, { body: state.context });
+    await api.patch(`/alarm_templates/${activeId.value}`, { body: state.context });
   } else {
-    const created = await api.post<AlarmTemplate>('/alert-monitor/templates', {
+    const created = await api.post<AlarmTemplate>('/alarm_templates', {
       name: `${state.kind}-${state.format} 模板`,
       body: state.context,
       level: 'major',
@@ -152,6 +160,18 @@ async function save() {
   }
   ElMessage.success(t('monitor.template.toast.saved'));
   loadList();
+}
+
+async function previewInterpolation() {
+  try {
+    const res = await api.post<{ rendered: string }>('/alarm_templates/preview', {
+      body: state.context,
+      sample: true,
+    });
+    previewText.value = res.rendered;
+  } catch {
+    previewText.value = state.context;
+  }
 }
 
 function formatTime(s: string) { return dayjs(s).format('YYYY-MM-DD HH:mm'); }
@@ -202,6 +222,19 @@ onMounted(loadList);
 .alarm-template__item-meta { display: flex; align-items: center; gap: 8px; }
 .alarm-template__item-time { font-size: 11px; color: var(--color-ink-faint); font-family: var(--font-mono); }
 .alarm-template__item-subj { font-size: 11px; color: var(--color-ink-subtle); font-family: var(--font-mono); }
+.alarm-template__preview {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0;
+  white-space: pre-wrap;
+  max-height: 320px;
+  overflow-y: auto;
+}
 @media (max-width: 1100px) {
   .alarm-template__body { grid-template-columns: 1fr; }
 }

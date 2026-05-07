@@ -11,7 +11,7 @@
       </el-breadcrumb>
     </div>
     <div class="topbar__right">
-      <el-badge :value="3" :offset="[-4, 6]" class="topbar__item">
+      <el-badge :value="alertCount" :hidden="alertCount === 0" :offset="[-4, 6]" class="topbar__item">
         <el-tooltip :content="t('topbar.notifications')" placement="bottom">
           <button class="topbar__icon-btn" @click="router.push('/alerts/current')">
             <IconBell />
@@ -60,11 +60,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onBeforeUnmount, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
+import { ElNotification } from 'element-plus';
 import { useAppStore } from '@/stores/app';
 import { useAuthStore } from '@/stores/auth';
+import { useAlertStream } from '@/composables/useAlertStream';
 import { SUPPORTED_LOCALES, type LocaleCode } from '@/locales';
 
 import IconBell from '~icons/tabler/bell';
@@ -79,6 +81,27 @@ const route = useRoute();
 const router = useRouter();
 const appStore = useAppStore();
 const auth = useAuthStore();
+
+// Global SSE alert stream — badge counter + toast
+const alertCount = ref(0);
+const alertStream = auth.isAuthenticated
+  ? useAlertStream({
+      url: '/api/alerts/stream',
+      onAlert: (e) => {
+        alertCount.value += 1;
+        ElNotification({
+          title: t('alerts.toast.newAlert'),
+          message: e.message,
+          type: e.level === 'critical' || e.level === 'major' ? 'error' : 'warning',
+          duration: 4000,
+          onClick: () => router.push('/alerts/current'),
+        });
+      },
+      bufferLimit: 1,
+    })
+  : null;
+
+onBeforeUnmount(() => alertStream?.close());
 
 const breadcrumb = computed<string[]>(() => {
   const b = (route.meta?.breadcrumb as string[] | undefined) ?? [];
