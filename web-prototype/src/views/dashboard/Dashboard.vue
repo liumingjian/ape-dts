@@ -15,9 +15,6 @@
     </PageHeader>
 
     <div class="ape-dts-console-page dashboard__body">
-      <!-- License warning banner (uses /api/license) -->
-      <LicenseBanner />
-
       <!-- Hero / KPI row with embedded sparklines -->
       <section class="dashboard__hero">
         <KpiCard
@@ -191,7 +188,6 @@ import ChartCard from '@/components/ChartCard.vue';
 import EmptyState from '@/components/EmptyState.vue';
 import ActivityTimeline from '@/components/ActivityTimeline.vue';
 import RunningTaskGrid from '@/components/RunningTaskGrid.vue';
-import LicenseBanner from '@/components/LicenseBanner.vue';
 import { useDashboardData } from '@/composables/useDashboardData';
 import { ENGINE_LABELS, type ActivityEvent, type TaskStatus, type TaskCategory } from '@/types/domain';
 import { AXIS_BASE } from '@/composables/useEcharts';

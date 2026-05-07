@@ -4,6 +4,8 @@ import { useDocumentVisibility } from '@/composables/useDocumentVisibility';
 import {
   ENGINE_LABELS,
   type DashboardSummary,
+  type MetricSeries,
+  type MetricPoint,
   type TaskCategory,
   type TaskStatus,
   type AlertLevel,
@@ -59,6 +61,21 @@ interface AlertListResponse {
   size: number;
 }
 
+/** Response shape from GET /api/runs/:id/metrics */
+interface MetricQueryResponse {
+  metric: string;
+  data: { ts: number; value: number }[];
+  details?: { source?: string[]; hint?: string };
+}
+
+interface RunRow {
+  id: string;
+  taskId: string;
+  status: string;
+  startedAt: string | null;
+  stoppedAt: string | null;
+}
+
 /* ---- Helpers ---- */
 const STATUS_MAP: Record<string, TaskStatus> = {
   draft: 'pending',
@@ -112,6 +129,12 @@ export function useDashboardData() {
   const prevRunningCount = ref(0);
   const prevAlertCount = ref(0);
 
+  // Metric series for RPS and latency charts
+  const rpsSeries = ref<MetricSeries[]>([]);
+  const latencySeries = ref<MetricSeries[]>([]);
+  const totalRpsValue = ref(0);
+  const avgLatencyValue = ref(0);
+
   async function loadTasks() {
     try {
       const data = await api.get<TaskListResponse>('/tasks?size=50');
@@ -138,10 +161,80 @@ export function useDashboardData() {
     }
   }
 
+  /** Fetch metric series for all running tasks from /api/runs/:id/metrics */
+  async function loadMetrics() {
+    const runningTasks = tasks.value.filter(
+      (t) => normalizeStatus(t.status) === 'running',
+    );
+    if (runningTasks.length === 0) {
+      rpsSeries.value = [];
+      latencySeries.value = [];
+      totalRpsValue.value = 0;
+      avgLatencyValue.value = 0;
+      return;
+    }
+
+    const now = Date.now();
+    const from = now - 3600_000; // last 1h
+    const step = 60;
+    const newRps: MetricSeries[] = [];
+    const newLat: MetricSeries[] = [];
+    let rpsSum = 0;
+    let latSum = 0;
+    let latN = 0;
+
+    for (const t of runningTasks) {
+      // Get the latest run for this task
+      let runId = '';
+      try {
+        const runs = await api.get<{ items: RunRow[] }>(`/tasks/${t.id}/runs?page=1&size=1`);
+        const items = runs.items ?? [];
+        const active = items.find(
+          (r) => r.status === 'running' || r.status === 'paused',
+        );
+        if (!active) continue;
+        runId = active.id;
+      } catch { continue; }
+
+      // Fetch extractor_rps_avg
+      try {
+        const res = await api.get<MetricQueryResponse>(
+          `/runs/${runId}/metrics?metric=extractor_rps_avg&from=${from}&to=${now}&step=${step}`,
+        );
+        if (res.data.length > 0) {
+          const points: MetricPoint[] = res.data.map((p) => ({ t: p.ts, v: p.value }));
+          newRps.push({ taskId: t.id, metric: 'extractor_rps_avg', points });
+          rpsSum += points[points.length - 1]?.v ?? 0;
+        }
+      } catch { /* ignore individual metric errors */ }
+
+      // Fetch replication_lag (latency)
+      try {
+        const res = await api.get<MetricQueryResponse>(
+          `/runs/${runId}/metrics?metric=replication_lag&from=${from}&to=${now}&step=${step}`,
+        );
+        if (res.data.length > 0) {
+          const points: MetricPoint[] = res.data.map((p) => ({ t: p.ts, v: p.value }));
+          newLat.push({ taskId: t.id, metric: 'replication_lag', points });
+          const latest = points[points.length - 1]?.v ?? 0;
+          latSum += latest;
+          latN += 1;
+        }
+      } catch { /* ignore individual metric errors */ }
+    }
+
+    rpsSeries.value = newRps;
+    latencySeries.value = newLat;
+    totalRpsValue.value = rpsSum;
+    avgLatencyValue.value = latN > 0 ? latSum / latN : 0;
+  }
+
   async function load() {
     loading.value = true;
     try {
       await Promise.all([loadTasks(), loadAlerts(), loadLicense()]);
+      // Load metrics after tasks are available (needs running task list)
+      await loadMetrics();
     } finally {
       loading.value = false;
     }
@@ -265,12 +358,12 @@ export function useDashboardData() {
       kpi: {
         running: { total: runningCount, delta: runningDelta },
         todayAlerts: { total: todayAlertCount, delta: alertDelta },
-        totalRps: { value: 0, delta: 0 },
-        avgLatencyMs: { value: 0, delta: 0 },
+        totalRps: { value: totalRpsValue.value, delta: 0 },
+        avgLatencyMs: { value: avgLatencyValue.value, delta: 0 },
       },
       kpiSparks: { running: [], todayAlerts: [], totalRps: [], avgLatencyMs: [] },
-      rpsSeries: [],
-      latencySeries: [],
+      rpsSeries: rpsSeries.value,
+      latencySeries: latencySeries.value,
       statusDist,
       engineDist,
       alertTrend,

@@ -537,6 +537,39 @@ function parseEndpointUrl(url: string): { host: string; port: number; username: 
 }
 
 /** Map a backend ApiTask to the frontend Task type used by the SPA. */
+
+/** Count the number of table references in a filter's do_tbs field. */
+function countFilterTables(filter: Record<string, unknown> | null): number {
+  if (!filter) return 0;
+  const doTbs = filter.do_tbs ?? filter.doTbs;
+  if (typeof doTbs === 'string' && doTbs.length > 0) {
+    return doTbs.split(',').filter((s: string) => s.trim().length > 0).length;
+  }
+  if (Array.isArray(doTbs)) return doTbs.length;
+  return 0;
+}
+
+/** Compute progress as percentage (0–100) from sinked count and filter tables. */
+function computeProgress(sinkedCount: number, filter: Record<string, unknown> | null): number {
+  const tables = countFilterTables(filter);
+  if (tables === 0 || sinkedCount === 0) return 0;
+  // Assume ~1000 rows per table as a rough baseline for percentage.
+  // Without a total-row-count metric from the backend, this is the best estimate.
+  const estimatedTotal = tables * 1000;
+  const pct = (sinkedCount / estimatedTotal) * 100;
+  return Math.min(Math.round(pct), 100);
+}
+
+/** Resolve ResumeType from the resumer field, defaulting to 'from_log'. */
+function resolveResumeType(resumer: Record<string, unknown> | null): ResumeType {
+  if (!resumer) return 'from_log';
+  const raw = resumer.resume_type ?? resumer.resumeType;
+  if (raw === 'from_target') return 'from_target';
+  if (raw === 'from_db') return 'from_db';
+  // 'auto', undefined, or unknown → default to 'from_log'
+  return 'from_log';
+}
+
 export function mapApiTask(raw: ApiTask): Task {
   const srcRaw = raw.sourceEndpoint?.url ?? '';
   const tgtRaw = raw.targetEndpoint?.url ?? '';
@@ -566,12 +599,12 @@ export function mapApiTask(raw: ApiTask): Task {
     },
     sourceUrl: maskConnectionStringPw(srcRaw),
     targetUrl: maskConnectionStringPw(tgtRaw),
-    syncMode: (raw.kind === 'cdc' ? 'cdc' : 'full') as SyncMode,
+    syncMode: (raw.kind === 'cdc' ? 'cdc' : 'snapshot') as SyncMode,
     extractType: (raw.kind === 'cdc' ? 'cdc' : 'snapshot') as ExtractType,
     taskType: 'standalone',
     resourceGroup: raw.resourceGroupId ?? '',
     instanceIp: src.host,
-    progressPercent: m?.pipeline_sinked_count_latest ?? 0,
+    progressPercent: computeProgress(m?.pipeline_sinked_count_latest ?? 0, raw.filter),
     syncObjects: { totalTables: 0, selectedTables: 0 },
     config: {
       parallelizer: 'snapshot' as ParallelType,
@@ -579,7 +612,7 @@ export function mapApiTask(raw: ApiTask): Task {
       bufferSize: 4,
       maxRps: 0,
       checkpointIntervalSecs: 10,
-      resumeType: 'auto' as ResumeType,
+      resumeType: resolveResumeType(raw.resumer),
       metricsEnabled: true,
     },
     createdAt: raw.createdAt,

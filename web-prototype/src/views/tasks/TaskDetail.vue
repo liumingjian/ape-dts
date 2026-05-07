@@ -350,7 +350,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, unref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref, shallowRef, unref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -593,10 +593,15 @@ const logFile = ref('default');
 const logFiles = ['default', 'position', 'monitor', 'commit', 'finished', 'task', 'http'];
 const logLevelFilter = ref('ALL');
 const logPaused = ref(false);
-const sseState = ref<'connected' | 'reconnecting' | 'disconnected'>('connected');
 const logPaneRef = ref<HTMLElement | null>(null);
 const showFollowBtn = ref(false);
-const logStreamHandle = ref<LogStreamHandle | null>(null);
+const logStreamHandle = shallowRef<LogStreamHandle | null>(null);
+
+/** Derive SSE state from the handle's state ref so it stays in sync after reconnect. */
+const sseState = computed<'connected' | 'reconnecting' | 'disconnected'>(() => {
+  if (!logStreamHandle.value) return 'disconnected';
+  return logStreamHandle.value.state.value;
+});
 
 const sseStateLabel = computed(() => {
   if (sseState.value === 'connected') return t('taskDetail.log.connected');
@@ -620,13 +625,11 @@ function formatLogTime(ts: number): string {
 function reopenLogStream() {
   logStreamHandle.value?.close();
   if (!currentRunId.value) return;
-  sseState.value = 'connected';
   logStreamHandle.value = useLogStream({
     runId: currentRunId.value,
     file: logFile.value,
     level: logLevelFilter.value !== 'ALL' ? logLevelFilter.value as 'debug' | 'info' | 'warn' | 'error' : undefined,
     bufferLimit: 500,
-    onError: () => { sseState.value = 'reconnecting'; },
   });
 }
 
@@ -786,6 +789,7 @@ onMounted(async () => {
     if (isVisible.value) {
       loadTask();
       loadCurrentRunId();
+      loadDetailMetrics();
       if (activeTab.value === 'monitor') loadMonitorMetrics();
       if (activeTab.value === 'alerts') loadAlerts();
     }
