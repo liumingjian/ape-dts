@@ -356,7 +356,15 @@
       "rg": "资源组",
       "instanceIp": "任务可用 IP 分配",
       "instanceIpHint": "当前 IP 还能创建 {n} 个任务",
-      "ipHint": "多个 IP 使用英文逗号分隔"
+      "ipHint": "多个 IP 使用英文逗号分隔",
+      "taskIdHint": "仅支持字母开头，2-64 位字母、数字、下划线、连字符",
+      "taskIdInvalid": "任务名称格式不正确",
+      "taskIdTaken": "任务名称已存在",
+      "topology": {
+        "_label": "实例形态",
+        "standalone": "单机",
+        "primary_backup": "主备"
+      }
     },
     "mode": {
       "snapshot_cdc": {
@@ -379,7 +387,8 @@
       "success": "连接成功 · 延迟 {ms} ms",
       "failure": "连接失败：{msg}",
       "network": "网络信息",
-      "instanceIp": "ape-dts Console 实例私有 IP"
+      "instanceIp": "ape-dts Console 实例私有 IP",
+      "bypass": "跳过连接测试"
     },
     "objects": {
       "section": {
@@ -399,9 +408,9 @@
       },
       "conflict": {
         "_label": "增量阶段冲突策略",
-        "ignore": "忽略",
-        "report": "报错",
-        "overwrite": "覆盖",
+        "insert": "插入（insert）",
+        "replace": "替换（replace）",
+        "ignore": "忽略（ignore）",
         "hint": "当同步数据与目标库已有数据冲突时（主键/唯一一键复写等），将覆盖原来的冲突数据。"
       },
       "pickerTitle": "同步对象",
@@ -413,7 +422,13 @@
       "available": "可选择对象",
       "selected": "已选择对象",
       "search": "对展开的对象进行搜索，支持正则表达式",
-      "tableLevel": "表级同步"
+      "tableLevel": "表级同步",
+      "doDbs": "迁移库（do_dbs）",
+      "doTbs": "迁移表（do_tbs）",
+      "ignoreDbs": "忽略库（ignore_dbs）",
+      "ignoreTbs": "忽略表（ignore_tbs）",
+      "wildcardHint": "支持通配符 * 和 ?，多个用逗号分隔",
+      "atLeastOne": "至少选择一个迁移对象"
     },
     "processing": {
       "removeInvalid": "一键去除无效对象",
@@ -433,6 +448,25 @@
         "where": "WHERE 过滤",
         "columnMap": "列名映射",
         "dropCol": "剔除列"
+      },
+      "router": {
+        "_label": "路由映射",
+        "dbMap": "库映射 (db_map)",
+        "tbMap": "表映射 (tb_map)",
+        "colMap": "列映射 (col_map)",
+        "topicMap": "主题映射 (topic_map, Kafka 目标端)"
+      },
+      "lua": {
+        "_label": "Lua 处理器",
+        "none": "无",
+        "inline": "内联脚本",
+        "file": "文件上传",
+        "inlineLabel": "Lua 脚本",
+        "inlinePh": "if row_type == \"delete\" then row_type = \"\" end",
+        "fileLabel": "上传 .lua 文件",
+        "chooseFile": "选择文件",
+        "notLua": "仅支持 .lua 文件",
+        "tooLarge": "文件过大（上限 {max} MB）"
       }
     },
     "advanced": {
@@ -451,7 +485,9 @@
         "from_db": "from_db：从源端反查"
       },
       "metrics": "启用 Prometheus 监控",
-      "metricsHttp": "Metrics HTTP 端口",
+      "metricsHttpPort": "Metrics HTTP 端口",
+      "metricsHttpHost": "Metrics HTTP 主机",
+      "metricsLabels": "自定义标签 (k1:v1,k2:v2)",
       "parallel": {
         "snapshot": "snapshot（全量并行）",
         "rdb_merge": "rdb_merge（合并写）",
@@ -480,8 +516,13 @@
         "running": "正在检查",
         "pass": "通过",
         "warn": "警告",
-        "fail": "失败"
-      }
+        "fail": "失败",
+        "skip": "跳过"
+      },
+      "failBlock": "存在未通过的预检查项，确认提交任务？",
+      "failTitle": "预检查警告",
+      "allPass": "所有预检查项均通过",
+      "error": "预检查请求失败"
     },
     "confirm": {
       "section": {
@@ -506,11 +547,25 @@
       "submitLater": "提交",
       "syncObjects": "同步对象",
       "syncObjectsCount": "同步对象数",
-      "syncScope": "同步范围"
+      "syncScope": "同步范围",
+      "hidePreview": "收起预览",
+      "previewError": "无法加载 INI 预览"
     },
     "toast": {
       "created": "任务已创建并启动",
-      "createdLater": "任务已创建，可稍后启动"
+      "createdLater": "任务已创建，可稍后启动",
+      "createFailed": "创建失败"
+    },
+    "draft": {
+      "discard": "放弃草稿",
+      "discardTitle": "放弃草稿确认",
+      "discardConfirm": "确定要放弃当前草稿吗？所有未保存的修改将丢失。",
+      "discardDone": "草稿已清除",
+      "leaveTitle": "离开确认",
+      "leaveConfirm": "当前有未保存的修改，是否放弃草稿并离开？",
+      "leaveDiscard": "放弃并离开",
+      "deepLinkRejected": "无法直接跳转到中间步骤，请从第一步开始",
+      "engineChangeCleared": "选择的迁移对象已重置，因源端引擎变更"
     },
     "action": {
       "back": "上一步",

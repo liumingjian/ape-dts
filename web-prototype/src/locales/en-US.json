@@ -293,6 +293,14 @@
         "oracle-mode": "oracle-mode (gaussdboracle)",
         "required": "GaussDB requires a sub-mode (pg / mysql / oracle).",
         "hint": "GaussDB exposes multiple wire protocols; oracle-mode (a.k.a. gaussdboracle) is the LogMiner-based CDC path."
+      },
+      "taskIdHint": "Letters first, 2-64 chars: letters, digits, underscore, hyphen",
+      "taskIdInvalid": "Invalid task name format",
+      "taskIdTaken": "Task name already in use",
+      "topology": {
+        "_label": "Instance topology",
+        "standalone": "Standalone",
+        "primary_backup": "Primary / Backup"
       }
     },
     "mode": {
@@ -316,7 +324,8 @@
       "success": "Connected · {ms} ms",
       "failure": "Connection failed: {msg}",
       "network": "Network info",
-      "instanceIp": "Private IP of the ape-dts Console instance"
+      "instanceIp": "Private IP of the ape-dts Console instance",
+      "bypass": "Skip connection test"
     },
     "objects": {
       "section": {
@@ -336,9 +345,9 @@
       },
       "conflict": {
         "_label": "CDC conflict policy",
+        "insert": "Insert",
+        "replace": "Replace",
         "ignore": "Ignore",
-        "report": "Error",
-        "overwrite": "Overwrite",
         "hint": "When synced data conflicts with target rows (PK / unique-key collisions), the conflicting target row is overwritten."
       },
       "pickerTitle": "Sync objects",
@@ -350,7 +359,13 @@
       "available": "Available",
       "selected": "Selected",
       "search": "Search expanded objects (regex supported)",
-      "tableLevel": "Table-level sync"
+      "tableLevel": "Table-level sync",
+      "doDbs": "Migrate DBs (do_dbs)",
+      "doTbs": "Migrate tables (do_tbs)",
+      "ignoreDbs": "Ignore DBs (ignore_dbs)",
+      "ignoreTbs": "Ignore tables (ignore_tbs)",
+      "wildcardHint": "Wildcards * and ? supported, comma-separated",
+      "atLeastOne": "At least one migration object required"
     },
     "processing": {
       "removeInvalid": "Remove invalid objects",
@@ -370,6 +385,25 @@
         "where": "WHERE filter",
         "columnMap": "Column rename",
         "dropCol": "Drop column"
+      },
+      "router": {
+        "_label": "Router maps",
+        "dbMap": "DB map (db_map)",
+        "tbMap": "Table map (tb_map)",
+        "colMap": "Column map (col_map)",
+        "topicMap": "Topic map (topic_map, Kafka target)"
+      },
+      "lua": {
+        "_label": "Lua processor",
+        "none": "None",
+        "inline": "Inline script",
+        "file": "File upload",
+        "inlineLabel": "Lua script",
+        "inlinePh": "if row_type == \"delete\" then row_type = \"\" end",
+        "fileLabel": "Upload .lua file",
+        "chooseFile": "Choose file",
+        "notLua": "Only .lua files are accepted",
+        "tooLarge": "File too large (max {max} MB)"
       }
     },
     "advanced": {
@@ -388,7 +422,9 @@
         "from_db": "from_db — lookback against source"
       },
       "metrics": "Enable Prometheus metrics",
-      "metricsHttp": "Metrics HTTP port",
+      "metricsHttpPort": "Metrics HTTP port",
+      "metricsHttpHost": "Metrics HTTP host",
+      "metricsLabels": "Custom labels (k1:v1,k2:v2)",
       "parallel": {
         "snapshot": "snapshot (parallel snapshot)",
         "rdb_merge": "rdb_merge (merge writes)",
@@ -417,8 +453,13 @@
         "running": "Running",
         "pass": "Pass",
         "warn": "Warning",
-        "fail": "Failed"
-      }
+        "fail": "Failed",
+        "skip": "Skipped"
+      },
+      "failBlock": "Some precheck items failed. Submit anyway?",
+      "failTitle": "Precheck Warning",
+      "allPass": "All precheck items passed.",
+      "error": "Precheck request failed"
     },
     "confirm": {
       "section": {
@@ -443,11 +484,25 @@
       "submitLater": "Submit",
       "syncObjects": "Sync objects",
       "syncObjectsCount": "Object count",
-      "syncScope": "Sync scope"
+      "syncScope": "Sync scope",
+      "hidePreview": "Hide preview",
+      "previewError": "Could not load INI preview"
     },
     "toast": {
       "created": "Task created and started.",
-      "createdLater": "Task created. You can start it later."
+      "createdLater": "Task created. You can start it later.",
+      "createFailed": "Task creation failed."
+    },
+    "draft": {
+      "discard": "Discard draft",
+      "discardTitle": "Discard draft?",
+      "discardConfirm": "Are you sure? All unsaved changes will be lost.",
+      "discardDone": "Draft cleared.",
+      "leaveTitle": "Leave wizard?",
+      "leaveConfirm": "You have unsaved changes. Discard draft and leave?",
+      "leaveDiscard": "Discard & leave",
+      "deepLinkRejected": "Cannot jump to a mid-wizard step. Start from step 1.",
+      "engineChangeCleared": "Migration objects were cleared because the source engine changed."
     },
     "action": {
       "back": "Previous",
