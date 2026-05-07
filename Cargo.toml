@@ -78,6 +78,8 @@ cookie = "0.18.1"
 prometheus-parse = "0.2.5"
 csnmp = "0.6.0"
 tracing = "0.1"
+async-stream = "0.3"
+serde_urlencoded = "0.7"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 sha2 = "0.10"
 base64 = "0.22"

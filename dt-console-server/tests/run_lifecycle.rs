@@ -24,6 +24,8 @@ use dt_console_server::auth;
 use dt_console_server::db;
 use dt_console_server::error;
 use dt_console_server::executor;
+use dt_console_server::log_sse_handlers;
+use dt_console_server::metrics_scraper;
 use dt_console_server::middleware::csrf::{Csrf, XSRF_COOKIE_NAME, XSRF_HEADER_NAME};
 use dt_console_server::models::{LoginRequest, ResourceGroup};
 use dt_console_server::rate_limit::{RateLimitConfig, RateLimiter};
@@ -90,6 +92,8 @@ fn build_test_app(
         .app_data(web::Data::new(RateLimiter::new(RateLimitConfig::default())))
         .app_data(web::Data::new(IDLE_TIMEOUT_SECS))
         .app_data(web::Data::new(active_runs))
+        .app_data(web::Data::new(metrics_scraper::ScraperState::new()))
+        .app_data(web::Data::new(log_sse_handlers::LogSseState::default()))
         .configure(dt_console_server::configure)
 }
 

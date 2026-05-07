@@ -1,6 +1,7 @@
 use actix_web::cookie::Key;
 use dt_console_server::auth;
 use dt_console_server::db::{self, DbError, SCHEMA_MISMATCH_CODE};
+use dt_console_server::log_sse_handlers;
 use dt_console_server::metrics_scraper;
 use dt_console_server::models::ResourceGroup;
 use dt_console_server::rate_limit::{RateLimitConfig, RateLimiter};
@@ -68,6 +69,9 @@ async fn main() -> std::io::Result<()> {
     // Create the scraper state for metrics scraping.
     let scraper_state = metrics_scraper::ScraperState::new();
 
+    // Create the SSE state for log streaming.
+    let log_sse_state = log_sse_handlers::LogSseState::default();
+
     // Read scrape interval from env, or use default.
     let scrape_interval_secs = std::env::var("CONSOLE_SCRAPE_INTERVAL_SECS")
         .ok()
@@ -93,6 +97,7 @@ async fn main() -> std::io::Result<()> {
         let rate_limiter_clone = rate_limiter.clone();
         let active_runs_clone = active_runs.clone();
         let scraper_state_clone = scraper_state.clone();
+        let log_sse_state_clone = log_sse_state.clone();
         dt_console_server::build_app(
             key,
             pool_clone,
@@ -100,6 +105,7 @@ async fn main() -> std::io::Result<()> {
             idle_timeout_secs,
             active_runs_clone,
             scraper_state_clone,
+            log_sse_state_clone,
         )
     })
     .bind(&bind_addr)?

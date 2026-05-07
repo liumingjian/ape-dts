@@ -21,6 +21,8 @@ use dt_console_server::auth_handlers;
 use dt_console_server::db;
 use dt_console_server::error;
 use dt_console_server::health;
+use dt_console_server::log_sse_handlers;
+use dt_console_server::metrics_scraper;
 use dt_console_server::middleware::csrf::{Csrf, XSRF_COOKIE_NAME, XSRF_HEADER_NAME};
 use dt_console_server::models::LoginRequest;
 use dt_console_server::operate_log_handlers;
@@ -85,6 +87,8 @@ fn build_test_app(
         .app_data(web::Data::new(pool))
         .app_data(web::Data::new(RateLimiter::new(RateLimitConfig::default())))
         .app_data(web::Data::new(IDLE_TIMEOUT_SECS))
+        .app_data(web::Data::new(metrics_scraper::ScraperState::new()))
+        .app_data(web::Data::new(log_sse_handlers::LogSseState::default()))
         .service(
             web::scope("/api")
                 .service(health::healthz)
@@ -118,6 +122,7 @@ async fn seed_user(
         display_name: username.to_string(),
         role: role.to_string(),
         disabled,
+        resource_group_id: None,
         created_at: now.clone(),
         updated_at: now,
     };
@@ -1024,6 +1029,8 @@ async fn rate_limited_login_writes_operate_log() {
             .app_data(web::Data::new(pool.clone()))
             .app_data(web::Data::new(limiter))
             .app_data(web::Data::new(IDLE_TIMEOUT_SECS))
+            .app_data(web::Data::new(metrics_scraper::ScraperState::new()))
+            .app_data(web::Data::new(log_sse_handlers::LogSseState::default()))
             .service(
                 web::scope("/api")
                     .service(auth_handlers::login)

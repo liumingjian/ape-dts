@@ -71,6 +71,8 @@ pub struct UserContext {
     pub display_name: String,
     pub role: String,
     pub disabled: bool,
+    /// Resource group the user is scoped to. None means all RGs (admin).
+    pub resource_group_id: Option<String>,
 }
 
 // ─── User ────────────────────────────────────────────────────────────────
@@ -85,6 +87,9 @@ pub struct User {
     pub disabled: bool,
     pub created_at: String,
     pub updated_at: String,
+    /// Resource group the user is scoped to. None means all RGs.
+    #[sqlx(default)]
+    pub resource_group_id: Option<String>,
 }
 
 // ─── Session ─────────────────────────────────────────────────────────────

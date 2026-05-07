@@ -72,6 +72,10 @@ pub mod codes {
     // Export
     pub const UNSUPPORTED_EXPORT_FORMAT: &str = "unsupported_export_format";
 
+    // Log / SSE
+    pub const UNKNOWN_LOG_FILE: &str = "unknown_log_file";
+    pub const REPLAY_GAP: &str = "replay_gap";
+
     // Schema / migration
     pub const SCHEMA_MISMATCH: &str = "schema_mismatch";
 
@@ -131,7 +135,8 @@ impl actix_web::ResponseError for ApiError {
             codes::NOT_FOUND
             | codes::TASK_NOT_FOUND
             | codes::RUN_NOT_FOUND
-            | codes::RESOURCE_GROUP_NOT_FOUND => StatusCode::NOT_FOUND,
+            | codes::RESOURCE_GROUP_NOT_FOUND
+            | codes::UNKNOWN_LOG_FILE => StatusCode::NOT_FOUND,
 
             codes::PARSE_ERROR | codes::VALIDATION_FAILED => StatusCode::BAD_REQUEST,
 

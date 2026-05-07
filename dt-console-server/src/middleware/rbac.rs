@@ -133,6 +133,7 @@ mod tests {
             display_name: "Test User".to_string(),
             role: role.to_string(),
             disabled: false,
+            resource_group_id: None,
         }
     }
 

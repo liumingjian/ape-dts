@@ -7,6 +7,8 @@ pub mod executor;
 pub mod health;
 pub mod ini_renderer;
 pub mod license_handlers;
+pub mod log_sse_handlers;
+pub mod log_tailer;
 pub mod metrics_handlers;
 pub mod metrics_scraper;
 pub mod middleware;
@@ -29,6 +31,7 @@ use actix_web::cookie::Key;
 use actix_web::web::{self, JsonConfig};
 use actix_web::App;
 
+use log_sse_handlers::LogSseState;
 use metrics_scraper::ScraperState;
 use middleware::csrf::Csrf;
 use rate_limit::RateLimiter;
@@ -78,7 +81,10 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(precheck_handlers::precheck)
             .service(precheck_handlers::preview_precheck)
             // Metrics query
-            .service(metrics_handlers::get_metrics),
+            .service(metrics_handlers::get_metrics)
+            // Log SSE stream + log file read
+            .service(log_sse_handlers::log_stream)
+            .service(log_sse_handlers::get_log_file),
     );
 }
 
@@ -99,6 +105,7 @@ pub fn build_app(
     idle_timeout_secs: i64,
     active_runs: ActiveRuns,
     scraper_state: ScraperState,
+    log_sse_state: LogSseState,
 ) -> App<
     impl actix_web::dev::ServiceFactory<
         actix_web::dev::ServiceRequest,
@@ -129,5 +136,6 @@ pub fn build_app(
         .app_data(web::Data::new(idle_timeout_secs))
         .app_data(web::Data::new(active_runs))
         .app_data(web::Data::new(scraper_state))
+        .app_data(web::Data::new(log_sse_state))
         .configure(configure)
 }

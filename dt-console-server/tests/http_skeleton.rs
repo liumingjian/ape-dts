@@ -11,6 +11,8 @@ use actix_web::{App, HttpResponse, ResponseError};
 use dt_console_server::error;
 use dt_console_server::error::codes;
 use dt_console_server::health;
+use dt_console_server::log_sse_handlers;
+use dt_console_server::metrics_scraper;
 use dt_console_server::middleware::csrf::{
     Csrf, SESSION_COOKIE_NAME, XSRF_COOKIE_NAME, XSRF_HEADER_NAME,
 };
@@ -45,6 +47,8 @@ fn test_app() -> App<
         .app_data(JsonConfig::default().error_handler(|err, _req| {
             error::ApiError::new(error::codes::PARSE_ERROR, err.to_string()).into()
         }))
+        .app_data(web::Data::new(metrics_scraper::ScraperState::new()))
+        .app_data(web::Data::new(log_sse_handlers::LogSseState::default()))
         .service(
             web::scope("/api")
                 .service(health::healthz)

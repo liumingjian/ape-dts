@@ -565,6 +565,7 @@ mod tests {
         let rate_limiter = RateLimiter::new(Default::default());
         let active_runs = new_active_runs();
         let scraper_state = crate::metrics_scraper::ScraperState::new();
+        let log_sse_state = crate::log_sse_handlers::LogSseState::default();
         crate::build_app(
             Key::from(&master_bytes),
             pool_clone,
@@ -572,6 +573,7 @@ mod tests {
             3600,
             active_runs,
             scraper_state,
+            log_sse_state,
         )
     }
 

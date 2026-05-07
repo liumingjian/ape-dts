@@ -9,8 +9,8 @@ impl UserRepository {
     /// Create a new user. Returns the inserted user.
     pub async fn create(pool: &SqlitePool, user: &User) -> Result<User, sqlx::Error> {
         sqlx::query(
-            "INSERT INTO users (id, username, password_hash, display_name, role, disabled, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO users (id, username, password_hash, display_name, role, disabled, resource_group_id, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind(&user.id)
         .bind(&user.username)
@@ -18,6 +18,7 @@ impl UserRepository {
         .bind(&user.display_name)
         .bind(&user.role)
         .bind(user.disabled)
+        .bind(&user.resource_group_id)
         .bind(&user.created_at)
         .bind(&user.updated_at)
         .execute(pool)
@@ -52,7 +53,7 @@ impl UserRepository {
     /// Update a user (all mutable fields).
     pub async fn update(pool: &SqlitePool, user: &User) -> Result<User, sqlx::Error> {
         sqlx::query(
-            "UPDATE users SET username = ?, password_hash = ?, display_name = ?, role = ?, disabled = ?, updated_at = ?
+            "UPDATE users SET username = ?, password_hash = ?, display_name = ?, role = ?, disabled = ?, resource_group_id = ?, updated_at = ?
              WHERE id = ?"
         )
         .bind(&user.username)
@@ -60,6 +61,7 @@ impl UserRepository {
         .bind(&user.display_name)
         .bind(&user.role)
         .bind(user.disabled)
+        .bind(&user.resource_group_id)
         .bind(&user.updated_at)
         .bind(&user.id)
         .execute(pool)

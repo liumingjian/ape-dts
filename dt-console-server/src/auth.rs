@@ -208,6 +208,7 @@ pub async fn validate_session(
         display_name: user.display_name,
         role: user.role,
         disabled: user.disabled,
+        resource_group_id: user.resource_group_id,
     })
 }
 
@@ -387,6 +388,7 @@ pub async fn seed_admin(pool: &SqlitePool) -> Result<(), ApiError> {
         display_name: "Administrator".to_string(),
         role: "admin".to_string(),
         disabled: false,
+        resource_group_id: None,
         created_at: now.clone(),
         updated_at: now,
     };

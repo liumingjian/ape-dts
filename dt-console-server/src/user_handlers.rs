@@ -183,6 +183,7 @@ pub async fn create_user(
         display_name,
         role: body.role.clone(),
         disabled: false,
+        resource_group_id: None,
         created_at: now.clone(),
         updated_at: now,
     };

@@ -56,6 +56,7 @@ async fn user_repository_crud() {
         display_name: "Admin".to_string(),
         role: "admin".to_string(),
         disabled: false,
+        resource_group_id: None,
         created_at: now(),
         updated_at: now(),
     };
@@ -109,6 +110,7 @@ async fn user_repository_duplicate_username_rejected() {
         display_name: "Alice".to_string(),
         role: "viewer".to_string(),
         disabled: false,
+        resource_group_id: None,
         created_at: now(),
         updated_at: now(),
     };
@@ -136,6 +138,7 @@ async fn session_repository_crud() {
         display_name: "Test".to_string(),
         role: "admin".to_string(),
         disabled: false,
+        resource_group_id: None,
         created_at: now(),
         updated_at: now(),
     };
@@ -249,6 +252,7 @@ async fn task_repository_crud() {
         display_name: "Owner".to_string(),
         role: "admin".to_string(),
         disabled: false,
+        resource_group_id: None,
         created_at: now(),
         updated_at: now(),
     };
