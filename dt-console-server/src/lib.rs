@@ -10,6 +10,7 @@ pub mod license_handlers;
 pub mod middleware;
 pub mod models;
 pub mod operate_log_handlers;
+pub mod precheck_handlers;
 pub mod rate_limit;
 pub mod repositories;
 pub mod resource_group_handlers;
@@ -66,7 +67,12 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(run_handlers::resume_task)
             .service(run_handlers::get_run)
             // Control logs
-            .service(control_log_handlers::list_control_logs),
+            .service(control_log_handlers::list_control_logs)
+            // Test connection & Precheck
+            .service(precheck_handlers::test_connection)
+            .service(precheck_handlers::preview_test_connection)
+            .service(precheck_handlers::precheck)
+            .service(precheck_handlers::preview_precheck),
     );
 }
 

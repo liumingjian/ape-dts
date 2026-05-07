@@ -34,16 +34,22 @@ pub fn render(task: &Task) -> String {
     // ── [extractor] ──────────────────────────────────────────────────────
     let extractor: serde_json::Value =
         serde_json::from_str(&task.extractor_config).unwrap_or_default();
-    sections.push(render_extractor(&task.db_type_source, &extractor));
+    let source_endpoint: serde_json::Value =
+        serde_json::from_str(&task.source_endpoint).unwrap_or_default();
+    sections.push(render_extractor(
+        &task.db_type_source,
+        &extractor,
+        &source_endpoint,
+    ));
 
     // ── [sinker] ──────────────────────────────────────────────────────────
     let sinker: serde_json::Value = serde_json::from_str(&task.sinker_config).unwrap_or_default();
-    let source_endpoint: serde_json::Value =
-        serde_json::from_str(&task.source_endpoint).unwrap_or_default();
+    let target_endpoint: serde_json::Value =
+        serde_json::from_str(&task.target_endpoint).unwrap_or_default();
     sections.push(render_sinker(
         &task.db_type_target,
         &sinker,
-        &source_endpoint,
+        &target_endpoint,
     ));
 
     // ── [filter] ──────────────────────────────────────────────────────────
@@ -137,6 +143,7 @@ fn is_empty_value(v: &serde_json::Value) -> bool {
 fn render_extractor(
     db_type_source: &str,
     extractor: &serde_json::Value,
+    source_endpoint: &serde_json::Value,
 ) -> (String, Vec<(String, String)>) {
     let mut kv = Vec::new();
 
@@ -150,13 +157,21 @@ fn render_extractor(
     kv.push(("db_type".into(), db_type_source.into()));
     kv.push(("extract_type".into(), extract_type.into()));
 
-    // URL — prefer the top-level `url` field; fall back to `source_endpoint.url`
+    // URL — prefer extractor.url; fall back to source_endpoint.url
     let url = extractor.get("url").and_then(|v| v.as_str()).unwrap_or("");
     if !url.is_empty() {
         kv.push(("url".into(), url.into()));
+    } else {
+        let src_url = source_endpoint
+            .get("url")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if !src_url.is_empty() {
+            kv.push(("url".into(), src_url.into()));
+        }
     }
 
-    // Connection auth — username/password
+    // Connection auth — username/password (fallback to source_endpoint)
     let username = extractor
         .get("username")
         .or_else(|| {
@@ -164,6 +179,7 @@ fn render_extractor(
                 .get("connection_auth")
                 .and_then(|ca| ca.get("username"))
         })
+        .or_else(|| source_endpoint.get("username"))
         .and_then(|v| v.as_str())
         .unwrap_or("");
     let password = extractor
@@ -173,6 +189,7 @@ fn render_extractor(
                 .get("connection_auth")
                 .and_then(|ca| ca.get("password"))
         })
+        .or_else(|| source_endpoint.get("password"))
         .and_then(|v| v.as_str())
         .unwrap_or("");
 
@@ -274,7 +291,7 @@ fn render_extractor(
 fn render_sinker(
     db_type_target: &str,
     sinker: &serde_json::Value,
-    source_endpoint: &serde_json::Value,
+    target_endpoint: &serde_json::Value,
 ) -> (String, Vec<(String, String)>) {
     let mut kv = Vec::new();
 
@@ -288,22 +305,21 @@ fn render_sinker(
     kv.push(("db_type".into(), db_type_target.into()));
     kv.push(("sink_type".into(), sink_type.into()));
 
-    // URL
+    // URL — prefer sinker.url; fall back to target_endpoint.url
     let url = sinker.get("url").and_then(|v| v.as_str()).unwrap_or("");
     if !url.is_empty() {
         kv.push(("url".into(), url.into()));
     } else {
-        // For struct/check, source URL may serve as sinker URL
-        let src_url = source_endpoint
+        let tgt_url = target_endpoint
             .get("url")
             .and_then(|v| v.as_str())
             .unwrap_or("");
-        if !src_url.is_empty() && (sink_type == "struct" || sink_type == "check") {
-            kv.push(("url".into(), src_url.into()));
+        if !tgt_url.is_empty() {
+            kv.push(("url".into(), tgt_url.into()));
         }
     }
 
-    // Connection auth
+    // Connection auth (fallback to target_endpoint)
     let username = sinker
         .get("username")
         .or_else(|| {
@@ -311,6 +327,7 @@ fn render_sinker(
                 .get("connection_auth")
                 .and_then(|ca| ca.get("username"))
         })
+        .or_else(|| target_endpoint.get("username"))
         .and_then(|v| v.as_str())
         .unwrap_or("");
     let password = sinker
@@ -320,6 +337,7 @@ fn render_sinker(
                 .get("connection_auth")
                 .and_then(|ca| ca.get("password"))
         })
+        .or_else(|| target_endpoint.get("password"))
         .and_then(|v| v.as_str())
         .unwrap_or("");
 

@@ -11,6 +11,7 @@ metrics = ["dt-common/metrics"]
 
 [dependencies]
 dt-common = { path = "../dt-common", version = "0.1.0" }
+dt-precheck = { path = "../dt-precheck", version = "0.1.0" }
 
 actix-web = { workspace = true }
 actix-session = { workspace = true, features = ["cookie-session"] }

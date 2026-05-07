@@ -1762,6 +1762,7 @@ dependencies = [
  "csnmp",
  "dashmap",
  "dt-common",
+ "dt-precheck",
  "futures",
  "prometheus-parse",
  "regex",
