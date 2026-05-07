@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## ape-dts Console initial release
+
+### Added
+
+- **dt-console-server**: actix-web 4.9 orchestrator service with SQLite storage (sqlx), cookie-session auth (bcrypt ≥ cost 10), CSRF middleware, and RBAC (admin / operator / viewer).
+- **Task CRUD** with per-category validation (Snapshot / CDC / Check / Struct), GaussDB sub-mode enforcement, and license cap.
+- **IniRenderer**: pure `Task → INI` function built on `dt-common::config::*` with 11 golden-test matrices; `GET /api/tasks/:id/preview_ini` endpoint.
+- **Run lifecycle**: `LocalExecutor` fork-execs `dt-main` with per-Run cwd; start / stop / pause / resume endpoints; SIGTERM → SIGKILL graceful shutdown.
+- **Test connection & Precheck**: engine-specific probe endpoints for both persisted and draft-mode (wizard pre-submit) tasks.
+- **MetricsScraper + TimeSeriesStore**: polls `:9090/metrics` per Run every 10s; Prometheus text parse; downsample after 24h; query API at `GET /api/runs/:id/metrics`.
+- **LogTailer + SSE**: tails per-Run log files; ships via `GET /api/runs/:id/logs/stream` with level filter and rate limiting.
+- **AlertEngine**: evaluates metric/event alert rules with dwell-time anti-flap; Kafka and SNMP alarm dispatch channels; alert CRUD, clear, batch clear, and SSE stream.
+- **Audit**: operate logs (login, mutations) and control logs (lifecycle intent + result); both immutable; activation codes redacted.
+- **License management**: activate, persist across restart, cap enforcement, expiry blocking.
+- **Resource Groups**: CRUD with default-group protection.
+- **User management**: admin-only CRUD; duplicate username → 409; last-admin protection; self-PATCH role escalation blocked.
+- **Idempotency-Key** support on lifecycle and clear endpoints.
+- **Orchestrator restart reconciliation**: re-attaches live Runs with PID check, supervision, scraper, and log tailer.
+- **Frontend (web-prototype)**: Vue 3 SPA wired to real backend; canonical taxonomy (`/tasks/snapshot|cdc|check|struct`); wizard with 7-step (snapshot/cdc/check) and 5-step (struct) branches; route-level RBAC; `ape-dts-console-*` CSS namespace; i18n (zh-CN + en-US); Playwright e2e happy path.
+
 ## [2.0.25] - 2025-12-11
 
 ### Added

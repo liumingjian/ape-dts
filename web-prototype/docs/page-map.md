@@ -1,6 +1,6 @@
 # ape-dts Console Web Prototype · Page Map & Cross-Page Linkage
 
-Locked at the end of build sprint (2026-04-22). All pages live under `src/views/<module>/`. Routes are declared in `src/router/index.ts`.
+Canonical taxonomy (ADR-0006). All pages live under `src/views/<module>/`. Routes are declared in `src/router/index.ts`. Task categories: **snapshot** / **cdc** / **check** / **struct** (中文: 全量迁移 / 增量同步 / 数据校验 / 结构迁移). Legacy `/tasks/sync|replay|verify` redirect to their canonical counterparts.
 
 ## Page completeness matrix
 
@@ -8,10 +8,15 @@ Locked at the end of build sprint (2026-04-22). All pages live under `src/views/
 |---|---|---|---|---|
 | P0 | `/login` | `views/auth/Login.vue` | ✅ | Bilingual login, demo creds, branded hero |
 | P0 | `/dashboard` | `views/dashboard/Dashboard.vue` | ✅ | License banner · 4 KPI · 24h RPS/latency · status pie · engine bar · 7d alert trend · recent tasks/alerts |
-| P0 | `/tasks/sync` | `views/tasks/SyncTaskList.vue` | ✅ | Sortable table with status / engine / RG filters, 8 s polling, batch actions, `?status=&engine=&q=` query honored |
-| P0 | `/tasks/create/sync` | `views/tasks/CreateTaskWizard.vue` | ✅ | 7-step wizard, real validation, INI preview, draft persistence |
-| P0 | `/tasks/sync/:id` | `views/tasks/TaskDetail.vue` | ✅ | KPI · 3 charts · config / objects / logs / alerts tabs · edit drawer · `?tab=` honored |
-| P1 | `/tasks/replay`, `/tasks/verify` | wrap `TaskListView` | ✅ | Same shell as sync list |
+| P0 | `/tasks/snapshot` | `views/tasks/SnapshotTaskList.vue` | ✅ | Sortable table with status / engine / RG filters, 8 s polling, batch actions, `?status=&engine=&q=` honored |
+| P0 | `/tasks/cdc` | `views/tasks/CdcTaskList.vue` | ✅ | Same shell as snapshot list, category-specific columns |
+| P0 | `/tasks/check` | `views/tasks/CheckTaskList.vue` | ✅ | Same shell as snapshot list |
+| P0 | `/tasks/struct` | `views/tasks/StructTaskList.vue` | ✅ | Same shell as snapshot list |
+| P0 | `/tasks/create/snapshot` | `views/tasks/CreateTaskWizard.vue` | ✅ | **7-step** wizard (source → test → objects → processing → advanced → precheck → confirm) |
+| P0 | `/tasks/create/cdc` | `views/tasks/CreateTaskWizard.vue` | ✅ | **7-step** wizard (same sequence, CDC-specific fields) |
+| P0 | `/tasks/create/check` | `views/tasks/CreateTaskWizard.vue` | ✅ | **7-step** wizard (same sequence, check-specific fields) |
+| P0 | `/tasks/create/struct` | `views/tasks/CreateTaskWizard.vue` | ✅ | **5-step** wizard (source → test → objects → precheck → confirm); no processing/advanced steps |
+| P0 | `/tasks/:category/:id` | `views/tasks/TaskDetail.vue` | ✅ | KPI · 3 charts · config / objects / logs / alerts tabs · edit drawer · `?tab=` honored |
 | P1 | `/alerts/current` | `views/alerts/CurrentAlerts.vue` (`AlertTableView` mode=active) | ✅ | Level summary cards · auto-refresh toggle · level/source/engine/IP/taskId/alertId filters · batch clear |
 | P1 | `/alerts/history` | `views/alerts/HistoryAlerts.vue` (`AlertTableView` mode=history) | ✅ | Date-range picker · cleared-at column · no batch actions |
 | P1 | `/alert-monitor/metrics` | `views/alertMonitor/MetricRules.vue` | ✅ | CRUD drawer, threshold + level + period editor |
@@ -19,13 +24,43 @@ Locked at the end of build sprint (2026-04-22). All pages live under `src/views/
 | P1 | `/alert-monitor/alarm-setting` | `views/alertMonitor/AlarmSetting.vue` | ✅ | Channel cards (Kafka / SNMP), inline test connection |
 | P1 | `/alert-monitor/alarm-template` | `views/alertMonitor/AlarmTemplate.vue` | ✅ | Editor with template list, defaults per kind × format |
 | P1 | `/system/monitor` | `views/system/SystemMonitor.vue` | ✅ | Host cards summary + sortable table with CPU/Mem/Disk progress bars |
-| P1 | `/ops/management` | `views/ops/OpsManagement.vue` | ✅ | Tabbed wrapper around `TaskListView` (sync / replay / verify) |
+| P1 | `/ops/management` | `views/ops/OpsManagement.vue` | ✅ | Tabbed wrapper around TaskListView (snapshot / cdc / check / struct) |
 | P1 | `/license` | `views/license/License.vue` | ✅ | Summary tiles + table + activation dialog |
 | P2 | `/alert-monitor/monitor-setting` | `views/alertMonitor/MonitorSetting.vue` | ✅ | Single-form: retention, aggregation window, default channel/template, silence window |
 | P2 | `/system/operate-log` | `views/system/OperateLog.vue` | ✅ | Multi-field filter + table |
 | P2 | `/ops/control-log` | `views/ops/ControlLog.vue` | ✅ | Aggregated daily log files with preview drawer + download |
 | P2 | `/ops/global-params` | `views/ops/GlobalParams.vue` | ✅ | Inline-editable runtime parameters |
-| — | `/profile`, `/login`, `/404` | `views/misc/*` | ✅ | scaffolds |
+| — | `/profile`, `/forbidden`, `/404` | `views/misc/*` | ✅ | Profile + 403 fallback + catch-all |
+
+## Wizard step branches
+
+The create-task wizard branches on `TaskCategory` via `STEP_KEYS_BY_CATEGORY` in `src/composables/useWizardSteps.ts`:
+
+| Step | Snapshot | CDC | Check | Struct |
+|---|---|---|---|---|
+| 1. source | ✅ | ✅ | ✅ | ✅ |
+| 2. test | ✅ | ✅ | ✅ | ✅ |
+| 3. objects | ✅ | ✅ | ✅ | ✅ |
+| 4. processing | ✅ | ✅ | ✅ | — |
+| 5. advanced | ✅ | ✅ | ✅ | — |
+| 6. precheck | ✅ | ✅ | ✅ | ✅ |
+| 7. confirm | ✅ | ✅ | ✅ | ✅ |
+
+Struct Migration skips processing (Lua processor) and advanced (parallelizer/pipeline) steps per ADR-0006, yielding a 5-step flow.
+
+## Legacy route redirects
+
+| Old path | Redirects to | Notes |
+|---|---|---|
+| `/tasks/sync` | `/tasks/snapshot` (or `/tasks/cdc` if `?mode=cdc`) | Query preserved |
+| `/tasks/replay` | `/tasks/snapshot` | |
+| `/tasks/verify` | `/tasks/check` | |
+| `/tasks/create/sync` | `/tasks/create/snapshot` | |
+| `/tasks/create/replay` | `/tasks/create/snapshot` | |
+| `/tasks/create/verify` | `/tasks/create/check` | |
+| `/tasks/sync/:id` | `/tasks/snapshot/:id` | |
+| `/tasks/replay/:id` | `/tasks/snapshot/:id` | |
+| `/tasks/verify/:id` | `/tasks/check/:id` | |
 
 ## Cross-page links (audited)
 
@@ -34,23 +69,23 @@ LicenseBanner (global, except /dashboard)
    └─ click "前往处理" → /license
 
 Dashboard
-   ├─ KPI 运行中任务 → /tasks/sync?status=running
+   ├─ KPI 运行中任务 → /tasks/snapshot?status=running
    ├─ KPI 今日告警 → /alerts/current
-   ├─ 状态饼图扇区 → /tasks/sync?status=<status>
+   ├─ 状态饼图扇区 → /tasks/snapshot?status=<status>
    ├─ 最近任务 row → /tasks/{category}/{id}
    ├─ 高优先级告警 row → /tasks/{category}/{id}?tab=alerts
-   ├─ "查看全部任务" → /tasks/sync
+   ├─ "查看全部任务" → /tasks/snapshot
    ├─ "查看全部告警" → /alerts/current
    └─ License banner (built-in) → /license
 
-TaskListView (sync/replay/verify)
+TaskListView (snapshot/cdc/check/struct)
    ├─ name link / "查看任务" → /tasks/{category}/{id}
    ├─ "编辑" → /tasks/{category}/{id}?tab=config&edit=1
-   ├─ create button → CreateTaskModeDialog → /tasks/create/{category}?mode=<mode>
+   ├─ create button → CreateTaskModeDialog → /tasks/create/{category}
    └─ honors ?status=, ?engine=, ?q= from URL
 
 AlertTableView (current / history)
-   ├─ task name link → /tasks/{cat}/{taskId}?tab=alerts (cat inferred from id prefix)
+   ├─ task name link → /tasks/{category}/{taskId}?tab=alerts
    ├─ "查看任务" → same as above
    ├─ honors ?level=, ?taskId= from URL
    └─ summary cards toggle the level filter (active mode only)
@@ -58,32 +93,29 @@ AlertTableView (current / history)
 TaskDetail
    ├─ honors ?tab= and ?edit=1 from URL
    ├─ back button → /tasks/{category}
-   └─ delete confirm → /tasks/sync (fallback)
+   └─ delete confirm → /tasks/snapshot (fallback)
 
 OpsManagement
-   └─ Embeds 3 TaskListView instances; all child links propagate normally.
+   └─ Embeds 4 TaskListView instances (snapshot/cdc/check/struct); all child links propagate normally.
 
 CreateTaskWizard
+   ├─ 7-step branch for snapshot / cdc / check
+   ├─ 5-step branch for struct (no processing/advanced steps)
    └─ on submit → /tasks/{category}/{newId} (so the user lands on the live task)
 
 LicenseBanner / License
-   └─ activate dialog → calls /api/licenses/activate; on success refreshes the page summary
+   └─ activate dialog → calls /api/license/activate; on success refreshes the page summary
 ```
 
-All listed links were verified against `src/router/index.ts` route definitions and the `:category(sync|replay|verify)/:id` constraint. Two issues were found and fixed during this audit:
-
-1. `Dashboard.goToTask` was emitting `/tasks/{id}` (missing the category segment) → would 404. Now uses `row.category`.
-2. `Dashboard.goToTaskAlert` had the same omission. Now infers the category from the `taskId` prefix the seeder produces.
+All listed links were verified against `src/router/index.ts` route definitions and the `:category(snapshot|cdc|check|struct)/:id` constraint.
 
 ## Mock data notes
 
-- `src/mock/db.ts` seeds 24 sync, 8 replay, 6 verify tasks; 12 active + 200 history alerts; 18 metric rules; 300 events; 4 licenses (1 perpetual / 2 expiring / 1 expired); 6 hosts; 8 global params.
-- A 5 s ticker (`tickRunningMetrics`) jitters running task metrics and pushes a fresh point to each metric series so dashboard charts feel alive without backend.
-- All endpoints inject 300–900 ms latency; tests use `pause(lo, hi)`. No artificial failure on alert pages (matches their high refresh rate).
+- MSW is opt-in only when `VITE_USE_MOCK=true`; production wiring uses the real backend.
+- Backend provides live data — no MSW ticker needed for dashboard metrics.
 
 ## How to extend
 
 1. Add a new route under `src/router/index.ts`. Use the `module` meta key so `Sidebar.vue` can highlight the active group.
-2. Add page i18n keys to `src/locales/zh-CN.json` (full) and `src/locales/en-US.json` (scaffold).
-3. New mock endpoint? Create / amend a handler in `src/mock/handlers/<module>.ts`; register it in `src/mock/handlers/index.ts`.
-4. Cross-page deep link? Read `useRoute().query` in `onMounted` and seed the local filters from it (mirror the pattern in `TaskListView.vue` and `AlertTableView.vue`).
+2. Add page i18n keys to BOTH `src/locales/zh-CN.json` and `src/locales/en-US.json` (parity test enforced).
+3. Cross-page deep link? Read `useRoute().query` in `onMounted` and seed the local filters from it (mirror the pattern in `TaskListView.vue` and `AlertTableView.vue`).
