@@ -15,9 +15,25 @@ export function useCrossTabLogout(router: Router) {
   function onStorage(e: StorageEvent) {
     if (e.key !== PERSIST_KEY && e.key !== null) return;
 
-    // Key was deleted or set to null in another tab
+    // pinia-plugin-persistedstate writes {"user":null} instead of deleting the
+    // key, so !e.newValue never triggers. Parse the JSON and check user===null.
     const raw = e.newValue;
+    let loggedOut = false;
     if (!raw) {
+      // Key was genuinely deleted
+      loggedOut = true;
+    } else {
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.user === null) {
+          loggedOut = true;
+        }
+      } catch {
+        // Non-JSON value — not a logout event
+      }
+    }
+
+    if (loggedOut) {
       // Don't call server logout — the other tab already did that.
       // Just clear local state.
       auth.user = null;

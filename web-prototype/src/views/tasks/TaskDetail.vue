@@ -95,6 +95,8 @@
         <el-tab-pane :label="t('taskDetail.tab.config')" name="config">
           <div class="detail__config">
             <dl>
+              <dt>源端连接</dt><dd class="detail__mono">{{ task.sourceUrl || '—' }}</dd>
+              <dt>目标连接</dt><dd class="detail__mono">{{ task.targetUrl || '—' }}</dd>
               <dt>并行模式</dt><dd>{{ task.config.parallelizer }}</dd>
               <dt>并行度</dt><dd>{{ task.config.parallelSize }}</dd>
               <dt>缓冲区</dt><dd>{{ task.config.bufferSize }} rows</dd>

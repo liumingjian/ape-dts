@@ -86,6 +86,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useAppStore } from '@/stores/app';
 import { SUPPORTED_LOCALES, type LocaleCode } from '@/locales';
 import { localizeApiError } from '@/utils/localizeError';
+import { sanitizeRedirect } from '@/utils/sanitizeRedirect';
 import type { ApiError } from '@/api/client';
 import BrandMark from '@/components/BrandMark.vue';
 
@@ -114,14 +115,6 @@ const currentLocaleLabel = computed(
 
 function onLocaleChange(code: LocaleCode) {
   appStore.changeLocale(code);
-}
-
-/** Only allow same-origin redirect paths (prevent open redirect). */
-function sanitizeRedirect(raw: string | undefined): string {
-  if (!raw) return '/dashboard';
-  // Must start with / but not // (scheme-relative) or /\ (potential escape)
-  if (!raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/\\')) return '/dashboard';
-  return raw;
 }
 
 async function onSubmit() {

@@ -3,6 +3,7 @@ import { setActivePinia, createPinia } from 'pinia';
 import { createRouter, createMemoryHistory, type Router, type RouteRecordRaw } from 'vue-router';
 import { defineComponent, h } from 'vue';
 import { useAuthStore } from '@/stores/auth';
+import { sanitizeRedirect } from '@/utils/sanitizeRedirect';
 
 const Stub = defineComponent({ name: 'Stub', render: () => h('div') });
 
@@ -94,12 +95,6 @@ describe('Auth guard redirect', () => {
 });
 
 describe('sanitizeRedirect (open redirect protection)', () => {
-  function sanitizeRedirect(raw: string | null | undefined): string | undefined {
-    if (!raw) return undefined;
-    if (!raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/\\')) return undefined;
-    return raw;
-  }
-
   it('allows same-origin paths', () => {
     expect(sanitizeRedirect('/dashboard')).toBe('/dashboard');
     expect(sanitizeRedirect('/tasks/sync?status=running')).toBe('/tasks/sync?status=running');
@@ -109,24 +104,27 @@ describe('sanitizeRedirect (open redirect protection)', () => {
   });
 
   it('rejects scheme-relative URLs', () => {
-    expect(sanitizeRedirect('//evil.com')).toBeUndefined();
+    expect(sanitizeRedirect('//evil.com')).toBe('/dashboard');
   });
 
   it('rejects external URLs', () => {
-    expect(sanitizeRedirect('https://evil.com')).toBeUndefined();
+    expect(sanitizeRedirect('https://evil.com')).toBe('/dashboard');
   });
 
   it('rejects javascript: scheme', () => {
-    expect(sanitizeRedirect('javascript:alert(1)')).toBeUndefined();
+    expect(sanitizeRedirect('javascript:alert(1)')).toBe('/dashboard');
   });
 
   it('rejects data: scheme', () => {
-    expect(sanitizeRedirect('data:text/html,<script>alert(1)</script>')).toBeUndefined();
+    expect(sanitizeRedirect('data:text/html,<script>alert(1)</script>')).toBe('/dashboard');
   });
 
-  it('returns undefined for empty/null/undefined', () => {
-    expect(sanitizeRedirect('')).toBeUndefined();
-    expect(sanitizeRedirect(null)).toBeUndefined();
-    expect(sanitizeRedirect(undefined)).toBeUndefined();
+  it('returns /dashboard for empty or undefined', () => {
+    expect(sanitizeRedirect('')).toBe('/dashboard');
+    expect(sanitizeRedirect(undefined)).toBe('/dashboard');
+  });
+
+  it('rejects backslash-escaped paths', () => {
+    expect(sanitizeRedirect('/\\evil.com')).toBe('/dashboard');
   });
 });

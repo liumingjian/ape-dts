@@ -1148,8 +1148,8 @@ function formToTaskDraft() {
     },
     processor: (form.processor.luaInline || form.processor.luaFile)
       ? {
-          lua_code_file: form.processor.luaInline ? 'inline' : (form.processor.luaFile ? 'inline' : undefined),
-          lua_code: form.processor.luaInline || undefined,
+          lua_code_file: 'inline',
+          lua_code: form.processor.luaInline || form.processor.luaFile || undefined,
         }
       : undefined,
     runtime: {},

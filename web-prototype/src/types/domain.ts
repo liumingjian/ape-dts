@@ -4,6 +4,8 @@
  * ape-dts engine concepts (see docs/domain-model.md).
  */
 
+import { maskConnectionStringPw } from '@/utils/localizeError';
+
 export type EngineType =
   | 'mysql'
   | 'postgres'
@@ -117,6 +119,8 @@ export interface Task {
   status: TaskStatus;
   source: Endpoint;
   target: Endpoint;
+  sourceUrl: string;                  // masked connection string (password hidden)
+  targetUrl: string;                  // masked connection string (password hidden)
   syncMode: SyncMode;                 // legacy field kept for back-compat with mock seed data
   extractType: ExtractType;
   taskType: 'standalone' | 'primary_backup';
@@ -433,52 +437,48 @@ export interface TimeSeriesPoint {
   value: number;
 }
 
-/* ----- task creation DTO (WizardForm → API) ----- */
+/* ----- task creation DTO (WizardForm → API) — snake_case wire format ----- */
 export interface CreateTaskDto {
   name: string;
-  description: string;
-  category: TaskCategory;
-  source: {
-    engine: EngineType;
-    subMode?: GaussdbSubMode;
-    host: string;
-    port: number;
-    username: string;
-    password: string;
-    database?: string;
-    ssl?: boolean;
-  };
-  target: {
-    engine: EngineType;
-    subMode?: GaussdbSubMode;
-    host: string;
-    port: number;
-    username: string;
-    password: string;
-    database?: string;
-    ssl?: boolean;
-  };
-  syncMode: SyncMode;
-  extractType: ExtractType;
-  taskType: 'standalone' | 'primary_backup';
-  resourceGroup: string;
-  instanceIp: string;
-  syncObjects: { totalTables: number; selectedTables: number };
-  config: {
-    parallelizer: ParallelType;
-    parallelSize: number;
-    bufferSize: number;
-    maxRps: number;
-    checkpointIntervalSecs: number;
-    resumeType: ResumeType;
-    metricsEnabled: boolean;
-    metricsHttpPort?: number;
-  };
+  kind: TaskCategory;
+  engineSource: EngineType;
+  engineTarget: EngineType;
+  subMode?: GaussdbSubMode;
+  sourceEndpoint: { url: string };
+  targetEndpoint: { url: string };
+  extractor: { extract_type: ExtractType };
+  sinker: Record<string, unknown>;
   filter?: {
-    doDbs?: string[];
-    doTbs?: string[];
-    doEvents?: string[];
+    do_dbs?: string;
+    do_tbs?: string;
+    ignore_dbs?: string;
+    ignore_tbs?: string;
+    do_events?: string;
   };
+  router?: Record<string, string>;
+  parallelizer: {
+    parallel_type: ParallelType;
+    parallel_size: number;
+  };
+  pipeline: {
+    buffer_size: number;
+    checkpoint_interval_secs: number;
+    max_rps: number;
+  };
+  resumer: {
+    resume_type: ResumeType;
+  };
+  processor?: {
+    lua_code_file?: string;
+    lua_code?: string;
+  };
+  runtime?: Record<string, unknown>;
+  metrics?: {
+    http_host?: string;
+    http_port?: number;
+    labels?: string;
+  };
+  resourceGroupId: string;
 }
 
 /* ----- API response types (backend snake_case → frontend camelCase) ----- */
@@ -538,8 +538,10 @@ function parseEndpointUrl(url: string): { host: string; port: number; username: 
 
 /** Map a backend ApiTask to the frontend Task type used by the SPA. */
 export function mapApiTask(raw: ApiTask): Task {
-  const src = parseEndpointUrl(raw.sourceEndpoint?.url ?? '');
-  const tgt = parseEndpointUrl(raw.targetEndpoint?.url ?? '');
+  const srcRaw = raw.sourceEndpoint?.url ?? '';
+  const tgtRaw = raw.targetEndpoint?.url ?? '';
+  const src = parseEndpointUrl(srcRaw);
+  const tgt = parseEndpointUrl(tgtRaw);
   const m = raw.metrics;
   return {
     id: raw.id,
@@ -562,6 +564,8 @@ export function mapApiTask(raw: ApiTask): Task {
       password: '',
       database: tgt.database,
     },
+    sourceUrl: maskConnectionStringPw(srcRaw),
+    targetUrl: maskConnectionStringPw(tgtRaw),
     syncMode: (raw.kind === 'cdc' ? 'cdc' : 'full') as SyncMode,
     extractType: (raw.kind === 'cdc' ? 'cdc' : 'snapshot') as ExtractType,
     taskType: 'standalone',

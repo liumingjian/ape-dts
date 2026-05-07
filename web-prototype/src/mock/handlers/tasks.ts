@@ -7,6 +7,7 @@ import { pause, ok, notFound, badRequest, parsePage, paginate, q } from './_shar
 import { db, findTask, tasksOf } from '../db';
 import type { Task, TaskCategory, TaskStatus, MetricSeries } from '@/types/domain';
 import { legacyToCategory } from '@/types/domain';
+import { maskConnectionStringPw } from '@/utils/localizeError';
 import { id, intBetween, isoMinus, pick } from '../fake';
 
 function listByCategoryParam(catParam: string, url: URL): Task[] {
@@ -63,6 +64,8 @@ export const taskHandlers = [
       status: 'creating',
       source: body.source,
       target: body.target,
+      sourceUrl: buildMaskedUrl(body.source),
+      targetUrl: buildMaskedUrl(body.target),
       syncMode: body.syncMode ?? 'snapshot_cdc',
       extractType: body.extractType ?? (category === 'check' ? 'snapshot' : category === 'struct' ? 'struct' : category === 'cdc' ? 'cdc' : 'snapshot_and_cdc'),
       taskType: body.taskType ?? 'standalone',
@@ -255,6 +258,19 @@ export const taskHandlers = [
     return ok({ ini });
   }),
 ];
+
+/** Build a masked connection URL from endpoint fields. */
+function buildMaskedUrl(ep: Task['source'] | undefined): string {
+  if (!ep) return '';
+  const schemeMap: Record<string, string> = {
+    mysql: 'mysql', postgres: 'postgres', gaussdb: 'postgres', oracle: 'oracle',
+    mongo: 'mongodb', redis: 'redis', kafka: 'kafka', tidb: 'mysql',
+    starrocks: 'mysql', clickhouse: 'clickhouse', doris: 'mysql', foxlake: 'postgres',
+  };
+  const scheme = schemeMap[ep.engine] ?? 'mysql';
+  const raw = `${scheme}://${ep.username}:${ep.password}@${ep.host}:${ep.port}${ep.database ? `/${ep.database}` : ''}`;
+  return maskConnectionStringPw(raw);
+}
 
 /** Render task into ape-dts task.ini flavor. */
 function buildIni(t: Partial<Task>): string {

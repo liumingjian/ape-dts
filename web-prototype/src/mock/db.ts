@@ -8,6 +8,7 @@ import type {
   GlobalParam, EngineType, TaskCategory, TaskStatus, SyncMode, ExtractType,
   MetricSeries, MetricPoint, AlertLevel,
 } from '@/types/domain';
+import { maskConnectionStringPw } from '@/utils/localizeError';
 import { pick, intBetween, floatBetween, id, isoMinus, jitter } from './fake';
 
 const ENGINES: EngineType[] = [
@@ -111,6 +112,16 @@ function makeTask(idx: number, category: TaskCategory, forcedStatus?: TaskStatus
   const syncMode: SyncMode =
     category === 'cdc' ? 'cdc' : category === 'snapshot' ? pick(SYNC_MODES) : 'snapshot';
   const startedMin = createdMin - intBetween(0, 60);
+  // Build connection URLs for display (passwords masked)
+  const schemeMap: Record<string, string> = {
+    mysql: 'mysql', postgres: 'postgres', gaussdb: 'postgres', oracle: 'oracle',
+    mongo: 'mongodb', redis: 'redis', kafka: 'kafka', tidb: 'mysql',
+    starrocks: 'mysql', clickhouse: 'clickhouse', doris: 'mysql', foxlake: 'postgres',
+  };
+  const srcScheme = schemeMap[source.engine] ?? 'mysql';
+  const tgtScheme = schemeMap[target.engine] ?? 'mysql';
+  const srcRaw = `${srcScheme}://${source.username}:${source.password}@${source.host}:${source.port}${source.database ? `/${source.database}` : ''}`;
+  const tgtRaw = `${tgtScheme}://${target.username}:${target.password}@${target.host}:${target.port}${target.database ? `/${target.database}` : ''}`;
   return {
     id: id(category),
     name: buildTaskName(source.engine, target.engine, idx),
@@ -127,6 +138,8 @@ function makeTask(idx: number, category: TaskCategory, forcedStatus?: TaskStatus
     status,
     source,
     target,
+    sourceUrl: maskConnectionStringPw(srcRaw),
+    targetUrl: maskConnectionStringPw(tgtRaw),
     syncMode,
     extractType: defaultExtractType(category, syncMode),
     taskType: Math.random() > 0.3 ? 'standalone' : 'primary_backup',
