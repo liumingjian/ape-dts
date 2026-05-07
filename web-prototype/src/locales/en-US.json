@@ -1,0 +1,928 @@
+{
+  "brand": {
+    "name": "ape-dts Console",
+    "tagline": "Management Console",
+    "full": "ape-dts Console"
+  },
+  "common": {
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "submit": "Submit",
+    "save": "Save",
+    "edit": "Edit",
+    "delete": "Delete",
+    "create": "Create",
+    "search": "Search",
+    "reset": "Reset",
+    "refresh": "Refresh",
+    "export": "Export",
+    "import": "Import",
+    "back": "Back",
+    "next": "Next",
+    "prev": "Previous",
+    "loading": "Loading…",
+    "empty": "No data",
+    "total": "Total",
+    "all": "All",
+    "enable": "Enable",
+    "disable": "Disable",
+    "yes": "Yes",
+    "no": "No",
+    "more": "More"
+  },
+  "auth": {
+    "loginTitle": "Sign in to ape-dts Console",
+    "username": "Username",
+    "password": "Password",
+    "login": "Sign in",
+    "logout": "Sign out",
+    "hint": "Demo account: admin / admin123 (any credential works)",
+    "heroTitle": "ape-dts Console",
+    "heroSubtitle": "Open-source management console for the ape-dts data sync engine — Snapshot Migration / CDC / Check / Struct Migration",
+    "copyright": "© 2026 ape-dts · Open Source · MIT License"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "tasks": {
+      "_label": "Tasks",
+      "snapshot": "Snapshot Migration",
+      "cdc": "CDC",
+      "check": "Check",
+      "struct": "Struct Migration",
+      "sync": "Sync tasks"
+    },
+    "alerts": {
+      "_label": "Alerts",
+      "current": "Active",
+      "history": "History"
+    },
+    "license": "License",
+    "system": {
+      "_label": "System",
+      "monitor": "Monitor",
+      "operateLog": "Audit Log"
+    },
+    "ops": {
+      "_label": "Operations",
+      "management": "Operations",
+      "controlLog": "Control Log",
+      "globalParams": "Global Params"
+    },
+    "alertMonitor": {
+      "_label": "Alert Config",
+      "metrics": "Metric Rules",
+      "events": "Event Rules",
+      "monitorSetting": "Monitor Settings",
+      "alarmSetting": "Channel",
+      "alarmTemplate": "Templates"
+    }
+  },
+  "topbar": {
+    "help": "Help",
+    "notifications": "Notifications",
+    "profile": "Profile",
+    "changePassword": "Change password"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "subtitle": "Global overview · Last 24 hours",
+    "licenseWarn": "{n} License(s) are about to expire. Please review.",
+    "handle": "Handle",
+    "kpi": {
+      "running": "Running",
+      "todayAlerts": "Today's Alerts",
+      "throughput": "Total RPS",
+      "latency": "Avg Latency"
+    },
+    "section": {
+      "timeseries": "Key Time Series",
+      "distribution": "Global Distribution",
+      "recent": "Recent",
+      "distributionHint": "Tasks · engines · alerts at a glance",
+      "recentHint": "Unified timeline · tasks · alerts · system"
+    },
+    "chart": {
+      "throughput24h": "Throughput (24h)",
+      "latency24h": "Sync Latency (24h)",
+      "taskStatus": "Task Status",
+      "engineDist": "Engine Distribution",
+      "alertTrend": "Alerts (7 days)",
+      "combined": "Throughput & latency · live overlay",
+      "combinedSub": "Last 60 minutes, 1-minute buckets",
+      "taskStatusSub": "Total tasks",
+      "engineDistSub": "Grouped by source engine",
+      "alertTrendSub": "Stacked by severity",
+      "totalTasks": "Tasks"
+    },
+    "recent": {
+      "tasks": "Recent Tasks",
+      "alerts": "High-priority Alerts",
+      "tasksSub": "Latest 5 by update time",
+      "alertsSub": "Top 5 active alerts by severity"
+    },
+    "badge": {
+      "live": "LIVE"
+    },
+    "top": {
+      "title": "Top 5 by throughput",
+      "sub": "Running tasks ranked by RPS"
+    },
+    "empty": {
+      "timeseries": "No running tasks producing time-series yet",
+      "topRunning": "No running tasks",
+      "statusDist": "No tasks",
+      "engineDist": "No engine data",
+      "alertTrend": "No alerts in the last 7 days",
+      "recentTasks": "No tasks under the current filter",
+      "recentAlerts": "No high-severity alerts right now",
+      "activity": "No recent activity"
+    },
+    "filter": {
+      "all": "All"
+    },
+    "activity": {
+      "title": "Activity timeline",
+      "sub": "Latest 20 events, newest first",
+      "cat": {
+        "task": "Tasks",
+        "alert": "Alerts",
+        "system": "System"
+      }
+    }
+  },
+  "task": {
+    "status": {
+      "running": "Running",
+      "paused": "Paused",
+      "failed": "Failed",
+      "completed": "Completed",
+      "creating": "Creating",
+      "pending": "Pending"
+    },
+    "action": {
+      "pause": "Pause",
+      "resume": "Resume",
+      "stop": "Stop",
+      "delete": "Delete",
+      "view": "View",
+      "edit": "Edit",
+      "create": "Create Task",
+      "start": "Start"
+    },
+    "type": {
+      "snapshot": "Snapshot Migration",
+      "cdc": "CDC",
+      "check": "Check",
+      "struct": "Struct Migration",
+      "sync": "Sync task"
+    }
+  },
+  "taskDetail": {
+    "back": "Back to list",
+    "tab": {
+      "overview": "Overview",
+      "config": "Sync config",
+      "objects": "Sync objects",
+      "logs": "Logs",
+      "alerts": "Alerts"
+    },
+    "kpi": {
+      "rps": "Extract RPS",
+      "sinkRps": "Sink RPS",
+      "latency": "Sync latency",
+      "buffer": "Buffer queue",
+      "processed": "Records processed",
+      "errors": "Errors"
+    },
+    "chart": {
+      "rps": "Extract / sink RPS",
+      "latency": "Sync latency",
+      "buffer": "Buffer queue length"
+    },
+    "objects": {
+      "col": {
+        "name": "Object",
+        "type": "Type",
+        "rows": "Estimated rows",
+        "status": "Status"
+      }
+    },
+    "log": {
+      "filter": {
+        "level": "Level"
+      },
+      "col": {
+        "time": "Time",
+        "level": "Level",
+        "source": "Source",
+        "msg": "Message"
+      },
+      "autoRefresh": "Auto-refresh"
+    },
+    "editor": {
+      "title": "Edit task configuration",
+      "tip": "Some fields are immutable after the task starts; only runtime and rate parameters can be updated."
+    },
+    "alerts": {
+      "none": "No alerts for this task."
+    },
+    "action": {
+      "pause": "Pause",
+      "resume": "Resume",
+      "stop": "Stop",
+      "edit": "Edit",
+      "delete": "Delete"
+    }
+  },
+  "wizard": {
+    "header": {
+      "create": "Create {type}",
+      "back": "Back to list"
+    },
+    "step": {
+      "source": "Source instance",
+      "test": "Test connection",
+      "objects": "Pick objects & sync settings",
+      "processing": "Data processing",
+      "advanced": "Advanced",
+      "precheck": "Precheck",
+      "confirm": "Review & submit"
+    },
+    "alert": {
+      "beforeStart": "Step 1 provisions the source/target resources. Fields marked as immutable cannot be changed once submitted; modifying them later requires recreating the task."
+    },
+    "source": {
+      "section": {
+        "source": "Source database",
+        "target": "Target database",
+        "basic": "Task basics",
+        "mode": "Sync mode"
+      },
+      "notEditable": "Immutable",
+      "editable": "Editable",
+      "engineType": "Engine",
+      "host": "Host / IP",
+      "port": "Port",
+      "username": "Username",
+      "password": "Password",
+      "database": "Database",
+      "ssl": "SSL",
+      "pdb": "PDB name",
+      "name": "Task name",
+      "desc": {
+        "_label": "Description",
+        "ph": "Background and rationale; helpful for future audits."
+      },
+      "drsType": {
+        "_label": "Instance topology",
+        "standalone": "Standalone",
+        "primary_backup": "Primary / Backup"
+      },
+      "rg": "Resource group",
+      "instanceIp": "Allocated task IP",
+      "instanceIpHint": "This IP can host {n} more task(s).",
+      "ipHint": "Separate multiple IPs with commas.",
+      "subMode": {
+        "_label": "GaussDB sub-mode",
+        "pg-mode": "pg-mode",
+        "mysql-mode": "mysql-mode",
+        "oracle-mode": "oracle-mode (gaussdboracle)",
+        "required": "GaussDB requires a sub-mode (pg / mysql / oracle).",
+        "hint": "GaussDB exposes multiple wire protocols; oracle-mode (a.k.a. gaussdboracle) is the LogMiner-based CDC path."
+      }
+    },
+    "mode": {
+      "snapshot_cdc": {
+        "label": "Snapshot + CDC",
+        "desc": "Continuous migration with minimal downtime."
+      },
+      "snapshot": {
+        "label": "Snapshot",
+        "desc": "One-off bulk copy; suitable when downtime is acceptable."
+      },
+      "cdc": {
+        "label": "CDC",
+        "desc": "Continuous incremental replication for downtime-sensitive workloads."
+      }
+    },
+    "test": {
+      "hint": "After provisioning the sync instance, verify connectivity to the source and target. If either side enforces an IP allow-list, add the ape-dts Console IP (127.0.0.1) so the instance can reach both endpoints.",
+      "run": "Run test",
+      "running": "Testing connection…",
+      "success": "Connected · {ms} ms",
+      "failure": "Connection failed: {msg}",
+      "network": "Network info",
+      "instanceIp": "Private IP of the ape-dts Console instance"
+    },
+    "objects": {
+      "section": {
+        "rate": "Rate limit",
+        "sync": "Sync configuration"
+      },
+      "rate": {
+        "_label": "Rate-limit mode",
+        "off": "Unlimited",
+        "on": "Throttle"
+      },
+      "fullType": {
+        "_label": "Snapshot object types",
+        "schema": "Schema",
+        "data": "Data",
+        "index": "Indexes"
+      },
+      "conflict": {
+        "_label": "CDC conflict policy",
+        "ignore": "Ignore",
+        "report": "Error",
+        "overwrite": "Overwrite",
+        "hint": "When synced data conflicts with target rows (PK / unique-key collisions), the conflicting target row is overwritten."
+      },
+      "pickerTitle": "Sync objects",
+      "picker": {
+        "manual": "Manual",
+        "batch": "Bulk import"
+      },
+      "ddlNotice": "This link does not support DDL replication. Executing DDL on the source may break the task.",
+      "available": "Available",
+      "selected": "Selected",
+      "search": "Search expanded objects (regex supported)",
+      "tableLevel": "Table-level sync"
+    },
+    "processing": {
+      "removeInvalid": "Remove invalid objects",
+      "searchObj": "Object name",
+      "col": {
+        "obj": "Target object",
+        "rule": "Rule scope",
+        "filter": "Filter",
+        "rules": "Rule",
+        "dml": "DML operations",
+        "colRules": "Column rules",
+        "actions": "Actions"
+      },
+      "empty": "No data",
+      "addRule": "Add rule",
+      "rule": {
+        "where": "WHERE filter",
+        "columnMap": "Column rename",
+        "dropCol": "Drop column"
+      }
+    },
+    "advanced": {
+      "section": {
+        "runtime": "Runtime"
+      },
+      "parallelizer": "Parallel mode",
+      "parallelSize": "Parallelism",
+      "bufferSize": "Buffer size",
+      "checkpoint": "Checkpoint interval (s)",
+      "maxRps": "Max RPS per sinker",
+      "resume": {
+        "_label": "Resume strategy",
+        "from_log": "from_log — replay from log offset",
+        "from_target": "from_target — cursor on target",
+        "from_db": "from_db — lookback against source"
+      },
+      "metrics": "Enable Prometheus metrics",
+      "metricsHttp": "Metrics HTTP port",
+      "parallel": {
+        "snapshot": "snapshot (parallel snapshot)",
+        "rdb_merge": "rdb_merge (merge writes)",
+        "rdb_partition": "rdb_partition (partitioned)",
+        "rdb_check": "rdb_check (parallel check)",
+        "serial": "serial (ordered)",
+        "table": "table (per-table)"
+      }
+    },
+    "precheck": {
+      "title": "Smart check in progress",
+      "desc": "ape-dts Console is verifying source compatibility. Goals: (1) estimate the migration's impact on the source; (2) flag known incompatibilities. Results are advisory; the live check at run-time is authoritative.",
+      "reset": "Re-check",
+      "col": {
+        "idx": "#",
+        "item": "Check",
+        "type": "Category",
+        "result": "Result",
+        "action": "Actions"
+      },
+      "action": {
+        "detail": "View details"
+      },
+      "result": {
+        "pending": "Review",
+        "running": "Running",
+        "pass": "Pass",
+        "warn": "Warning",
+        "fail": "Failed"
+      }
+    },
+    "confirm": {
+      "section": {
+        "basic": "Basics",
+        "taskInfo": "Task review"
+      },
+      "field": {
+        "id": "Task ID",
+        "name": "Task name",
+        "createdAt": "Created"
+      },
+      "startTime": "Start at",
+      "startNow": "Start now",
+      "startLater": "Start later",
+      "delayThreshold": "Latency threshold (s)",
+      "iniPreview": "Preview generated task.ini",
+      "migrationSettings": "Migration settings",
+      "migrationMode": "Mode",
+      "rateMode": "Rate mode",
+      "taskInfo": "Task info",
+      "submitStart": "Submit & start",
+      "submitLater": "Submit",
+      "syncObjects": "Sync objects",
+      "syncObjectsCount": "Object count",
+      "syncScope": "Sync scope"
+    },
+    "toast": {
+      "created": "Task created and started.",
+      "createdLater": "Task created. You can start it later."
+    },
+    "action": {
+      "back": "Previous",
+      "next": "Next",
+      "testFirst": "Pass the connection test first.",
+      "precheckFirst": "Complete the precheck first."
+    }
+  },
+  "page": {
+    "wip": "Under construction",
+    "wipDesc": "Pages are being delivered in P0/P1/P2 tiers."
+  },
+  "license": {
+    "title": "License",
+    "subtitle": "Authorization status, ESN, capacity and expiry. Activate codes to extend.",
+    "esn": "ESN",
+    "esnPh": "Enter ESN",
+    "filter": {
+      "status": "All statuses",
+      "model": "All SKUs"
+    },
+    "col": {
+      "name": "Name",
+      "status": "Status",
+      "curUse": "Tasks in use",
+      "maxUse": "Max tasks",
+      "unit": "Unit",
+      "file": "File",
+      "expire": "Expires",
+      "actions": "Actions"
+    },
+    "status": {
+      "active": "Active",
+      "expiring": "Expiring",
+      "expired": "Expired",
+      "perpetual": "Perpetual"
+    },
+    "action": {
+      "activate": "Activate",
+      "download": "Download"
+    },
+    "activate": {
+      "title": "Activate / Extend License",
+      "codeLabel": "Activation code",
+      "codePh": "Enter activation code",
+      "toast": {
+        "success": "License activated",
+        "fail": "Activation failed"
+      }
+    },
+    "summary": {
+      "active": "Active",
+      "expiring": "Expiring",
+      "expired": "Expired",
+      "maxTasks": "Total task quota"
+    }
+  },
+  "system": {
+    "monitor": {
+      "title": "System monitor",
+      "subtitle": "Cluster node metrics — CPU / Memory / Disk, grouped by status.",
+      "filter": {
+        "host": "Hostname",
+        "ip": "IP"
+      },
+      "col": {
+        "host": "Host",
+        "ip": "IP",
+        "role": "Role",
+        "status": "Status",
+        "nodeType": "Node type",
+        "cpu": "CPU",
+        "mem": "Memory",
+        "disk": "Disk",
+        "uptime": "Uptime"
+      },
+      "role": {
+        "master": "Master",
+        "worker": "Worker",
+        "manager": "Manager"
+      },
+      "nodeType": {
+        "physical": "Physical",
+        "virtual": "VM",
+        "container": "Container"
+      },
+      "status": {
+        "healthy": "Healthy",
+        "warning": "Warning",
+        "error": "Error"
+      }
+    },
+    "operateLog": {
+      "title": "Audit log",
+      "subtitle": "User actions on the ape-dts Console (180-day retention).",
+      "action": "Action",
+      "level": "Level",
+      "result": {
+        "_label": "Result",
+        "success": "Success",
+        "failure": "Failure"
+      },
+      "target": "Target",
+      "user": "User",
+      "ip": "IP",
+      "range": "Time range",
+      "col": {
+        "action": "Action",
+        "level": "Level",
+        "target": "Target",
+        "type": "Type",
+        "result": "Result",
+        "user": "User",
+        "at": "Time",
+        "ip": "IP"
+      },
+      "btn": {
+        "search": "Search",
+        "reset": "Reset"
+      }
+    }
+  },
+  "ops": {
+    "management": {
+      "title": "Operations",
+      "subtitle": "Cross-task operational view with batch actions.",
+      "tab": {
+        "sync": "Sync tasks",
+        "check": "Check",
+        "struct": "Struct"
+      }
+    },
+    "controlLog": {
+      "title": "Control logs",
+      "subtitle": "Control-plane log files; download by date or scope.",
+      "filter": {
+        "scope": "Scope"
+      },
+      "scope": {
+        "all": "All",
+        "task": "Tasks",
+        "controller": "Controller",
+        "engine": "Engine"
+      },
+      "btn": {
+        "search": "Search"
+      },
+      "col": {
+        "file": "File",
+        "date": "Date",
+        "size": "Size",
+        "actions": "Actions"
+      },
+      "action": {
+        "download": "Download",
+        "preview": "Preview"
+      },
+      "empty": "No log files"
+    },
+    "globalParams": {
+      "title": "Global parameters",
+      "subtitle": "Cluster-wide runtime parameters. Edit carefully.",
+      "col": {
+        "key": "Key",
+        "value": "Value",
+        "desc": "Description",
+        "createdAt": "Created",
+        "updatedAt": "Updated",
+        "actions": "Actions"
+      },
+      "cat": {
+        "runtime": "Runtime",
+        "pipeline": "Pipeline",
+        "security": "Security",
+        "alarm": "Alarm"
+      },
+      "toast": {
+        "saved": "Parameter saved"
+      }
+    }
+  },
+  "monitor": {
+    "metric": {
+      "title": "Metric rules",
+      "subtitle": "Threshold alerts on ape-dts Prometheus metrics",
+      "action": {
+        "create": "New metric rule",
+        "edit": "Edit rule"
+      },
+      "col": {
+        "id": "ID",
+        "name": "Name",
+        "metric": "Metric",
+        "category": "Type",
+        "status": "Status",
+        "threshold": "Threshold",
+        "source": "Source",
+        "enabled": "Enabled",
+        "efficient": "Effective",
+        "period": "Period (min)",
+        "trigger": "Triggers",
+        "recovery": "Recovery",
+        "actions": "Actions"
+      },
+      "field": {
+        "name": "Rule name",
+        "metric": "Metric",
+        "operator": "Operator",
+        "threshold": "Threshold",
+        "level": "Level",
+        "period": "Period (min)",
+        "trigger": "Trigger count",
+        "recovery": "Recovery threshold",
+        "description": "Description"
+      },
+      "empty": "No metric rules",
+      "toast": {
+        "created": "Rule created",
+        "updated": "Rule updated",
+        "deleted": "Rule deleted",
+        "toggled": "Status toggled"
+      }
+    },
+    "event": {
+      "title": "Event rules",
+      "subtitle": "Alerts triggered by ape-dts system events: task stop, broken connection, checkpoint reset, etc.",
+      "col": {
+        "id": "ID",
+        "name": "Event",
+        "category": "Category",
+        "status": "Status",
+        "level": "Level",
+        "source": "Source",
+        "enabled": "Enabled",
+        "validUntil": "Valid until",
+        "period": "Period (min)",
+        "trigger": "Triggers",
+        "desc": "Description"
+      },
+      "cat": {
+        "task": "Task",
+        "system": "System",
+        "security": "Security"
+      }
+    },
+    "setting": {
+      "title": "Monitor settings",
+      "subtitle": "Adjust evaluation, default channel/template and maintenance windows.",
+      "dataRetentionDays": "Alert retention (days)",
+      "dataRetentionHelp": "Active and historical alerts are kept for N days then auto-archived.",
+      "aggregationWindowMin": "Aggregation window (min)",
+      "aggregationHelp": "Identical alerts inside the window are de-duplicated.",
+      "defaultChannel": "Default channel",
+      "defaultTemplate": "Default template",
+      "silenceStart": "Silence (start)",
+      "silenceEnd": "Silence (end)",
+      "toast": {
+        "saved": "Settings saved"
+      }
+    },
+    "channel": {
+      "title": "Alarm channels",
+      "subtitle": "Configure Kafka / SNMP delivery channels. Each channel toggles independently.",
+      "create": "Add channel",
+      "edit": "Edit channel",
+      "field": {
+        "name": "Channel name",
+        "enabled": "Channel switch",
+        "range": "Schedule",
+        "rangeHint": "End time must be later than the current time.",
+        "period": "Period",
+        "periodHint": "How often to deliver inside the schedule, in minutes.",
+        "kind": "Type",
+        "brokers": "brokers",
+        "topic": "topic",
+        "distinguish": "Differentiate alert types",
+        "ssl": "SSL",
+        "snmp": {
+          "agent": "Agent",
+          "community": "Community",
+          "version": "Version"
+        }
+      },
+      "action": {
+        "test": "Test connection"
+      },
+      "toast": {
+        "testOk": "Channel reachable",
+        "testFail": "Connection failed",
+        "saved": "Channel saved",
+        "deleted": "Channel deleted"
+      }
+    },
+    "template": {
+      "title": "Alarm templates",
+      "subtitle": "Per-channel message templates, supports JSON or split format.",
+      "field": {
+        "kind": "Channel kind",
+        "format": "Format",
+        "context": "Context",
+        "contextPh": "Template body. Use {{level}}, {{taskName}}, {{message}} placeholders."
+      },
+      "action": {
+        "init": "Reset"
+      },
+      "toast": {
+        "saved": "Template saved",
+        "reset": "Restored default"
+      },
+      "format": {
+        "json": "json",
+        "split": "split"
+      }
+    }
+  },
+  "alerts": {
+    "subtitle": {
+      "current": "Active alerts from the last 24h. Auto-refresh can be toggled off.",
+      "history": "Cleared alerts (kept for 30 days). Filter by time range."
+    },
+    "summary": {
+      "critical": "Critical",
+      "major": "Major",
+      "minor": "Minor",
+      "info": "Info",
+      "total": "Active alerts"
+    },
+    "auto": {
+      "on": "Auto-refresh on · 8s",
+      "off": "Auto-refresh off",
+      "label": "Auto-refresh"
+    },
+    "filter": {
+      "level": "All levels",
+      "source": "All sources",
+      "engine": "All engines",
+      "taskId": "Task ID",
+      "alertId": "Alert ID",
+      "ip": "Instance IP",
+      "range": "Time range",
+      "search": "Search alert ID / task / message"
+    },
+    "batch": {
+      "clear": "Clear selected"
+    },
+    "col": {
+      "id": "Alert ID",
+      "level": "Level",
+      "message": "Message",
+      "ip": "Instance IP",
+      "engine": "Engine",
+      "source": "Source",
+      "task": "Task",
+      "first": "First seen",
+      "last": "Last seen",
+      "cleared": "Cleared at",
+      "service": "Service",
+      "count": "Count",
+      "actions": "Actions"
+    },
+    "action": {
+      "clear": "Clear",
+      "viewTask": "Open task"
+    },
+    "source": {
+      "rps": "Throughput",
+      "latency": "Latency",
+      "error_rate": "Error rate",
+      "connection": "Connection",
+      "disk": "Disk",
+      "custom": "Custom"
+    },
+    "empty": {
+      "current": "No active alerts — system is healthy.",
+      "history": "No alerts in the selected window."
+    },
+    "confirm": {
+      "clear": "Clear alert \"{id}\"?",
+      "clearBatch": "Clear {n} selected alerts?"
+    },
+    "toast": {
+      "cleared": "Alert cleared",
+      "clearedBatch": "{n} alerts cleared"
+    },
+    "trend": {
+      "title": "Alert trend (14d)"
+    }
+  },
+  "taskList": {
+    "empty": "No tasks yet. Create one to begin.",
+    "subtitle": {
+      "snapshot": "One-shot bulk copy from source to target with resumable checkpoints",
+      "cdc": "Continuous incremental sync via binlog/WAL/SCN with millisecond latency",
+      "check": "Compare data between source and target with sampling or full scan",
+      "struct": "Schema-only migration: DDL, indexes, constraints, views",
+      "sync": "Snapshot / CDC / Snapshot+CDC unified — filter by mode in the list"
+    },
+    "action": {
+      "batch": "Batch",
+      "export": "Export",
+      "import": "Import",
+      "exportTpl": "Export Template",
+      "downloadTpl": "Download Template",
+      "create": "Create {type}"
+    },
+    "batch": {
+      "pause": "Pause selected",
+      "resume": "Resume selected",
+      "stop": "Stop selected",
+      "delete": "Delete selected"
+    },
+    "filter": {
+      "rg": "All resource groups",
+      "engine": "All engines",
+      "status": "All statuses",
+      "search": "Search name / ID / instance IP",
+      "mode": "All modes"
+    },
+    "col": {
+      "name": "Name / ID",
+      "status": "Status",
+      "rg": "Resource Group",
+      "flow": "Source → Target",
+      "mode": "Mode",
+      "ip": "Instance IP",
+      "rps": "RPS",
+      "latency": "Latency (ms)",
+      "progress": "Progress",
+      "desc": "Description",
+      "actions": "Actions",
+      "throughput": "Throughput / Latency",
+      "createdAt": "Created at",
+      "updatedAt": "Updated at",
+      "source": "Source",
+      "target": "Target"
+    },
+    "create": {
+      "title": "Create {type}",
+      "modeTitle": "Pick a task mode",
+      "mode": {
+        "snapshot": "Snapshot",
+        "snapshotDesc": "One-off migration of existing data, ideal for downtime-friendly cutovers.",
+        "cdc": "CDC",
+        "cdcDesc": "Continuously replicate change events from binlog / WAL / oplog.",
+        "snapshot_cdc": "Snapshot + CDC",
+        "snapshot_cdcDesc": "Run snapshot first, then switch to CDC — the hot cut-over path."
+      },
+      "next": "Next: configure"
+    },
+    "mode": {
+      "snapshot": "Snapshot",
+      "cdc": "CDC",
+      "snapshot_cdc": "Snapshot+CDC"
+    },
+    "confirm": {
+      "delete": "Delete task \"{name}\"? This cannot be undone.",
+      "stop": "Stop task \"{name}\"?",
+      "batchDelete": "Delete {n} selected tasks? This cannot be undone."
+    },
+    "toast": {
+      "deleted": "Task deleted",
+      "action": {
+        "paused": "Paused",
+        "resumed": "Resumed",
+        "stopped": "Stopped",
+        "started": "Started"
+      },
+      "exported": "Task list exported as JSON",
+      "importHint": "Demo: please upload an ape-dts task.ini bundle",
+      "loadFailed": "Failed to load tasks",
+      "actionFailed": "Action failed"
+    },
+    "cols": {
+      "manage": "Columns",
+      "title": "Visible columns",
+      "fixedHint": "Name, source, target, status, progress, actions are fixed"
+    },
+    "density": {
+      "tip": "Toggle row density (compact / default)"
+    }
+  }
+}
