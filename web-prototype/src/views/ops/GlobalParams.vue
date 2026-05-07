@@ -2,6 +2,11 @@
   <div class="gparams">
     <PageHeader :title="t('ops.globalParams.title')" :subtitle="t('ops.globalParams.subtitle')">
       <template #actions>
+        <el-switch
+          v-model="bilingualMode"
+          :active-text="t('ops.globalParams.bilingual')"
+          class="gparams__bilingual-switch"
+        />
         <el-button @click="loadList">
           <template #icon><IconRefresh /></template>
           {{ t('common.refresh') }}
@@ -34,7 +39,7 @@
           <el-table-column :label="t('ops.globalParams.col.key')" prop="key" sortable min-width="240">
             <template #default="{ row }">
               <div class="gparams__key">
-                <span class="gparams__key-text">{{ row.key }}</span>
+                <span class="gparams__key-text">{{ paramDisplayName(row) }}</span>
                 <span class="gparams__key-cat" :class="`gparams__key-cat--${row.category}`">
                   {{ t(`ops.globalParams.cat.${row.category}`) }}
                 </span>
@@ -49,7 +54,7 @@
           </el-table-column>
           <el-table-column :label="t('ops.globalParams.col.desc')" min-width="280" show-overflow-tooltip>
             <template #default="{ row }">
-              <span class="gparams__desc">{{ row.description }}</span>
+              <span class="gparams__desc">{{ paramDisplayDesc(row) }}</span>
             </template>
           </el-table-column>
           <el-table-column :label="t('ops.globalParams.col.createdAt')" width="180">
@@ -101,6 +106,7 @@ const CATS: GlobalParam['category'][] = ['runtime', 'pipeline', 'security', 'ala
 const list = ref<GlobalParam[]>([]);
 const loading = ref(false);
 const filter = reactive({ category: '' as GlobalParam['category'] | '', q: '' });
+const bilingualMode = ref(false);
 
 const filteredList = computed(() => {
   let l = list.value;
@@ -108,6 +114,21 @@ const filteredList = computed(() => {
   if (filter.q) l = l.filter((p) => p.key.includes(filter.q) || p.description.includes(filter.q));
   return l;
 });
+
+/** Bilingual display: show zh-CN / en-US when toggle is on. */
+function paramDisplayName(row: GlobalParam): string {
+  if (!bilingualMode.value) return row.key;
+  const zh = row.nameZh || row.key;
+  const en = row.nameEn || row.key;
+  return `${zh} / ${en}`;
+}
+
+function paramDisplayDesc(row: GlobalParam): string {
+  if (!bilingualMode.value) return row.description;
+  const zh = row.descZh || row.description;
+  const en = row.descEn || row.description;
+  return `${zh} / ${en}`;
+}
 
 async function loadList() {
   loading.value = true;
@@ -146,6 +167,7 @@ onMounted(loadList);
 .gparams__body { display: flex; flex-direction: column; gap: 16px; }
 .gparams__panel { padding: 16px 20px 12px; display: flex; flex-direction: column; gap: 14px; }
 .gparams__filters { display: flex; gap: 12px; align-items: center; }
+.gparams__bilingual-switch { margin-right: 8px; }
 .gparams__key { display: flex; align-items: center; gap: 8px; }
 .gparams__key-text { font-family: var(--font-mono); font-size: 13px; color: var(--color-ink); font-weight: 500; }
 .gparams__key-cat {

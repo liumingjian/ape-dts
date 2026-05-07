@@ -741,6 +741,7 @@
     "globalParams": {
       "title": "全局参数管理",
       "subtitle": "ape-dts 全局生效的运行参数，谨慎修改 (会立即作用于新启动的任务)",
+      "bilingual": "双语显示",
       "col": {
         "key": "参数名称",
         "value": "值",
@@ -1063,6 +1064,7 @@
     },
     "density": {
       "tip": "切换行高（紧凑 / 默认）"
-    }
+    },
+    "overCapTip": "License 任务配额已达上限（{current}/{max}），无法创建新任务。请联系管理员激活或升级 License。"
   }
 }

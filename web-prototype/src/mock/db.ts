@@ -406,14 +406,14 @@ function seed(): Db {
   const hosts: SystemHost[] = Array.from({ length: 6 }, (_, i) => buildHost(i));
 
   const globalParams: GlobalParam[] = [
-    { key: 'checkpoint_interval_secs', value: '10', description: '断点提交间隔', category: 'runtime', updatedAt: isoMinus(1000) },
-    { key: 'max_parallel_tasks', value: '20', description: '单集群最大并行任务数', category: 'runtime', updatedAt: isoMinus(2000) },
-    { key: 'default_buffer_memory_mb', value: '200', description: '默认内存缓冲', category: 'pipeline', updatedAt: isoMinus(500) },
-    { key: 'metric_retention_days', value: '30', description: '指标保留天数', category: 'runtime', updatedAt: isoMinus(100) },
-    { key: 'alarm_default_channel', value: '主 Kafka 通道', description: '默认告警外发通道', category: 'alarm', updatedAt: isoMinus(700) },
-    { key: 'session_timeout_min', value: '60', description: '登录会话超时', category: 'security', updatedAt: isoMinus(100) },
-    { key: 'audit_log_days', value: '180', description: '审计日志保留天数', category: 'security', updatedAt: isoMinus(300) },
-    { key: 'log_level', value: 'info', description: '日志级别', category: 'runtime', updatedAt: isoMinus(10) },
+    { key: 'checkpoint_interval_secs', value: '10', description: '断点提交间隔', nameZh: '断点提交间隔', nameEn: 'Checkpoint interval (secs)', descZh: '断点提交间隔', descEn: 'Checkpoint interval in seconds', category: 'runtime', updatedAt: isoMinus(1000) },
+    { key: 'max_parallel_tasks', value: '20', description: '单集群最大并行任务数', nameZh: '单集群最大并行任务数', nameEn: 'Max parallel tasks per cluster', descZh: '单集群最大并行任务数', descEn: 'Max parallel tasks per cluster', category: 'runtime', updatedAt: isoMinus(2000) },
+    { key: 'default_buffer_memory_mb', value: '200', description: '默认内存缓冲', nameZh: '默认内存缓冲', nameEn: 'Default buffer memory (MB)', descZh: '默认内存缓冲', descEn: 'Default buffer memory in MB', category: 'pipeline', updatedAt: isoMinus(500) },
+    { key: 'metric_retention_days', value: '30', description: '指标保留天数', nameZh: '指标保留天数', nameEn: 'Metric retention days', descZh: '指标保留天数', descEn: 'Metric retention days', category: 'runtime', updatedAt: isoMinus(100) },
+    { key: 'alarm_default_channel', value: '主 Kafka 通道', description: '默认告警外发通道', nameZh: '默认告警外发通道', nameEn: 'Default alarm channel', descZh: '默认告警外发通道', descEn: 'Default alarm dispatch channel', category: 'alarm', updatedAt: isoMinus(700) },
+    { key: 'session_timeout_min', value: '60', description: '登录会话超时', nameZh: '登录会话超时', nameEn: 'Session timeout (min)', descZh: '登录会话超时', descEn: 'Session timeout in minutes', category: 'security', updatedAt: isoMinus(100) },
+    { key: 'audit_log_days', value: '180', description: '审计日志保留天数', nameZh: '审计日志保留天数', nameEn: 'Audit log retention days', descZh: '审计日志保留天数', descEn: 'Audit log retention days', category: 'security', updatedAt: isoMinus(300) },
+    { key: 'log_level', value: 'info', description: '日志级别', nameZh: '日志级别', nameEn: 'Log level', descZh: '日志级别', descEn: 'Log level', category: 'runtime', updatedAt: isoMinus(10) },
   ];
 
   // Build metric series only for running tasks (performance)

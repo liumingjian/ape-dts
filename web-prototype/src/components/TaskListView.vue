@@ -6,7 +6,17 @@
           <template #icon><IconRefresh /></template>
           {{ t('common.refresh') }}
         </el-button>
-        <el-button type="primary" @click="onCreate">
+        <el-tooltip
+          v-if="isAtCap"
+          :content="t('taskList.overCapTip', { current: licenseInfo?.currentTasks ?? 0, max: licenseInfo?.maxTasks ?? 0 })"
+          placement="top"
+        >
+          <el-button type="primary" disabled>
+            <template #icon><IconPlus /></template>
+            {{ createLabel }}
+          </el-button>
+        </el-tooltip>
+        <el-button v-else type="primary" @click="onCreate">
           <template #icon><IconPlus /></template>
           {{ createLabel }}
         </el-button>
@@ -368,9 +378,14 @@
             <div class="task-list__empty">
               <IconInbox class="task-list__empty-icon" />
               <p>{{ t('taskList.empty') }}</p>
-              <el-button type="primary" @click="onCreate">
-                {{ createLabel }}
-              </el-button>
+              <el-tooltip
+                v-if="isAtCap"
+                :content="t('taskList.overCapTip', { current: licenseInfo?.currentTasks ?? 0, max: licenseInfo?.maxTasks ?? 0 })"
+                placement="top"
+              >
+                <el-button type="primary" disabled>{{ createLabel }}</el-button>
+              </el-tooltip>
+              <el-button v-else type="primary" @click="onCreate">{{ createLabel }}</el-button>
             </div>
           </template>
         </el-table>
@@ -417,6 +432,27 @@ const router = useRouter();
 const route = useRoute();
 const { can } = useRbac();
 const { isVisible } = useDocumentVisibility();
+
+/* ---------- license cap ---------- */
+interface LicenseInfo {
+  maxTasks: number;
+  currentTasks: number;
+  status?: string;
+}
+const licenseInfo = ref<LicenseInfo | null>(null);
+const isAtCap = computed(() => {
+  const l = licenseInfo.value;
+  if (!l || l.maxTasks === 0) return false;
+  return typeof l.maxTasks === 'number' && typeof l.currentTasks === 'number' && l.currentTasks >= l.maxTasks;
+});
+
+async function loadLicense() {
+  try {
+    licenseInfo.value = await api.get<LicenseInfo>('/license');
+  } catch {
+    /* noop — button stays enabled */
+  }
+}
 
 const showModeCol = computed(() => false);
 const apiCategory = computed(() => props.viewKind);
@@ -768,6 +804,7 @@ const POLL_INTERVAL_MS = 5_000;
 onMounted(() => {
   readFiltersFromUrl();
   loadList();
+  loadLicense();
   pollId = setInterval(() => {
     if (isVisible.value) loadList();
   }, POLL_INTERVAL_MS);

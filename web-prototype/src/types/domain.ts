@@ -275,6 +275,10 @@ export interface GlobalParam {
   key: string;
   value: string;
   description: string;
+  nameZh?: string;
+  nameEn?: string;
+  descZh?: string;
+  descEn?: string;
   category: 'runtime' | 'pipeline' | 'security' | 'alarm';
   updatedAt: string;
 }
