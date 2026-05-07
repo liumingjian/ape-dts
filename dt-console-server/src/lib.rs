@@ -1,7 +1,9 @@
 pub mod auth;
 pub mod auth_handlers;
+pub mod control_log_handlers;
 pub mod db;
 pub mod error;
+pub mod executor;
 pub mod health;
 pub mod ini_renderer;
 pub mod license_handlers;
@@ -11,6 +13,7 @@ pub mod operate_log_handlers;
 pub mod rate_limit;
 pub mod repositories;
 pub mod resource_group_handlers;
+pub mod run_handlers;
 pub mod task_handlers;
 pub mod user_handlers;
 pub mod validation;
@@ -24,6 +27,7 @@ use actix_web::App;
 
 use middleware::csrf::Csrf;
 use rate_limit::RateLimiter;
+use run_handlers::ActiveRuns;
 
 /// Configure all API routes.
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -54,7 +58,15 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(resource_group_handlers::delete_resource_group)
             .service(operate_log_handlers::list_operate_logs)
             .service(license_handlers::get_license)
-            .service(license_handlers::activate_license),
+            .service(license_handlers::activate_license)
+            // Run lifecycle
+            .service(run_handlers::start_task)
+            .service(run_handlers::stop_task)
+            .service(run_handlers::pause_task)
+            .service(run_handlers::resume_task)
+            .service(run_handlers::get_run)
+            // Control logs
+            .service(control_log_handlers::list_control_logs),
     );
 }
 
@@ -73,6 +85,7 @@ pub fn build_app(
     pool: sqlx::SqlitePool,
     rate_limiter: RateLimiter,
     idle_timeout_secs: i64,
+    active_runs: ActiveRuns,
 ) -> App<
     impl actix_web::dev::ServiceFactory<
         actix_web::dev::ServiceRequest,
@@ -101,5 +114,6 @@ pub fn build_app(
         .app_data(web::Data::new(pool))
         .app_data(web::Data::new(rate_limiter))
         .app_data(web::Data::new(idle_timeout_secs))
+        .app_data(web::Data::new(active_runs))
         .configure(configure)
 }

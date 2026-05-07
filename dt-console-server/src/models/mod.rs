@@ -158,6 +158,79 @@ pub struct Run {
     pub updated_at: String,
 }
 
+/// Response body for GET /api/runs/:run_id.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunResponse {
+    pub id: String,
+    pub task_id: String,
+    pub status: String,
+    pub pid: Option<i64>,
+    pub ini_path: Option<String>,
+    pub log_dir: Option<String>,
+    pub started_at: Option<String>,
+    pub stopped_at: Option<String>,
+    pub exit_code: Option<i64>,
+    pub stop_method: Option<String>,
+    pub position: Option<serde_json::Value>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// Response body for POST /api/tasks/:id/start.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartRunResponse {
+    pub run_id: String,
+}
+
+/// Legal Run statuses in the state machine.
+pub mod run_status {
+    pub const PENDING: &str = "pending";
+    pub const RUNNING: &str = "running";
+    pub const PAUSED: &str = "paused";
+    pub const STOPPING: &str = "stopping";
+    pub const STOPPED: &str = "stopped";
+    pub const FAILED: &str = "failed";
+
+    /// All statuses that represent an "active" (non-terminal) Run.
+    pub fn is_active(status: &str) -> bool {
+        matches!(status, PENDING | RUNNING | PAUSED | STOPPING)
+    }
+
+    /// All statuses that represent a terminal Run.
+    pub fn is_terminal(status: &str) -> bool {
+        matches!(status, STOPPED | FAILED)
+    }
+}
+
+/// Check if a state transition is legal.
+///
+/// Legal transitions:
+/// - pending → running
+/// - running → paused
+/// - paused → running
+/// - running → stopping
+/// - paused → stopping
+/// - stopping → stopped
+/// - stopping → failed
+/// - running → failed (unexpected exit)
+/// - pending → failed (spawn failure)
+pub fn is_legal_transition(from: &str, to: &str) -> bool {
+    matches!(
+        (from, to),
+        ("pending", "running")
+            | ("running", "paused")
+            | ("paused", "running")
+            | ("running", "stopping")
+            | ("paused", "stopping")
+            | ("stopping", "stopped")
+            | ("stopping", "failed")
+            | ("running", "failed")
+            | ("pending", "failed")
+    )
+}
+
 // ─── License ─────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
@@ -437,7 +510,66 @@ pub struct ControlLog {
     pub run_id: Option<String>,
     pub action: String,
     pub intent_or_result: String,
+    pub operator_id: Option<String>,
     pub created_at: String,
+}
+
+/// Response DTO for GET /api/control_logs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ControlLogResponse {
+    pub id: i64,
+    pub task_id: String,
+    pub run_id: Option<String>,
+    pub action: String,
+    pub phase: String,
+    pub result: Option<String>,
+    pub operator_id: Option<String>,
+    pub ts: String,
+}
+
+impl ControlLog {
+    /// Parse the `intent_or_result` field into (phase, result) components.
+    ///
+    /// - "intent" → ("intent", None)
+    /// - "result:success" → ("result", Some("success"))
+    /// - "result:error" → ("result", Some("error"))
+    /// - "result:orphaned_by_restart" → ("result", Some("orphaned_by_restart"))
+    pub fn phase_and_result(&self) -> (String, Option<String>) {
+        if self.intent_or_result == "intent" {
+            ("intent".to_string(), None)
+        } else if let Some(rest) = self.intent_or_result.strip_prefix("result:") {
+            ("result".to_string(), Some(rest.to_string()))
+        } else {
+            // Fallback for malformed data.
+            (self.intent_or_result.clone(), None)
+        }
+    }
+
+    /// Convert to the API response DTO.
+    pub fn to_response(&self) -> ControlLogResponse {
+        let (phase, result) = self.phase_and_result();
+        ControlLogResponse {
+            id: self.id,
+            task_id: self.task_id.clone(),
+            run_id: self.run_id.clone(),
+            action: self.action.clone(),
+            phase,
+            result,
+            operator_id: self.operator_id.clone(),
+            ts: self.created_at.clone(),
+        }
+    }
+}
+
+/// List response for GET /api/control_logs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ControlLogListResponse {
+    pub items: Vec<ControlLogResponse>,
+    pub total: i64,
+    pub page: i64,
+    pub page_size: i64,
 }
 
 // ─── GlobalParam ─────────────────────────────────────────────────────────

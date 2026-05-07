@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS control_logs (
     task_id         TEXT NOT NULL,
     run_id          TEXT,
     action          TEXT NOT NULL,
-    intent_or_result TEXT NOT NULL CHECK (intent_or_result IN ('intent', 'result')),
+    intent_or_result TEXT NOT NULL CHECK (intent_or_result = 'intent' OR intent_or_result LIKE 'result:%'),
     created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     FOREIGN KEY (task_id) REFERENCES tasks(id)
 );

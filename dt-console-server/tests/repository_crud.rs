@@ -673,6 +673,7 @@ async fn control_log_repository_crud() {
         run_id: None,
         action: "start".to_string(),
         intent_or_result: "intent".to_string(),
+        operator_id: Some("admin".to_string()),
         created_at: now(),
     };
     let created = ControlLogRepository::create(&pool, &intent).await.unwrap();
@@ -685,11 +686,12 @@ async fn control_log_repository_crud() {
         task_id: task.id.clone(),
         run_id: None,
         action: "start".to_string(),
-        intent_or_result: "result".to_string(),
+        intent_or_result: "result:success".to_string(),
+        operator_id: Some("admin".to_string()),
         created_at: now(),
     };
     let created_result = ControlLogRepository::create(&pool, &result).await.unwrap();
-    assert_eq!(created_result.intent_or_result, "result");
+    assert_eq!(created_result.intent_or_result, "result:success");
 
     // List
     let list = ControlLogRepository::list(&pool).await.unwrap();

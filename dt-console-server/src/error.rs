@@ -46,6 +46,12 @@ pub mod codes {
     pub const TASK_KIND_IMMUTABLE: &str = "task_kind_immutable";
     pub const TASK_HAS_ACTIVE_RUN: &str = "task_has_active_run";
 
+    // Run
+    pub const RUN_ALREADY_ACTIVE: &str = "RUN_ALREADY_ACTIVE";
+    pub const RUN_NOT_ACTIVE: &str = "RUN_NOT_ACTIVE";
+    pub const ILLEGAL_TRANSITION: &str = "ILLEGAL_TRANSITION";
+    pub const RUN_NOT_FOUND: &str = "run_not_found";
+
     // Task validation
     pub const GAUSSDB_SUB_MODE_REQUIRED: &str = "gaussdb_sub_mode_required";
     pub const UNKNOWN_GAUSSDB_SUB_MODE: &str = "unknown_gaussdb_sub_mode";
@@ -122,9 +128,10 @@ impl actix_web::ResponseError for ApiError {
                 StatusCode::FORBIDDEN
             }
 
-            codes::NOT_FOUND | codes::TASK_NOT_FOUND | codes::RESOURCE_GROUP_NOT_FOUND => {
-                StatusCode::NOT_FOUND
-            }
+            codes::NOT_FOUND
+            | codes::TASK_NOT_FOUND
+            | codes::RUN_NOT_FOUND
+            | codes::RESOURCE_GROUP_NOT_FOUND => StatusCode::NOT_FOUND,
 
             codes::PARSE_ERROR | codes::VALIDATION_FAILED => StatusCode::BAD_REQUEST,
 
@@ -146,6 +153,9 @@ impl actix_web::ResponseError for ApiError {
             | codes::LAST_ADMIN_PROTECTED
             | codes::USERNAME_TAKEN
             | codes::TASK_HAS_ACTIVE_RUN
+            | codes::RUN_ALREADY_ACTIVE
+            | codes::RUN_NOT_ACTIVE
+            | codes::ILLEGAL_TRANSITION
             | codes::RESOURCE_GROUP_NAME_TAKEN
             | codes::DEFAULT_RESOURCE_GROUP_PROTECTED
             | codes::RESOURCE_GROUP_HAS_TASKS => StatusCode::CONFLICT,

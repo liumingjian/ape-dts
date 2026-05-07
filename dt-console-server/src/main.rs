@@ -4,6 +4,7 @@ use dt_console_server::db::{self, DbError, SCHEMA_MISMATCH_CODE};
 use dt_console_server::models::ResourceGroup;
 use dt_console_server::rate_limit::{RateLimitConfig, RateLimiter};
 use dt_console_server::repositories::resource_group_repository::ResourceGroupRepository;
+use dt_console_server::run_handlers;
 use tracing_subscriber::EnvFilter;
 
 const DEFAULT_BIND_ADDR: &str = "127.0.0.1:8080";
@@ -46,6 +47,9 @@ async fn main() -> std::io::Result<()> {
         std::process::exit(1);
     }
 
+    // Finalise orphaned control-log intents from a previous orchestrator session.
+    dt_console_server::control_log_handlers::finalise_orphaned_intents(&pool).await;
+
     // Read idle timeout from env, or use default.
     let idle_timeout_secs = std::env::var("CONSOLE_IDLE_TIMEOUT_SECS")
         .ok()
@@ -54,6 +58,9 @@ async fn main() -> std::io::Result<()> {
 
     // Create the rate limiter.
     let rate_limiter = RateLimiter::new(RateLimitConfig::default());
+
+    // Create the active runs registry.
+    let active_runs = run_handlers::new_active_runs();
 
     // Generate the session encryption key once; clone the master bytes for each
     // worker thread so sessions are valid across all workers.
@@ -66,7 +73,14 @@ async fn main() -> std::io::Result<()> {
         let key = Key::from(&master_bytes);
         let pool_clone = pool.clone();
         let rate_limiter_clone = rate_limiter.clone();
-        dt_console_server::build_app(key, pool_clone, rate_limiter_clone, idle_timeout_secs)
+        let active_runs_clone = active_runs.clone();
+        dt_console_server::build_app(
+            key,
+            pool_clone,
+            rate_limiter_clone,
+            idle_timeout_secs,
+            active_runs_clone,
+        )
     })
     .bind(&bind_addr)?
     .run()

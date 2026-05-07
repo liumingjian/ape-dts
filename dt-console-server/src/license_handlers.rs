@@ -369,6 +369,35 @@ async fn write_license_audit_log(
     Ok(())
 }
 
+/// Check that the license is not expired (for Run start gating).
+///
+/// Unlike `check_license_cap` which gates Task *creation*, this only
+/// checks expiry — a running Run should not be stopped by the orchestrator
+/// just because the license expired mid-flight.
+pub async fn check_license_not_expired(pool: &SqlitePool) -> Result<(), ApiError> {
+    let current = LicenseRepository::get_current(pool)
+        .await
+        .map_err(|e| ApiError::new(codes::INTERNAL_ERROR, format!("license query failed: {e}")))?
+        .ok_or_else(|| {
+            ApiError::with_details(
+                codes::LICENSE_EXPIRED,
+                "No active license; cannot start a run",
+                serde_json::json!({ "status": "missing" }),
+            )
+        })?;
+
+    let status = compute_license_status(current.expire_at.as_deref());
+    if status == "expired" {
+        return Err(ApiError::with_details(
+            codes::LICENSE_EXPIRED,
+            "License has expired; cannot start a run",
+            serde_json::json!({ "status": "expired" }),
+        ));
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

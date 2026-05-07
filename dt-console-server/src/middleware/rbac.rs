@@ -39,6 +39,7 @@ pub enum RbacAction {
 
     // Audit
     OperateLogsList,
+    ControlLogsList,
 
     // Resource groups
     ResourceGroupCreate,
@@ -65,6 +66,7 @@ impl std::fmt::Display for RbacAction {
             RbacAction::LicenseActivate => "license.activate",
             RbacAction::AlertClear => "alert.clear",
             RbacAction::OperateLogsList => "operate_logs.list",
+            RbacAction::ControlLogsList => "control_logs.list",
             RbacAction::ResourceGroupCreate => "resource_group.create",
             RbacAction::ResourceGroupRead => "resource_group.read",
             RbacAction::ResourceGroupUpdate => "resource_group.update",
@@ -155,6 +157,7 @@ mod tests {
             RbacAction::LicenseActivate,
             RbacAction::AlertClear,
             RbacAction::OperateLogsList,
+            RbacAction::ControlLogsList,
             RbacAction::ResourceGroupCreate,
             RbacAction::ResourceGroupRead,
             RbacAction::ResourceGroupUpdate,
@@ -207,6 +210,7 @@ mod tests {
             RbacAction::UsersDelete,
             RbacAction::LicenseActivate,
             RbacAction::OperateLogsList,
+            RbacAction::ControlLogsList,
             RbacAction::ResourceGroupCreate,
             RbacAction::ResourceGroupUpdate,
             RbacAction::ResourceGroupDelete,
@@ -266,6 +270,7 @@ mod tests {
             RbacAction::LicenseActivate,
             RbacAction::AlertClear,
             RbacAction::OperateLogsList,
+            RbacAction::ControlLogsList,
             RbacAction::ResourceGroupCreate,
             RbacAction::ResourceGroupUpdate,
             RbacAction::ResourceGroupDelete,
@@ -432,6 +437,9 @@ mod tests {
             ("admin", RbacAction::OperateLogsList, true),
             ("operator", RbacAction::OperateLogsList, false),
             ("viewer", RbacAction::OperateLogsList, false),
+            ("admin", RbacAction::ControlLogsList, true),
+            ("operator", RbacAction::ControlLogsList, false),
+            ("viewer", RbacAction::ControlLogsList, false),
             // Resource groups
             ("admin", RbacAction::ResourceGroupCreate, true),
             ("admin", RbacAction::ResourceGroupRead, true),

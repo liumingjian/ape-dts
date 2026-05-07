@@ -47,6 +47,24 @@ impl RunRepository {
             .await
     }
 
+    /// Find the active (non-terminal) run for a given task.
+    ///
+    /// Returns the most recent run whose status is in {pending, running, paused, stopping},
+    /// or None if no active run exists.
+    pub async fn find_active_by_task(
+        pool: &SqlitePool,
+        task_id: &str,
+    ) -> Result<Option<Run>, sqlx::Error> {
+        let runs = sqlx::query_as(
+            "SELECT * FROM runs WHERE task_id = ? AND status IN ('pending', 'running', 'paused', 'stopping') ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(task_id)
+        .fetch_all(pool)
+        .await?;
+
+        Ok(runs.into_iter().next())
+    }
+
     /// Update a run.
     pub async fn update(pool: &SqlitePool, run: &Run) -> Result<Run, sqlx::Error> {
         sqlx::query(
@@ -69,5 +87,11 @@ impl RunRepository {
         .await?;
 
         Self::find_by_id(pool, &run.id).await
+    }
+
+    /// Check whether a task has an active (non-terminal) run.
+    pub async fn has_active_run(pool: &SqlitePool, task_id: &str) -> Result<bool, sqlx::Error> {
+        let active = Self::find_active_by_task(pool, task_id).await?;
+        Ok(active.is_some())
     }
 }
