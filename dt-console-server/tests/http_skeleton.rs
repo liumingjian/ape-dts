@@ -11,7 +11,9 @@ use actix_web::{App, HttpResponse, ResponseError};
 use dt_console_server::error;
 use dt_console_server::error::codes;
 use dt_console_server::health;
-use dt_console_server::middleware::csrf::{Csrf, XSRF_COOKIE_NAME, XSRF_HEADER_NAME};
+use dt_console_server::middleware::csrf::{
+    Csrf, SESSION_COOKIE_NAME, XSRF_COOKIE_NAME, XSRF_HEADER_NAME,
+};
 
 /// Build a test app with the same middleware stack as production.
 fn test_app() -> App<
@@ -65,9 +67,13 @@ async fn echo_handler(body: web::Json<EchoPayload>) -> HttpResponse {
 async fn error_envelope_4xx_returns_code_message_details() {
     let app = test::init_service(test_app()).await;
 
-    // POST without CSRF token → 403 with envelope
+    // POST with session cookie but without CSRF token → 403 with envelope
     let req = test::TestRequest::post()
         .uri("/api/echo")
+        .cookie(actix_web::cookie::Cookie::new(
+            SESSION_COOKIE_NAME,
+            "session-value",
+        ))
         .set_json(serde_json::json!({"message": "hi"}))
         .to_request();
     let res = test::call_service(&app, req).await;
@@ -83,7 +89,17 @@ async fn error_envelope_4xx_returns_code_message_details() {
 async fn error_envelope_csrf_missing_has_correct_code() {
     let app = test::init_service(test_app()).await;
 
-    let req = test::TestRequest::post().uri("/api/echo").to_request();
+    // Must include a session cookie so the CSRF middleware enforces CSRF.
+    // Without a session cookie, the request is treated as anonymous and
+    // CSRF validation is skipped (the auth middleware would return 401 on
+    // protected routes).
+    let req = test::TestRequest::post()
+        .uri("/api/echo")
+        .cookie(actix_web::cookie::Cookie::new(
+            SESSION_COOKIE_NAME,
+            "session-value",
+        ))
+        .to_request();
     let res = test::call_service(&app, req).await;
 
     let body: serde_json::Value = test::read_body_json(res).await;
@@ -98,6 +114,10 @@ async fn full_stack_post_without_xsrf_token_returns_403() {
 
     let req = test::TestRequest::post()
         .uri("/api/echo")
+        .cookie(actix_web::cookie::Cookie::new(
+            SESSION_COOKIE_NAME,
+            "session-value",
+        ))
         .set_json(serde_json::json!({"message": "hi"}))
         .to_request();
     let res = test::call_service(&app, req).await;
@@ -111,6 +131,10 @@ async fn full_stack_post_with_valid_xsrf_token_succeeds() {
     let token = "my-xsrf-token-abc";
     let req = test::TestRequest::post()
         .uri("/api/echo")
+        .cookie(actix_web::cookie::Cookie::new(
+            SESSION_COOKIE_NAME,
+            "session-value",
+        ))
         .cookie(actix_web::cookie::Cookie::new(XSRF_COOKIE_NAME, token))
         .insert_header((XSRF_HEADER_NAME, token))
         .set_json(serde_json::json!({"message": "hello"}))
@@ -126,7 +150,13 @@ async fn full_stack_post_with_valid_xsrf_token_succeeds() {
 async fn full_stack_delete_without_xsrf_token_returns_403() {
     let app = test::init_service(test_app()).await;
 
-    let req = test::TestRequest::delete().uri("/api/healthz").to_request();
+    let req = test::TestRequest::delete()
+        .uri("/api/healthz")
+        .cookie(actix_web::cookie::Cookie::new(
+            SESSION_COOKIE_NAME,
+            "session-value",
+        ))
+        .to_request();
     let res = test::call_service(&app, req).await;
     assert_eq!(res.status(), StatusCode::FORBIDDEN);
 }
@@ -140,6 +170,10 @@ async fn invalid_json_body_returns_400_parse_error() {
     let token = "test-token-parse";
     let req = test::TestRequest::post()
         .uri("/api/echo")
+        .cookie(actix_web::cookie::Cookie::new(
+            SESSION_COOKIE_NAME,
+            "session-value",
+        ))
         .cookie(actix_web::cookie::Cookie::new(XSRF_COOKIE_NAME, token))
         .insert_header((XSRF_HEADER_NAME, token))
         .insert_header(("Content-Type", "application/json"))
@@ -160,6 +194,10 @@ async fn empty_body_with_json_content_type_returns_parse_error() {
     let token = "test-token-empty";
     let req = test::TestRequest::post()
         .uri("/api/echo")
+        .cookie(actix_web::cookie::Cookie::new(
+            SESSION_COOKIE_NAME,
+            "session-value",
+        ))
         .cookie(actix_web::cookie::Cookie::new(XSRF_COOKIE_NAME, token))
         .insert_header((XSRF_HEADER_NAME, token))
         .insert_header(("Content-Type", "application/json"))
@@ -208,17 +246,24 @@ async fn healthz_endpoint_works_with_full_stack() {
 async fn error_envelope_ignores_accept_language() {
     let app = test::init_service(test_app()).await;
 
-    // Request 1: Accept-Language: zh-CN
+    // Use authenticated POST (with session cookie) without CSRF to get 403
     let req1 = test::TestRequest::post()
         .uri("/api/echo")
+        .cookie(actix_web::cookie::Cookie::new(
+            SESSION_COOKIE_NAME,
+            "session-value",
+        ))
         .insert_header(("Accept-Language", "zh-CN"))
         .to_request();
     let res1 = test::call_service(&app, req1).await;
     let body1: serde_json::Value = test::read_body_json(res1).await;
 
-    // Request 2: Accept-Language: en-US
     let req2 = test::TestRequest::post()
         .uri("/api/echo")
+        .cookie(actix_web::cookie::Cookie::new(
+            SESSION_COOKIE_NAME,
+            "session-value",
+        ))
         .insert_header(("Accept-Language", "en-US"))
         .to_request();
     let res2 = test::call_service(&app, req2).await;
@@ -276,6 +321,10 @@ async fn csrf_header_extra_whitespace_is_mismatch() {
     // Cookie value has no spaces; header has a trailing space
     let req = test::TestRequest::post()
         .uri("/api/echo")
+        .cookie(actix_web::cookie::Cookie::new(
+            SESSION_COOKIE_NAME,
+            "session-value",
+        ))
         .cookie(actix_web::cookie::Cookie::new(XSRF_COOKIE_NAME, "token"))
         .insert_header((XSRF_HEADER_NAME, "token "))
         .to_request();
