@@ -1,11 +1,13 @@
 //! MetricsScraper — polls each running Run's /metrics:9090 every 10s,
 //! parses Prometheus text via prometheus-parse, writes to MetricPointRepository.
 //!
-//! Scrape failure → metrics_unavailable alert event; recovery clears it.
+//! Scrape failure → metrics_unavailable alert fired in the alerts table;
+//! recovery → alert marked recovered.
 //! Pause stops ingestion; resume restarts.
 //! Never silently drops a parsed sample.
 
 use crate::models::MetricPoint;
+use crate::repositories::alert_repository::AlertRepository;
 use crate::repositories::metric_point_repository::MetricPointRepository;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -45,6 +47,8 @@ pub struct ScraperState {
     failures: Arc<Mutex<std::collections::HashMap<String, FailureState>>>,
     /// Set of run_ids currently paused (should not be scraped).
     paused: Arc<Mutex<HashSet<String>>>,
+    /// Whether the background scraper loop is running.
+    running: Arc<Mutex<bool>>,
 }
 
 impl ScraperState {
@@ -53,7 +57,19 @@ impl ScraperState {
             targets: Arc::new(Mutex::new(Vec::new())),
             failures: Arc::new(Mutex::new(std::collections::HashMap::new())),
             paused: Arc::new(Mutex::new(HashSet::new())),
+            running: Arc::new(Mutex::new(false)),
         }
+    }
+
+    /// Mark the scraper loop as running.
+    pub async fn set_running(&self, value: bool) {
+        let mut r = self.running.lock().await;
+        *r = value;
+    }
+
+    /// Check if the scraper loop is running.
+    pub async fn is_running(&self) -> bool {
+        *self.running.lock().await
     }
 
     /// Add or update a scrape target.
@@ -65,11 +81,27 @@ impl ScraperState {
     }
 
     /// Remove a scrape target by task_id.
+    ///
+    /// Looks up the target's `run_id` to construct the composite key
+    /// `"{task_id}:{run_id}"` used by the `failures` map, ensuring
+    /// failure state is properly cleaned up.
     pub async fn remove_target(&self, task_id: &str) {
+        let run_id = {
+            let targets = self.targets.lock().await;
+            targets
+                .iter()
+                .find(|t| t.task_id == task_id)
+                .map(|t| t.run_id.clone())
+        };
+
         let mut targets = self.targets.lock().await;
         targets.retain(|t| t.task_id != task_id);
-        let mut failures = self.failures.lock().await;
-        failures.remove(task_id);
+
+        if let Some(rid) = run_id {
+            let mut failures = self.failures.lock().await;
+            let key = format!("{task_id}:{rid}");
+            failures.remove(&key);
+        }
     }
 
     /// Mark a run as paused (stops scraping).
@@ -242,7 +274,7 @@ async fn scrape_tick(pool: &sqlx::SqlitePool, state: &ScraperState) {
                     }
                 }
 
-                // Record success; clear alert if needed.
+                // Record success; clear metrics_unavailable alert if needed.
                 let should_clear = state.record_success(&target.task_id, &target.run_id).await;
                 if should_clear {
                     tracing::info!(
@@ -251,10 +283,19 @@ async fn scrape_tick(pool: &sqlx::SqlitePool, state: &ScraperState) {
                         run_id = %target.run_id,
                         "metrics scrape recovered"
                     );
+                    // Clear the metrics_unavailable alert in the database.
+                    fire_or_clear_metrics_unavailable(
+                        pool,
+                        &target.task_id,
+                        &target.run_id,
+                        false, // clear
+                        &now,
+                    )
+                    .await;
                 }
             }
             Err(e) => {
-                // Record failure; fire alert if threshold reached.
+                // Record failure; fire metrics_unavailable alert if threshold reached.
                 let should_alert = state.record_failure(&target.task_id, &target.run_id).await;
                 if should_alert {
                     tracing::warn!(
@@ -264,7 +305,76 @@ async fn scrape_tick(pool: &sqlx::SqlitePool, state: &ScraperState) {
                         reason = %e,
                         "metrics_unavailable alert: scrape failed"
                     );
+                    // Fire a metrics_unavailable alert in the database.
+                    fire_or_clear_metrics_unavailable(
+                        pool,
+                        &target.task_id,
+                        &target.run_id,
+                        true, // fire
+                        &now,
+                    )
+                    .await;
                 }
+            }
+        }
+    }
+}
+
+/// Fire or clear a `metrics_unavailable` alert for a given (task_id, run_id).
+///
+/// When `fire` is true, creates a new firing alert unless one already exists.
+/// When `fire` is false, finds the existing firing alert and marks it recovered.
+async fn fire_or_clear_metrics_unavailable(
+    pool: &sqlx::SqlitePool,
+    task_id: &str,
+    run_id: &str,
+    fire: bool,
+    now: &str,
+) {
+    if fire {
+        // Only create if one doesn't already exist.
+        if AlertRepository::find_metrics_unavailable(pool, task_id, run_id)
+            .await
+            .ok()
+            .flatten()
+            .is_some()
+        {
+            return; // Already firing — dedup.
+        }
+
+        let alert = crate::models::Alert {
+            id: uuid::Uuid::new_v4().to_string(),
+            task_id: Some(task_id.to_string()),
+            run_id: Some(run_id.to_string()),
+            rule_id: None,
+            metric_name: Some("metrics_unavailable".to_string()),
+            operator: None,
+            threshold: None,
+            severity: "critical".to_string(),
+            value: None,
+            status: "firing".to_string(),
+            silenced: false,
+            fired_at: now.to_string(),
+            recovered_at: None,
+            cleared_at: None,
+            delivered_at: None,
+            cleared_by: None,
+            last_error: None,
+            created_at: now.to_string(),
+        };
+
+        if let Err(e) = AlertRepository::create(pool, &alert).await {
+            tracing::warn!("failed to persist metrics_unavailable alert: {e}");
+        }
+    } else {
+        // Find and recover the firing alert.
+        if let Ok(Some(mut alert)) =
+            AlertRepository::find_metrics_unavailable(pool, task_id, run_id).await
+        {
+            alert.status = "recovered".to_string();
+            alert.recovered_at = Some(now.to_string());
+            if let Err(e) = AlertRepository::update(pool, &alert).await {
+                tracing::warn!("failed to recover metrics_unavailable alert: {e}");
             }
         }
     }
@@ -281,7 +391,10 @@ pub fn spawn_scraper(pool: sqlx::SqlitePool, state: ScraperState, interval_secs:
         interval_secs
     };
 
+    // Mark the scraper as running before spawning the loop.
+    let state_clone = state.clone();
     tokio::spawn(async move {
+        state_clone.set_running(true).await;
         loop {
             tokio::time::sleep(tokio::time::Duration::from_secs(interval)).await;
             scrape_tick(&pool, &state).await;
@@ -358,6 +471,39 @@ mod tests {
         state.remove_target("t1").await;
         let targets = state.get_targets().await;
         assert!(targets.is_empty());
+
+        // Verify failure state is also cleaned up.
+        let failures = state.failures.lock().await;
+        assert!(!failures.contains_key("t1:r1"));
+    }
+
+    #[tokio::test]
+    async fn scraper_state_remove_target_cleans_failure_state() {
+        let state = ScraperState::new();
+        state
+            .add_target(ScrapeTarget {
+                task_id: "t2".into(),
+                run_id: "r2".into(),
+                host: "127.0.0.1".into(),
+                port: 9090,
+            })
+            .await;
+
+        // Record some failures to populate the failures map.
+        state.record_failure("t2", "r2").await;
+        state.record_failure("t2", "r2").await;
+        assert!(state.record_failure("t2", "r2").await); // fires alert
+
+        // Verify the composite key is present.
+        {
+            let failures = state.failures.lock().await;
+            assert!(failures.contains_key("t2:r2"));
+        }
+
+        // remove_target must clean up the failure state using the composite key.
+        state.remove_target("t2").await;
+        let failures = state.failures.lock().await;
+        assert!(!failures.contains_key("t2:r2"));
     }
 
     #[tokio::test]
@@ -392,5 +538,45 @@ mod tests {
         assert!(state.record_success("t1", "r1").await);
         // Subsequent success should not claim to clear again.
         assert!(!state.record_success("t1", "r1").await);
+    }
+
+    /// Verify that fire_or_clear_metrics_unavailable creates and recovers alerts.
+    #[tokio::test]
+    async fn fire_or_clear_metrics_unavailable_creates_and_recoveries() {
+        let pool = crate::db::create_pool(":memory:").await.unwrap();
+        crate::db::run_migrations(&pool).await.unwrap();
+
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        // Fire the alert.
+        fire_or_clear_metrics_unavailable(&pool, "task-a", "run-a", true, &now).await;
+
+        // Verify the alert was created.
+        let alert = AlertRepository::find_metrics_unavailable(&pool, "task-a", "run-a")
+            .await
+            .unwrap()
+            .expect("alert should exist");
+        assert_eq!(alert.status, "firing");
+        assert_eq!(alert.metric_name, Some("metrics_unavailable".to_string()));
+        assert_eq!(alert.severity, "critical");
+
+        // Firing again should dedup (not create a second alert).
+        fire_or_clear_metrics_unavailable(&pool, "task-a", "run-a", true, &now).await;
+        let alerts = AlertRepository::list(&pool).await.unwrap();
+        assert_eq!(alerts.len(), 1, "dedup should prevent duplicate alerts");
+
+        // Save the alert ID before recovery.
+        let alert_id = alert.id.clone();
+
+        // Clear (recover) the alert.
+        let now2 = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        fire_or_clear_metrics_unavailable(&pool, "task-a", "run-a", false, &now2).await;
+
+        // Look up by ID (find_metrics_unavailable only finds firing alerts).
+        let recovered = AlertRepository::find_by_id(&pool, &alert_id)
+            .await
+            .expect("alert should still exist");
+        assert_eq!(recovered.status, "recovered");
+        assert!(recovered.recovered_at.is_some());
     }
 }

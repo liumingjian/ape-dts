@@ -90,14 +90,24 @@ impl MetricPointRepository {
     }
 
     /// Check whether a metric name has any rows for a given run.
+    ///
+    /// Queries both `metric_points` and `downsampled_metric_points` so that
+    /// names are still found after the 24h downsampling sweep moves raw
+    /// rows into the downsampled table.
     pub async fn metric_name_exists_for_run(
         pool: &SqlitePool,
         run_id: &str,
         metric_name: &str,
     ) -> Result<bool, sqlx::Error> {
         let row: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM metric_points WHERE run_id = ? AND metric_name = ? LIMIT 1",
+            "SELECT COUNT(*) FROM (
+                SELECT 1 FROM metric_points WHERE run_id = ? AND metric_name = ?
+                UNION ALL
+                SELECT 1 FROM downsampled_metric_points WHERE run_id = ? AND metric_name = ?
+            ) LIMIT 1",
         )
+        .bind(run_id)
+        .bind(metric_name)
         .bind(run_id)
         .bind(metric_name)
         .fetch_one(pool)
@@ -106,13 +116,21 @@ impl MetricPointRepository {
     }
 
     /// List distinct metric names for a given run.
+    ///
+    /// Queries both `metric_points` and `downsampled_metric_points` so that
+    /// names are still returned after the 24h downsampling sweep moves raw
+    /// rows into the downsampled table.
     pub async fn list_metric_names_by_run(
         pool: &SqlitePool,
         run_id: &str,
     ) -> Result<Vec<String>, sqlx::Error> {
         let rows: Vec<(String,)> = sqlx::query_as(
-            "SELECT DISTINCT metric_name FROM metric_points WHERE run_id = ? ORDER BY metric_name",
+            "SELECT DISTINCT metric_name FROM metric_points WHERE run_id = ?
+             UNION
+             SELECT DISTINCT metric_name FROM downsampled_metric_points WHERE run_id = ?
+             ORDER BY metric_name",
         )
+        .bind(run_id)
         .bind(run_id)
         .fetch_all(pool)
         .await?;

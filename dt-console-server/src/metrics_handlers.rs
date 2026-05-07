@@ -508,4 +508,68 @@ mod tests {
         .unwrap();
         assert_eq!(points.len(), 5);
     }
+
+    /// After 24h downsampling, metric_name_exists_for_run and
+    /// list_metric_names_by_run must still find names in the
+    /// downsampled table even when the raw metric_points are gone.
+    #[tokio::test]
+    async fn metric_name_finds_downsampled_after_raws_deleted() {
+        let pool = test_pool().await;
+        let rg_id = seed_resource_group(&pool).await;
+        seed_task(&pool, "ds-task", &rg_id).await;
+        seed_run(&pool, "ds-run", "ds-task", "stopped").await;
+
+        // Insert downsampled rows directly (simulating post-downsample state).
+        let old_time = chrono::Utc::now() - chrono::Duration::hours(25);
+        for i in 0..3 {
+            let bucket_ts = (old_time + chrono::Duration::minutes(i))
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+            sqlx::query(
+                "INSERT INTO downsampled_metric_points
+                 (task_id, run_id, metric_name, bucket_ts, bucket_secs, value_mean, value_min, value_max, sample_count)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            )
+            .bind("ds-task")
+            .bind("ds-run")
+            .bind("extractor_rps_avg")
+            .bind(&bucket_ts)
+            .bind(60)
+            .bind(5.0 + i as f64)
+            .bind(4.0 + i as f64)
+            .bind(6.0 + i as f64)
+            .bind(6i64)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+
+        // No raw metric_points for this run — only downsampled.
+        // Verify the raw-only query would be empty (sanity check).
+        let raw_only: Vec<(String,)> =
+            sqlx::query_as("SELECT DISTINCT metric_name FROM metric_points WHERE run_id = ?")
+                .bind("ds-run")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+        assert!(
+            raw_only.is_empty(),
+            "raw table should have no names for ds-run"
+        );
+
+        // metric_name_exists_for_run should find it via the UNION query.
+        let exists =
+            MetricPointRepository::metric_name_exists_for_run(&pool, "ds-run", "extractor_rps_avg")
+                .await
+                .unwrap();
+        assert!(
+            exists,
+            "metric_name_exists_for_run must find downsampled rows"
+        );
+
+        // list_metric_names_by_run should return names from both tables.
+        let names = MetricPointRepository::list_metric_names_by_run(&pool, "ds-run")
+            .await
+            .unwrap();
+        assert_eq!(names, vec!["extractor_rps_avg"]);
+    }
 }

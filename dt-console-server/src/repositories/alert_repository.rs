@@ -93,7 +93,7 @@ impl AlertRepository {
             conditions.push(format!(
                 "EXISTS (SELECT 1 FROM tasks t WHERE t.id = a.task_id AND (t.db_type_source LIKE ?{param_idx} OR t.db_type_target LIKE ?{param_idx}))"
             ));
-            param_idx += 1;
+            let _ = param_idx;
         }
 
         let where_sql = if conditions.is_empty() {
@@ -122,7 +122,7 @@ impl AlertRepository {
             count_conditions.push(format!(
                 "EXISTS (SELECT 1 FROM tasks t WHERE t.id = alerts.task_id AND (t.db_type_source LIKE ?{count_idx} OR t.db_type_target LIKE ?{count_idx}))"
             ));
-            count_idx += 1;
+            let _ = count_idx;
         }
 
         let count_where_sql = if count_conditions.is_empty() {
@@ -226,6 +226,21 @@ impl AlertRepository {
             "SELECT * FROM alerts WHERE task_id = ? AND metric_name = 'cdc_stalled' AND status = 'firing' ORDER BY fired_at DESC LIMIT 1",
         )
         .bind(task_id)
+        .fetch_optional(pool)
+        .await
+    }
+
+    /// Find a metrics_unavailable alert for a specific (task_id, run_id) pair.
+    pub async fn find_metrics_unavailable(
+        pool: &SqlitePool,
+        task_id: &str,
+        run_id: &str,
+    ) -> Result<Option<Alert>, sqlx::Error> {
+        sqlx::query_as(
+            "SELECT * FROM alerts WHERE task_id = ? AND run_id = ? AND metric_name = 'metrics_unavailable' AND status = 'firing' ORDER BY fired_at DESC LIMIT 1",
+        )
+        .bind(task_id)
+        .bind(run_id)
         .fetch_optional(pool)
         .await
     }
