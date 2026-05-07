@@ -342,7 +342,7 @@ pub async fn test_connection(
     user: UserContext,
     path: web::Path<String>,
 ) -> HttpResponse {
-    if let Err(e) = rbac::require_action(&user, RbacAction::TaskRead) {
+    if let Err(e) = rbac::require_action(&user, RbacAction::TaskCreate) {
         return e.error_response();
     }
 
@@ -380,7 +380,7 @@ pub async fn precheck(
     user: UserContext,
     path: web::Path<String>,
 ) -> HttpResponse {
-    if let Err(e) = rbac::require_action(&user, RbacAction::TaskRead) {
+    if let Err(e) = rbac::require_action(&user, RbacAction::TaskCreate) {
         return e.error_response();
     }
 
@@ -569,6 +569,7 @@ mod tests {
         let alert_sse_state = crate::alert_handlers::AlertSseState::new();
         let dispatcher_state = crate::alarm_dispatcher::DispatcherState::new();
         let alert_engine_state = crate::alert_engine::AlertEngineState::new();
+        let idempotency_cache = crate::idempotency::IdempotencyCache::new();
         crate::build_app(
             Key::from(&master_bytes),
             pool_clone,
@@ -580,6 +581,7 @@ mod tests {
             alert_sse_state,
             dispatcher_state,
             alert_engine_state,
+            idempotency_cache,
         )
     }
 

@@ -19,6 +19,7 @@ use tokio::sync::Mutex;
 use crate::alarm_dispatcher;
 use crate::alert_engine::AlertEvent;
 use crate::error::{codes, ApiError};
+use crate::idempotency::{extract_key, IdempotencyCache};
 use crate::middleware::rbac::{self, RbacAction};
 use crate::models::{Alert, UserContext};
 use crate::repositories::alarm_channel_repository::AlarmChannelRepository;
@@ -222,15 +223,30 @@ pub async fn list_alerts(
 /// Sets status=cleared, cleared_at=now, cleared_by=session_user.
 /// Emits one SSE `event: cleared`.
 /// Already-cleared re-clear is idempotent.
+/// Honours Idempotency-Key: replayed key returns cached result.
 #[post("/alerts/{id}/clear")]
 pub async fn clear_alert(
     pool: web::Data<sqlx::SqlitePool>,
     user: UserContext,
     path: web::Path<String>,
     sse_state: web::Data<AlertSseState>,
+    idempotency_cache: web::Data<IdempotencyCache>,
+    req: HttpRequest,
 ) -> HttpResponse {
     if let Err(e) = rbac::require_action(&user, RbacAction::AlertClear) {
         return e.error_response();
+    }
+
+    // Idempotency-Key check: if the key was seen before, return the cached result.
+    let idem_key = extract_key(&req);
+    if let Some(ref key) = idem_key {
+        if let Some(cached) = idempotency_cache.get(key).await {
+            return HttpResponse::build(
+                actix_web::http::StatusCode::from_u16(cached.status)
+                    .unwrap_or(actix_web::http::StatusCode::OK),
+            )
+            .json(cached.body);
+        }
     }
 
     let alert_id = path.into_inner();
@@ -249,13 +265,19 @@ pub async fn clear_alert(
 
     // Idempotent: already-cleared → return 200 with noop=true.
     if alert.status == "cleared" {
-        return HttpResponse::Ok().json(serde_json::json!({
+        let already_cleared_body = serde_json::json!({
             "id": alert.id,
             "status": "cleared",
             "cleared_at": alert.cleared_at,
             "cleared_by": alert.cleared_by,
             "noop": true,
-        }));
+        });
+        if let Some(ref key) = idem_key {
+            idempotency_cache
+                .put(key, 200, already_cleared_body.clone())
+                .await;
+        }
+        return HttpResponse::Ok().json(already_cleared_body);
     }
 
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
@@ -274,12 +296,16 @@ pub async fn clear_alert(
                 })
                 .await;
 
-            HttpResponse::Ok().json(serde_json::json!({
+            let cleared_body = serde_json::json!({
                 "id": persisted.id,
                 "status": "cleared",
                 "cleared_at": persisted.cleared_at,
                 "cleared_by": persisted.cleared_by,
-            }))
+            });
+            if let Some(ref key) = idem_key {
+                idempotency_cache.put(key, 200, cleared_body.clone()).await;
+            }
+            HttpResponse::Ok().json(cleared_body)
         }
         Err(e) => {
             tracing::warn!("alert clear update failed: {e}");
@@ -292,15 +318,30 @@ pub async fn clear_alert(
 ///
 /// Atomic per request: each id is cleared independently.
 /// Returns per-row success/failure outcome.
+/// Honours Idempotency-Key: replayed key returns cached result.
 #[post("/alerts/clear_batch")]
 pub async fn clear_batch(
     pool: web::Data<sqlx::SqlitePool>,
     user: UserContext,
     body: web::Json<ClearBatchRequest>,
     sse_state: web::Data<AlertSseState>,
+    idempotency_cache: web::Data<IdempotencyCache>,
+    req: HttpRequest,
 ) -> HttpResponse {
     if let Err(e) = rbac::require_action(&user, RbacAction::AlertClear) {
         return e.error_response();
+    }
+
+    // Idempotency-Key check: if the key was seen before, return the cached result.
+    let idem_key = extract_key(&req);
+    if let Some(ref key) = idem_key {
+        if let Some(cached) = idempotency_cache.get(key).await {
+            return HttpResponse::build(
+                actix_web::http::StatusCode::from_u16(cached.status)
+                    .unwrap_or(actix_web::http::StatusCode::OK),
+            )
+            .json(cached.body);
+        }
     }
 
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
@@ -357,10 +398,17 @@ pub async fn clear_batch(
         }
     }
 
-    HttpResponse::Ok().json(serde_json::json!({
+    let result_body = serde_json::json!({
         "successes": successes,
         "failures": failures,
-    }))
+    });
+
+    // Cache the result if an Idempotency-Key was provided.
+    if let Some(ref key) = idem_key {
+        idempotency_cache.put(key, 200, result_body.clone()).await;
+    }
+
+    HttpResponse::Ok().json(result_body)
 }
 
 /// GET /api/alerts/stream — SSE alert stream.

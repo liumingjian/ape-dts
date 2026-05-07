@@ -4,6 +4,7 @@ use dt_console_server::alert_engine;
 use dt_console_server::alert_handlers;
 use dt_console_server::auth;
 use dt_console_server::db::{self, DbError, SCHEMA_MISMATCH_CODE};
+use dt_console_server::idempotency::IdempotencyCache;
 use dt_console_server::log_sse_handlers;
 use dt_console_server::metrics_scraper;
 use dt_console_server::models::{ResourceGroup, Run};
@@ -90,6 +91,9 @@ async fn main() -> std::io::Result<()> {
     // Create the alert engine state.
     let alert_engine_state = alert_engine::AlertEngineState::new();
 
+    // Create the idempotency cache for lifecycle/clear dedup.
+    let idempotency_cache = IdempotencyCache::new();
+
     // Read scrape interval from env, or use default.
     let scrape_interval_secs = std::env::var("CONSOLE_SCRAPE_INTERVAL_SECS")
         .ok()
@@ -140,6 +144,7 @@ async fn main() -> std::io::Result<()> {
             alert_sse_state_clone,
             dispatcher_state_clone,
             alert_engine_state_clone,
+            idempotency_cache.clone(),
         )
     })
     .bind(&bind_addr)?;

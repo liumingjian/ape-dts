@@ -77,6 +77,18 @@ fn build_test_app(
         .app_data(web::Data::new(IDLE_TIMEOUT_SECS))
         .app_data(web::Data::new(metrics_scraper::ScraperState::new()))
         .app_data(web::Data::new(log_sse_handlers::LogSseState::default()))
+        .app_data(web::Data::new(
+            dt_console_server::alert_handlers::AlertSseState::new(),
+        ))
+        .app_data(web::Data::new(
+            dt_console_server::alarm_dispatcher::DispatcherState::new(),
+        ))
+        .app_data(web::Data::new(
+            dt_console_server::alert_engine::AlertEngineState::new(),
+        ))
+        .app_data(web::Data::new(
+            dt_console_server::idempotency::IdempotencyCache::new(),
+        ))
         .configure(dt_console_server::configure)
 }
 

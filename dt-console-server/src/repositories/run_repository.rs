@@ -47,6 +47,22 @@ impl RunRepository {
             .await
     }
 
+    /// Find the latest run for a given task regardless of status.
+    ///
+    /// Returns the most recent run (including terminal), or None if no run exists.
+    pub async fn find_latest_by_task(
+        pool: &SqlitePool,
+        task_id: &str,
+    ) -> Result<Option<Run>, sqlx::Error> {
+        let runs =
+            sqlx::query_as("SELECT * FROM runs WHERE task_id = ? ORDER BY created_at DESC LIMIT 1")
+                .bind(task_id)
+                .fetch_all(pool)
+                .await?;
+
+        Ok(runs.into_iter().next())
+    }
+
     /// Find the active (non-terminal) run for a given task.
     ///
     /// Returns the most recent run whose status is in {pending, running, paused, stopping},
@@ -93,5 +109,26 @@ impl RunRepository {
     pub async fn has_active_run(pool: &SqlitePool, task_id: &str) -> Result<bool, sqlx::Error> {
         let active = Self::find_active_by_task(pool, task_id).await?;
         Ok(active.is_some())
+    }
+
+    /// List runs by a set of statuses (used for orchestrator restart reconciliation).
+    pub async fn list_by_statuses(
+        pool: &SqlitePool,
+        statuses: &[&str],
+    ) -> Result<Vec<Run>, sqlx::Error> {
+        if statuses.is_empty() {
+            return Ok(Vec::new());
+        }
+        // Build a parameterised IN clause: WHERE status IN (?, ?, ?)
+        let placeholders: Vec<&str> = statuses.iter().map(|_| "?").collect();
+        let sql = format!(
+            "SELECT * FROM runs WHERE status IN ({}) ORDER BY created_at ASC",
+            placeholders.join(",")
+        );
+        let mut query = sqlx::query_as::<_, Run>(&sql);
+        for status in statuses {
+            query = query.bind(*status);
+        }
+        query.fetch_all(pool).await
     }
 }

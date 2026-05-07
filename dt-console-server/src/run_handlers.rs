@@ -13,6 +13,7 @@ use tokio::sync::Mutex;
 
 use crate::error::{codes, ApiError};
 use crate::executor::{self, ChildStatus, ExitStatus, RunSlot};
+use crate::idempotency::{extract_key, IdempotencyCache};
 use crate::ini_renderer;
 use crate::metrics_scraper::{self, ScraperState};
 use crate::middleware::rbac::{self, RbacAction};
@@ -164,6 +165,7 @@ fn run_to_response(run: &Run) -> RunResponse {
 /// Returns 202 with `{run_id}` on success.
 /// Returns 409 if a Run is already active for the Task.
 /// Returns 422 if the license is expired or at cap.
+/// Honours Idempotency-Key: replayed key returns cached 202 result.
 #[post("/tasks/{id}/start")]
 pub async fn start_task(
     pool: web::Data<sqlx::SqlitePool>,
@@ -171,10 +173,23 @@ pub async fn start_task(
     path: web::Path<String>,
     active_runs: web::Data<ActiveRuns>,
     scraper_state: web::Data<ScraperState>,
+    idempotency_cache: web::Data<IdempotencyCache>,
     req: actix_web::HttpRequest,
 ) -> HttpResponse {
     if let Err(e) = rbac::require_action(&user, RbacAction::TaskStart) {
         return e.error_response();
+    }
+
+    // Idempotency-Key check: if the key was seen before, return the cached result.
+    let idem_key = extract_key(&req);
+    if let Some(ref key) = idem_key {
+        if let Some(cached) = idempotency_cache.get(key).await {
+            return HttpResponse::build(
+                actix_web::http::StatusCode::from_u16(cached.status)
+                    .unwrap_or(actix_web::http::StatusCode::ACCEPTED),
+            )
+            .json(cached.body);
+        }
     }
 
     let task_id = path.into_inner();
@@ -377,13 +392,23 @@ pub async fn start_task(
         supervise_run(bg_pool, bg_active_runs, bg_task_id, bg_run_id).await;
     });
 
-    HttpResponse::Accepted().json(StartRunResponse { run_id })
+    // Cache the result if an Idempotency-Key was provided.
+    let response_body = serde_json::to_value(&StartRunResponse {
+        run_id: run_id.clone(),
+    })
+    .unwrap_or(serde_json::json!({ "run_id": run_id }));
+    if let Some(ref key) = idem_key {
+        idempotency_cache.put(key, 202, response_body.clone()).await;
+    }
+
+    HttpResponse::Accepted().json(response_body)
 }
 
 /// POST /api/tasks/:id/stop — stop the active Run for a Task.
 ///
 /// Returns 202 on success.
-/// Returns 409 if no active Run exists.
+/// Returns 409 if no active Run exists (with ILLEGAL_TRANSITION details).
+/// Honours Idempotency-Key: replayed key returns cached 202 result.
 #[post("/tasks/{id}/stop")]
 pub async fn stop_task(
     pool: web::Data<sqlx::SqlitePool>,
@@ -391,10 +416,23 @@ pub async fn stop_task(
     path: web::Path<String>,
     active_runs: web::Data<ActiveRuns>,
     scraper_state: web::Data<ScraperState>,
+    idempotency_cache: web::Data<IdempotencyCache>,
     req: actix_web::HttpRequest,
 ) -> HttpResponse {
     if let Err(e) = rbac::require_action(&user, RbacAction::TaskStop) {
         return e.error_response();
+    }
+
+    // Idempotency-Key check: if the key was seen before, return the cached result.
+    let idem_key = extract_key(&req);
+    if let Some(ref key) = idem_key {
+        if let Some(cached) = idempotency_cache.get(key).await {
+            return HttpResponse::build(
+                actix_web::http::StatusCode::from_u16(cached.status)
+                    .unwrap_or(actix_web::http::StatusCode::ACCEPTED),
+            )
+            .json(cached.body);
+        }
     }
 
     let task_id = path.into_inner();
@@ -408,10 +446,18 @@ pub async fn stop_task(
     let active_run = match RunRepository::find_active_by_task(&pool, &task_id).await {
         Ok(Some(r)) => r,
         Ok(None) => {
+            // No active run — check if there's a terminal run to report the
+            // correct ILLEGAL_TRANSITION error with {from, to} details.
+            let from_status = RunRepository::find_latest_by_task(&pool, &task_id)
+                .await
+                .ok()
+                .flatten()
+                .map(|r| r.status)
+                .unwrap_or_else(|| "none".to_string());
             return ApiError::with_details(
-                codes::RUN_NOT_ACTIVE,
-                "No active run for this task",
-                serde_json::json!({ "task_id": task_id }),
+                codes::ILLEGAL_TRANSITION,
+                "Cannot stop a run that is not active",
+                serde_json::json!({ "from": from_status, "to": "stopping" }),
             )
             .error_response();
         }
@@ -424,9 +470,9 @@ pub async fn stop_task(
     // Only running or paused runs can be stopped.
     if !matches!(active_run.status.as_str(), "running" | "paused") {
         return ApiError::with_details(
-            codes::RUN_NOT_ACTIVE,
+            codes::ILLEGAL_TRANSITION,
             "Run is not in a stoppable state",
-            serde_json::json!({ "run_id": active_run.id, "run_status": active_run.status }),
+            serde_json::json!({ "from": active_run.status, "to": "stopping" }),
         )
         .error_response();
     }
@@ -526,7 +572,13 @@ pub async fn stop_task(
     // Write audit log.
     let _ = write_run_audit_log(&pool, &user.username, "tasks.stop", "success", &run_id, &ip).await;
 
-    HttpResponse::Accepted().json(serde_json::json!({ "run_id": run_id }))
+    // Cache the result if an Idempotency-Key was provided.
+    let stop_body = serde_json::json!({ "run_id": run_id });
+    if let Some(ref key) = idem_key {
+        idempotency_cache.put(key, 202, stop_body.clone()).await;
+    }
+
+    HttpResponse::Accepted().json(stop_body)
 }
 
 /// POST /api/tasks/:id/pause — pause a running CDC Run.
@@ -557,10 +609,17 @@ pub async fn pause_task(
     let mut run = match RunRepository::find_active_by_task(&pool, &task_id).await {
         Ok(Some(r)) => r,
         Ok(None) => {
+            // No active run — report ILLEGAL_TRANSITION with the terminal status.
+            let from_status = RunRepository::find_latest_by_task(&pool, &task_id)
+                .await
+                .ok()
+                .flatten()
+                .map(|r| r.status)
+                .unwrap_or_else(|| "none".to_string());
             return ApiError::with_details(
-                codes::RUN_NOT_ACTIVE,
-                "No active run for this task",
-                serde_json::json!({ "task_id": task_id }),
+                codes::ILLEGAL_TRANSITION,
+                "Cannot pause a run that is not active",
+                serde_json::json!({ "from": from_status, "to": "paused" }),
             )
             .error_response();
         }
@@ -655,10 +714,17 @@ pub async fn resume_task(
     let mut run = match RunRepository::find_active_by_task(&pool, &task_id).await {
         Ok(Some(r)) => r,
         Ok(None) => {
+            // No active run — report ILLEGAL_TRANSITION with the terminal status.
+            let from_status = RunRepository::find_latest_by_task(&pool, &task_id)
+                .await
+                .ok()
+                .flatten()
+                .map(|r| r.status)
+                .unwrap_or_else(|| "none".to_string());
             return ApiError::with_details(
-                codes::RUN_NOT_ACTIVE,
-                "No active run for this task",
-                serde_json::json!({ "task_id": task_id }),
+                codes::ILLEGAL_TRANSITION,
+                "Cannot resume a run that is not active",
+                serde_json::json!({ "from": from_status, "to": "running" }),
             )
             .error_response();
         }

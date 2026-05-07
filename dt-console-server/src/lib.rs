@@ -1,6 +1,9 @@
+pub mod alarm_channel_handlers;
 pub mod alarm_dispatcher;
+pub mod alarm_template_handlers;
 pub mod alert_engine;
 pub mod alert_handlers;
+pub mod alert_rule_handlers;
 pub mod auth;
 pub mod auth_handlers;
 pub mod control_log_handlers;
@@ -8,6 +11,7 @@ pub mod db;
 pub mod error;
 pub mod executor;
 pub mod health;
+pub mod idempotency;
 pub mod ini_renderer;
 pub mod license_handlers;
 pub mod log_sse_handlers;
@@ -22,6 +26,7 @@ pub mod rate_limit;
 pub mod repositories;
 pub mod resource_group_handlers;
 pub mod run_handlers;
+pub mod system_handlers;
 pub mod task_handlers;
 pub mod time_series_store;
 pub mod user_handlers;
@@ -43,6 +48,7 @@ use run_handlers::ActiveRuns;
 use alarm_dispatcher::DispatcherState;
 use alert_engine::AlertEngineState;
 use alert_handlers::AlertSseState;
+use idempotency::IdempotencyCache;
 
 /// Configure all API routes.
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -98,7 +104,34 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(alert_handlers::clear_batch)
             .service(alert_handlers::alert_stream)
             // Alarm channel test
-            .service(alert_handlers::test_alarm_channel),
+            .service(alert_handlers::test_alarm_channel)
+            // Alert rule CRUD
+            .service(alert_rule_handlers::list_alert_rules)
+            .service(alert_rule_handlers::create_alert_rule)
+            .service(alert_rule_handlers::get_alert_rule)
+            .service(alert_rule_handlers::update_alert_rule)
+            .service(alert_rule_handlers::delete_alert_rule)
+            .service(alert_rule_handlers::evaluate_now)
+            // Alarm channel CRUD
+            .service(alarm_channel_handlers::list_alarm_channels)
+            .service(alarm_channel_handlers::create_alarm_channel)
+            .service(alarm_channel_handlers::get_alarm_channel)
+            .service(alarm_channel_handlers::update_alarm_channel)
+            .service(alarm_channel_handlers::delete_alarm_channel)
+            // Alarm template CRUD
+            .service(alarm_template_handlers::list_alarm_templates)
+            .service(alarm_template_handlers::create_alarm_template)
+            .service(alarm_template_handlers::get_alarm_template)
+            .service(alarm_template_handlers::update_alarm_template)
+            .service(alarm_template_handlers::delete_alarm_template)
+            .service(alarm_template_handlers::preview_template)
+            // System hosts
+            .service(system_handlers::list_system_hosts)
+            // Global params
+            .service(system_handlers::list_global_params)
+            .service(system_handlers::update_global_params)
+            // Readiness probe
+            .service(system_handlers::readyz),
     );
 }
 
@@ -124,6 +157,7 @@ pub fn build_app(
     alert_sse_state: AlertSseState,
     dispatcher_state: DispatcherState,
     alert_engine_state: AlertEngineState,
+    idempotency_cache: IdempotencyCache,
 ) -> App<
     impl actix_web::dev::ServiceFactory<
         actix_web::dev::ServiceRequest,
@@ -158,5 +192,6 @@ pub fn build_app(
         .app_data(web::Data::new(alert_sse_state))
         .app_data(web::Data::new(dispatcher_state))
         .app_data(web::Data::new(alert_engine_state))
+        .app_data(web::Data::new(idempotency_cache))
         .configure(configure)
 }

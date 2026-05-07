@@ -94,6 +94,18 @@ fn build_test_app(
         .app_data(web::Data::new(active_runs))
         .app_data(web::Data::new(metrics_scraper::ScraperState::new()))
         .app_data(web::Data::new(log_sse_handlers::LogSseState::default()))
+        .app_data(web::Data::new(
+            dt_console_server::alert_handlers::AlertSseState::new(),
+        ))
+        .app_data(web::Data::new(
+            dt_console_server::alarm_dispatcher::DispatcherState::new(),
+        ))
+        .app_data(web::Data::new(
+            dt_console_server::alert_engine::AlertEngineState::new(),
+        ))
+        .app_data(web::Data::new(
+            dt_console_server::idempotency::IdempotencyCache::new(),
+        ))
         .configure(dt_console_server::configure)
 }
 
@@ -514,7 +526,7 @@ async fn test_stop_not_active_returns_409() {
     let task_body: serde_json::Value = test::read_body_json(resp).await;
     let task_id = task_body["id"].as_str().unwrap().to_string();
 
-    // Stop without a running Run should return 409.
+    // Stop without a running Run should return 409 ILLEGAL_TRANSITION.
     let req = add_auth(
         test::TestRequest::post().uri(&format!("/api/tasks/{task_id}/stop")),
         &cookies,
@@ -524,7 +536,10 @@ async fn test_stop_not_active_returns_409() {
     assert_eq!(resp.status(), StatusCode::CONFLICT);
 
     let body: serde_json::Value = test::read_body_json(resp).await;
-    assert_eq!(body["code"], "RUN_NOT_ACTIVE");
+    assert_eq!(body["code"], "ILLEGAL_TRANSITION");
+    // Details should contain from/to transition info.
+    assert!(body["details"]["from"].is_string());
+    assert!(body["details"]["to"].is_string());
 }
 
 #[actix_web::test]
@@ -560,8 +575,10 @@ async fn test_pause_not_running_returns_409() {
     assert_eq!(resp.status(), StatusCode::CONFLICT);
 
     let body: serde_json::Value = test::read_body_json(resp).await;
-    // When there's no active run at all, the handler returns RUN_NOT_ACTIVE.
-    assert_eq!(body["code"], "RUN_NOT_ACTIVE");
+    // When there's no active run, the handler returns ILLEGAL_TRANSITION with {from, to}.
+    assert_eq!(body["code"], "ILLEGAL_TRANSITION");
+    assert!(body["details"]["from"].is_string());
+    assert_eq!(body["details"]["to"], "paused");
 }
 
 #[actix_web::test]
@@ -597,8 +614,10 @@ async fn test_resume_not_paused_returns_409() {
     assert_eq!(resp.status(), StatusCode::CONFLICT);
 
     let body: serde_json::Value = test::read_body_json(resp).await;
-    // When there's no active run at all, the handler returns RUN_NOT_ACTIVE.
-    assert_eq!(body["code"], "RUN_NOT_ACTIVE");
+    // When there's no active run, the handler returns ILLEGAL_TRANSITION with {from, to}.
+    assert_eq!(body["code"], "ILLEGAL_TRANSITION");
+    assert!(body["details"]["from"].is_string());
+    assert_eq!(body["details"]["to"], "running");
 }
 
 #[actix_web::test]
