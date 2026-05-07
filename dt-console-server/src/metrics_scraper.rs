@@ -128,6 +128,12 @@ impl ScraperState {
         targets.clone()
     }
 
+    /// Get current targets snapshot (test-only accessor).
+    #[cfg(test)]
+    pub async fn get_targets_for_test(&self) -> Vec<ScrapeTarget> {
+        self.get_targets().await
+    }
+
     /// Record a scrape failure for a target.
     /// Returns true if metrics_unavailable alert should be fired.
     async fn record_failure(&self, task_id: &str, run_id: &str) -> bool {

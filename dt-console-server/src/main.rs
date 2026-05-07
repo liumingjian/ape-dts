@@ -6,9 +6,10 @@ use dt_console_server::auth;
 use dt_console_server::db::{self, DbError, SCHEMA_MISMATCH_CODE};
 use dt_console_server::log_sse_handlers;
 use dt_console_server::metrics_scraper;
-use dt_console_server::models::ResourceGroup;
+use dt_console_server::models::{ResourceGroup, Run};
 use dt_console_server::rate_limit::{RateLimitConfig, RateLimiter};
 use dt_console_server::repositories::resource_group_repository::ResourceGroupRepository;
+use dt_console_server::repositories::run_repository::RunRepository;
 use dt_console_server::run_handlers;
 use dt_console_server::time_series_store;
 use tracing_subscriber::EnvFilter;
@@ -75,6 +76,11 @@ async fn main() -> std::io::Result<()> {
     // Create the SSE state for log streaming.
     let log_sse_state = log_sse_handlers::LogSseState::default();
 
+    // Reconcile live Runs from a previous orchestrator session.
+    // Must run AFTER active_runs and scraper_state are created so that
+    // re-attached Runs can be registered for supervision and scraping.
+    reconcile_live_runs(&pool, &active_runs, &scraper_state).await;
+
     // Create the alert SSE state for alert streaming.
     let alert_sse_state = alert_handlers::AlertSseState::new();
 
@@ -103,7 +109,17 @@ async fn main() -> std::io::Result<()> {
 
     tracing::info!("dt-console-server starting on {bind_addr}");
 
-    actix_web::HttpServer::new(move || {
+    // Set up graceful SIGTERM handling.
+    // Spawn a task that marks the scraper as not running on shutdown,
+    // so the readyz endpoint reflects degraded state during shutdown.
+    let shutdown_scraper = scraper_state.clone();
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c().await.ok();
+        tracing::info!("received shutdown signal, marking scraper as stopped");
+        shutdown_scraper.set_running(false).await;
+    });
+
+    let server = actix_web::HttpServer::new(move || {
         let key = Key::from(&master_bytes);
         let pool_clone = pool.clone();
         let rate_limiter_clone = rate_limiter.clone();
@@ -126,9 +142,136 @@ async fn main() -> std::io::Result<()> {
             alert_engine_state_clone,
         )
     })
-    .bind(&bind_addr)?
-    .run()
-    .await
+    .bind(&bind_addr)?;
+
+    // Graceful SIGTERM: stop accepting new requests, finish in-flight, exit.
+    // actix-web handles SIGTERM and ctrl+c internally via the run() method:
+    // it stops accepting new connections and waits for in-flight requests
+    // to complete (up to the graceful shutdown timeout), then exits cleanly.
+    server.run().await
+}
+
+/// Reconcile live Runs from a previous orchestrator session.
+///
+/// On restart, any Run in a non-terminal state (pending, running, paused,
+/// stopping) must be reconciled:
+/// - If the PID is still alive, re-attach:
+///   - Reconstruct a `RunHandle` (with `reattached = true`)
+///   - Insert into the `ActiveRuns` registry
+///   - Spawn a `supervise_run` background task
+///   - Register as a scrape target for the MetricsScraper
+/// - If the PID is dead or missing, mark the Run as failed with
+///   stop_method="orphaned" and exit_status populated.
+///
+/// Log tailers are reconnected lazily when the first SSE subscriber connects,
+/// so no explicit reconnection is needed here.
+async fn reconcile_live_runs(
+    pool: &sqlx::SqlitePool,
+    active_runs: &run_handlers::ActiveRuns,
+    scraper_state: &metrics_scraper::ScraperState,
+) {
+    let active_statuses = ["pending", "running", "paused", "stopping"];
+
+    let runs: Vec<Run> = match RunRepository::list_by_statuses(pool, &active_statuses).await {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!("failed to list active runs for reconciliation: {e}");
+            return;
+        }
+    };
+
+    if runs.is_empty() {
+        return;
+    }
+
+    tracing::info!(
+        "reconciling {} active runs from previous session",
+        runs.len()
+    );
+
+    for run in runs {
+        let pid_alive = match run.pid {
+            Some(pid) if pid > 0 => {
+                // Check if the process is still alive.
+                // On Unix, sending signal 0 to a PID checks existence without affecting it.
+                #[cfg(unix)]
+                {
+                    unsafe { libc::kill(pid as i32, 0) == 0 }
+                }
+                #[cfg(not(unix))]
+                {
+                    false
+                }
+            }
+            _ => false,
+        };
+
+        if pid_alive {
+            let pid = run.pid.unwrap() as u32;
+
+            tracing::info!(run_id = %run.id, pid = pid, "re-attaching to live run");
+
+            // Derive run_dir from the Run's log_dir or ini_path.
+            let run_dir = run
+                .log_dir
+                .as_ref()
+                .or(run.ini_path.as_ref())
+                .map(|p| {
+                    std::path::PathBuf::from(p)
+                        .parent()
+                        .map(|parent| parent.to_path_buf())
+                        .unwrap_or_default()
+                })
+                .unwrap_or_else(|| {
+                    let base = run_handlers::executor_run_data_dir();
+                    std::path::PathBuf::from(format!("{base}/{}", run.id))
+                });
+
+            // Reconstruct a RunHandle for the live process.
+            let handle =
+                dt_console_server::executor::LocalExecutor::reattach(&run.id, pid, run_dir);
+
+            // Insert into the ActiveRuns registry.
+            {
+                let mut active = active_runs.lock().await;
+                active.insert(
+                    run.task_id.clone(),
+                    dt_console_server::executor::RunSlot::Active(handle.clone()),
+                );
+            }
+
+            // Register as a scrape target.
+            {
+                let target = metrics_scraper::scrape_target_from_run(&run.task_id, &run.id);
+                scraper_state.add_target(target).await;
+            }
+
+            // Spawn a background supervise_run task.
+            let bg_pool = pool.clone();
+            let bg_active_runs = active_runs.clone();
+            let bg_task_id = run.task_id.clone();
+            let bg_run_id = run.id.clone();
+            tokio::spawn(async move {
+                run_handlers::supervise_run(bg_pool, bg_active_runs, bg_task_id, bg_run_id).await;
+            });
+        } else {
+            tracing::info!(run_id = %run.id, "marking orphaned run as failed");
+            let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+            let mut updated = run;
+            updated.status = "failed".to_string();
+            updated.stop_method = Some("orphaned".to_string());
+            updated.stopped_at = Some(now);
+            if updated.exit_code.is_none() {
+                updated.exit_code = Some(-1);
+            }
+            updated.updated_at =
+                chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+            if let Err(e) = RunRepository::update(pool, &updated).await {
+                tracing::warn!(run_id = %updated.id, "failed to mark orphaned run: {e}");
+            }
+        }
+    }
 }
 
 /// Seed the default resource group if none exist.

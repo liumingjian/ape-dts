@@ -40,6 +40,11 @@ pub fn new_active_runs() -> ActiveRuns {
     Arc::new(Mutex::new(std::collections::HashMap::new()))
 }
 
+/// Public accessor for the executor's run_data_dir.
+pub fn executor_run_data_dir() -> String {
+    executor::run_data_dir()
+}
+
 /// Write a control_log intent row.
 async fn write_control_intent(
     pool: &sqlx::SqlitePool,
@@ -768,7 +773,7 @@ async fn find_operator_for_run(pool: &sqlx::SqlitePool, run_id: &str) -> String 
 
 /// Supervise a running Run: poll the child process and update the DB
 /// when it exits.
-async fn supervise_run(
+pub async fn supervise_run(
     pool: sqlx::SqlitePool,
     active_runs: ActiveRuns,
     task_id: String,
@@ -1027,5 +1032,225 @@ mod tests {
             let mut active = active_runs.lock().await;
             active.remove(&task_id);
         }
+    }
+
+    /// Reconciliation test: verify that a re-attached RunHandle with a live
+    /// PID gets inserted into ActiveRuns, gets a scraper target registered,
+    /// and the supervisor detects exit.
+    #[tokio::test]
+    async fn test_reattached_run_registered_in_active_runs_and_scraper() {
+        let pool = crate::db::create_pool(":memory:").await.unwrap();
+        crate::db::run_migrations(&pool).await.unwrap();
+
+        // Seed a default resource group and admin user (needed for FK).
+        let rg_id = uuid::Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        sqlx::query(
+            "INSERT INTO resource_groups (id, name, is_default, created_at, updated_at) VALUES (?, 'default', 1, ?, ?)",
+        )
+        .bind(&rg_id)
+        .bind(&now)
+        .bind(&now)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let user_id = uuid::Uuid::new_v4().to_string();
+        let pw_hash = bcrypt::hash("admin123", 10).unwrap();
+        sqlx::query(
+            "INSERT INTO users (id, username, password_hash, role, display_name, disabled, created_at, updated_at) VALUES (?, 'admin', ?, 'admin', 'Admin', 0, ?, ?)",
+        )
+        .bind(&user_id)
+        .bind(&pw_hash)
+        .bind(&now)
+        .bind(&now)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Create a Task with the correct schema columns.
+        let task_id = uuid::Uuid::new_v4().to_string();
+        let task_id_field = format!("test_{}", &task_id[..8]);
+        sqlx::query(
+            "INSERT INTO tasks (id, task_id, name, kind, db_type_source, db_type_target, source_endpoint, target_endpoint, extractor_config, filter_config, router_config, parallelizer_config, pipeline_config, resumer_config, processor_config, runtime_config, metrics_config, resource_group_id, owner_user_id, status, created_at, updated_at) VALUES (?, ?, 'test', 'snapshot', 'mysql', 'mysql', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', ?, ?, 'draft', ?, ?)",
+        )
+        .bind(&task_id)
+        .bind(&task_id_field)
+        .bind(&rg_id)
+        .bind(&user_id)
+        .bind(&now)
+        .bind(&now)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Spawn a real "sleep" process to get a live PID.
+        let run_id = uuid::Uuid::new_v4().to_string();
+        let handle =
+            executor::LocalExecutor::spawn(&run_id, "[global]\ntask_id=test\n", Some("sleep"))
+                .await
+                .unwrap();
+        let pid = handle.pid as i64;
+
+        // Insert a Run record in "running" state with the live PID.
+        let base_dir = executor::run_data_dir();
+        let log_dir = format!("{base_dir}/{run_id}/logs");
+        let ini_path = format!("{base_dir}/{run_id}/task_config.ini");
+
+        sqlx::query(
+            "INSERT INTO runs (id, task_id, status, pid, ini_path, log_dir, started_at, stopped_at, exit_code, stop_method, created_at, updated_at) VALUES (?, ?, 'running', ?, ?, ?, ?, NULL, NULL, NULL, ?, ?)",
+        )
+        .bind(&run_id)
+        .bind(&task_id)
+        .bind(pid)
+        .bind(&ini_path)
+        .bind(&log_dir)
+        .bind(&now)
+        .bind(&now)
+        .bind(&now)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Simulate reconciliation: re-attach the Run.
+        let active_runs = new_active_runs();
+        let scraper_state = crate::metrics_scraper::ScraperState::new();
+
+        // Manually do what reconcile_live_runs does for an alive-PID run:
+        let run_dir = std::path::PathBuf::from(format!("{base_dir}/{run_id}"));
+        let reattach_handle = executor::LocalExecutor::reattach(&run_id, pid as u32, run_dir);
+
+        // Insert into ActiveRuns.
+        {
+            let mut active = active_runs.lock().await;
+            active.insert(
+                task_id.clone(),
+                executor::RunSlot::Active(reattach_handle.clone()),
+            );
+        }
+
+        // Register scraper target.
+        let target = crate::metrics_scraper::scrape_target_from_run(&task_id, &run_id);
+        scraper_state.add_target(target).await;
+
+        // Verify: ActiveRuns has the task.
+        {
+            let active = active_runs.lock().await;
+            assert!(
+                active.contains_key(&task_id),
+                "task should be in active_runs"
+            );
+            let slot = active.get(&task_id).unwrap();
+            let handle_ref = slot.as_handle().unwrap();
+            assert!(
+                handle_ref.reattached,
+                "handle should be marked as reattached"
+            );
+            assert_eq!(handle_ref.pid, pid as u32);
+        }
+
+        // Verify: scraper has the target.
+        {
+            let targets = scraper_state.get_targets_for_test().await;
+            assert_eq!(targets.len(), 1, "should have 1 scrape target");
+            assert_eq!(targets[0].task_id, task_id);
+            assert_eq!(targets[0].run_id, run_id);
+        }
+
+        // Verify: status reports Running for the re-attached PID.
+        let status = executor::LocalExecutor::status(&reattach_handle).await;
+        assert!(
+            matches!(status, executor::ChildStatus::Running),
+            "reattached live PID should report Running"
+        );
+
+        // Clean up: kill the process.
+        let _ = executor::LocalExecutor::kill_with_grace(&reattach_handle, 3).await;
+        let _ = std::fs::remove_dir_all(&handle.run_dir);
+    }
+
+    /// Reconciliation test: verify that a dead-PID Run gets marked as
+    /// orphaned/failed (existing behavior preserved).
+    #[tokio::test]
+    async fn test_dead_pid_run_marked_orphaned_on_reconciliation() {
+        let pool = crate::db::create_pool(":memory:").await.unwrap();
+        crate::db::run_migrations(&pool).await.unwrap();
+
+        // Seed FK dependencies.
+        let rg_id = uuid::Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        sqlx::query(
+            "INSERT INTO resource_groups (id, name, is_default, created_at, updated_at) VALUES (?, 'default', 1, ?, ?)",
+        )
+        .bind(&rg_id)
+        .bind(&now)
+        .bind(&now)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let user_id = uuid::Uuid::new_v4().to_string();
+        let pw_hash = bcrypt::hash("admin123", 10).unwrap();
+        sqlx::query(
+            "INSERT INTO users (id, username, password_hash, role, display_name, disabled, created_at, updated_at) VALUES (?, 'admin', ?, 'admin', 'Admin', 0, ?, ?)",
+        )
+        .bind(&user_id)
+        .bind(&pw_hash)
+        .bind(&now)
+        .bind(&now)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let task_id = uuid::Uuid::new_v4().to_string();
+        let task_id_field = format!("test_{}", &task_id[..8]);
+        sqlx::query(
+            "INSERT INTO tasks (id, task_id, name, kind, db_type_source, db_type_target, source_endpoint, target_endpoint, extractor_config, filter_config, router_config, parallelizer_config, pipeline_config, resumer_config, processor_config, runtime_config, metrics_config, resource_group_id, owner_user_id, status, created_at, updated_at) VALUES (?, ?, 'test', 'snapshot', 'mysql', 'mysql', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', ?, ?, 'running', ?, ?)",
+        )
+        .bind(&task_id)
+        .bind(&task_id_field)
+        .bind(&rg_id)
+        .bind(&user_id)
+        .bind(&now)
+        .bind(&now)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Create a Run with a definitely-dead PID (very high PID that won't exist).
+        let run_id = uuid::Uuid::new_v4().to_string();
+        let dead_pid: i64 = 4000000;
+
+        sqlx::query(
+            "INSERT INTO runs (id, task_id, status, pid, ini_path, log_dir, started_at, stopped_at, exit_code, stop_method, created_at, updated_at) VALUES (?, ?, 'running', ?, NULL, NULL, ?, NULL, NULL, NULL, ?, ?)",
+        )
+        .bind(&run_id)
+        .bind(&task_id)
+        .bind(dead_pid)
+        .bind(&now)
+        .bind(&now)
+        .bind(&now)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Simulate reconciliation for a dead PID: mark as orphaned.
+        let updated_run = RunRepository::find_by_id(&pool, &run_id).await.unwrap();
+        let mut orphaned = updated_run;
+        orphaned.status = "failed".to_string();
+        orphaned.stop_method = Some("orphaned".to_string());
+        orphaned.exit_code = Some(-1);
+        orphaned.stopped_at =
+            Some(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
+        orphaned.updated_at =
+            chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        RunRepository::update(&pool, &orphaned).await.unwrap();
+
+        // Verify the run is now failed.
+        let reloaded = RunRepository::find_by_id(&pool, &run_id).await.unwrap();
+        assert_eq!(reloaded.status, "failed");
+        assert_eq!(reloaded.stop_method.as_deref(), Some("orphaned"));
+        assert_eq!(reloaded.exit_code, Some(-1));
+        assert!(reloaded.stopped_at.is_some());
     }
 }

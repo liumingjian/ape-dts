@@ -38,6 +38,11 @@ pub struct RunHandle {
     pub run_dir: PathBuf,
     /// The managed child process.
     pub child: Arc<Mutex<Option<tokio::process::Child>>>,
+    /// Whether this handle was re-attached after orchestrator restart.
+    ///
+    /// When `true`, `child` is `None` and process liveness is checked
+    /// via `kill(pid, 0)` instead of `child.try_wait()`.
+    pub reattached: bool,
 }
 
 impl Clone for RunHandle {
@@ -47,6 +52,7 @@ impl Clone for RunHandle {
             pid: self.pid,
             run_dir: self.run_dir.clone(),
             child: self.child.clone(),
+            reattached: self.reattached,
         }
     }
 }
@@ -195,6 +201,7 @@ impl LocalExecutor {
             pid,
             run_dir,
             child: Arc::new(Mutex::new(Some(child))),
+            reattached: false,
         })
     }
 
@@ -202,7 +209,15 @@ impl LocalExecutor {
     ///
     /// Returns `ChildStatus::Running` if the child is still alive,
     /// or `ChildStatus::Exited` with the exit code/signal if it has terminated.
+    ///
+    /// For re-attached processes (where `child` is `None` and `reattached` is
+    /// `true`), process liveness is checked via `kill(pid, 0)` on Unix.
     pub async fn status(handle: &RunHandle) -> ChildStatus {
+        // Re-attached processes: no Child object, check PID liveness directly.
+        if handle.reattached {
+            return pid_status(handle.pid);
+        }
+
         let mut guard = handle.child.lock().await;
         if let Some(ref mut child) = *guard {
             match child.try_wait() {
@@ -241,6 +256,9 @@ impl LocalExecutor {
     /// 2. Waits up to `grace_window_secs()` for the child to exit.
     /// 3. If the child doesn't exit within the grace window, sends SIGKILL.
     ///
+    /// For re-attached processes, sends SIGTERM/KILL directly via PID
+    /// and polls for process exit via `kill(pid, 0)`.
+    ///
     /// Returns a `KillResult` describing how the process was stopped.
     pub async fn kill(handle: &RunHandle) -> Result<KillResult, String> {
         let grace = grace_window_secs();
@@ -252,6 +270,11 @@ impl LocalExecutor {
         handle: &RunHandle,
         grace_secs: u64,
     ) -> Result<KillResult, String> {
+        // Re-attached processes: no Child object, signal directly via PID.
+        if handle.reattached {
+            return kill_reattached(handle.pid, grace_secs).await;
+        }
+
         let mut guard = handle.child.lock().await;
         let child = guard
             .as_mut()
@@ -331,6 +354,22 @@ impl LocalExecutor {
         }
     }
 
+    /// Re-attach to an already-running engine subprocess after orchestrator restart.
+    ///
+    /// Creates a `RunHandle` that tracks the process by PID without a `Child`
+    /// object (since the process was spawned by a previous orchestrator session).
+    /// The `reattached` flag is set to `true` so that `status()` and `kill()`
+    /// use PID-based checking instead of `child.try_wait()`.
+    pub fn reattach(run_id: &str, pid: u32, run_dir: PathBuf) -> RunHandle {
+        RunHandle {
+            run_id: run_id.to_string(),
+            pid,
+            run_dir,
+            child: Arc::new(Mutex::new(None)),
+            reattached: true,
+        }
+    }
+
     /// Read the position from a Run's position.log file.
     ///
     /// Returns `None` if the file doesn't exist or is empty.
@@ -383,6 +422,82 @@ fn parse_position_kv(s: &str) -> serde_json::Value {
     } else {
         serde_json::Value::Object(map)
     }
+}
+
+/// Check process liveness by PID using `kill(pid, 0)`.
+///
+/// Returns `ChildStatus::Running` if the process exists,
+/// or `ChildStatus::Exited` if it does not.
+#[cfg(unix)]
+fn pid_status(pid: u32) -> ChildStatus {
+    if pid > 0 && unsafe { libc::kill(pid as i32, 0) == 0 } {
+        ChildStatus::Running
+    } else {
+        ChildStatus::Exited(ExitStatus::Exited { code: -1 })
+    }
+}
+
+/// Check process liveness by PID (non-Unix fallback).
+///
+/// Always returns `Exited` on non-Unix platforms since we cannot
+/// reliably check PID liveness without `kill(pid, 0)`.
+#[cfg(not(unix))]
+fn pid_status(pid: u32) -> ChildStatus {
+    let _ = pid;
+    ChildStatus::Exited(ExitStatus::Exited { code: -1 })
+}
+
+/// Kill a re-attached process by PID with graceful shutdown.
+///
+/// 1. Sends SIGTERM to the PID.
+/// 2. Polls via `kill(pid, 0)` up to `grace_secs` for the process to exit.
+/// 3. If still alive, sends SIGKILL and waits briefly.
+#[cfg(unix)]
+async fn kill_reattached(pid: u32, grace_secs: u64) -> Result<KillResult, String> {
+    send_sigterm(pid)?;
+
+    let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(grace_secs);
+    let mut stop_method = "sigterm".to_string();
+
+    loop {
+        if unsafe { libc::kill(pid as i32, 0) != 0 } {
+            return Ok(KillResult {
+                stop_method,
+                exit_status: ExitStatus::Exited { code: -1 },
+            });
+        }
+        if tokio::time::Instant::now() >= deadline {
+            send_sigkill(pid)?;
+            stop_method = "sigkill".to_string();
+
+            // Wait for SIGKILL to take effect.
+            let kill_deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(2);
+            loop {
+                if unsafe { libc::kill(pid as i32, 0) != 0 } {
+                    return Ok(KillResult {
+                        stop_method,
+                        exit_status: ExitStatus::Signaled { signal: 9 },
+                    });
+                }
+                if tokio::time::Instant::now() >= kill_deadline {
+                    return Ok(KillResult {
+                        stop_method,
+                        exit_status: ExitStatus::Signaled { signal: 9 },
+                    });
+                }
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            }
+        }
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    }
+}
+
+/// Kill a re-attached process by PID (non-Unix fallback).
+#[cfg(not(unix))]
+async fn kill_reattached(pid: u32, _grace_secs: u64) -> Result<KillResult, String> {
+    Err(format!(
+        "cannot kill re-attached process {pid} on non-Unix platform"
+    ))
 }
 
 /// Send SIGTERM to a process by PID.
@@ -706,5 +821,125 @@ mod tests {
         }
 
         let _ = std::fs::remove_dir_all(&handle.run_dir);
+    }
+
+    #[test]
+    fn test_reattach_creates_handle_with_correct_fields() {
+        let run_id = "reattach-test-run";
+        let pid = 12345u32;
+        let run_dir = PathBuf::from("/data/runs/reattach-test-run");
+
+        let handle = LocalExecutor::reattach(run_id, pid, run_dir.clone());
+
+        assert_eq!(handle.run_id, run_id);
+        assert_eq!(handle.pid, pid);
+        assert_eq!(handle.run_dir, run_dir);
+        assert!(handle.reattached, "reattached flag should be true");
+    }
+
+    #[test]
+    fn test_reattach_handle_clones_correctly() {
+        let run_id = "reattach-clone-test";
+        let pid = 54321u32;
+        let run_dir = PathBuf::from("/data/runs/reattach-clone-test");
+
+        let handle = LocalExecutor::reattach(run_id, pid, run_dir.clone());
+        let clone = handle.clone();
+
+        assert_eq!(clone.run_id, run_id);
+        assert_eq!(clone.pid, pid);
+        assert_eq!(clone.run_dir, run_dir);
+        assert!(clone.reattached);
+    }
+
+    #[tokio::test]
+    async fn test_status_reattached_alive_pid_reports_running() {
+        // Spawn a real "sleep" process so we have a valid PID.
+        let handle = LocalExecutor::spawn(
+            &format!("reattach-alive-{}", uuid::Uuid::new_v4()),
+            "[global]\ntask_id=test\n",
+            Some("sleep"),
+        )
+        .await
+        .unwrap();
+
+        let pid = handle.pid;
+        let run_dir = handle.run_dir.clone();
+
+        // Kill the original child so we can create a re-attached handle
+        // for the same PID (the process is still alive).
+        // We must NOT use kill_with_grace because that consumes the child.
+        // Instead, just verify the PID is alive, then construct a re-attached handle.
+        let reattach_handle = LocalExecutor::reattach(&handle.run_id, pid, run_dir);
+
+        let status = LocalExecutor::status(&reattach_handle).await;
+        assert!(
+            matches!(status, ChildStatus::Running),
+            "reattached handle with alive PID should report Running"
+        );
+
+        // Clean up: kill the original handle
+        let _ = LocalExecutor::kill_with_grace(&handle, 2).await;
+        let _ = std::fs::remove_dir_all(&handle.run_dir);
+    }
+
+    #[tokio::test]
+    async fn test_status_reattached_dead_pid_reports_exited() {
+        // Use a PID that definitely doesn't exist (very high PID).
+        let dead_pid = 4000000u32;
+        let handle = LocalExecutor::reattach(
+            "reattach-dead-test",
+            dead_pid,
+            PathBuf::from("/data/runs/nonexistent"),
+        );
+
+        let status = LocalExecutor::status(&handle).await;
+        assert!(
+            matches!(status, ChildStatus::Exited(_)),
+            "reattached handle with dead PID should report Exited"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_kill_reattached_terminates_process() {
+        // Spawn a real "sleep" process, then re-attach and kill via the
+        // re-attached handle.
+        let spawned = LocalExecutor::spawn(
+            &format!("reattach-kill-{}", uuid::Uuid::new_v4()),
+            "[global]\ntask_id=test\n",
+            Some("sleep"),
+        )
+        .await
+        .unwrap();
+
+        let pid = spawned.pid;
+        let run_dir = spawned.run_dir.clone();
+
+        // Create a re-attached handle for the same PID.
+        let reattach_handle = LocalExecutor::reattach(&spawned.run_id, pid, run_dir);
+
+        // Kill via the re-attached handle.
+        let result = LocalExecutor::kill_with_grace(&reattach_handle, 3).await;
+        assert!(result.is_ok(), "kill re-attached process should succeed");
+
+        let kr = result.unwrap();
+        assert!(
+            kr.stop_method == "sigterm" || kr.stop_method == "sigkill",
+            "stop method should be sigterm or sigkill, got {}",
+            kr.stop_method
+        );
+
+        // Also reap the original child (zombie) so it doesn't linger.
+        let _ = LocalExecutor::kill_with_grace(&spawned, 2).await;
+
+        // Verify process is truly gone after reaping.
+        #[cfg(unix)]
+        {
+            tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+            let alive = unsafe { libc::kill(pid as i32, 0) == 0 };
+            assert!(!alive, "process {pid} should be gone after kill");
+        }
+
+        let _ = std::fs::remove_dir_all(&spawned.run_dir);
     }
 }
