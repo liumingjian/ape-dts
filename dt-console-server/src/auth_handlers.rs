@@ -12,6 +12,7 @@ use crate::auth::{self, LoginResult, DEFAULT_IDLE_TIMEOUT_SECS, SESSION_TOKEN_KE
 use crate::error::{codes, ApiError};
 use crate::models::{AuthResponse, LoginRequest, UserContext};
 use crate::rate_limit::RateLimiter;
+use crate::sse_session_tracker::SseSessionTracker;
 
 /// POST /api/auth/login
 ///
@@ -83,7 +84,8 @@ pub async fn login(
 
 /// POST /api/auth/logout
 ///
-/// Invalidates the current session server-side and clears the actix-session.
+/// Invalidates the current session server-side, closes any SSE connections
+/// associated with the session, and clears the actix-session.
 ///
 /// On success: 200
 /// On failure (no session): 200 (idempotent — logout is always "successful")
@@ -92,9 +94,19 @@ pub async fn logout(
     pool: web::Data<SqlitePool>,
     session: Session,
     _user: UserContext,
+    sse_tracker: web::Data<SseSessionTracker>,
 ) -> HttpResponse {
     // Get the session token from actix-session
     if let Ok(Some(token)) = session.get::<String>(SESSION_TOKEN_KEY) {
+        // Close all SSE connections associated with this session before
+        // invalidating the session. This ensures clients receive an
+        // immediate connection close rather than discovering it on next
+        // heartbeat/SSE event attempt.
+        let closed = sse_tracker.close_all_for_session(&token).await;
+        if closed > 0 {
+            tracing::debug!("closed {closed} SSE connections on logout for session");
+        }
+
         let _ = auth::logout(&pool, &token).await;
     }
 

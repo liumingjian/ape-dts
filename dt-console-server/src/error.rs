@@ -62,6 +62,7 @@ pub mod codes {
     pub const PATH_OUTSIDE_SANDBOX: &str = "PATH_OUTSIDE_SANDBOX";
     pub const ENDPOINT_HOST_BLOCKED: &str = "ENDPOINT_HOST_BLOCKED";
     pub const UNKNOWN_RESOURCE_GROUP: &str = "UNKNOWN_RESOURCE_GROUP";
+    pub const PRECHECK_BLOCKING_FAILED: &str = "PRECHECK_BLOCKING_FAILED";
 
     // Resource Group
     pub const RESOURCE_GROUP_NAME_TAKEN: &str = "RESOURCE_GROUP_NAME_TAKEN";
@@ -152,7 +153,8 @@ impl actix_web::ResponseError for ApiError {
             | codes::ENDPOINT_HOST_BLOCKED
             | codes::UNKNOWN_RESOURCE_GROUP
             | codes::TASK_KIND_IMMUTABLE
-            | codes::TASK_VALIDATION_FAILED => StatusCode::UNPROCESSABLE_ENTITY,
+            | codes::TASK_VALIDATION_FAILED
+            | codes::PRECHECK_BLOCKING_FAILED => StatusCode::UNPROCESSABLE_ENTITY,
 
             codes::CONFLICT
             | codes::LAST_ADMIN_PROTECTED

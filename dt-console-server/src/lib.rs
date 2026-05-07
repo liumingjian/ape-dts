@@ -26,6 +26,7 @@ pub mod rate_limit;
 pub mod repositories;
 pub mod resource_group_handlers;
 pub mod run_handlers;
+pub mod sse_session_tracker;
 pub mod system_handlers;
 pub mod task_handlers;
 pub mod time_series_store;
@@ -49,6 +50,7 @@ use alarm_dispatcher::DispatcherState;
 use alert_engine::AlertEngineState;
 use alert_handlers::AlertSseState;
 use idempotency::IdempotencyCache;
+use sse_session_tracker::SseSessionTracker;
 
 /// Configure all API routes.
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -160,6 +162,7 @@ pub fn build_app(
     dispatcher_state: DispatcherState,
     alert_engine_state: AlertEngineState,
     idempotency_cache: IdempotencyCache,
+    sse_session_tracker: SseSessionTracker,
 ) -> App<
     impl actix_web::dev::ServiceFactory<
         actix_web::dev::ServiceRequest,
@@ -195,5 +198,6 @@ pub fn build_app(
         .app_data(web::Data::new(dispatcher_state))
         .app_data(web::Data::new(alert_engine_state))
         .app_data(web::Data::new(idempotency_cache))
+        .app_data(web::Data::new(sse_session_tracker))
         .configure(configure)
 }

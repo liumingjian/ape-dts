@@ -20,6 +20,7 @@ use crate::middleware::rbac::{self, RbacAction};
 use crate::models::{Run, UserContext};
 use crate::repositories::run_repository::RunRepository;
 use crate::repositories::task_repository::TaskRepository;
+use crate::sse_session_tracker::SseSessionTracker;
 
 /// Default rate limit: max events per second per SSE subscriber.
 const DEFAULT_RATE_LIMIT_PER_SEC: u32 = 500;
@@ -120,12 +121,15 @@ impl SubscriberRateLimit {
 /// - Heartbeat comments every 30 seconds
 /// - `Last-Event-Id` header for reconnect
 #[get("/runs/{id}/logs/stream")]
+#[allow(clippy::too_many_arguments)]
 pub async fn log_stream(
     pool: web::Data<sqlx::SqlitePool>,
     user: UserContext,
     path: web::Path<String>,
     query: web::Query<LogStreamQuery>,
     sse_state: web::Data<LogSseState>,
+    sse_tracker: web::Data<SseSessionTracker>,
+    session: actix_session::Session,
     req: HttpRequest,
 ) -> HttpResponse {
     // RBAC: viewer and above can subscribe to logs
@@ -203,10 +207,22 @@ pub async fn log_stream(
     // Create SSE event stream using mpsc channel
     let (event_tx, event_rx) = tokio::sync::mpsc::channel::<SseEvent>(100);
 
+    // Register this SSE connection with the session tracker so it can be
+    // closed when the session is invalidated (logout, expiry, disable).
+    let session_token = session
+        .get::<String>(crate::auth::SESSION_TOKEN_KEY)
+        .ok()
+        .flatten();
+    if let Some(ref token) = session_token {
+        sse_tracker.register(token, event_tx.clone()).await;
+    }
+
     // Spawn the stream producer task
     let producer_run_id = run_id.clone();
     let producer_file_name = file_name.clone();
     let producer_sse_state = sse_state.get_ref().clone();
+    let producer_sse_tracker = sse_tracker.get_ref().clone();
+    let producer_session_token = session_token.clone();
     tokio::spawn(async move {
         produce_sse_events(
             producer_run_id,
@@ -218,6 +234,11 @@ pub async fn log_stream(
             event_tx,
         )
         .await;
+
+        // Unregister from the session tracker when the stream ends
+        if let Some(ref token) = producer_session_token {
+            producer_sse_tracker.unregister(token).await;
+        }
     });
 
     // Build SSE response with retry hint and keep-alive

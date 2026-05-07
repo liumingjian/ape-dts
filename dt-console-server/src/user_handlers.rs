@@ -16,6 +16,7 @@ use crate::models::OperateLog;
 use crate::models::{CreateUserRequest, UpdateUserRequest, UserContext, UserResponse};
 use crate::repositories::operate_log_repository::OperateLogRepository;
 use crate::repositories::user_repository::UserRepository;
+use crate::sse_session_tracker::SseSessionTracker;
 
 /// Convert a User model to a UserResponse (strips password_hash, updated_at).
 fn user_to_response(user: &crate::models::User) -> UserResponse {
@@ -291,9 +292,16 @@ pub async fn update_user(
             Ok(h) => h,
             Err(e) => return e.error_response(),
         };
-        // Invalidate all sessions for the user
-        if let Err(e) = auth::invalidate_user_sessions(&pool, &id).await {
-            return e.error_response();
+        // Invalidate all sessions for the user and close their SSE connections
+        match auth::invalidate_user_sessions(&pool, &id).await {
+            Ok(tokens) => {
+                if let Some(tracker) = req.app_data::<web::Data<SseSessionTracker>>() {
+                    for token in &tokens {
+                        tracker.close_all_for_session(token).await;
+                    }
+                }
+            }
+            Err(e) => return e.error_response(),
         }
     }
 
@@ -313,9 +321,25 @@ pub async fn update_user(
     // Apply disabled toggle
     if let Some(disabled) = body.disabled {
         found.disabled = disabled;
-        // When disabling, sessions are NOT deleted — they will be rejected
-        // on next request because validate_session checks the disabled flag.
-        // This ensures the error code is ACCOUNT_DISABLED, not UNAUTHENTICATED.
+        if disabled {
+            // When disabling, sessions are NOT deleted — they will be rejected
+            // on next request because validate_session checks the disabled flag.
+            // This ensures the error code is ACCOUNT_DISABLED, not UNAUTHENTICATED.
+            // However, we DO close SSE connections proactively since the user
+            // should not continue receiving real-time data.
+            if let Some(tracker) = req.app_data::<web::Data<SseSessionTracker>>() {
+                if let Ok(sessions) =
+                    crate::repositories::session_repository::SessionRepository::find_by_user(
+                        &pool, &id,
+                    )
+                    .await
+                {
+                    for session in &sessions {
+                        tracker.close_all_for_session(&session.token).await;
+                    }
+                }
+            }
+        }
         // When re-enabling, existing sessions naturally resume working.
     }
 
@@ -350,6 +374,7 @@ pub async fn delete_user(
     pool: web::Data<SqlitePool>,
     user: UserContext,
     path: web::Path<String>,
+    sse_tracker: web::Data<SseSessionTracker>,
     req: actix_web::HttpRequest,
 ) -> HttpResponse {
     // RBAC: admin-only
@@ -365,6 +390,19 @@ pub async fn delete_user(
         .peer_addr()
         .map(|a| a.to_string())
         .unwrap_or_else(|| "unknown".to_string());
+
+    // Close SSE connections for the user's sessions before deleting them.
+    // This must happen before auth::delete_user invalidates the sessions.
+    let session_tokens =
+        match crate::repositories::session_repository::SessionRepository::find_by_user(&pool, &id)
+            .await
+        {
+            Ok(sessions) => sessions.iter().map(|s| s.token.clone()).collect::<Vec<_>>(),
+            Err(_) => vec![],
+        };
+    for token in &session_tokens {
+        sse_tracker.close_all_for_session(token).await;
+    }
 
     // Perform deletion (includes last-admin check + session cascade)
     if let Err(e) = auth::delete_user(&pool, &id).await {

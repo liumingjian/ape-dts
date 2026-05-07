@@ -78,6 +78,17 @@ impl SessionRepository {
         Ok(())
     }
 
+    /// Find all sessions for a user.
+    pub async fn find_by_user(
+        pool: &SqlitePool,
+        user_id: &str,
+    ) -> Result<Vec<Session>, sqlx::Error> {
+        sqlx::query_as("SELECT * FROM sessions WHERE user_id = ?")
+            .bind(user_id)
+            .fetch_all(pool)
+            .await
+    }
+
     /// Delete a session by token.
     pub async fn delete_by_token(pool: &SqlitePool, token: &str) -> Result<(), sqlx::Error> {
         sqlx::query("DELETE FROM sessions WHERE token = ?")

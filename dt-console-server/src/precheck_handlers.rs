@@ -454,9 +454,18 @@ async fn do_test_connection(task: &Task) -> HttpResponse {
 /// Core precheck logic. Runs all applicable checks and returns per-item results.
 /// A single failing check does NOT panic the orchestrator.
 async fn do_precheck(task: &Task) -> HttpResponse {
+    match run_precheck(task).await {
+        Ok(resp) => HttpResponse::Ok().json(resp),
+        Err(e) => e.error_response(),
+    }
+}
+
+/// Run precheck and return the structured response (not an HttpResponse).
+/// Used by both the HTTP handler and the start_task precheck gate.
+pub async fn run_precheck(task: &Task) -> Result<PrecheckResponse, ApiError> {
     // Struct kind: return empty-but-OK
     if task.kind == "struct" {
-        return HttpResponse::Ok().json(PrecheckResponse {
+        return Ok(PrecheckResponse {
             items: vec![],
             summary: PrecheckSummary {
                 pass: 0,
@@ -466,30 +475,19 @@ async fn do_precheck(task: &Task) -> HttpResponse {
         });
     }
 
-    let ini_path = match write_temp_ini(task, &task.kind) {
-        Ok(p) => p,
-        Err(e) => return e.error_response(),
-    };
+    let ini_path = write_temp_ini(task, &task.kind)?;
 
     let result = {
-        let (task_config, precheck_config) = match load_configs(&ini_path) {
-            Ok(c) => c,
-            Err(e) => {
-                cleanup_temp_ini(&ini_path);
-                return e.error_response();
-            }
-        };
-
+        let (task_config, precheck_config) = load_configs(&ini_path)?;
         let builder = PrecheckerBuilder::build(precheck_config, task_config);
         let do_cdc = task.kind == "cdc";
 
         if !builder.valid_config() {
             cleanup_temp_ini(&ini_path);
-            return ApiError::new(
+            return Err(ApiError::new(
                 codes::TASK_VALIDATION_FAILED,
                 "invalid config: source or target URL is empty",
-            )
-            .error_response();
+            ));
         }
 
         let mut items = Vec::new();
@@ -516,7 +514,7 @@ async fn do_precheck(task: &Task) -> HttpResponse {
             }
         }
 
-        HttpResponse::Ok().json(PrecheckResponse {
+        Ok(PrecheckResponse {
             items,
             summary: PrecheckSummary { pass, fail, skip },
         })
@@ -579,6 +577,7 @@ mod tests {
             dispatcher_state,
             alert_engine_state,
             idempotency_cache,
+            crate::sse_session_tracker::SseSessionTracker::new(),
         )
     }
 

@@ -24,6 +24,7 @@ use crate::middleware::rbac::{self, RbacAction};
 use crate::models::{Alert, UserContext};
 use crate::repositories::alarm_channel_repository::AlarmChannelRepository;
 use crate::repositories::alert_repository::AlertRepository;
+use crate::sse_session_tracker::SseSessionTracker;
 
 /// Default page size for alert listing.
 const DEFAULT_PAGE_SIZE: i64 = 20;
@@ -418,6 +419,8 @@ pub async fn clear_batch(
 pub async fn alert_stream(
     user: UserContext,
     sse_state: web::Data<AlertSseState>,
+    sse_tracker: web::Data<SseSessionTracker>,
+    session: actix_session::Session,
     req: HttpRequest,
 ) -> HttpResponse {
     // RBAC: viewer and above can subscribe
@@ -426,6 +429,16 @@ pub async fn alert_stream(
     }
 
     let (event_tx, event_rx) = tokio::sync::mpsc::channel::<SseEvent>(100);
+
+    // Register this SSE connection with the session tracker so it can be
+    // closed when the session is invalidated (logout, expiry, disable).
+    let session_token = session
+        .get::<String>(crate::auth::SESSION_TOKEN_KEY)
+        .ok()
+        .flatten();
+    if let Some(ref token) = session_token {
+        sse_tracker.register(token, event_tx.clone()).await;
+    }
 
     // Subscribe to the broadcast channel.
     let bcast_rx = {
@@ -440,8 +453,15 @@ pub async fn alert_stream(
     };
 
     // Spawn the stream producer.
+    let producer_sse_tracker = sse_tracker.get_ref().clone();
+    let producer_session_token = session_token.clone();
     tokio::spawn(async move {
         produce_alert_sse_events(bcast_rx, event_tx).await;
+
+        // Unregister from the session tracker when the stream ends
+        if let Some(ref token) = producer_session_token {
+            producer_sse_tracker.unregister(token).await;
+        }
     });
 
     let sse = Sse::from_infallible_receiver(event_rx)

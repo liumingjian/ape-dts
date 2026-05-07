@@ -213,6 +213,7 @@ pub async fn validate_session(
 }
 
 /// Invalidate a session (logout). Deletes the session row from the DB.
+/// Also closes any SSE connections associated with the session token.
 pub async fn logout(pool: &SqlitePool, token: &str) -> Result<(), ApiError> {
     if let Ok(session) = SessionRepository::find_by_token(pool, token).await {
         SessionRepository::delete(pool, &session.id)
@@ -228,7 +229,18 @@ pub async fn logout(pool: &SqlitePool, token: &str) -> Result<(), ApiError> {
 }
 
 /// Invalidate all sessions for a user (e.g. on password reset or account disable).
-pub async fn invalidate_user_sessions(pool: &SqlitePool, user_id: &str) -> Result<(), ApiError> {
+/// Returns the tokens of all invalidated sessions so that SSE connections can be closed.
+pub async fn invalidate_user_sessions(
+    pool: &SqlitePool,
+    user_id: &str,
+) -> Result<Vec<String>, ApiError> {
+    // Find all sessions for this user first, to get their tokens
+    let sessions = SessionRepository::find_by_user(pool, user_id)
+        .await
+        .map_err(|e| ApiError::new(codes::INTERNAL_ERROR, format!("session lookup failed: {e}")))?;
+
+    let tokens: Vec<String> = sessions.iter().map(|s| s.token.clone()).collect();
+
     SessionRepository::delete_by_user(pool, user_id)
         .await
         .map_err(|e| {
@@ -236,7 +248,9 @@ pub async fn invalidate_user_sessions(pool: &SqlitePool, user_id: &str) -> Resul
                 codes::INTERNAL_ERROR,
                 format!("session invalidation failed: {e}"),
             )
-        })
+        })?;
+
+    Ok(tokens)
 }
 
 /// Admin password reset: hash the new password and update the user row.

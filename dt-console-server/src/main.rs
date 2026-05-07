@@ -12,6 +12,7 @@ use dt_console_server::rate_limit::{RateLimitConfig, RateLimiter};
 use dt_console_server::repositories::resource_group_repository::ResourceGroupRepository;
 use dt_console_server::repositories::run_repository::RunRepository;
 use dt_console_server::run_handlers;
+use dt_console_server::sse_session_tracker::SseSessionTracker;
 use dt_console_server::time_series_store;
 use tracing_subscriber::EnvFilter;
 
@@ -94,6 +95,9 @@ async fn main() -> std::io::Result<()> {
     // Create the idempotency cache for lifecycle/clear dedup.
     let idempotency_cache = IdempotencyCache::new();
 
+    // Create the SSE session tracker for closing connections on session invalidation.
+    let sse_session_tracker = SseSessionTracker::new();
+
     // Read scrape interval from env, or use default.
     let scrape_interval_secs = std::env::var("CONSOLE_SCRAPE_INTERVAL_SECS")
         .ok()
@@ -145,6 +149,7 @@ async fn main() -> std::io::Result<()> {
             dispatcher_state_clone,
             alert_engine_state_clone,
             idempotency_cache.clone(),
+            sse_session_tracker.clone(),
         )
     })
     .bind(&bind_addr)?;

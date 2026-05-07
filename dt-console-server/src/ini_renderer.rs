@@ -54,7 +54,7 @@ pub fn render(task: &Task) -> String {
 
     // ── [filter] ──────────────────────────────────────────────────────────
     let filter: serde_json::Value = serde_json::from_str(&task.filter_config).unwrap_or_default();
-    sections.push(render_filter(&filter));
+    sections.push(render_filter(&filter, &task.kind));
 
     // ── [router] ──────────────────────────────────────────────────────────
     let router: serde_json::Value = serde_json::from_str(&task.router_config).unwrap_or_default();
@@ -405,7 +405,7 @@ fn render_sinker(
     ("sinker".into(), kv)
 }
 
-fn render_filter(filter: &serde_json::Value) -> (String, Vec<(String, String)>) {
+fn render_filter(filter: &serde_json::Value, kind: &str) -> (String, Vec<(String, String)>) {
     let mut kv = Vec::new();
 
     // Deterministic key order
@@ -413,7 +413,15 @@ fn render_filter(filter: &serde_json::Value) -> (String, Vec<(String, String)>) 
     push_opt_string(&mut kv, filter, "ignore_dbs", "ignore_dbs");
     push_opt_string(&mut kv, filter, "do_tbs", "do_tbs");
     push_opt_string(&mut kv, filter, "ignore_tbs", "ignore_tbs");
-    push_opt_string(&mut kv, filter, "do_events", "do_events");
+
+    // Snapshot tasks: engine only accepts do_events=insert for extract_type=snapshot.
+    // Force "insert" regardless of what the filter config contains.
+    if kind == "snapshot" || kind == "check" {
+        kv.push(("do_events".into(), "insert".into()));
+    } else {
+        push_opt_string(&mut kv, filter, "do_events", "do_events");
+    }
+
     push_opt_string(&mut kv, filter, "do_ddls", "do_ddls");
     push_opt_string(&mut kv, filter, "do_dcls", "do_dcls");
     push_opt_string(&mut kv, filter, "do_structures", "do_structures");
@@ -986,6 +994,8 @@ mod tests {
             r#"{"sinkType":"write","url":"kafka://kafka:9092","batch_size":2}"#,
         );
         task.db_type_target = "kafka".into();
+        // Even though the user requests all event types, snapshot extract_type
+        // only supports insert — the renderer forces do_events=insert.
         task.filter_config =
             r#"{"do_dbs":"","ignore_dbs":"","do_tbs":"test_db_1.*,test_db_2.*","ignore_tbs":"","do_events":"insert,update,delete"}"#
                 .into();
@@ -996,6 +1006,9 @@ mod tests {
         assert!(ini.contains("db_type=kafka"));
         assert!(ini.contains("sink_type=write"));
         assert!(ini.contains("topic_map="));
+        // Snapshot: do_events must be forced to "insert"
+        assert!(ini.contains("do_events=insert"));
+        assert!(!ini.contains("do_events=insert,update,delete"));
     }
 
     #[test]
@@ -1072,6 +1085,92 @@ mod tests {
         assert!(
             !ini.contains("[resumer]"),
             "dummy resumer should be omitted"
+        );
+    }
+
+    #[test]
+    fn test_snapshot_do_events_forced_to_insert() {
+        // Even if filter_config has do_events=insert,update,delete,
+        // the renderer must emit only do_events=insert for snapshot tasks.
+        let mut task = make_task(
+            "snapshot",
+            "mysql",
+            "mysql",
+            r#"{"extractType":"snapshot","url":"mysql://src:3306/db"}"#,
+            r#"{"sinkType":"write","url":"mysql://dst:3306/db"}"#,
+        );
+        task.filter_config =
+            r#"{"do_dbs":"","ignore_dbs":"","do_tbs":"test_db.*","ignore_tbs":"","do_events":"insert,update,delete"}"#
+                .into();
+        let ini = render(&task);
+        assert!(
+            ini.contains("do_events=insert"),
+            "snapshot task must have do_events=insert"
+        );
+        assert!(
+            !ini.contains("do_events=insert,update,delete"),
+            "snapshot task must NOT have do_events=insert,update,delete"
+        );
+    }
+
+    #[test]
+    fn test_check_do_events_forced_to_insert() {
+        // Check tasks also use extract_type=snapshot, so do_events must be "insert".
+        let mut task = make_task(
+            "check",
+            "mysql",
+            "mysql",
+            r#"{"extractType":"snapshot","url":"mysql://src:3306/db"}"#,
+            r#"{"sinkType":"check","url":"mysql://dst:3306/db","check_log_dir":"./check"}"#,
+        );
+        task.filter_config =
+            r#"{"do_dbs":"","ignore_dbs":"","do_tbs":"test_db.*","ignore_tbs":"","do_events":"insert,update,delete"}"#
+                .into();
+        let ini = render(&task);
+        assert!(
+            ini.contains("do_events=insert"),
+            "check task must have do_events=insert"
+        );
+    }
+
+    #[test]
+    fn test_cdc_do_events_preserved_from_config() {
+        // CDC tasks should keep the full do_events value from filter config.
+        let mut task = make_task(
+            "cdc",
+            "mysql",
+            "mysql",
+            r#"{"extractType":"cdc","url":"mysql://src:3306/db","server_id":2000}"#,
+            r#"{"sinkType":"write","url":"mysql://dst:3306/db"}"#,
+        );
+        task.filter_config =
+            r#"{"do_dbs":"","ignore_dbs":"","do_tbs":"test_db.*","ignore_tbs":"","do_events":"insert,update,delete"}"#
+                .into();
+        let ini = render(&task);
+        assert!(
+            ini.contains("do_events=insert,update,delete"),
+            "CDC task must preserve full do_events from filter config"
+        );
+    }
+
+    #[test]
+    fn test_struct_do_events_not_forced() {
+        // Struct tasks don't need do_events at all — the filter has do_structures instead.
+        let mut task = make_task(
+            "struct",
+            "mysql",
+            "mysql",
+            r#"{"extractType":"struct","url":"mysql://src:3306/db"}"#,
+            r#"{"sinkType":"struct","url":"mysql://dst:3306/db","conflict_policy":"interrupt"}"#,
+        );
+        task.filter_config =
+            r#"{"do_dbs":"struct_it_mysql2mysql_1","ignore_dbs":"","do_tbs":"","ignore_tbs":"","do_events":"","do_structures":"table,index,constraint"}"#
+                .into();
+        let ini = render(&task);
+        // Struct tasks: do_events is empty in config, should remain empty
+        assert!(
+            !ini.contains("do_events=insert"),
+            "struct task with empty do_events should not get forced insert"
         );
     }
 }
