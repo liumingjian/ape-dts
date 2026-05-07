@@ -52,6 +52,7 @@
       v-model="previewVisible"
       :title="previewing?.file"
       size="640px"
+      append-to-body
       destroy-on-close
     >
       <pre v-if="previewing" class="ctrl-log__preview">{{ previewing.body }}</pre>

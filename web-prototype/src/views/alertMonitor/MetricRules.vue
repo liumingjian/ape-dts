@@ -147,6 +147,7 @@
       v-model="drawerVisible"
       :title="editing?.id ? t('monitor.metric.action.edit') : t('monitor.metric.action.create')"
       size="540px"
+      append-to-body
       destroy-on-close
     >
       <el-form v-if="form" label-width="120px" label-position="top" class="metric-rules__form">

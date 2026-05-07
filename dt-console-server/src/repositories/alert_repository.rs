@@ -57,6 +57,10 @@ impl AlertRepository {
     ///
     /// All filters are AND-combined. NULL / empty filters are ignored.
     /// Uses parameterized queries to prevent SQL injection (VAL-SEC-INJ-001).
+    ///
+    /// NOTE: Uses all-positional `?` placeholders (never numbered `?N`).
+    /// SQLite/sqlx does not allow mixing numbered and positional parameters,
+    /// which was the root cause of the `status=active` 500 error.
     pub async fn list_filtered(
         pool: &SqlitePool,
         status: Option<&str>,
@@ -72,28 +76,25 @@ impl AlertRepository {
         let task_id = task_id.filter(|t| !t.is_empty());
         let engine = engine.filter(|e| !e.is_empty());
 
-        // Build WHERE clause with positional parameters.
+        // Build WHERE clause with positional `?` placeholders.
         // Engine filter requires a subquery join with tasks.
+        // IMPORTANT: do NOT use numbered placeholders (?1, ?2) — they cannot
+        // be mixed with unnumbered ? for LIMIT/OFFSET in SQLite.
         let mut conditions = Vec::new();
-        let mut param_idx = 1u32; // 1-based for SQL parameter numbering
 
         if status.is_some() {
-            conditions.push(format!("a.status = ?{param_idx}"));
-            param_idx += 1;
+            conditions.push("a.status = ?".to_string());
         }
         if level.is_some() {
-            conditions.push(format!("a.severity = ?{param_idx}"));
-            param_idx += 1;
+            conditions.push("a.severity = ?".to_string());
         }
         if task_id.is_some() {
-            conditions.push(format!("a.task_id = ?{param_idx}"));
-            param_idx += 1;
+            conditions.push("a.task_id = ?".to_string());
         }
         if engine.is_some() {
-            conditions.push(format!(
-                "EXISTS (SELECT 1 FROM tasks t WHERE t.id = a.task_id AND (t.db_type_source LIKE ?{param_idx} OR t.db_type_target LIKE ?{param_idx}))"
-            ));
-            let _ = param_idx;
+            conditions.push(
+                "EXISTS (SELECT 1 FROM tasks t WHERE t.id = a.task_id AND (t.db_type_source LIKE ? OR t.db_type_target LIKE ?))".to_string(),
+            );
         }
 
         let where_sql = if conditions.is_empty() {
@@ -102,27 +103,22 @@ impl AlertRepository {
             format!("WHERE {}", conditions.join(" AND "))
         };
 
-        // Count query — same conditions, different alias.
+        // Count query — same conditions, no alias needed.
         let mut count_conditions = Vec::new();
-        let mut count_idx = 1u32;
 
         if status.is_some() {
-            count_conditions.push(format!("status = ?{count_idx}"));
-            count_idx += 1;
+            count_conditions.push("status = ?".to_string());
         }
         if level.is_some() {
-            count_conditions.push(format!("severity = ?{count_idx}"));
-            count_idx += 1;
+            count_conditions.push("severity = ?".to_string());
         }
         if task_id.is_some() {
-            count_conditions.push(format!("task_id = ?{count_idx}"));
-            count_idx += 1;
+            count_conditions.push("task_id = ?".to_string());
         }
         if engine.is_some() {
-            count_conditions.push(format!(
-                "EXISTS (SELECT 1 FROM tasks t WHERE t.id = alerts.task_id AND (t.db_type_source LIKE ?{count_idx} OR t.db_type_target LIKE ?{count_idx}))"
-            ));
-            let _ = count_idx;
+            count_conditions.push(
+                "EXISTS (SELECT 1 FROM tasks t WHERE t.id = alerts.task_id AND (t.db_type_source LIKE ? OR t.db_type_target LIKE ?))".to_string(),
+            );
         }
 
         let count_where_sql = if count_conditions.is_empty() {
@@ -145,7 +141,7 @@ impl AlertRepository {
         }
         if let Some(e) = engine {
             let pattern = format!("%{e}%");
-            count_query = count_query.bind(pattern);
+            count_query = count_query.bind(pattern.clone()).bind(pattern);
         }
         let count: (i64,) = count_query.fetch_one(pool).await?;
 
@@ -166,7 +162,7 @@ impl AlertRepository {
         }
         if let Some(e) = engine {
             let pattern = format!("%{e}%");
-            data_query = data_query.bind(pattern);
+            data_query = data_query.bind(pattern.clone()).bind(pattern);
         }
         data_query = data_query.bind(page_size).bind(offset);
 

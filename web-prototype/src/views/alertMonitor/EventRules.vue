@@ -126,7 +126,7 @@
       </div>
     </div>
 
-    <el-drawer v-model="drawerVisible" :title="t('common.edit')" size="480px" destroy-on-close>
+    <el-drawer v-model="drawerVisible" :title="t('common.edit')" size="480px" append-to-body destroy-on-close>
       <el-form v-if="form" label-position="top" class="event-rules__form">
         <el-form-item :label="t('monitor.event.col.name')">
           <el-input v-model="form.name" disabled />

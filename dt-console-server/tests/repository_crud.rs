@@ -478,6 +478,126 @@ async fn alert_repository_crud() {
     assert_eq!(saved.status, "recovered");
 }
 
+/// Regression test: GET /api/alerts?status=active must return 200 (empty)
+/// not 500 INTERNAL_ERROR. The root cause was mixing numbered (?1) and
+/// positional (?) SQL parameters, which SQLite/sqlx rejects.
+#[tokio::test]
+async fn alert_repository_list_filtered_status_no_match() {
+    let pool = test_pool().await;
+
+    // Insert a firing alert
+    let alert = Alert {
+        id: uuid::Uuid::new_v4().to_string(),
+        task_id: None,
+        run_id: None,
+        rule_id: None,
+        metric_name: Some("extractor_rps_avg".to_string()),
+        operator: Some(">".to_string()),
+        threshold: Some(100.0),
+        severity: "warning".to_string(),
+        value: Some(150.0),
+        status: "firing".to_string(),
+        silenced: false,
+        fired_at: now(),
+        recovered_at: None,
+        cleared_at: None,
+        delivered_at: None,
+        cleared_by: None,
+        last_error: None,
+        created_at: now(),
+    };
+    AlertRepository::create(&pool, &alert).await.unwrap();
+
+    // Query with status="active" — no alerts match, but must NOT error
+    let (items, total) = AlertRepository::list_filtered(
+        &pool,
+        Some("active"),
+        None,
+        None,
+        None,
+        1,
+        20,
+    )
+    .await
+    .expect("list_filtered must not fail for non-matching status");
+    assert_eq!(total, 0, "no alerts should match status=active");
+    assert!(items.is_empty());
+
+    // Query with status="firing" — should match the inserted alert
+    let (items, total) = AlertRepository::list_filtered(
+        &pool,
+        Some("firing"),
+        None,
+        None,
+        None,
+        1,
+        20,
+    )
+    .await
+    .expect("list_filtered must work for matching status");
+    assert_eq!(total, 1);
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].status, "firing");
+}
+
+/// Test that list_filtered works with multiple filters AND-combined.
+#[tokio::test]
+async fn alert_repository_list_filtered_multiple_filters() {
+    let pool = test_pool().await;
+
+    let alert = Alert {
+        id: uuid::Uuid::new_v4().to_string(),
+        task_id: Some("task-1".to_string()),
+        run_id: None,
+        rule_id: None,
+        metric_name: Some("extractor_rps_avg".to_string()),
+        operator: Some(">".to_string()),
+        threshold: Some(100.0),
+        severity: "critical".to_string(),
+        value: Some(150.0),
+        status: "firing".to_string(),
+        silenced: false,
+        fired_at: now(),
+        recovered_at: None,
+        cleared_at: None,
+        delivered_at: None,
+        cleared_by: None,
+        last_error: None,
+        created_at: now(),
+    };
+    AlertRepository::create(&pool, &alert).await.unwrap();
+
+    // Both status and level filter
+    let (items, total) = AlertRepository::list_filtered(
+        &pool,
+        Some("firing"),
+        Some("critical"),
+        None,
+        None,
+        1,
+        20,
+    )
+    .await
+    .unwrap();
+    assert_eq!(total, 1);
+    assert_eq!(items.len(), 1);
+
+    // Status matches but level doesn't
+    let (items, total) = AlertRepository::list_filtered(
+        &pool,
+        Some("firing"),
+        Some("info"),
+        None,
+        None,
+        1,
+        20,
+    )
+    .await
+    .unwrap();
+    assert_eq!(total, 0);
+    assert!(items.is_empty());
+}
+
 // ─── AlertRuleRepository ─────────────────────────────────────────────────
 
 #[tokio::test]

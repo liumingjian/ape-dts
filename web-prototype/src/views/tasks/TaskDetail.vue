@@ -293,6 +293,7 @@
       :title="t('taskDetail.editor.title')"
       size="520px"
       direction="rtl"
+      append-to-body
       @close="onEditorClose"
     >
       <div v-if="task" class="detail__editor">

@@ -141,12 +141,26 @@
                 <small class="wizard__hint">{{ t('wizard.source.subMode.hint') }}</small>
               </template>
 
-              <label class="required">{{ t('wizard.source.host') }}</label>
-              <el-input
-                v-model="form.target.host"
-                placeholder="10.250.0.52:8000"
-                @paste="onTargetPaste"
-              />
+              <div class="wizard__row wizard__row--split">
+                <div>
+                  <label class="required">{{ t('wizard.source.host') }}</label>
+                  <el-input
+                    v-model="form.target.host"
+                    placeholder="10.250.0.52"
+                    @paste="onTargetPaste"
+                  />
+                </div>
+                <div>
+                  <label class="required">{{ t('wizard.source.port') }}</label>
+                  <el-input-number
+                    v-model="form.target.port"
+                    :min="1"
+                    :max="65535"
+                    controls-position="right"
+                    style="width: 100%"
+                  />
+                </div>
+              </div>
               <small class="wizard__hint">{{ t('wizard.source.ipHint') }}</small>
 
               <div class="wizard__row wizard__row--switch">

@@ -88,6 +88,7 @@
       v-model="drawerVisible"
       :title="editing?.id ? t('monitor.channel.edit') : t('monitor.channel.create')"
       size="540px"
+      append-to-body
       destroy-on-close
     >
       <el-form v-if="form" label-position="top" class="alarm-setting__edit">
