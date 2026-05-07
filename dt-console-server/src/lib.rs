@@ -1,3 +1,6 @@
+pub mod alarm_dispatcher;
+pub mod alert_engine;
+pub mod alert_handlers;
 pub mod auth;
 pub mod auth_handlers;
 pub mod control_log_handlers;
@@ -36,6 +39,10 @@ use metrics_scraper::ScraperState;
 use middleware::csrf::Csrf;
 use rate_limit::RateLimiter;
 use run_handlers::ActiveRuns;
+
+use alarm_dispatcher::DispatcherState;
+use alert_engine::AlertEngineState;
+use alert_handlers::AlertSseState;
 
 /// Configure all API routes.
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -84,7 +91,14 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(metrics_handlers::get_metrics)
             // Log SSE stream + log file read
             .service(log_sse_handlers::log_stream)
-            .service(log_sse_handlers::get_log_file),
+            .service(log_sse_handlers::get_log_file)
+            // Alert API
+            .service(alert_handlers::list_alerts)
+            .service(alert_handlers::clear_alert)
+            .service(alert_handlers::clear_batch)
+            .service(alert_handlers::alert_stream)
+            // Alarm channel test
+            .service(alert_handlers::test_alarm_channel),
     );
 }
 
@@ -98,6 +112,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 /// 3. `SessionMiddleware` — cookie-backed sessions via actix-session
 /// 4. `Csrf` — XSRF-TOKEN cookie ↔ X-XSRF-TOKEN header enforcement
 /// 5. `JsonConfig` — parse errors mapped to `{ code: "PARSE_ERROR" }` envelope
+#[allow(clippy::too_many_arguments)]
 pub fn build_app(
     key: Key,
     pool: sqlx::SqlitePool,
@@ -106,6 +121,9 @@ pub fn build_app(
     active_runs: ActiveRuns,
     scraper_state: ScraperState,
     log_sse_state: LogSseState,
+    alert_sse_state: AlertSseState,
+    dispatcher_state: DispatcherState,
+    alert_engine_state: AlertEngineState,
 ) -> App<
     impl actix_web::dev::ServiceFactory<
         actix_web::dev::ServiceRequest,
@@ -137,5 +155,8 @@ pub fn build_app(
         .app_data(web::Data::new(active_runs))
         .app_data(web::Data::new(scraper_state))
         .app_data(web::Data::new(log_sse_state))
+        .app_data(web::Data::new(alert_sse_state))
+        .app_data(web::Data::new(dispatcher_state))
+        .app_data(web::Data::new(alert_engine_state))
         .configure(configure)
 }

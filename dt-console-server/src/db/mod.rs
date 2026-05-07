@@ -204,8 +204,8 @@ mod tests {
             .fetch_one(&pool)
             .await
             .unwrap();
-        // 20 migrations, each applied exactly once.
-        assert_eq!(count.0, 20);
+        // 23 migrations, each applied exactly once.
+        assert_eq!(count.0, 23);
     }
 
     #[tokio::test]
@@ -259,7 +259,7 @@ mod tests {
             .fetch_one(&pool)
             .await
             .unwrap();
-        assert_eq!(count_before.0, 20, "all 20 migrations should be recorded");
+        assert_eq!(count_before.0, 23, "all 23 migrations should be recorded");
 
         // Mark the first applied migration as dirty (success = false).
         // Migration versions are timestamps like 20260507000001, not sequential.
@@ -347,6 +347,6 @@ mod tests {
             .fetch_one(&pool)
             .await
             .unwrap();
-        assert_eq!(count.0, 20);
+        assert_eq!(count.0, 23);
     }
 }

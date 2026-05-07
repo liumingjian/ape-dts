@@ -25,6 +25,7 @@ cookie = { workspace = true }
 prometheus-parse = { workspace = true }
 csnmp = { workspace = true }
 dashmap = { workspace = true }
+rdkafka = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }

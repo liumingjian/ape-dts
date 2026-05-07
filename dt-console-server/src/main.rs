@@ -1,4 +1,7 @@
 use actix_web::cookie::Key;
+use dt_console_server::alarm_dispatcher;
+use dt_console_server::alert_engine;
+use dt_console_server::alert_handlers;
 use dt_console_server::auth;
 use dt_console_server::db::{self, DbError, SCHEMA_MISMATCH_CODE};
 use dt_console_server::log_sse_handlers;
@@ -72,6 +75,15 @@ async fn main() -> std::io::Result<()> {
     // Create the SSE state for log streaming.
     let log_sse_state = log_sse_handlers::LogSseState::default();
 
+    // Create the alert SSE state for alert streaming.
+    let alert_sse_state = alert_handlers::AlertSseState::new();
+
+    // Create the alarm dispatcher state.
+    let dispatcher_state = alarm_dispatcher::DispatcherState::new();
+
+    // Create the alert engine state.
+    let alert_engine_state = alert_engine::AlertEngineState::new();
+
     // Read scrape interval from env, or use default.
     let scrape_interval_secs = std::env::var("CONSOLE_SCRAPE_INTERVAL_SECS")
         .ok()
@@ -98,6 +110,9 @@ async fn main() -> std::io::Result<()> {
         let active_runs_clone = active_runs.clone();
         let scraper_state_clone = scraper_state.clone();
         let log_sse_state_clone = log_sse_state.clone();
+        let alert_sse_state_clone = alert_sse_state.clone();
+        let dispatcher_state_clone = dispatcher_state.clone();
+        let alert_engine_state_clone = alert_engine_state.clone();
         dt_console_server::build_app(
             key,
             pool_clone,
@@ -106,6 +121,9 @@ async fn main() -> std::io::Result<()> {
             active_runs_clone,
             scraper_state_clone,
             log_sse_state_clone,
+            alert_sse_state_clone,
+            dispatcher_state_clone,
+            alert_engine_state_clone,
         )
     })
     .bind(&bind_addr)?

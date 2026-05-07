@@ -9,17 +9,20 @@ impl AlertRuleRepository {
     /// Create a new alert rule.
     pub async fn create(pool: &SqlitePool, rule: &AlertRule) -> Result<AlertRule, sqlx::Error> {
         sqlx::query(
-            "INSERT INTO alert_rules (id, name, metric_name, operator, threshold, severity,
-             dwell_secs, enabled, resource_group_id, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO alert_rules (id, name, metric_name, operator, threshold,
+             recovery_threshold, severity, dwell_secs, channel_ids, enabled,
+             resource_group_id, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&rule.id)
         .bind(&rule.name)
         .bind(&rule.metric_name)
         .bind(&rule.operator)
         .bind(rule.threshold)
+        .bind(rule.recovery_threshold)
         .bind(&rule.severity)
         .bind(rule.dwell_secs)
+        .bind(&rule.channel_ids)
         .bind(rule.enabled)
         .bind(&rule.resource_group_id)
         .bind(&rule.created_at)
@@ -45,19 +48,29 @@ impl AlertRuleRepository {
             .await
     }
 
+    /// List enabled alert rules.
+    pub async fn list_enabled(pool: &SqlitePool) -> Result<Vec<AlertRule>, sqlx::Error> {
+        sqlx::query_as("SELECT * FROM alert_rules WHERE enabled = 1 ORDER BY created_at ASC")
+            .fetch_all(pool)
+            .await
+    }
+
     /// Update an alert rule.
     pub async fn update(pool: &SqlitePool, rule: &AlertRule) -> Result<AlertRule, sqlx::Error> {
         sqlx::query(
             "UPDATE alert_rules SET name = ?, metric_name = ?, operator = ?, threshold = ?,
-             severity = ?, dwell_secs = ?, enabled = ?, resource_group_id = ?, updated_at = ?
+             recovery_threshold = ?, severity = ?, dwell_secs = ?, channel_ids = ?,
+             enabled = ?, resource_group_id = ?, updated_at = ?
              WHERE id = ?",
         )
         .bind(&rule.name)
         .bind(&rule.metric_name)
         .bind(&rule.operator)
         .bind(rule.threshold)
+        .bind(rule.recovery_threshold)
         .bind(&rule.severity)
         .bind(rule.dwell_secs)
+        .bind(&rule.channel_ids)
         .bind(rule.enabled)
         .bind(&rule.resource_group_id)
         .bind(&rule.updated_at)

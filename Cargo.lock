@@ -1788,6 +1788,7 @@ dependencies = [
  "dt-precheck",
  "futures",
  "prometheus-parse",
+ "rdkafka",
  "regex",
  "reqwest 0.11.22",
  "serde",

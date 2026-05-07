@@ -566,6 +566,9 @@ mod tests {
         let active_runs = new_active_runs();
         let scraper_state = crate::metrics_scraper::ScraperState::new();
         let log_sse_state = crate::log_sse_handlers::LogSseState::default();
+        let alert_sse_state = crate::alert_handlers::AlertSseState::new();
+        let dispatcher_state = crate::alarm_dispatcher::DispatcherState::new();
+        let alert_engine_state = crate::alert_engine::AlertEngineState::new();
         crate::build_app(
             Key::from(&master_bytes),
             pool_clone,
@@ -574,6 +577,9 @@ mod tests {
             active_runs,
             scraper_state,
             log_sse_state,
+            alert_sse_state,
+            dispatcher_state,
+            alert_engine_state,
         )
     }
 
