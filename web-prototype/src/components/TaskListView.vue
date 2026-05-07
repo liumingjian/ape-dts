@@ -404,8 +404,9 @@ import { api } from '@/api/client';
 import { useRbac } from '@/composables/useRbac';
 import { useDocumentVisibility } from '@/composables/useDocumentVisibility';
 import type {
-  Task, TaskCategory, TaskStatus, EngineType, Paginated,
+  Task, TaskCategory, TaskStatus, EngineType, Paginated, ApiTask,
 } from '@/types/domain';
+import { mapApiTask } from '@/types/domain';
 import { ENGINE_LABELS } from '@/types/domain';
 
 type ViewKind = TaskCategory;
@@ -570,8 +571,8 @@ async function loadList() {
       params.set('sort', sortKey.value);
       params.set('order', sortDir.value);
     }
-    const data = await api.get<Paginated<Task>>(`/tasks?${params.toString()}`);
-    list.value = data.items;
+    const data = await api.get<Paginated<ApiTask>>(`/tasks?${params.toString()}`);
+    list.value = (data.items ?? []).map(mapApiTask);
     total.value = data.total;
   } catch {
     ElMessage.error(t('taskList.toast.loadFailed'));

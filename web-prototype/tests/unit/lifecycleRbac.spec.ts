@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canPerform, type Action, type Role } from '@/auth/permissions';
+import { canPerform, type Action } from '@/auth/permissions';
 
 describe('Task lifecycle RBAC — pause/resume permissions', () => {
   it('admin can pause and resume tasks', () => {

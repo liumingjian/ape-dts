@@ -357,7 +357,8 @@ import { api } from '@/api/client';
 import { useRbac } from '@/composables/useRbac';
 import { useDocumentVisibility } from '@/composables/useDocumentVisibility';
 import { useLogStream, type LogLine, type LogStreamHandle } from '@/composables/useLogStream';
-import type { Task, Alert, MetricQueryResponse, Run, RunPosition } from '@/types/domain';
+import type { Task, Alert, MetricQueryResponse, Run, RunPosition, ApiTask } from '@/types/domain';
+import { mapApiTask } from '@/types/domain';
 import KpiCard from '@/components/KpiCard.vue';
 import ChartCard from '@/components/ChartCard.vue';
 import LevelBadge from '@/components/LevelBadge.vue';
@@ -420,7 +421,8 @@ watch(task, (v) => {
 /* ---------- load task ---------- */
 async function loadTask() {
   try {
-    task.value = await api.get<Task>(`/tasks/${taskId.value}`);
+    const raw = await api.get<ApiTask>(`/tasks/${taskId.value}`);
+    task.value = mapApiTask(raw);
   } catch {
     ElMessage.error('任务不存在');
     router.push(backToListPath());

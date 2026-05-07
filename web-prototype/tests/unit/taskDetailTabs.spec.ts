@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { VALID_TABS_TAB_NAMES } from './taskDetailTabs.helpers';
 
 // Reusable constants matching TaskDetail.vue
 const VALID_TABS = ['config', 'objects', 'logs', 'monitor', 'alerts', 'history'] as const;

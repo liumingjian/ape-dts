@@ -354,7 +354,7 @@ export interface Paginated<T> {
   items: T[];
   total: number;
   page: number;
-  size: number;
+  pageSize: number;
 }
 
 /* ----- INI-rendering fixture types (consolidated from taskFixture) ----- */
@@ -478,5 +478,120 @@ export interface CreateTaskDto {
     doDbs?: string[];
     doTbs?: string[];
     doEvents?: string[];
+  };
+}
+
+/* ----- API response types (backend snake_case → frontend camelCase) ----- */
+
+/** Raw shape returned by GET /api/tasks from the Rust backend. */
+export interface ApiTask {
+  id: string;
+  taskId: string;
+  name: string;
+  kind: string;                         // snapshot | cdc | check | struct
+  dbTypeSource: string;                 // mysql | postgres | ...
+  dbTypeTarget: string;
+  sourceEndpoint: { url?: string };
+  targetEndpoint: { url?: string };
+  extractor: Record<string, unknown> | null;
+  sinker: Record<string, unknown> | null;
+  filter: Record<string, unknown> | null;
+  router: Record<string, unknown> | null;
+  parallelizer: Record<string, unknown> | null;
+  pipeline: Record<string, unknown> | null;
+  resumer: Record<string, unknown> | null;
+  processor: Record<string, unknown> | null;
+  runtime: Record<string, unknown> | null;
+  metrics: {
+    extractor_pushed_rps_avg?: number;
+    extractor_pushed_bps_avg?: number;
+    sinker_record_count_avg_by_sec?: number;
+    replication_lag?: number;
+    sinker_rt_per_query_avg?: number;
+    pipeline_buffer_size_avg?: number;
+    pipeline_sinked_count_latest?: number;
+    error_count?: number;
+  } | null;
+  resourceGroupId: string;
+  ownerUserId: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  startedAt?: string;
+  completedAt?: string;
+}
+
+/** Parse a database connection URL string into its host/port/username/database parts. */
+function parseEndpointUrl(url: string): { host: string; port: number; username: string; database: string } {
+  try {
+    const u = new URL(url);
+    return {
+      host: u.hostname,
+      port: Number(u.port) || 3306,
+      username: decodeURIComponent(u.username || ''),
+      database: decodeURIComponent(u.pathname.slice(1) || ''),
+    };
+  } catch {
+    return { host: '', port: 0, username: '', database: '' };
+  }
+}
+
+/** Map a backend ApiTask to the frontend Task type used by the SPA. */
+export function mapApiTask(raw: ApiTask): Task {
+  const src = parseEndpointUrl(raw.sourceEndpoint?.url ?? '');
+  const tgt = parseEndpointUrl(raw.targetEndpoint?.url ?? '');
+  const m = raw.metrics;
+  return {
+    id: raw.id,
+    name: raw.name,
+    category: (raw.kind || 'snapshot') as TaskCategory,
+    status: (raw.status || 'draft') as TaskStatus,
+    source: {
+      engine: (raw.dbTypeSource || 'mysql') as EngineType,
+      host: src.host,
+      port: src.port,
+      username: src.username,
+      password: '',
+      database: src.database,
+    },
+    target: {
+      engine: (raw.dbTypeTarget || 'mysql') as EngineType,
+      host: tgt.host,
+      port: tgt.port,
+      username: tgt.username,
+      password: '',
+      database: tgt.database,
+    },
+    syncMode: (raw.kind === 'cdc' ? 'cdc' : 'full') as SyncMode,
+    extractType: (raw.kind === 'cdc' ? 'cdc' : 'snapshot') as ExtractType,
+    taskType: 'standalone',
+    resourceGroup: raw.resourceGroupId ?? '',
+    instanceIp: src.host,
+    progressPercent: m?.pipeline_sinked_count_latest ?? 0,
+    syncObjects: { totalTables: 0, selectedTables: 0 },
+    config: {
+      parallelizer: 'snapshot' as ParallelType,
+      parallelSize: 1,
+      bufferSize: 4,
+      maxRps: 0,
+      checkpointIntervalSecs: 10,
+      resumeType: 'auto' as ResumeType,
+      metricsEnabled: true,
+    },
+    createdAt: raw.createdAt,
+    updatedAt: raw.updatedAt,
+    startedAt: raw.startedAt,
+    completedAt: raw.completedAt,
+    metrics: {
+      rpsLatest: m?.extractor_pushed_rps_avg ?? 0,
+      bpsLatest: m?.extractor_pushed_bps_avg ?? 0,
+      sinkerRpsLatest: m?.sinker_record_count_avg_by_sec ?? 0,
+      latencyMs: m?.replication_lag ?? 0,
+      queryRtUs: m?.sinker_rt_per_query_avg ?? 0,
+      bufferSize: m?.pipeline_buffer_size_avg ?? 0,
+      errorCount: m?.error_count ?? 0,
+      processedRecords: m?.pipeline_sinked_count_latest ?? 0,
+    },
+    lastHeartbeatAt: raw.updatedAt,
   };
 }
