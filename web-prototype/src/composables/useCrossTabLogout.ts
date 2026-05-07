@@ -18,7 +18,9 @@ export function useCrossTabLogout(router: Router) {
     // Key was deleted or set to null in another tab
     const raw = e.newValue;
     if (!raw) {
-      auth.logout();
+      // Don't call server logout — the other tab already did that.
+      // Just clear local state.
+      auth.user = null;
       router.push({ path: '/login', query: { redirect: router.currentRoute.value.fullPath } });
     }
   }

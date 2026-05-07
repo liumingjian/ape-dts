@@ -36,10 +36,14 @@
     "password": "密码",
     "login": "登录",
     "logout": "退出登录",
-    "hint": "演示账号：admin / admin123（任意凭据均可登入）",
+    "hint": "默认账号：admin / admin123",
     "heroTitle": "ape-dts Console",
     "heroSubtitle": "面向 ape-dts 数据同步引擎的开源管理控制台 · 全量迁移 / 增量同步 / 数据校验 / 结构迁移",
-    "copyright": "© 2026 ape-dts · 开源版本 · MIT License"
+    "copyright": "© 2026 ape-dts · 开源版本 · MIT License",
+    "validation": {
+      "usernameRequired": "请输入用户名",
+      "passwordRequired": "请输入密码"
+    }
   },
   "nav": {
     "dashboard": "工作台",
@@ -185,6 +189,60 @@
     "title": "无访问权限",
     "desc": "您没有权限访问此页面，请联系管理员。",
     "back": "返回工作台"
+  },
+  "notfound": {
+    "title": "页面走丢了",
+    "desc": "请核对 URL 或返回工作台。",
+    "back": "返回工作台"
+  },
+  "profile": {
+    "username": "用户名",
+    "displayName": "显示名称",
+    "role": {
+      "label": "角色",
+      "admin": "管理员",
+      "operator": "操作员",
+      "viewer": "观察者"
+    }
+  },
+  "errors": {
+    "REQUEST_FAILED": "请求失败，请稍后重试",
+    "SERVER_ERROR": "服务器内部错误，请稍后重试",
+    "UNAUTHENTICATED": "未登录或会话已过期",
+    "INVALID_CREDENTIALS": "用户名或密码错误",
+    "ACCOUNT_DISABLED": "该账号已被禁用",
+    "SESSION_EXPIRED": "会话已过期，请重新登录",
+    "CSRF_TOKEN_MISSING": "CSRF 令牌缺失，请刷新页面",
+    "FORBIDDEN": "无权限执行此操作",
+    "USERNAME_TAKEN": "用户名已存在",
+    "LICENSE_LIMIT_EXCEEDED": "License 任务配额已达上限",
+    "LICENSE_EXPIRED": "License 已过期",
+    "INVALID_LICENSE_CODE": "激活码无效",
+    "TASK_NOT_FOUND": "任务不存在",
+    "RUN_ALREADY_ACTIVE": "任务已有活跃运行",
+    "RUN_NOT_ACTIVE": "任务当前无活跃运行",
+    "ILLEGAL_TRANSITION": "非法状态转换",
+    "VALIDATION_FAILED": "数据验证失败",
+    "PARSE_ERROR": "请求数据格式错误",
+    "TOO_MANY_ATTEMPTS": "请求过于频繁，请稍后重试",
+    "CANNOT_DEMOTE_SELF": "不能降低自身角色",
+    "LAST_ADMIN_PROTECTED": "无法删除最后一个管理员",
+    "RESOURCE_GROUP_NAME_TAKEN": "资源组名称已存在",
+    "DEFAULT_RESOURCE_GROUP_PROTECTED": "默认资源组不可修改或删除",
+    "RESOURCE_GROUP_HAS_TASKS": "资源组下存在任务，无法删除",
+    "UNKNOWN_RESOURCE_GROUP": "资源组不存在",
+    "TASK_HAS_ACTIVE_RUN": "任务存在活跃运行，无法操作",
+    "TASK_KIND_IMMUTABLE": "任务类型不可变更",
+    "GAUSSDB_SUB_MODE_REQUIRED": "GaussDB 引擎需要选择子模式",
+    "URL_SCHEME_ENGINE_MISMATCH": "URL 协议与引擎类型不匹配",
+    "INVALID_URL_SCHEME": "URL 协议无效",
+    "STRUCT_FILTER_REQUIRED": "结构迁移需要指定迁移对象",
+    "SYNC_MODE_INVALID_FOR_CATEGORY": "同步模式与任务类型不兼容",
+    "PATH_OUTSIDE_SANDBOX": "路径超出允许范围",
+    "ENDPOINT_HOST_BLOCKED": "目标地址不在允许范围内",
+    "TASK_ID_TAKEN": "任务 ID 已被占用",
+    "INVALID_TASK_ID_FORMAT": "任务 ID 格式无效",
+    "CONNECTION_FAILED": "连接失败"
   },
   "taskDetail": {
     "back": "返回列表",

@@ -209,16 +209,18 @@ router.beforeEach((to) => {
   const auth = useAuthStore();
 
   // Public routes bypass all checks
-  if (to.meta?.public) return true;
-
-  // Unauthenticated → login with redirect
-  if (!auth.isAuthenticated) {
-    return { path: '/login', query: { redirect: to.fullPath } };
+  if (to.meta?.public) {
+    // Authenticated /login → dashboard (even though /login is public)
+    if (to.path === '/login' && auth.isAuthenticated) {
+      return { path: '/dashboard' };
+    }
+    return true;
   }
 
-  // Authenticated /login → dashboard
-  if (to.path === '/login') {
-    return { path: '/dashboard' };
+  // Unauthenticated → login with redirect (preserving full path + query)
+  if (!auth.isAuthenticated) {
+    const redirect = to.fullPath;
+    return { path: '/login', query: redirect ? { redirect } : undefined };
   }
 
   // Role-based access control

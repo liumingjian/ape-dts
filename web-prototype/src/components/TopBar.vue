@@ -41,6 +41,7 @@
         <div class="topbar__user">
           <div class="topbar__avatar">{{ avatarLetter }}</div>
           <span class="topbar__user-name">{{ auth.user?.displayName ?? 'Guest' }}</span>
+          <el-tag :type="roleTagType" size="small" effect="dark" class="topbar__role-tag">{{ roleLabel }}</el-tag>
           <IconChevronDown class="topbar__chev" />
         </div>
         <template #dropdown>
@@ -92,13 +93,28 @@ const avatarLetter = computed(() =>
   (auth.user?.displayName ?? auth.user?.username ?? 'G').slice(0, 1).toUpperCase(),
 );
 
+const roleLabel = computed(() => {
+  const key = `profile.role.${auth.user?.role}`;
+  const val = t(key);
+  return val !== key ? val : (auth.user?.role ?? '');
+});
+
+const roleTagType = computed(() => {
+  switch (auth.user?.role) {
+    case 'admin': return 'danger';
+    case 'operator': return 'warning';
+    case 'viewer': return 'info';
+    default: return 'info';
+  }
+});
+
 function onLocaleChange(code: LocaleCode) {
   appStore.changeLocale(code);
 }
 
-function onUserCommand(cmd: string) {
+async function onUserCommand(cmd: string) {
   if (cmd === 'logout') {
-    auth.logout();
+    await auth.logout();
     router.push('/login');
   } else if (cmd === 'profile') {
     router.push('/profile');
@@ -194,6 +210,9 @@ function onUserCommand(cmd: string) {
 .topbar__user-name {
   font-size: var(--text-sm);
   color: var(--color-ink);
+}
+.topbar__role-tag {
+  margin-left: 4px;
 }
 .topbar__menu-icon {
   width: 16px;

@@ -68,14 +68,25 @@ export async function apiFetch<T>(path: string, init: RequestOptions = {}): Prom
     clearTimeout(timer);
   }
 
+  // Parse body for all non-2xx responses (including 401) so we get the error code
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : null;
+
   if (res.status === 401) {
-    await handleUnauthorized();
-    const err: ApiError = { status: 401, message: 'unauthorized' };
+    // If already on /login, don't redirect — let the caller surface the error
+    const onLoginPage = typeof window !== 'undefined' && router.currentRoute.value.path === '/login';
+    if (!onLoginPage) {
+      await handleUnauthorized();
+    }
+    const err: ApiError = {
+      status: 401,
+      code: data?.code,
+      message: data?.message ?? 'unauthorized',
+      details: data?.details,
+    };
     throw err;
   }
 
-  const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
   if (!res.ok) {
     const err: ApiError = {
       status: res.status,

@@ -34,18 +34,29 @@
       </div>
       <div class="login__card">
         <h2 class="login__title">{{ t('auth.loginTitle') }}</h2>
-        <el-form :model="form" label-position="top" size="large" @submit.prevent="onSubmit">
-          <el-form-item :label="t('auth.username')">
-            <el-input v-model="form.username" placeholder="admin" autocomplete="username">
+        <el-form
+          ref="formRef"
+          :model="form"
+          :rules="formRules"
+          label-position="top"
+          size="large"
+          @submit.prevent="onSubmit"
+        >
+          <el-form-item :label="t('auth.username')" prop="username">
+            <el-input
+              v-model="form.username"
+              placeholder="admin"
+              autocomplete="username"
+            >
               <template #prefix><IconUser /></template>
             </el-input>
           </el-form-item>
-          <el-form-item :label="t('auth.password')">
+          <el-form-item :label="t('auth.password')" prop="password">
             <el-input
               v-model="form.password"
               type="password"
               show-password
-              placeholder="admin123"
+              placeholder="••••••••"
               autocomplete="current-password"
             >
               <template #prefix><IconLock /></template>
@@ -61,7 +72,6 @@
             {{ t('auth.login') }}
           </el-button>
         </el-form>
-        <div class="login__hint">{{ t('auth.hint') }}</div>
       </div>
     </div>
   </div>
@@ -71,10 +81,12 @@
 import { reactive, ref, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
-import { ElMessage } from 'element-plus';
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
 import { useAuthStore } from '@/stores/auth';
 import { useAppStore } from '@/stores/app';
 import { SUPPORTED_LOCALES, type LocaleCode } from '@/locales';
+import { localizeApiError } from '@/utils/localizeError';
+import type { ApiError } from '@/api/client';
 import BrandMark from '@/components/BrandMark.vue';
 
 import IconUser from '~icons/tabler/user';
@@ -87,8 +99,14 @@ const route = useRoute();
 const auth = useAuthStore();
 const appStore = useAppStore();
 
-const form = reactive({ username: 'admin', password: 'admin123' });
+const formRef = ref<FormInstance>();
+const form = reactive({ username: '', password: '' });
 const loading = ref(false);
+
+const formRules = computed<FormRules>(() => ({
+  username: [{ required: true, message: t('auth.validation.usernameRequired'), trigger: 'blur' }],
+  password: [{ required: true, message: t('auth.validation.passwordRequired'), trigger: 'blur' }],
+}));
 
 const currentLocaleLabel = computed(
   () => SUPPORTED_LOCALES.find((l) => l.code === appStore.locale)?.label ?? '中文（简体）',
@@ -98,18 +116,31 @@ function onLocaleChange(code: LocaleCode) {
   appStore.changeLocale(code);
 }
 
+/** Only allow same-origin redirect paths (prevent open redirect). */
+function sanitizeRedirect(raw: string | undefined): string {
+  if (!raw) return '/dashboard';
+  // Must start with / but not // (scheme-relative) or /\ (potential escape)
+  if (!raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/\\')) return '/dashboard';
+  return raw;
+}
+
 async function onSubmit() {
-  if (!form.username || !form.password) {
-    ElMessage.warning('请输入账号和密码');
-    return;
-  }
+  // Inline validation first — no network request on empty fields
+  const valid = await formRef.value?.validate().catch(() => false);
+  if (!valid) return;
+
   loading.value = true;
-  await new Promise((r) => setTimeout(r, 700));
-  auth.login(form.username, form.password);
-  loading.value = false;
-  ElMessage.success('登录成功');
-  const redirect = (route.query.redirect as string) || '/dashboard';
-  router.push(redirect);
+  try {
+    await auth.login(form.username, form.password);
+    const redirect = sanitizeRedirect(route.query.redirect as string);
+    await router.push(redirect);
+  } catch (err) {
+    const apiErr = err as ApiError;
+    const msg = localizeApiError(apiErr);
+    ElMessage.error(msg);
+  } finally {
+    loading.value = false;
+  }
 }
 </script>
 
@@ -266,16 +297,5 @@ async function onSubmit() {
   font-size: 15px;
   letter-spacing: 0.04em;
   margin-top: 8px;
-}
-
-.login__hint {
-  margin-top: 20px;
-  padding: 10px 12px;
-  border-radius: var(--radius);
-  background: var(--color-primary-50);
-  color: var(--color-primary-800);
-  font-size: 12px;
-  text-align: center;
-  line-height: 1.5;
 }
 </style>

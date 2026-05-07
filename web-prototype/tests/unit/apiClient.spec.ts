@@ -69,7 +69,8 @@ describe('api/client · apiFetch', () => {
 
   it('on 401 logs out and redirects to /login with redirect query', async () => {
     const auth = useAuthStore();
-    auth.login('admin', 'admin123');
+    // Simulate authenticated state
+    auth.user = { username: 'admin', displayName: 'Admin', role: 'admin' };
     expect(auth.isAuthenticated).toBe(true);
 
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({}, { status: 401 }));

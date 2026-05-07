@@ -1,35 +1,62 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
+import { api } from '@/api/client';
 
 export interface CurrentUser {
   username: string;
   displayName: string;
   role: 'admin' | 'operator' | 'viewer';
-  token: string;
+}
+
+/** Server returns snake_case; normalize to camelCase. */
+interface LoginResponse {
+  username: string;
+  display_name: string;
+  role: 'admin' | 'operator' | 'viewer';
+}
+
+function normalizeUser(res: LoginResponse): CurrentUser {
+  return { username: res.username, displayName: res.display_name, role: res.role };
 }
 
 export const useAuthStore = defineStore(
   'auth',
   () => {
     const user = ref<CurrentUser | null>(null);
-    const isAuthenticated = computed(() => !!user.value?.token);
+    const isAuthenticated = computed(() => !!user.value);
 
-    function login(username: string, _password: string) {
-      // Prototype: any non-empty credential works; admin gets admin role.
-      const role = username === 'admin' ? 'admin' : 'operator';
-      user.value = {
-        username,
-        displayName: username === 'admin' ? '超级管理员' : username,
-        role,
-        token: `mock-${Date.now()}`,
-      };
+    /** Call POST /api/auth/login — returns the user on success, throws ApiError on failure. */
+    async function login(username: string, password: string): Promise<CurrentUser> {
+      const res = await api.post<LoginResponse>('/auth/login', { username, password });
+      const normalized = normalizeUser(res);
+      user.value = normalized;
+      return normalized;
     }
 
-    function logout() {
+    /** Call POST /api/auth/logout, then clear local state. */
+    async function logout(): Promise<void> {
+      try {
+        await api.post('/auth/logout');
+      } catch {
+        // Even if the server call fails we still clear local state
+      }
       user.value = null;
     }
 
-    return { user, isAuthenticated, login, logout };
+    /** Hydrate current user from GET /api/auth/me (e.g. on app boot). */
+    async function fetchMe(): Promise<CurrentUser | null> {
+      try {
+        const res = await api.get<LoginResponse>('/auth/me');
+        const normalized = normalizeUser(res);
+        user.value = normalized;
+        return normalized;
+      } catch {
+        user.value = null;
+        return null;
+      }
+    }
+
+    return { user, isAuthenticated, login, logout, fetchMe };
   },
   {
     persist: { key: 'console.auth', pick: ['user'] },

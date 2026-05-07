@@ -1,13 +1,18 @@
 <template>
   <div class="notfound">
     <div class="notfound__code">404</div>
-    <div class="notfound__title">页面走丢了</div>
-    <div class="notfound__desc">请核对 URL 或返回工作台。</div>
-    <el-button type="primary" @click="$router.push('/dashboard')">返回工作台</el-button>
+    <div class="notfound__title">{{ t('notfound.title') }}</div>
+    <div class="notfound__desc">{{ t('notfound.desc') }}</div>
+    <el-button type="primary" @click="$router.push('/dashboard')">
+      {{ t('notfound.back') }}
+    </el-button>
   </div>
 </template>
 
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+const { t } = useI18n();
+</script>
 
 <style scoped>
 .notfound {

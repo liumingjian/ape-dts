@@ -40,4 +40,12 @@ describe('locale parity · zh-CN ↔ en-US', () => {
     const offenders = [...blank(zh, 'zh'), ...blank(en, 'en')];
     expect(offenders).toEqual([]);
   });
+
+  it('errors namespace has identical key sets', () => {
+    const zhErrors = Object.fromEntries(Object.entries(zh).filter(([k]) => k.startsWith('errors.')));
+    const enErrors = Object.fromEntries(Object.entries(en).filter(([k]) => k.startsWith('errors.')));
+    const zhErrKeys = Object.keys(zhErrors);
+    const enErrKeys = Object.keys(enErrors);
+    expect(zhErrKeys.sort()).toEqual(enErrKeys.sort());
+  });
 });

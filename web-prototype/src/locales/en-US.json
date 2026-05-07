@@ -36,10 +36,14 @@
     "password": "Password",
     "login": "Sign in",
     "logout": "Sign out",
-    "hint": "Demo account: admin / admin123 (any credential works)",
+    "hint": "Default account: admin / admin123",
     "heroTitle": "ape-dts Console",
     "heroSubtitle": "Open-source management console for the ape-dts data sync engine — Snapshot Migration / CDC / Check / Struct Migration",
-    "copyright": "© 2026 ape-dts · Open Source · MIT License"
+    "copyright": "© 2026 ape-dts · Open Source · MIT License",
+    "validation": {
+      "usernameRequired": "Username is required",
+      "passwordRequired": "Password is required"
+    }
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -460,6 +464,60 @@
     "title": "Access Denied",
     "desc": "You do not have permission to view this page. Contact your administrator.",
     "back": "Back to Dashboard"
+  },
+  "notfound": {
+    "title": "Page not found",
+    "desc": "Check the URL or go back to the dashboard.",
+    "back": "Back to Dashboard"
+  },
+  "profile": {
+    "username": "Username",
+    "displayName": "Display name",
+    "role": {
+      "label": "Role",
+      "admin": "Admin",
+      "operator": "Operator",
+      "viewer": "Viewer"
+    }
+  },
+  "errors": {
+    "REQUEST_FAILED": "Request failed. Please try again later.",
+    "SERVER_ERROR": "Internal server error. Please try again later.",
+    "UNAUTHENTICATED": "Not signed in or session expired.",
+    "INVALID_CREDENTIALS": "Invalid username or password.",
+    "ACCOUNT_DISABLED": "This account has been disabled.",
+    "SESSION_EXPIRED": "Session expired. Please sign in again.",
+    "CSRF_TOKEN_MISSING": "CSRF token missing. Please refresh the page.",
+    "FORBIDDEN": "You do not have permission to perform this action.",
+    "USERNAME_TAKEN": "Username already exists.",
+    "LICENSE_LIMIT_EXCEEDED": "License task quota has been reached.",
+    "LICENSE_EXPIRED": "License has expired.",
+    "INVALID_LICENSE_CODE": "Invalid activation code.",
+    "TASK_NOT_FOUND": "Task not found.",
+    "RUN_ALREADY_ACTIVE": "Task already has an active run.",
+    "RUN_NOT_ACTIVE": "Task has no active run.",
+    "ILLEGAL_TRANSITION": "Illegal state transition.",
+    "VALIDATION_FAILED": "Validation failed.",
+    "PARSE_ERROR": "Invalid request data format.",
+    "TOO_MANY_ATTEMPTS": "Too many attempts. Please try again later.",
+    "CANNOT_DEMOTE_SELF": "Cannot demote your own role.",
+    "LAST_ADMIN_PROTECTED": "Cannot delete the last admin.",
+    "RESOURCE_GROUP_NAME_TAKEN": "Resource group name already exists.",
+    "DEFAULT_RESOURCE_GROUP_PROTECTED": "Default resource group cannot be modified or deleted.",
+    "RESOURCE_GROUP_HAS_TASKS": "Resource group has tasks and cannot be deleted.",
+    "UNKNOWN_RESOURCE_GROUP": "Resource group does not exist.",
+    "TASK_HAS_ACTIVE_RUN": "Task has an active run and cannot be modified.",
+    "TASK_KIND_IMMUTABLE": "Task kind cannot be changed.",
+    "GAUSSDB_SUB_MODE_REQUIRED": "GaussDB engine requires a sub-mode selection.",
+    "URL_SCHEME_ENGINE_MISMATCH": "URL scheme does not match engine type.",
+    "INVALID_URL_SCHEME": "Invalid URL scheme.",
+    "STRUCT_FILTER_REQUIRED": "Struct migration requires migration objects.",
+    "SYNC_MODE_INVALID_FOR_CATEGORY": "Sync mode is incompatible with task category.",
+    "PATH_OUTSIDE_SANDBOX": "Path is outside the allowed sandbox.",
+    "ENDPOINT_HOST_BLOCKED": "Endpoint host is not in the allowed range.",
+    "TASK_ID_TAKEN": "Task ID is already in use.",
+    "INVALID_TASK_ID_FORMAT": "Task ID format is invalid.",
+    "CONNECTION_FAILED": "Connection failed."
   },
   "license": {
     "title": "License",
