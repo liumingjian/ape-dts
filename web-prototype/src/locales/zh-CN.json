@@ -90,7 +90,7 @@
   "dashboard": {
     "title": "工作台",
     "subtitle": "全局概览 · 最近 24 小时",
-    "licenseWarn": "您有 {n} 条 License 即将过期，请及时查看。",
+    "licenseWarn": "License 将在 {n} 天后过期，请及时处理。",
     "handle": "前往处理",
     "kpi": {
       "running": "运行中任务",
@@ -110,12 +110,12 @@
       "latency24h": "近 24 小时同步延迟",
       "taskStatus": "任务状态分布",
       "engineDist": "引擎类型分布",
-      "alertTrend": "近 7 天告警趋势",
+      "alertTrend": "近 14 天告警趋势",
       "combined": "吞吐 & 延迟 · 实时叠合",
       "combinedSub": "近 60 分钟，按 1 分钟聚合",
       "taskStatusSub": "总任务数",
       "engineDistSub": "按源端引擎统计",
-      "alertTrendSub": "按告警级别堆叠",
+      "alertTrendSub": "按告警级别堆叠（近 14 天）",
       "totalTasks": "任务总数"
     },
     "recent": {
@@ -136,7 +136,7 @@
       "topRunning": "暂无运行中任务",
       "statusDist": "暂无任务",
       "engineDist": "暂无引擎数据",
-      "alertTrend": "近 7 天暂无告警",
+      "alertTrend": "近 14 天暂无告警",
       "recentTasks": "当前筛选条件下暂无任务",
       "recentAlerts": "当前没有高优先级告警",
       "activity": "当前没有最近活动"

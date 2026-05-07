@@ -1,7 +1,7 @@
 <template>
   <transition name="fade">
     <el-alert
-      v-if="warnCount > 0"
+      v-if="shouldWarn"
       class="lic-banner"
       type="warning"
       :closable="false"
@@ -9,7 +9,7 @@
     >
       <template #title>
         <div class="lic-banner__content">
-          <span>{{ t('dashboard.licenseWarn', { n: warnCount }) }}</span>
+          <span>{{ t('dashboard.licenseWarn', { n: license?.expireAt ? Math.ceil((new Date(license.expireAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000)) : 0 }) }}</span>
           <el-button type="warning" link @click="go">
             {{ t('dashboard.handle') }}
             <IconArrowRight class="lic-banner__arrow" />
@@ -21,23 +21,42 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import IconArrowRight from '~icons/tabler/arrow-right';
 import { api } from '@/api/client';
-import type { License } from '@/types/domain';
+import { useDocumentVisibility } from '@/composables/useDocumentVisibility';
+
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+interface LicensePayload {
+  sku?: string;
+  maxTasks?: number;
+  expireAt?: string;
+  status?: 'active' | 'expiring_soon' | 'expired' | 'missing';
+}
 
 const { t } = useI18n();
 const router = useRouter();
-const warnCount = ref(0);
+const { isVisible } = useDocumentVisibility();
+
+const license = ref<LicensePayload | null>(null);
+
+const shouldWarn = computed(() => {
+  if (!license.value) return false;
+  const s = license.value.status;
+  if (s === 'expired' || s === 'expiring_soon') return true;
+  if (!license.value.expireAt) return false;
+  const diff = new Date(license.value.expireAt).getTime() - Date.now();
+  return diff > 0 && diff <= THIRTY_DAYS_MS;
+});
 
 async function load() {
   try {
-    const data = await api.get<{ items: License[] }>('/licenses');
-    warnCount.value = data.items.filter((l) => l.status === 'expiring' || l.status === 'expired').length;
+    license.value = await api.get<LicensePayload>('/license');
   } catch {
-    /* noop */
+    /* noop — banner simply won't render */
   }
 }
 
@@ -46,6 +65,15 @@ function go() {
 }
 
 onMounted(load);
+let pollHandle: ReturnType<typeof setInterval> | null = null;
+onMounted(() => {
+  pollHandle = setInterval(() => {
+    if (isVisible.value) load();
+  }, 30_000);
+});
+onUnmounted(() => {
+  if (pollHandle !== null) clearInterval(pollHandle);
+});
 </script>
 
 <style scoped>

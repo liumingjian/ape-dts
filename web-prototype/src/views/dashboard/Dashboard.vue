@@ -15,24 +15,8 @@
     </PageHeader>
 
     <div class="ape-dts-console-page dashboard__body">
-      <!-- License warning banner -->
-      <el-alert
-        v-if="summary && summary.licenseWarnCount > 0"
-        class="dashboard__banner"
-        type="warning"
-        :closable="false"
-        show-icon
-      >
-        <template #title>
-          <div class="dashboard__banner-content">
-            <span>{{ t('dashboard.licenseWarn', { n: summary.licenseWarnCount }) }}</span>
-            <el-button type="warning" link @click="goLicense">
-              {{ t('dashboard.handle') }}
-              <IconArrowRight class="dashboard__banner-arrow" />
-            </el-button>
-          </div>
-        </template>
-      </el-alert>
+      <!-- License warning banner (uses /api/license) -->
+      <LicenseBanner />
 
       <!-- Hero / KPI row with embedded sparklines -->
       <section class="dashboard__hero">
@@ -196,7 +180,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import VChart from 'vue-echarts';
@@ -207,23 +191,22 @@ import ChartCard from '@/components/ChartCard.vue';
 import EmptyState from '@/components/EmptyState.vue';
 import ActivityTimeline from '@/components/ActivityTimeline.vue';
 import RunningTaskGrid from '@/components/RunningTaskGrid.vue';
-import { api } from '@/api/client';
-import { ENGINE_LABELS, type DashboardSummary, type ActivityEvent, type TaskStatus, type TaskCategory } from '@/types/domain';
+import LicenseBanner from '@/components/LicenseBanner.vue';
+import { useDashboardData } from '@/composables/useDashboardData';
+import { ENGINE_LABELS, type ActivityEvent, type TaskStatus, type TaskCategory } from '@/types/domain';
 import { AXIS_BASE } from '@/composables/useEcharts';
 import IconActivity from '~icons/tabler/activity';
 import IconAlertTriangle from '~icons/tabler/alert-triangle';
 import IconBolt from '~icons/tabler/bolt';
 import IconClock from '~icons/tabler/clock';
 import IconRefresh from '~icons/tabler/refresh';
-import IconArrowRight from '~icons/tabler/arrow-right';
 
 const { t } = useI18n();
 const router = useRouter();
 
-const summary = ref<DashboardSummary | null>(null);
-const loading = ref(false);
-const timeRange = ref<string>('24h');
+const { summary, loading, load } = useDashboardData();
 
+const timeRange = ref<string>('24h');
 const timeRangeOptions = [
   { label: '1h', value: '1h' },
   { label: '6h', value: '6h' },
@@ -241,26 +224,6 @@ const recentEvents = computed(() => summary.value?.recentEvents ?? []);
 const totalTasks = computed(() => (summary.value?.statusDist ?? []).reduce((s, d) => s + d.count, 0));
 const hasTimeseries = computed(() => (summary.value?.rpsSeries?.length ?? 0) > 0
   || (summary.value?.latencySeries?.length ?? 0) > 0);
-
-async function load() {
-  loading.value = true;
-  try {
-    summary.value = await api.get<DashboardSummary>('/dashboard/summary');
-  } catch (e) {
-    console.warn('[dashboard] load failed', e);
-  } finally {
-    loading.value = false;
-  }
-}
-
-let pollHandle: number | null = null;
-onMounted(() => {
-  load();
-  pollHandle = window.setInterval(load, 5000);
-});
-onUnmounted(() => {
-  if (pollHandle !== null) clearInterval(pollHandle);
-});
 
 /* ---- ECharts options ---- */
 
@@ -471,7 +434,6 @@ const alertTrendOption = computed(() => {
 
 /* ---- Interactions ---- */
 function go(path: string) { router.push(path); }
-function goLicense() { router.push('/license'); }
 function onStatusClick(ev: unknown) {
   const data = (ev as { data?: { status?: TaskStatus } } | undefined)?.data;
   if (data?.status) router.push({ path: '/tasks/sync', query: { status: data.status } });

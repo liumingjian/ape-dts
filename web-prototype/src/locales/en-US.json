@@ -90,7 +90,7 @@
   "dashboard": {
     "title": "Dashboard",
     "subtitle": "Global overview · Last 24 hours",
-    "licenseWarn": "{n} License(s) are about to expire. Please review.",
+    "licenseWarn": "License expires in {n} days. Please review.",
     "handle": "Handle",
     "kpi": {
       "running": "Running",
@@ -110,12 +110,12 @@
       "latency24h": "Sync Latency (24h)",
       "taskStatus": "Task Status",
       "engineDist": "Engine Distribution",
-      "alertTrend": "Alerts (7 days)",
+      "alertTrend": "Alerts (14 days)",
       "combined": "Throughput & latency · live overlay",
       "combinedSub": "Last 60 minutes, 1-minute buckets",
       "taskStatusSub": "Total tasks",
       "engineDistSub": "Grouped by source engine",
-      "alertTrendSub": "Stacked by severity",
+      "alertTrendSub": "Stacked by severity (14 days)",
       "totalTasks": "Tasks"
     },
     "recent": {

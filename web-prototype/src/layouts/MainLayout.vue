@@ -7,7 +7,7 @@
       <TopBar />
     </header>
     <main class="main-layout__content">
-      <LicenseBanner v-if="$route.name !== 'Dashboard'" class="main-layout__banner" />
+      <LicenseBanner class="main-layout__banner" />
       <router-view v-slot="{ Component }">
         <transition name="fade" mode="out-in">
           <component :is="Component" />
