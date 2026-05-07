@@ -467,17 +467,23 @@ async fn produce_sse_events(
         .await
         {
             Ok(Ok(chunk)) => {
-                // Apply level filter
-                if let Some(ref level) = level_filter {
-                    let any_match = chunk.lines.iter().any(|l| level.matches_line(l));
-                    if !any_match {
-                        continue;
-                    }
+                // Apply level filter per-line: only buffer lines that match
+                let filtered: Vec<&String> = match level_filter {
+                    Some(ref level) => chunk
+                        .lines
+                        .iter()
+                        .filter(|l| level.matches_line(l))
+                        .collect(),
+                    None => chunk.lines.iter().collect(),
+                };
+
+                if filtered.is_empty() {
+                    continue;
                 }
 
-                // Buffer lines for potential coalescing
-                for line in &chunk.lines {
-                    pending_lines.push(line.clone());
+                // Buffer only matching lines for potential coalescing
+                for line in filtered {
+                    pending_lines.push(line.to_string());
                 }
 
                 // Try to emit
@@ -648,5 +654,38 @@ mod tests {
     fn test_sse_event_comment_construction() {
         let event: SseEvent = SseEvent::Comment("heartbeat".into());
         assert!(matches!(event, SseEvent::Comment(_)));
+    }
+
+    /// Verify that per-line level filtering only forwards matching lines,
+    /// NOT all lines when any line matches (the old any()-on-chunk bug).
+    #[test]
+    fn test_log_level_filter_per_line_not_per_batch() {
+        let error_level = LogLevel::Error;
+
+        // A chunk with mixed lines: one ERROR, one INFO, one WARN
+        let lines = vec![
+            "[ERROR] something broke".to_string(),
+            "[INFO] all is fine".to_string(),
+            "[WARN] be careful".to_string(),
+        ];
+
+        // Per-line filtering: only ERROR line matches
+        let filtered: Vec<&String> = lines
+            .iter()
+            .filter(|l| error_level.matches_line(l))
+            .collect();
+        assert_eq!(filtered.len(), 1, "only ERROR lines should pass the filter");
+        assert_eq!(filtered[0], "[ERROR] something broke");
+
+        // Verify the old any()-on-chunk behaviour would have been wrong:
+        // any() would return true (ERROR matches), causing ALL lines to be forwarded.
+        let any_match = lines.iter().any(|l| error_level.matches_line(l));
+        assert!(
+            any_match,
+            "any() would return true — old bug would forward all lines"
+        );
+        // But with per-line filter, non-matching lines are excluded
+        assert!(!error_level.matches_line(&lines[1]));
+        assert!(!error_level.matches_line(&lines[2]));
     }
 }

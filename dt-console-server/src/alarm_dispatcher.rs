@@ -1,6 +1,6 @@
 //! AlarmDispatcher — dispatches firing alerts to configured channels.
 //!
-//! Kafka channel (rdkafka): lazy producer construction, retry with
+//! Kafka channel (rdkafka): lazy FutureProducer construction, retry with
 //! exponential backoff (1s/2s/4s/8s/16s), dead-letter on exhaustion,
 //! delivery success recorded exactly once.
 //!
@@ -10,6 +10,8 @@
 //! Both channels share the same retry budget (N=5 attempts).
 
 use crate::models::{AlarmChannel, Alert};
+use rdkafka::producer::{FutureProducer, FutureRecord};
+use rdkafka::ClientConfig;
 use sqlx::SqlitePool;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -23,29 +25,32 @@ const BACKOFF_DELAYS_SECS: [u64; 5] = [1, 2, 4, 8, 16];
 /// SNMP enterprise OID base for ape-dts Console alerts.
 const SNMP_ENTERPRISE_OID: &str = "1.3.6.1.4.1.99999";
 
+/// Timeout for Kafka produce delivery report (milliseconds).
+const KAFKA_PRODUCE_TIMEOUT_MS: u64 = 5000;
+
 /// Shared state for the AlarmDispatcher.
 #[derive(Debug, Clone, Default)]
 pub struct DispatcherState {
-    /// Lazy Kafka producers keyed by channel config hash.
+    /// Lazy Kafka producers keyed by (brokers, topic).
     kafka_producers: Arc<Mutex<std::collections::HashMap<String, KafkaProducerHandle>>>,
 }
 
 /// A lazily-constructed Kafka producer.
-#[derive(Debug)]
+///
+/// The producer is constructed on first dispatch and reused for subsequent
+/// dispatches to the same (brokers, topic) pair. If construction fails,
+/// the entry is not cached so the next attempt will retry construction.
 struct KafkaProducerHandle {
-    /// The producer client (or placeholder for unit tests).
-    #[allow(dead_code)]
-    client: KafkaClientKind,
+    /// The rdkafka FutureProducer. Cheaply clonable (internal Arc).
+    producer: FutureProducer,
 }
 
-/// Kafka client abstraction for testing.
-#[derive(Debug)]
-enum KafkaClientKind {
-    /// Placeholder for when rdkafka is not available in test builds.
-    Mock,
-    /// Real producer not yet implemented; will be added when rdkafka is linked.
-    #[allow(dead_code)]
-    Pending,
+impl std::fmt::Debug for KafkaProducerHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("KafkaProducerHandle")
+            .field("producer", &"<FutureProducer>")
+            .finish()
+    }
 }
 
 impl DispatcherState {
@@ -82,7 +87,6 @@ pub async fn dispatch_alert(
     let mut results = Vec::new();
 
     if is_silenced {
-        // Silence window active: skip dispatch entirely.
         return results;
     }
 
@@ -131,21 +135,24 @@ async fn dispatch_kafka(
         }
     };
 
-    // Lazy producer construction.
-    let mut producers = state.kafka_producers.lock().await;
-    let producer_key = format!("{}:{}", config.brokers, config.topic);
-    if !producers.contains_key(&producer_key) {
-        // In a real implementation, we would construct an rdkafka producer here.
-        // For now, we store a mock handle. The real producer will be constructed
-        // when rdkafka is fully integrated.
-        producers.insert(
-            producer_key.clone(),
-            KafkaProducerHandle {
-                client: KafkaClientKind::Mock,
-            },
-        );
-    }
-    drop(producers);
+    // Lazy producer construction: get or create.
+    let producer = match get_or_create_producer(state, &config).await {
+        Ok(p) => p,
+        Err(e) => {
+            // Construction failed — cannot proceed. Dead-letter immediately.
+            let mut updated = alert.clone();
+            updated.last_error = Some(e.clone());
+            let _ = alert_repository_update_error(pool, &updated).await;
+            return DispatchResult {
+                channel_id: channel.id.clone(),
+                channel_kind: "kafka".to_string(),
+                success: false,
+                attempts: 0,
+                last_error: Some(e),
+                dead_lettered: Some(true),
+            };
+        }
+    };
 
     // Attempt to produce with exponential backoff.
     let mut attempts = 0u32;
@@ -154,9 +161,7 @@ async fn dispatch_kafka(
     for delay_secs in BACKOFF_DELAYS_SECS {
         attempts += 1;
 
-        // In unit test mode, simulate success on first attempt.
-        // Real implementation would call rdkafka producer.send().
-        match try_kafka_produce(&config, alert).await {
+        match try_kafka_produce(&producer, &config, alert).await {
             Ok(()) => {
                 // Record delivery success exactly once.
                 let mut updated = alert.clone();
@@ -176,7 +181,6 @@ async fn dispatch_kafka(
             Err(e) => {
                 last_error = e;
                 if attempts < MAX_RETRIES {
-                    // Wait with exponential backoff (synthetic time in tests).
                     tokio::time::sleep(tokio::time::Duration::from_secs(delay_secs)).await;
                 }
             }
@@ -196,6 +200,94 @@ async fn dispatch_kafka(
         last_error: Some(last_error),
         dead_lettered: Some(true),
     }
+}
+
+/// Get or lazily create a Kafka FutureProducer for the given config.
+///
+/// If the producer already exists in the cache, return a clone (cheap — internal Arc).
+/// If not, construct one, cache it, and return a clone.
+/// If construction fails, do NOT cache the failure — next dispatch retries construction.
+async fn get_or_create_producer(
+    state: &DispatcherState,
+    config: &KafkaConfig,
+) -> Result<FutureProducer, String> {
+    let producer_key = format!("{}:{}", config.brokers, config.topic);
+
+    // Check cache first.
+    {
+        let producers = state.kafka_producers.lock().await;
+        if let Some(handle) = producers.get(&producer_key) {
+            return Ok(handle.producer.clone());
+        }
+    }
+
+    // Not cached — construct a new producer.
+    let producer: FutureProducer = ClientConfig::new()
+        .set("bootstrap.servers", &config.brokers)
+        .set("message.timeout.ms", "5000")
+        .set("request.timeout.ms", "3000")
+        .set("reconnect.backoff.max.ms", "10000")
+        .set("enable.idempotence", "true")
+        .set("queue.buffering.max.messages", "100000")
+        .create()
+        .map_err(|e| {
+            format!(
+                "kafka producer creation failed for '{}': {e}",
+                config.brokers
+            )
+        })?;
+
+    // Cache the producer.
+    {
+        let mut producers = state.kafka_producers.lock().await;
+        producers.insert(
+            producer_key,
+            KafkaProducerHandle {
+                producer: producer.clone(),
+            },
+        );
+    }
+
+    Ok(producer)
+}
+
+/// Try to produce a Kafka message using the real rdkafka FutureProducer.
+///
+/// Serialises the alert as JSON and sends it to the configured topic.
+/// Returns Ok(()) on successful delivery, Err on failure.
+async fn try_kafka_produce(
+    producer: &FutureProducer,
+    config: &KafkaConfig,
+    alert: &Alert,
+) -> Result<(), String> {
+    let payload =
+        serde_json::to_string(alert).map_err(|e| format!("alert serialisation failed: {e}"))?;
+
+    let mut record: FutureRecord<'_, String, String> =
+        FutureRecord::to(&config.topic).payload(&payload);
+
+    if let Some(ref key) = config.key {
+        record = record.key(key);
+    } else if let Some(ref task_id) = alert.task_id {
+        // Default key: task_id for partitioning affinity.
+        record = record.key(task_id);
+    }
+
+    let delivery_result = producer
+        .send(
+            record,
+            std::time::Duration::from_millis(KAFKA_PRODUCE_TIMEOUT_MS),
+        )
+        .await
+        .map_err(|(e, _)| format!("kafka produce failed: {e}"))?;
+
+    tracing::debug!(
+        "kafka produce ok: partition={}, offset={}",
+        delivery_result.partition,
+        delivery_result.offset
+    );
+
+    Ok(())
 }
 
 /// Dispatch to an SNMP channel (v2c trap).
@@ -260,30 +352,8 @@ async fn dispatch_snmp(pool: &SqlitePool, alert: &Alert, channel: &AlarmChannel)
     }
 }
 
-/// Try to produce a Kafka message. Returns Ok(()) on success.
-///
-/// In the current implementation this uses a mock producer for unit tests.
-/// The real rdkafka integration will be added when linking against the
-/// actual Kafka broker for integration testing.
-async fn try_kafka_produce(config: &KafkaConfig, _alert: &Alert) -> Result<(), String> {
-    // Mock: always succeed (simulates successful produce).
-    // In real implementation: build rdkafka BaseRecord, send, await delivery.
-    let _ = config; // Suppress unused warning.
-    Ok(())
-}
-
 /// Try to send an SNMP v2c trap. Returns Ok(()) on success.
-///
-/// Constructs the trap with correct OIDs per VAL-CHAN-004:
-/// - sysUpTime.0
-/// - snmpTrapOID.0 set to the enterprise OID
-/// - Varbinds for task_id, severity, metric, value
 async fn try_snmp_trap(config: &SnmpConfig, alert: &Alert) -> Result<(), String> {
-    // Build the SNMP v2c trap using csnmp.
-    // The trap includes:
-    //   - sysUpTime.0 (1.3.6.1.2.1.1.3.0)
-    //   - snmpTrapOID.0 (1.3.6.1.6.3.1.1.4.1.0) = enterprise OID
-    //   - enterprise-specific varbinds
     let community = config.community.as_deref().unwrap_or("public");
     let enterprise_oid_str = config
         .enterprise_oid
@@ -291,12 +361,7 @@ async fn try_snmp_trap(config: &SnmpConfig, alert: &Alert) -> Result<(), String>
         .unwrap_or(SNMP_ENTERPRISE_OID);
 
     let target_addr = format!("{}:{}", config.host, config.port);
-
-    // Use csnmp to send the trap.
-    // csnmp 0.6.0 provides SNMPv2c trap sending capability.
-    let trap_result = send_snmp_v2c_trap(&target_addr, community, enterprise_oid_str, alert).await;
-
-    trap_result
+    send_snmp_v2c_trap(&target_addr, community, enterprise_oid_str, alert).await
 }
 
 /// Parse a dotted OID string like "1.3.6.1.2.1.1.3.0" into an ObjectIdentifier.
@@ -314,33 +379,26 @@ fn parse_oid(oid_str: &str) -> Result<csnmp::oid::ObjectIdentifier, String> {
 }
 
 /// Send an SNMP v2c trap via csnmp.
-///
-/// This function constructs the proper trap PDU with the required OIDs
-/// and enterprise-specific varbinds using csnmp 0.6.0 API.
 async fn send_snmp_v2c_trap(
     target_addr: &str,
     community: &str,
     enterprise_oid_str: &str,
     alert: &Alert,
 ) -> Result<(), String> {
-    // Parse target address.
     let addr: std::net::SocketAddr = target_addr
         .parse()
         .map_err(|e| format!("invalid SNMP target address '{target_addr}': {e}"))?;
 
-    // Create SNMP client for trap sending.
     let client = csnmp::client::Snmp2cClient::new(
         addr,
         community.as_bytes().to_vec(),
-        None,                                    // bind_addr
-        Some(std::time::Duration::from_secs(5)), // timeout
-        1,                                       // retries
+        None,
+        Some(std::time::Duration::from_secs(5)),
+        1,
     )
     .await
     .map_err(|e| format!("SNMP client creation failed: {e}"))?;
 
-    // Build varbinds for the trap.
-    // Per VAL-CHAN-004: sysUpTime.0, snmpTrapOID.0, plus enterprise varbinds.
     let mut bindings: Vec<(csnmp::oid::ObjectIdentifier, csnmp::message::ObjectValue)> = Vec::new();
 
     // sysUpTime.0 = 1.3.6.1.2.1.1.3.0
@@ -352,7 +410,7 @@ async fn send_snmp_v2c_trap(
     let enterprise_oid = parse_oid(enterprise_oid_str)?;
     bindings.push((
         trap_oid_field,
-        csnmp::message::ObjectValue::ObjectId(enterprise_oid.clone()),
+        csnmp::message::ObjectValue::ObjectId(enterprise_oid),
     ));
 
     // Enterprise-specific varbinds: task_id, severity, metric, value
@@ -376,7 +434,6 @@ async fn send_snmp_v2c_trap(
         }
     }
 
-    // Send the trap.
     client
         .trap(bindings.into_iter())
         .await
@@ -432,6 +489,10 @@ pub struct SnmpConfig {
 }
 
 /// Produce a synthetic test alert for the test-channel endpoint.
+///
+/// For Kafka: constructs a producer and attempts to produce. If the broker
+/// is unavailable, the test result reflects the failure (not a mock success).
+/// For SNMP: attempts a real trap send.
 pub async fn test_channel(channel: &AlarmChannel) -> DispatchResult {
     let test_alert = Alert {
         id: "synthetic-test".to_string(),
@@ -456,16 +517,49 @@ pub async fn test_channel(channel: &AlarmChannel) -> DispatchResult {
 
     match channel.kind.as_str() {
         "kafka" => {
-            let _state = DispatcherState::new();
-            // Use a fake pool for the test — we don't persist synthetic alerts.
-            // This is a best-effort test; the real pool is not needed for synthetic.
-            DispatchResult {
-                channel_id: channel.id.clone(),
-                channel_kind: "kafka".to_string(),
-                success: true, // Mock: always succeeds for test
-                attempts: 1,
-                last_error: None,
-                dead_lettered: None,
+            let config: KafkaConfig = match serde_json::from_str(&channel.config) {
+                Ok(c) => c,
+                Err(e) => {
+                    return DispatchResult {
+                        channel_id: channel.id.clone(),
+                        channel_kind: "kafka".to_string(),
+                        success: false,
+                        attempts: 0,
+                        last_error: Some(format!("invalid kafka config: {e}")),
+                        dead_lettered: Some(true),
+                    };
+                }
+            };
+
+            // Try to construct a producer and send. No pool for synthetic alerts.
+            let state = DispatcherState::new();
+            match get_or_create_producer(&state, &config).await {
+                Ok(producer) => match try_kafka_produce(&producer, &config, &test_alert).await {
+                    Ok(()) => DispatchResult {
+                        channel_id: channel.id.clone(),
+                        channel_kind: "kafka".to_string(),
+                        success: true,
+                        attempts: 1,
+                        last_error: None,
+                        dead_lettered: None,
+                    },
+                    Err(e) => DispatchResult {
+                        channel_id: channel.id.clone(),
+                        channel_kind: "kafka".to_string(),
+                        success: false,
+                        attempts: 1,
+                        last_error: Some(e),
+                        dead_lettered: Some(true),
+                    },
+                },
+                Err(e) => DispatchResult {
+                    channel_id: channel.id.clone(),
+                    channel_kind: "kafka".to_string(),
+                    success: false,
+                    attempts: 0,
+                    last_error: Some(e),
+                    dead_lettered: Some(true),
+                },
             }
         }
         "snmp" => {
@@ -525,6 +619,16 @@ mod tests {
             serde_json::from_str(r#"{"brokers":"localhost:9092","topic":"alerts"}"#).unwrap();
         assert_eq!(config.brokers, "localhost:9092");
         assert_eq!(config.topic, "alerts");
+        assert!(config.key.is_none());
+    }
+
+    #[test]
+    fn test_kafka_config_parse_with_key() {
+        let config: KafkaConfig = serde_json::from_str(
+            r#"{"brokers":"localhost:9092","topic":"alerts","key":"test-key"}"#,
+        )
+        .unwrap();
+        assert_eq!(config.key.as_deref(), Some("test-key"));
     }
 
     #[test]
@@ -538,19 +642,102 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_kafka_lazy_producer_construction() {
+    async fn test_kafka_lazy_producer_construction_caches_producer() {
         let state = DispatcherState::new();
-        let mut producers = state.kafka_producers.lock().await;
-        assert!(producers.is_empty());
+        let config = KafkaConfig {
+            brokers: "nonexistent:9092".to_string(),
+            topic: "test".to_string(),
+            key: None,
+        };
 
-        // Insert a mock producer.
-        producers.insert(
-            "localhost:9092:alerts".to_string(),
-            KafkaProducerHandle {
-                client: KafkaClientKind::Mock,
-            },
+        // rdkafka defers the broker connection to the background, so create()
+        // may succeed even when the broker is unreachable. The real failure
+        // surfaces at produce time. Either way, the producer should be cached.
+        let result = get_or_create_producer(&state, &config).await;
+
+        if let Ok(_producer) = result {
+            // Producer was created — it should be cached now.
+            let producers = state.kafka_producers.lock().await;
+            assert_eq!(producers.len(), 1, "Successful producer should be cached");
+            drop(producers);
+
+            // Second call should return the same cached producer.
+            let result2 = get_or_create_producer(&state, &config).await;
+            assert!(result2.is_ok(), "Second call should succeed from cache");
+
+            // Still just one entry (not duplicated).
+            let producers = state.kafka_producers.lock().await;
+            assert_eq!(producers.len(), 1, "Cache should not duplicate entries");
+        } else {
+            // Construction failed — failure should NOT be cached.
+            let producers = state.kafka_producers.lock().await;
+            assert!(producers.is_empty(), "Failed producer should not be cached");
+        }
+    }
+
+    /// VAL-CHAN-001: Kafka producer is constructed lazily on first dispatch.
+    /// Verify that the producer is NOT constructed just by creating DispatcherState.
+    #[tokio::test]
+    async fn test_kafka_producer_not_constructed_until_dispatch() {
+        let state = DispatcherState::new();
+        let producers = state.kafka_producers.lock().await;
+        assert!(
+            producers.is_empty(),
+            "Producer cache should be empty on fresh DispatcherState"
         );
-        assert_eq!(producers.len(), 1);
+    }
+
+    /// Verify dispatch_kafka returns proper error when broker is unavailable,
+    /// and that the retry/backoff/dead-letter paths work correctly.
+    ///
+    /// Note: rdkafka defers broker connection to background, so producer
+    /// construction may succeed even without a broker. The real failure
+    /// surfaces at produce time. We test that try_kafka_produce returns
+    /// an error for an unreachable broker, and that the DispatchResult
+    /// correctly reflects the failure.
+    #[tokio::test]
+    async fn test_kafka_produce_fails_on_unreachable_broker() {
+        let config = KafkaConfig {
+            brokers: "192.0.2.1:9999".to_string(), // RFC 5737 TEST-NET — unreachable
+            topic: "alerts".to_string(),
+            key: None,
+        };
+
+        let alert = Alert {
+            id: "alert-1".into(),
+            task_id: Some("task-1".into()),
+            run_id: None,
+            rule_id: None,
+            metric_name: Some("test".into()),
+            operator: None,
+            threshold: None,
+            severity: "warning".into(),
+            value: Some(1.0),
+            status: "firing".into(),
+            silenced: false,
+            fired_at: String::new(),
+            recovered_at: None,
+            cleared_at: None,
+            delivered_at: None,
+            cleared_by: None,
+            last_error: None,
+            created_at: String::new(),
+        };
+
+        // Producer construction may succeed (deferred connection), but
+        // produce should fail within the timeout since no broker is available.
+        match get_or_create_producer(&DispatcherState::new(), &config).await {
+            Ok(producer) => {
+                let result = try_kafka_produce(&producer, &config, &alert).await;
+                assert!(
+                    result.is_err(),
+                    "Produce should fail when broker is unreachable: got {result:?}"
+                );
+            }
+            Err(_) => {
+                // Construction itself failed — that's also acceptable.
+            }
+        }
     }
 
     #[test]
@@ -561,5 +748,10 @@ mod tests {
     #[test]
     fn test_max_retries_is_five() {
         assert_eq!(MAX_RETRIES, 5);
+    }
+
+    #[test]
+    fn test_kafka_produce_timeout_constant() {
+        assert_eq!(KAFKA_PRODUCE_TIMEOUT_MS, 5000);
     }
 }

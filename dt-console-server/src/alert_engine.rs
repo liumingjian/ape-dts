@@ -46,6 +46,8 @@ pub enum AlertEvent {
         run_id: Option<String>,
         severity: String,
         recovered_at: String,
+        /// The status the alert held before recovery (always "firing").
+        previous_status: String,
     },
     /// A cdc_stalled alert has been flagged due to heartbeat staleness.
     CdcStalled {
@@ -359,6 +361,7 @@ pub async fn evaluate_tick(
                                 run_id: persisted.run_id,
                                 severity: persisted.severity,
                                 recovered_at,
+                                previous_status: "firing".to_string(),
                             });
                         }
                     }
@@ -409,7 +412,7 @@ pub async fn evaluate_heartbeat_staleness(
                 // Fire cdc_stalled alert.
                 let alert_id = uuid::Uuid::new_v4().to_string();
                 let fired_at = ts_to_rfc3339(now_ts);
-                let last_hb_str = last_ts.map(|t| ts_to_rfc3339(t));
+                let last_hb_str = last_ts.map(ts_to_rfc3339);
 
                 let alert = Alert {
                     id: alert_id.clone(),
@@ -720,5 +723,108 @@ mod tests {
         assert!(is_recovered(&rule, 0.0));
         // The engine would only emit ONE recovery event for the first
         // transition from firing→recovered, not for subsequent points.
+    }
+
+    /// VAL-RULE-002: Disabled rule does not fire.
+    /// Verify that a rule with enabled=false is skipped by evaluate_tick.
+    #[tokio::test]
+    async fn test_disabled_rule_does_not_fire() {
+        let pool = crate::db::create_pool(":memory:").await.unwrap();
+        crate::db::run_migrations(&pool).await.unwrap();
+
+        let state = AlertEngineState::new();
+
+        let disabled_rule = AlertRule {
+            id: "disabled-rule".into(),
+            name: "disabled".into(),
+            metric_name: "extractor_rps_avg".into(),
+            operator: ">".into(),
+            threshold: 100.0,
+            recovery_threshold: None,
+            severity: "critical".into(),
+            dwell_secs: 0,
+            channel_ids: "[]".into(),
+            enabled: false, // DISABLED
+            resource_group_id: None,
+            created_at: String::new(),
+            updated_at: String::new(),
+        };
+
+        let metrics = vec![MetricInput {
+            task_id: "t1".into(),
+            run_id: "r1".into(),
+            metric_name: "extractor_rps_avg".into(),
+            ts: 0,
+            value: 150.0, // Would breach > 100
+        }];
+
+        let events = evaluate_tick(&pool, &state, &[disabled_rule], &metrics, 0).await;
+
+        // Disabled rule should produce zero events.
+        assert!(
+            events.is_empty(),
+            "Disabled rule should not fire, got {} events",
+            events.len()
+        );
+
+        // No alert should be persisted.
+        let persisted = crate::repositories::alert_repository::AlertRepository::list(&pool)
+            .await
+            .unwrap();
+        assert!(
+            persisted.is_empty(),
+            "No alert should be persisted for disabled rule"
+        );
+    }
+
+    /// Verify that re-enabling a disabled rule resumes evaluation.
+    #[tokio::test]
+    async fn test_reenabling_rule_resumes_evaluation() {
+        let pool = crate::db::create_pool(":memory:").await.unwrap();
+        crate::db::run_migrations(&pool).await.unwrap();
+
+        let state = AlertEngineState::new();
+
+        // First: disabled rule produces no events.
+        let rule_base = AlertRule {
+            id: "rule-reenable".into(),
+            name: "test".into(),
+            metric_name: "extractor_rps_avg".into(),
+            operator: ">".into(),
+            threshold: 100.0,
+            recovery_threshold: None,
+            severity: "warning".into(),
+            dwell_secs: 0,
+            channel_ids: "[]".into(),
+            enabled: false,
+            resource_group_id: None,
+            created_at: String::new(),
+            updated_at: String::new(),
+        };
+
+        let metrics = vec![MetricInput {
+            task_id: "t1".into(),
+            run_id: "r1".into(),
+            metric_name: "extractor_rps_avg".into(),
+            ts: 0,
+            value: 150.0,
+        }];
+
+        let disabled_rule = rule_base.clone();
+        let events = evaluate_tick(&pool, &state, &[disabled_rule], &metrics, 0).await;
+        assert!(events.is_empty());
+
+        // Now enable the rule.
+        let enabled_rule = AlertRule {
+            enabled: true,
+            ..rule_base
+        };
+
+        let events = evaluate_tick(&pool, &state, &[enabled_rule], &metrics, 0).await;
+        assert_eq!(
+            events.len(),
+            1,
+            "Enabled rule should fire exactly one event"
+        );
     }
 }

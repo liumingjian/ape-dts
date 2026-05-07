@@ -62,6 +62,8 @@ pub enum AlertSseEvent {
         run_id: Option<String>,
         severity: String,
         recovered_at: String,
+        /// The status the alert held before recovery (always "firing" per VAL-SSE-008).
+        previous_status: String,
     },
     Cleared {
         id: String,
@@ -121,12 +123,14 @@ pub async fn publish_alert_event(state: &AlertSseState, event: &AlertEvent) {
             run_id,
             severity,
             recovered_at,
+            previous_status,
         } => AlertSseEvent::Recovery {
             id: id.clone(),
             task_id: task_id.clone(),
             run_id: run_id.clone(),
             severity: severity.clone(),
             recovered_at: recovered_at.clone(),
+            previous_status: previous_status.clone(),
         },
         AlertEvent::CdcStalled {
             id,
@@ -158,6 +162,7 @@ pub async fn publish_alert_event(state: &AlertSseState, event: &AlertEvent) {
             run_id: None,
             severity: "critical".to_string(),
             recovered_at: recovered_at.clone(),
+            previous_status: "firing".to_string(),
         },
     };
     state.broadcast(sse_event).await;
@@ -197,8 +202,7 @@ pub async fn list_alerts(
     .await
     {
         Ok((items, total)) => {
-            let items_json: Vec<serde_json::Value> =
-                items.iter().map(alert_to_json).collect();
+            let items_json: Vec<serde_json::Value> = items.iter().map(alert_to_json).collect();
             HttpResponse::Ok().json(serde_json::json!({
                 "items": items_json,
                 "total": total,
@@ -596,5 +600,57 @@ mod tests {
             }
             _ => panic!("expected Cleared event"),
         }
+    }
+
+    /// VAL-SSE-008: Recovery event must include previous_status field.
+    #[tokio::test]
+    async fn test_sse_recovery_event_has_previous_status() {
+        let state = AlertSseState::new();
+        let mut rx = {
+            let tx = state.tx.lock().await;
+            tx.as_ref().unwrap().subscribe()
+        };
+
+        state
+            .broadcast(AlertSseEvent::Recovery {
+                id: "alert-1".into(),
+                task_id: Some("task-1".into()),
+                run_id: None,
+                severity: "warning".into(),
+                recovered_at: "2026-05-07T00:00:00.000Z".into(),
+                previous_status: "firing".into(),
+            })
+            .await;
+
+        let event = rx.try_recv().unwrap();
+        match event {
+            AlertSseEvent::Recovery {
+                id,
+                previous_status,
+                ..
+            } => {
+                assert_eq!(id, "alert-1");
+                assert_eq!(
+                    previous_status, "firing",
+                    "Recovery event must include previous_status='firing' per VAL-SSE-008"
+                );
+            }
+            _ => panic!("expected Recovery event"),
+        }
+
+        // Also verify JSON serialization includes previous_status
+        let recovery = AlertSseEvent::Recovery {
+            id: "a1".into(),
+            task_id: None,
+            run_id: None,
+            severity: "warning".into(),
+            recovered_at: "2026-05-07T00:00:00.000Z".into(),
+            previous_status: "firing".into(),
+        };
+        let json = serde_json::to_string(&recovery).unwrap();
+        assert!(
+            json.contains("previous_status"),
+            "Serialized Recovery must include previous_status field: {json}"
+        );
     }
 }
