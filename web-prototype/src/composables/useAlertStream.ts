@@ -1,4 +1,5 @@
 import { getCurrentInstance, onBeforeUnmount, ref, type Ref } from 'vue';
+import { registerSse, unregisterSse } from '@/composables/useSseRegistry';
 
 export interface AlertEvent {
   id: string;
@@ -27,7 +28,7 @@ export function useAlertStream(opts: AlertStreamOptions): AlertStreamHandle {
   const events = ref<AlertEvent[]>([]) as Ref<AlertEvent[]>;
   const limit = opts.bufferLimit ?? 200;
 
-  let source: EventSource | null = new EventSource(opts.url);
+  let source: EventSource | null = registerSse(new EventSource(opts.url));
   let reconnects = 0;
   let closed = false;
 
@@ -47,7 +48,8 @@ export function useAlertStream(opts: AlertStreamOptions): AlertStreamHandle {
       if (closed) return;
       reconnects += 1;
       source?.close();
-      source = new EventSource(opts.url);
+      unregisterSse(source!);
+      source = registerSse(new EventSource(opts.url));
       wire();
     };
   };
@@ -55,7 +57,10 @@ export function useAlertStream(opts: AlertStreamOptions): AlertStreamHandle {
 
   const close = () => {
     closed = true;
-    source?.close();
+    if (source) {
+      source.close();
+      unregisterSse(source);
+    }
     source = null;
   };
 

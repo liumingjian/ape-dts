@@ -1,5 +1,5 @@
 <template>
-  <div class="wizard">
+  <div class="wizard" data-testid="wizard">
     <header class="wizard__header">
       <div class="wizard__header-inner">
         <el-button link class="wizard__back" @click="onBack">
@@ -42,7 +42,7 @@
         </el-alert>
 
         <div class="wizard__grid wizard__grid--2">
-          <section class="ape-dts-console-card wizard__card">
+          <section class="ape-dts-console-card wizard__card" data-testid="source-card">
             <header class="wizard__card-head">
               <h3>{{ t('wizard.source.section.source') }}</h3>
               <span class="wizard__card-tag wizard__card-tag--locked">{{ t('wizard.source.notEditable') }}</span>
@@ -56,6 +56,7 @@
                   type="button"
                   class="wizard__engine-chip"
                   :class="{ 'wizard__engine-chip--active': form.source.engine === e.value }"
+                  :data-testid="`engine-chip-source-${e.value}`"
                   @click="setSourceEngine(e.value)"
                 >
                   <EngineTag :engine="e.value" icon-only />
@@ -108,7 +109,7 @@
             </div>
           </section>
 
-          <section class="ape-dts-console-card wizard__card">
+          <section class="ape-dts-console-card wizard__card" data-testid="target-card">
             <header class="wizard__card-head">
               <h3>{{ t('wizard.source.section.target') }}</h3>
               <span class="wizard__card-tag">{{ t('wizard.source.editable') }}</span>
@@ -122,6 +123,7 @@
                   type="button"
                   class="wizard__engine-chip"
                   :class="{ 'wizard__engine-chip--active': form.target.engine === e.value }"
+                  :data-testid="`engine-chip-target-${e.value}`"
                   @click="setTargetEngine(e.value)"
                 >
                   <EngineTag :engine="e.value" icon-only />
@@ -180,7 +182,7 @@
           </section>
         </div>
 
-        <section class="ape-dts-console-card wizard__card">
+        <section class="ape-dts-console-card wizard__card" data-testid="basic-section">
           <header class="wizard__card-head">
             <h3>{{ t('wizard.source.section.basic') }}</h3>
             <span class="wizard__card-tag wizard__card-tag--locked">{{ t('wizard.source.notEditable') }}</span>
@@ -245,6 +247,7 @@
               type="button"
               class="wizard__mode-card"
               :class="{ 'wizard__mode-card--active': form.syncMode === m.value }"
+              :data-testid="`mode-card-${m.value}`"
               @click="form.syncMode = m.value"
             >
               <div class="wizard__mode-title">{{ m.label }}</div>
@@ -264,12 +267,14 @@
         <div class="wizard__grid wizard__grid--2">
           <ConnectionTestCard
             :title="t('wizard.source.section.source')"
+            testid="conn-card-source"
             :endpoint="form.source"
             :result="testState.source"
             @test="runTest('source')"
           />
           <ConnectionTestCard
             :title="t('wizard.source.section.target')"
+            testid="conn-card-target"
             :endpoint="form.target"
             :result="testState.target"
             @test="runTest('target')"
@@ -335,9 +340,9 @@
           <header class="wizard__card-head"><h3>{{ t('wizard.objects.pickerTitle') }}</h3></header>
           <div class="wizard__form">
             <label>{{ t('wizard.objects.doDbs') }}</label>
-            <el-input v-model="form.filter.doDbs" :placeholder="t('wizard.objects.wildcardHint')" />
+            <el-input v-model="form.filter.doDbs" :placeholder="t('wizard.objects.wildcardHint')" data-testid="filter-do-dbs" />
             <label>{{ t('wizard.objects.doTbs') }}</label>
-            <el-input v-model="form.filter.doTbs" :placeholder="t('wizard.objects.wildcardHint')" />
+            <el-input v-model="form.filter.doTbs" :placeholder="t('wizard.objects.wildcardHint')" data-testid="filter-do-tbs" />
             <label>{{ t('wizard.objects.ignoreDbs') }}</label>
             <el-input v-model="form.filter.ignoreDbs" :placeholder="t('wizard.objects.wildcardHint')" />
             <label>{{ t('wizard.objects.ignoreTbs') }}</label>
@@ -531,7 +536,7 @@
 
           <el-progress :percentage="precheckProgress" :status="precheckResultStatus" :show-text="false" />
 
-          <el-table :data="precheckItems" class="wizard__table">
+          <el-table :data="precheckItems" class="wizard__table" data-testid="precheck-table">
             <el-table-column :label="t('wizard.precheck.col.idx')" type="index" width="60" />
             <el-table-column :label="t('wizard.precheck.col.item')" prop="title" min-width="220" />
             <el-table-column :label="t('wizard.precheck.col.type')" prop="group" width="180" />
@@ -661,11 +666,11 @@
     </div>
 
     <footer class="wizard__footer">
-      <el-button v-if="current > 0" @click="onPrev">
+      <el-button v-if="current > 0" data-testid="wizard-prev" @click="onPrev">
         <IconArrowLeft /> {{ t('wizard.action.back') }}
       </el-button>
       <span class="wizard__footer-spacer" />
-      <el-button v-if="current < steps.length - 1" type="primary" :disabled="!canProceed" @click="onNext">
+      <el-button v-if="current < steps.length - 1" type="primary" :disabled="!canProceed" data-testid="wizard-next" @click="onNext">
         {{ t('wizard.action.next') }}
         <IconArrowRight />
       </el-button>
@@ -674,6 +679,7 @@
         type="primary"
         :loading="submitting"
         :disabled="!canSubmit"
+        data-testid="wizard-submit"
         @click="onSubmit"
       >
         {{ form.startMode === 'now' ? t('wizard.confirm.submitStart') : t('wizard.confirm.submitLater') }}

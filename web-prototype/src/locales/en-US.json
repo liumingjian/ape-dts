@@ -64,6 +64,7 @@
     "license": "License",
     "system": {
       "_label": "System",
+      "users": "Users",
       "monitor": "Monitor",
       "operateLog": "Audit Log"
     },
@@ -638,6 +639,23 @@
     }
   },
   "system": {
+    "users": {
+      "title": "User Management",
+      "subtitle": "Manage system user accounts, role assignment, and access control",
+      "createUser": "Create User",
+      "username": "Username",
+      "displayName": "Display Name",
+      "password": "Password",
+      "passwordPlaceholder": "Leave empty to keep current",
+      "role": "Role",
+      "status": "Status",
+      "createdAt": "Created At",
+      "requiredFields": "Username and password are required",
+      "created": "User created",
+      "saved": "Saved",
+      "deleted": "User deleted",
+      "deleteConfirm": "Are you sure you want to delete user {name}? This action cannot be undone."
+    },
     "monitor": {
       "title": "System monitor",
       "subtitle": "Cluster node metrics — CPU / Memory / Disk, grouped by status.",

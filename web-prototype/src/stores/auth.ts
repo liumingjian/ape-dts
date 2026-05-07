@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { api } from '@/api/client';
+import { closeAllSseStreams } from '@/composables/useSseRegistry';
 
 export interface CurrentUser {
   username: string;
@@ -40,6 +41,9 @@ export const useAuthStore = defineStore(
       } catch {
         // Even if the server call fails we still clear local state
       }
+      // Close all SSE streams to prevent stale connections
+      // that bypass session invalidation
+      closeAllSseStreams();
       user.value = null;
     }
 

@@ -39,6 +39,7 @@ export const menu: MenuItem[] = [
     labelKey: 'nav.system._label',
     icon: 'tabler:server-2',
     children: [
+      { key: 'system.users', labelKey: 'nav.system.users', to: '/system/users' },
       { key: 'system.monitor', labelKey: 'nav.system.monitor', to: '/system/monitor' },
       { key: 'system.operateLog', labelKey: 'nav.system.operateLog', to: '/system/operate-log' },
     ],

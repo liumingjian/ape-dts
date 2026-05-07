@@ -169,6 +169,13 @@ async function seedSourceRow(tableName: string, tracerValue: string) {
   execSync(cmd, { timeout: 15_000 });
 }
 
+/** Ensure the target database exists on mysql-dst. */
+async function ensureTargetDb(dbName: string) {
+  const cmd = `docker exec mysql-dst-ci mysql -u${DB_USER} -p${DB_PASS} -h 127.0.0.1 -e "CREATE DATABASE IF NOT EXISTS ${dbName}"`;
+  const { execSync } = await import('child_process');
+  execSync(cmd, { timeout: 15_000 });
+}
+
 /** Query target DB to verify a row exists. */
 async function queryTargetRow(tableName: string, tracerValue: string): Promise<boolean> {
   const sql = `SELECT COUNT(*) AS cnt FROM ${tableName} WHERE tracer='${tracerValue}'`;
@@ -192,15 +199,15 @@ test.describe('full happy path — login → wizard → start → metrics → st
 
     // ── Navigate to Snapshot Creation Wizard ──
     await page.goto('/tasks/create/snapshot');
-    await expect(page.locator('.wizard')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('wizard')).toBeVisible({ timeout: 15_000 });
 
     // ── STEP 1: Source / Target / Basic ──
     // Select MySQL for source engine
-    const srcEngineChip = page.locator('.wizard__card').first().locator('button.wizard__engine-chip').filter({ hasText: /MySQL/ });
+    const srcEngineChip = page.getByTestId('engine-chip-source-mysql');
     await srcEngineChip.click();
 
     // Fill source connection details
-    const sourceCard = page.locator('.wizard__card').first();
+    const sourceCard = page.getByTestId('source-card');
     await sourceCard.locator('input[placeholder="192.168.1.116"]').fill(SRC_HOST);
     // Source port (el-input-number)
     const srcPortInput = sourceCard.locator('.el-input-number input').first();
@@ -211,8 +218,8 @@ test.describe('full happy path — login → wizard → start → metrics → st
     await sourceCard.locator('input[placeholder="app_db"]').fill(DB_NAME);
 
     // Select MySQL for target engine (second card)
-    const targetCard = page.locator('.wizard__card').nth(1);
-    const tgtEngineChip = targetCard.locator('button.wizard__engine-chip').filter({ hasText: /MySQL/ });
+    const targetCard = page.getByTestId('target-card');
+    const tgtEngineChip = page.getByTestId('engine-chip-target-mysql');
     await tgtEngineChip.click();
 
     // Fill target connection details
@@ -224,7 +231,7 @@ test.describe('full happy path — login → wizard → start → metrics → st
     await targetCard.locator('input[type="password"]').first().fill(DB_PASS);
 
     // Fill basic section (task name)
-    const basicSection = page.locator('.wizard__form--basic');
+    const basicSection = page.getByTestId('basic-section');
     const taskNameInput = basicSection.locator('input').first();
     await taskNameInput.clear();
     await taskNameInput.fill(`e2e_wizard_${Date.now().toString(36)}`);
@@ -236,50 +243,45 @@ test.describe('full happy path — login → wizard → start → metrics → st
     await rgOption.click();
 
     // Click Next to step 2
-    await page.getByRole('button', { name: /下一步|Next/i }).click();
+    await page.getByTestId('wizard-next').click();
 
     // ── STEP 2: Test Connection ──
     await page.waitForTimeout(1_000); // Wait for step transition
 
     // Click "Test connection" for source side
-    const sourceTestBtn = page.locator('.conn-card').first().getByRole('button', { name: /测试连接|Test/i });
+    const sourceTestBtn = page.getByTestId('conn-card-source-test-btn');
     await sourceTestBtn.click();
     // Wait for source test result
-    await expect(page.locator('.conn-card').first().locator('.conn-card__status--ok')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('conn-card-source').getByTestId('conn-status-ok')).toBeVisible({ timeout: 15_000 });
 
     // Click "Test connection" for target side
-    const targetTestBtn = page.locator('.conn-card').nth(1).getByRole('button', { name: /测试连接|Test/i });
+    const targetTestBtn = page.getByTestId('conn-card-target-test-btn');
     await targetTestBtn.click();
     // Wait for target test result
-    await expect(page.locator('.conn-card').nth(1).locator('.conn-card__status--ok')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('conn-card-target').getByTestId('conn-status-ok')).toBeVisible({ timeout: 15_000 });
 
     // Click Next to step 3
-    await page.getByRole('button', { name: /下一步|Next/i }).click();
+    await page.getByTestId('wizard-next').click();
 
     // ── STEP 3: Objects (filter) ──
     await page.waitForTimeout(1_000);
 
-    // Fill do_dbs and do_tbs
-    const doDbsInput = page.locator('input[placeholder]').filter({ hasText: '' }).first();
-    // More robust: find the inputs by their label context
-    const objectInputs = page.locator('.wizard__form input.el-input__inner');
-    // do_dbs is the first input in the objects step
-    const doDbsField = page.locator('.wizard__card').filter({ hasText: /对象|Objects|同步范围/i }).locator('input.el-input__inner').first();
+    // Fill do_dbs and do_tbs using data-testid
+    const doDbsField = page.getByTestId('filter-do-dbs');
     await doDbsField.fill('*');
-    // do_tbs is the second input
-    const doTbsField = page.locator('.wizard__card').filter({ hasText: /对象|Objects|同步范围/i }).locator('input.el-input__inner').nth(1);
+    const doTbsField = page.getByTestId('filter-do-tbs');
     await doTbsField.fill('*.*');
 
     // Click Next to step 4
-    await page.getByRole('button', { name: /下一步|Next/i }).click();
+    await page.getByTestId('wizard-next').click();
 
     // ── STEP 4: Processing — skip (just Next) ──
     await page.waitForTimeout(1_000);
-    await page.getByRole('button', { name: /下一步|Next/i }).click();
+    await page.getByTestId('wizard-next').click();
 
     // ── STEP 5: Advanced — skip (defaults are fine, just Next) ──
     await page.waitForTimeout(1_000);
-    await page.getByRole('button', { name: /下一步|Next/i }).click();
+    await page.getByTestId('wizard-next').click();
 
     // ── STEP 6: Precheck — wait for auto-run to complete ──
     await page.waitForTimeout(1_000);
@@ -304,13 +306,13 @@ test.describe('full happy path — login → wizard → start → metrics → st
     }
 
     // Click Next to step 7
-    await page.getByRole('button', { name: /下一步|Next/i }).click();
+    await page.getByTestId('wizard-next').click();
 
     // ── STEP 7: Confirm — submit ──
     await page.waitForTimeout(1_000);
 
     // Click Submit (创建并启动 / 创建并稍后启动)
-    const submitBtn = page.getByRole('button', { name: /创建并启动|创建|Submit/i }).last();
+    const submitBtn = page.getByTestId('wizard-submit');
     await submitBtn.click();
 
     // Wait for redirect to task detail page
@@ -648,12 +650,14 @@ test.describe('RBAC coherence — admin walk', () => {
     await page.waitForTimeout(2_000);
     await expect(page).toHaveURL(/\/tasks\/snapshot/);
 
-    // Users page (admin-only)
+    // Users page (admin-only) — /users redirects to /system/users
     await page.goto('/users');
     await page.waitForTimeout(2_000);
+    // Should be redirected to /system/users
+    await expect(page).toHaveURL(/\/system\/users/, { timeout: 5_000 });
     const usersVisible = await page.locator('body').textContent() ?? '';
     // Should render user management content (not 403)
-    expect(/用户|User|管理员|Admin/i.test(usersVisible)).toBeTruthy();
+    expect(/用户|User|管理员|Admin|Username/i.test(usersVisible)).toBeTruthy();
 
     // License page (admin-only)
     await page.goto('/license');
@@ -830,6 +834,8 @@ test.describe('snapshot data verification', () => {
     // ── Seed a row in the source DB ──
     const tracer = `e2e_tracer_${Date.now().toString(36)}`;
     const tableName = 'e2e_test_t1';
+    // Ensure the target DB exists before the snapshot runs
+    await ensureTargetDb(DB_NAME);
     await seedSourceRow(tableName, tracer);
 
     // ── Create a snapshot task targeting the seeded table ──
@@ -936,21 +942,21 @@ test.describe('wizard draft persistence', () => {
 
     // Open wizard
     await page.goto('/tasks/create/snapshot');
-    await page.waitForSelector('.wizard', { timeout: 15_000 });
+    await page.waitForSelector('[data-testid="wizard"]', { timeout: 15_000 });
 
     // Fill task name
-    const taskNameInput = page.locator('.wizard__form--basic input').first();
+    const taskNameInput = page.getByTestId('basic-section').locator('input').first();
     if (await taskNameInput.count() > 0) {
       await taskNameInput.fill('draft_test_001');
     }
 
     // Reload the page
     await page.reload();
-    await page.waitForSelector('.wizard', { timeout: 15_000 });
+    await page.waitForSelector('[data-testid="wizard"]', { timeout: 15_000 });
 
     // The draft should be restored
     await page.waitForTimeout(2_000);
-    const taskNameInputAfter = page.locator('.wizard__form--basic input').first();
+    const taskNameInputAfter = page.getByTestId('basic-section').locator('input').first();
     if (await taskNameInputAfter.count() > 0) {
       const value = await taskNameInputAfter.inputValue();
       expect(value).toBe('draft_test_001');
@@ -993,13 +999,13 @@ test.describe('wizard precheck soft-warn submit', () => {
 
     // Create a CDC task via the wizard — CDC precheck checks more items
     await page.goto('/tasks/create/cdc');
-    await page.waitForSelector('.wizard', { timeout: 15_000 });
+    await page.waitForSelector('[data-testid="wizard"]', { timeout: 15_000 });
 
     // Step 1: Source/target details
-    const srcEngineChip = page.locator('.wizard__card').first().locator('button.wizard__engine-chip').filter({ hasText: /MySQL/ });
+    const srcEngineChip = page.getByTestId('engine-chip-source-mysql');
     await srcEngineChip.click();
 
-    const sourceCard = page.locator('.wizard__card').first();
+    const sourceCard = page.getByTestId('source-card');
     await sourceCard.locator('input[placeholder="192.168.1.116"]').fill(SRC_HOST);
     const srcPortInput = sourceCard.locator('.el-input-number input').first();
     await srcPortInput.clear();
@@ -1009,13 +1015,13 @@ test.describe('wizard precheck soft-warn submit', () => {
     await sourceCard.locator('input[placeholder="app_db"]').fill(DB_NAME);
 
     // Set sync mode to CDC
-    const cdcModeBtn = page.locator('.wizard__mode-card').filter({ hasText: /CDC|增量/i });
+    const cdcModeBtn = page.getByTestId('mode-card-cdc');
     if (await cdcModeBtn.count() > 0) {
       await cdcModeBtn.click();
     }
 
-    const targetCard = page.locator('.wizard__card').nth(1);
-    const tgtEngineChip = targetCard.locator('button.wizard__engine-chip').filter({ hasText: /MySQL/ });
+    const targetCard = page.getByTestId('target-card');
+    const tgtEngineChip = page.getByTestId('engine-chip-target-mysql');
     await tgtEngineChip.click();
     await targetCard.locator('input[placeholder="10.250.0.52"]').fill(DST_HOST);
     const tgtPortInput = targetCard.locator('.el-input-number input').first();
@@ -1024,7 +1030,7 @@ test.describe('wizard precheck soft-warn submit', () => {
     await targetCard.locator('input[placeholder="root"]').first().fill(DB_USER);
     await targetCard.locator('input[type="password"]').first().fill(DB_PASS);
 
-    const basicSection = page.locator('.wizard__form--basic');
+    const basicSection = page.getByTestId('basic-section');
     const taskNameInput = basicSection.locator('input').first();
     await taskNameInput.clear();
     await taskNameInput.fill(`e2e_cdc_precheck_${Date.now().toString(36)}`);
@@ -1034,16 +1040,16 @@ test.describe('wizard precheck soft-warn submit', () => {
     const rgOption = page.locator('.el-select-dropdown__item').first();
     await rgOption.click();
 
-    await page.getByRole('button', { name: /下一步|Next/i }).click();
+    await page.getByTestId('wizard-next').click();
 
     // Step 2: Test Connection
     await page.waitForTimeout(1_000);
-    const sourceTestBtn = page.locator('.conn-card').first().getByRole('button', { name: /测试连接|Test/i });
+    const sourceTestBtn = page.getByTestId('conn-card-source-test-btn');
     await sourceTestBtn.click();
-    await expect(page.locator('.conn-card').first().locator('.conn-card__status--ok, .conn-card__status--fail')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('conn-card-source').getByTestId('conn-status-ok, [data-testid="conn-status-fail"]')).toBeVisible({ timeout: 15_000 });
 
     // If test fails, use bypass (admin can bypass)
-    const srcOk = await page.locator('.conn-card').first().locator('.conn-card__status--ok').count();
+    const srcOk = await page.getByTestId('conn-card-source').getByTestId('conn-status-ok').count();
     if (srcOk === 0) {
       // Try bypass switch
       const bypassSwitch = page.locator('.el-switch').filter({ hasText: /跳过|Bypass/i });
@@ -1051,14 +1057,14 @@ test.describe('wizard precheck soft-warn submit', () => {
         await bypassSwitch.click();
       }
     } else {
-      const targetTestBtn = page.locator('.conn-card').nth(1).getByRole('button', { name: /测试连接|Test/i });
+      const targetTestBtn = page.getByTestId('conn-card-target-test-btn');
       await targetTestBtn.click();
-      await expect(page.locator('.conn-card').nth(1).locator('.conn-card__status--ok, .conn-card__status--fail')).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByTestId('conn-card-target').locator('[data-testid="conn-status-ok"], [data-testid="conn-status-fail"]')).toBeVisible({ timeout: 15_000 });
     }
 
     // Try to proceed (may need bypass)
     try {
-      await page.getByRole('button', { name: /下一步|Next/i }).click({ timeout: 5_000 });
+      await page.getByTestId('wizard-next').click({ timeout: 5_000 });
     } catch {
       // Enable bypass if not already
       const bypassSwitch = page.locator('.el-switch').last();
@@ -1066,14 +1072,14 @@ test.describe('wizard precheck soft-warn submit', () => {
         await bypassSwitch.click();
         await page.waitForTimeout(500);
       }
-      await page.getByRole('button', { name: /下一步|Next/i }).click();
+      await page.getByTestId('wizard-next').click();
     }
 
     // Steps 3-5: Skip through
     for (let i = 0; i < 3; i++) {
       await page.waitForTimeout(500);
       try {
-        await page.getByRole('button', { name: /下一步|Next/i }).click({ timeout: 3_000 });
+        await page.getByTestId('wizard-next').click({ timeout: 3_000 });
       } catch {
         // May need to fill required fields
         break;
@@ -1259,6 +1265,13 @@ test.describe('SSE alert stream closes on logout', () => {
         headers: { 'Cookie': `session=${sessionCookie.value}` },
       });
       expect(staleRes.status).toBe(401);
+
+      // Verify SSE/alert endpoint also returns 401 with stale cookie
+      const alertSseRes = await fetch(`${API}/alerts/stream`, {
+        headers: { 'Cookie': `session=${sessionCookie.value}` },
+      });
+      // SSE endpoint should reject with 401, not accept the connection with 200
+      expect(alertSseRes.status).toBe(401);
     }
 
     // Verify redirect to login page
@@ -1277,24 +1290,33 @@ test.describe('cookie-session idle expiry', () => {
   test('idle session expires and redirects to login', async ({ page }) => {
     test.setTimeout(120_000);
 
-    // This test requires the server to have a short idle timeout.
-    // We can't control the server timeout from the test, so we verify
-    // that the frontend handles 401 correctly by redirecting to login.
+    // This test requires the server to have CONSOLE_IDLE_TIMEOUT_SECS set
+    // (e.g. 30s). When running against the default server config (long timeout),
+    // we simulate the expiry by invalidating the session via API logout.
+    // The frontend handles both cases identically — 401 → redirect to /login.
     await loginAs(page);
 
     // Navigate to tasks page
     await page.goto('/tasks/snapshot');
     await page.waitForTimeout(2_000);
 
-    // Force session invalidation via API logout
-    await authedFetch('/auth/logout', 'POST');
+    // If the server has a short idle timeout (e.g. 30s), wait for natural expiry
+    const idleTimeoutSecs = Number(process.env.E2E_IDLE_TIMEOUT_SECS ?? 0);
+    if (idleTimeoutSecs > 0) {
+      // Wait for the idle timeout to pass + a small buffer
+      await page.waitForTimeout((idleTimeoutSecs + 5) * 1000);
+      // Try to interact — the next API call should return 401
+      await page.reload();
+    } else {
+      // Force session invalidation via API logout (simulates what idle expiry does)
+      await authedFetch('/auth/logout', 'POST');
+      // Now try to interact with the page — the next API call should return 401
+      await page.reload();
+    }
 
-    // Now try to interact with the page — the next API call should return 401
-    // and the frontend should redirect to /login
-    await page.reload();
     await page.waitForTimeout(3_000);
 
-    // After reload with invalid session, should redirect to login
+    // After reload with invalid/expired session, should redirect to login
     const currentUrl = page.url();
     expect(currentUrl).toContain('/login');
   });

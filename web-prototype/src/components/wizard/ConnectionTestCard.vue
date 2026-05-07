@@ -1,5 +1,5 @@
 <template>
-  <section class="conn-card ape-dts-console-card">
+  <section class="conn-card ape-dts-console-card" :data-testid="testid">
     <header class="conn-card__head">
       <h3>{{ title }}</h3>
       <span class="conn-card__badge">{{ t('wizard.source.editable') }}</span>
@@ -26,15 +26,16 @@
           type="primary"
           :loading="result.status === 'running'"
           :disabled="result.status === 'running'"
+          :data-testid="`${testid}-test-btn`"
           @click="emit('test')"
         >
           {{ result.status === 'running' ? t('wizard.test.running') : t('wizard.test.run') }}
         </el-button>
-        <span v-if="result.status === 'ok'" class="conn-card__status conn-card__status--ok">
+        <span v-if="result.status === 'ok'" class="conn-card__status conn-card__status--ok" data-testid="conn-status-ok">
           <IconCircleCheck />
           {{ t('wizard.test.success', { ms: result.latency }) }}
         </span>
-        <span v-else-if="result.status === 'fail'" class="conn-card__status conn-card__status--fail">
+        <span v-else-if="result.status === 'fail'" class="conn-card__status conn-card__status--fail" data-testid="conn-status-fail">
           <IconCircleX />
           {{ t('wizard.test.failure', { msg: result.message ?? '' }) }}
         </span>
@@ -52,6 +53,7 @@ import { useI18n } from 'vue-i18n';
 
 defineProps<{
   title: string;
+  testid: string;
   endpoint: { host: string; port: number; username: string; password: string };
   result: { status: 'idle' | 'running' | 'ok' | 'fail'; latency?: number; message?: string };
 }>();

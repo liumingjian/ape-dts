@@ -132,6 +132,12 @@ export const routes: RouteRecordRaw[] = [
       },
       // System — admin only
       {
+        path: 'system/users',
+        name: 'UserManagement',
+        component: () => import('@/views/system/UserManagement.vue'),
+        meta: { title: 'nav.system.users', module: 'system', breadcrumb: ['nav.system._label', 'nav.system.users'], roles: ['admin'] },
+      },
+      {
         path: 'system/monitor',
         name: 'SystemMonitor',
         component: () => import('@/views/system/SystemMonitor.vue'),
@@ -193,6 +199,8 @@ export const routes: RouteRecordRaw[] = [
         component: () => import('@/views/alertMonitor/AlarmTemplate.vue'),
         meta: { title: 'nav.alertMonitor.alarmTemplate', module: 'alertMonitor', breadcrumb: ['nav.alertMonitor._label', 'nav.alertMonitor.alarmTemplate'], roles: ['admin'] },
       },
+      // /users shorthand redirect → /system/users
+      { path: 'users', redirect: { path: '/system/users' } },
       {
         path: 'profile',
         name: 'Profile',

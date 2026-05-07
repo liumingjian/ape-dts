@@ -1,4 +1,5 @@
 import { getCurrentInstance, onBeforeUnmount, ref, type Ref } from 'vue';
+import { registerSse, unregisterSse } from '@/composables/useSseRegistry';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -59,7 +60,7 @@ export function useLogStream(opts: LogStreamOptions): LogStreamHandle {
   }
   const url = `${baseUrl}${streamPath}${params.toString() ? `?${params.toString()}` : ''}`;
 
-  let source: EventSource | null = new EventSource(url);
+  let source: EventSource | null = registerSse(new EventSource(url));
   let reconnects = 0;
   let closed = false;
   const maxReconnects = opts.maxReconnects ?? MAX_RECONNECTS_DEFAULT;
@@ -83,13 +84,15 @@ export function useLogStream(opts: LogStreamOptions): LogStreamHandle {
       if (reconnects > maxReconnects) {
         state.value = 'disconnected';
         source?.close();
+        if (source) unregisterSse(source);
         source = null;
         return;
       }
       source?.close();
+      if (source) unregisterSse(source);
       setTimeout(() => {
         if (closed) return;
-        source = new EventSource(url);
+        source = registerSse(new EventSource(url));
         wire();
       }, RECONNECT_DELAY_MS);
     };
@@ -98,7 +101,10 @@ export function useLogStream(opts: LogStreamOptions): LogStreamHandle {
 
   const close = () => {
     closed = true;
-    source?.close();
+    if (source) {
+      source.close();
+      unregisterSse(source);
+    }
     source = null;
   };
 
