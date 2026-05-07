@@ -10,8 +10,7 @@ use dt_common::log_info;
 use dt_common::meta::struct_meta::{
     statement::{
         pg_create_schema_statement::PgCreateSchemaStatement,
-        pg_create_table_statement::PgCreateTableStatement,
-        struct_statement::StructStatement,
+        pg_create_table_statement::PgCreateTableStatement, struct_statement::StructStatement,
     },
     struct_data::StructData,
     structure::{
@@ -76,7 +75,9 @@ impl OracleStructExtractor {
             }
 
             self.push_struct(StructStatement::PgCreateSchema(PgCreateSchemaStatement {
-                schema: Schema { name: schema.clone() },
+                schema: Schema {
+                    name: schema.clone(),
+                },
             }))
             .await?;
 
@@ -85,7 +86,8 @@ impl OracleStructExtractor {
                     continue;
                 }
                 let stmt = self.build_create_table_statement(schema, &tb).await?;
-                self.push_struct(StructStatement::PgCreateTable(stmt)).await?;
+                self.push_struct(StructStatement::PgCreateTable(stmt))
+                    .await?;
             }
         }
         Ok(())
@@ -106,7 +108,7 @@ impl OracleStructExtractor {
             "SELECT table_name FROM all_tables WHERE owner='{}' ORDER BY table_name ASC",
             owner
         );
-        Ok(self.client.query_lines(&sql).await?)
+        self.client.query_lines(&sql).await
     }
 
     async fn build_create_table_statement(
@@ -173,7 +175,10 @@ impl OracleStructExtractor {
         let mut cols = Vec::new();
         for line in lines {
             let meta = parse_oracle_column_meta(&line).with_context(|| {
-                format!("failed to parse oracle column meta line: schema={}, tb={}, line={}", schema, tb, line)
+                format!(
+                    "failed to parse oracle column meta line: schema={}, tb={}, line={}",
+                    schema, tb, line
+                )
             })?;
 
             let mapped_name = col_map.get(&meta.name).cloned().unwrap_or(meta.name);
@@ -254,7 +259,10 @@ impl OracleStructExtractor {
 fn parse_oracle_column_meta(line: &str) -> anyhow::Result<OracleColumnMeta> {
     let parts: Vec<&str> = line.split('|').map(|s| s.trim()).collect();
     if parts.len() < 7 {
-        bail!("invalid oracle column meta line (expected 7 cols): {}", line);
+        bail!(
+            "invalid oracle column meta line (expected 7 cols): {}",
+            line
+        );
     }
 
     Ok(OracleColumnMeta {
@@ -352,4 +360,3 @@ fn join_quoted_cols(cols: &[String]) -> String {
 fn escape_sql_literal(s: &str) -> String {
     s.replace('\'', "''")
 }
-

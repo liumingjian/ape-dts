@@ -673,7 +673,7 @@ mod tests {
         let error_level = LogLevel::Error;
 
         // A chunk with mixed lines: one ERROR, one INFO, one WARN
-        let lines = vec![
+        let lines = [
             "[ERROR] something broke".to_string(),
             "[INFO] all is fine".to_string(),
             "[WARN] be careful".to_string(),

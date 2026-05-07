@@ -603,7 +603,10 @@ WHERE
         Ok(out)
     }
 
-    async fn list_oracle_tbs(conn_client: &ConnClient, schema: &str) -> anyhow::Result<Vec<String>> {
+    async fn list_oracle_tbs(
+        conn_client: &ConnClient,
+        schema: &str,
+    ) -> anyhow::Result<Vec<String>> {
         let client = match conn_client {
             ConnClient::Oracle(client) => client,
             _ => {
@@ -616,7 +619,7 @@ WHERE
             "SELECT table_name FROM all_tables WHERE owner='{}' ORDER BY table_name ASC",
             owner
         );
-        Ok(client.query_lines(&sql).await?)
+        client.query_lines(&sql).await
     }
 
     async fn list_mysql_dbs(

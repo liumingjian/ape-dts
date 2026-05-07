@@ -507,7 +507,7 @@ mod tests {
         // But with 10s spacing we need 30s of sustained violation from index 2,
         // which means we need index at ts=50 to get elapsed=30.
         // Let's adjust: use 30s spacing to simplify.
-        let points = vec![
+        let points = [
             SyntheticPoint {
                 value: 150.0,
                 ts: Some(0),
@@ -642,7 +642,7 @@ mod tests {
         assert_eq!(found.recovery_threshold, Some(80.0));
         assert_eq!(found.severity, "critical");
         assert_eq!(found.dwell_secs, 0);
-        assert_eq!(found.enabled, true);
+        assert!(found.enabled);
 
         // Update
         let mut updated = found;
@@ -654,7 +654,7 @@ mod tests {
         let saved = AlertRuleRepository::update(&pool, &updated).await.unwrap();
         assert_eq!(saved.name, "Updated Rule");
         assert_eq!(saved.threshold, 200.0);
-        assert_eq!(saved.enabled, false);
+        assert!(!saved.enabled);
 
         // Delete
         AlertRuleRepository::delete(&pool, "rule-crud-1")

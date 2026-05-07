@@ -668,7 +668,7 @@ mod tests {
             updated_at: String::new(),
         };
 
-        let points = vec![
+        let points = [
             MetricInput {
                 task_id: "t1".into(),
                 run_id: "r1".into(),

@@ -4,11 +4,13 @@ use anyhow::{bail, Context};
 use dt_common::meta::col_value::ColValue;
 use dt_common::meta::row_type::RowType;
 
+type ColMap = Option<HashMap<String, ColValue>>;
+
 pub(crate) fn row_images_from_logminer(
     row_type: &RowType,
     sql_redo: &str,
     sql_undo: &str,
-) -> anyhow::Result<(Option<HashMap<String, ColValue>>, Option<HashMap<String, ColValue>>)> {
+) -> anyhow::Result<(ColMap, ColMap)> {
     match row_type {
         RowType::Insert => Ok((None, Some(parse_insert_values(sql_redo)?))),
         RowType::Delete => Ok((Some(parse_insert_values(sql_undo)?), None)),
@@ -83,7 +85,10 @@ fn parse_update_set_and_where(
 
     let set_clause = trimmed[set_pos + 5..where_pos].trim();
     let where_clause = trimmed[where_pos + 7..].trim();
-    Ok((parse_eq_assignments(set_clause)?, parse_where_eqs(where_clause)?))
+    Ok((
+        parse_eq_assignments(set_clause)?,
+        parse_where_eqs(where_clause)?,
+    ))
 }
 
 fn parse_eq_assignments(clause: &str) -> anyhow::Result<HashMap<String, ColValue>> {

@@ -531,14 +531,11 @@ mod tests {
     use super::*;
     use crate::auth;
     use crate::db;
-    use crate::middleware::csrf::{XSRF_COOKIE_NAME, XSRF_HEADER_NAME};
     use crate::rate_limit::RateLimiter;
     use crate::run_handlers::new_active_runs;
-    use actix_web::cookie::{Cookie, Key};
+    use actix_web::cookie::Key;
     use actix_web::test as actix_test;
     use actix_web::App;
-
-    const XSRF: &str = "test-xsrf-token";
 
     /// Set up an in-memory DB with migrations + admin user.
     async fn setup_db() -> sqlx::SqlitePool {
@@ -616,6 +613,7 @@ mod tests {
     }
 
     /// Helper: create a CDC task with mysql source.
+    #[allow(dead_code)]
     fn make_cdc_mysql_task() -> Task {
         let mut task = make_mysql_task();
         task.kind = "cdc".to_string();
@@ -636,6 +634,7 @@ mod tests {
     }
 
     /// Helper: create a check task.
+    #[allow(dead_code)]
     fn make_check_task() -> Task {
         let mut task = make_mysql_task();
         task.kind = "check".to_string();

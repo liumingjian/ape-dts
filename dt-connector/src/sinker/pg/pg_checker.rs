@@ -222,7 +222,7 @@ impl PgChecker {
                     .find(|(k, _)| k == "sslmode")
                     .map(|(_, v)| v.into_owned())
             })
-            .map_or(true, |sslmode| sslmode != "disable");
+            .is_none_or(|sslmode| sslmode != "disable");
 
         let connect_no_ssl = || async {
             let conn_info = Self::set_sslmode(&final_url, "disable")?;

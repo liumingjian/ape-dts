@@ -1,9 +1,6 @@
 use std::{
     collections::HashMap,
-    sync::{
-        atomic::Ordering,
-        Arc,
-    },
+    sync::{atomic::Ordering, Arc},
     time::{Duration, UNIX_EPOCH},
 };
 
@@ -219,7 +216,9 @@ impl OracleCdcExtractor {
 
                 let cols = columns_cache
                     .get(&(schema.clone(), tb.clone()))
-                    .with_context(|| format!("oracle cdc columns cache missing for {}.{}", schema, tb))?;
+                    .with_context(|| {
+                        format!("oracle cdc columns cache missing for {}.{}", schema, tb)
+                    })?;
 
                 let ignore_cols = self.filter.get_ignore_cols(&schema, &tb);
 
@@ -287,12 +286,9 @@ END;
     async fn fetch_max_change_id(&self) -> anyhow::Result<u64> {
         let lines = self
             .client
-            .query_lines(&format!(
-                "SELECT NVL(MAX(change_id), 0) FROM {}",
-                LOG_TABLE
-            ))
+            .query_lines(&format!("SELECT NVL(MAX(change_id), 0) FROM {}", LOG_TABLE))
             .await?;
-        let first = lines.get(0).cloned().unwrap_or_default();
+        let first = lines.first().cloned().unwrap_or_default();
         if first.trim().is_empty() {
             return Ok(0);
         }
@@ -445,7 +441,10 @@ END;
         batch_size: usize,
     ) -> anyhow::Result<Vec<String>> {
         // captured is explicit, so we can filter by TB_NAME IN (...)
-        let mut tbs = captured.iter().map(|(_, t)| t.to_uppercase()).collect::<Vec<_>>();
+        let mut tbs = captured
+            .iter()
+            .map(|(_, t)| t.to_uppercase())
+            .collect::<Vec<_>>();
         tbs.sort();
         tbs.dedup();
 
@@ -502,12 +501,13 @@ END;
             if ignore_cols.is_some_and(|set| set.contains(&col.name)) {
                 continue;
             }
-            let v = Self::parse_col_value(values[idx].trim(), &col.data_type).with_context(|| {
-                format!(
-                    "oracle cdc parse col value failed: col={}, data_type={}, raw={}",
-                    col.name, col.data_type, values[idx]
-                )
-            })?;
+            let v =
+                Self::parse_col_value(values[idx].trim(), &col.data_type).with_context(|| {
+                    format!(
+                        "oracle cdc parse col value failed: col={}, data_type={}, raw={}",
+                        col.name, col.data_type, values[idx]
+                    )
+                })?;
             out.insert(col.name.clone(), v);
         }
         Ok(Some(out))

@@ -10,15 +10,10 @@ use crate::{
     sinker::base_struct_sinker::{BaseStructSinker, DBConnPool},
     Sinker,
 };
-use dt_common::{
-    config::config_enums::ConflictPolicyEnum, meta::struct_meta::struct_data::StructData,
-    monitor::monitor::Monitor, rdb_filter::RdbFilter,
-};
 use dt_common::meta::struct_meta::{
     statement::{
         mysql_create_database_statement::MysqlCreateDatabaseStatement,
-        mysql_create_table_statement::MysqlCreateTableStatement,
-        struct_statement::StructStatement,
+        mysql_create_table_statement::MysqlCreateTableStatement, struct_statement::StructStatement,
     },
     structure::{
         column::{Column, ColumnDefault},
@@ -26,6 +21,10 @@ use dt_common::meta::struct_meta::{
         index::{Index, IndexColumn, IndexKind, IndexType},
         table::Table,
     },
+};
+use dt_common::{
+    config::config_enums::ConflictPolicyEnum, meta::struct_meta::struct_data::StructData,
+    monitor::monitor::Monitor, rdb_filter::RdbFilter,
 };
 
 use regex::Regex;
@@ -49,8 +48,9 @@ impl Sinker for MysqlStructSinker {
         let mut converted = Vec::with_capacity(data.len());
         for struct_data in data.into_iter() {
             match struct_data.statement {
-                StructStatement::MysqlCreateDatabase(_)
-                | StructStatement::MysqlCreateTable(_) => converted.push(struct_data),
+                StructStatement::MysqlCreateDatabase(_) | StructStatement::MysqlCreateTable(_) => {
+                    converted.push(struct_data)
+                }
 
                 StructStatement::PgCreateSchema(s) => {
                     converted.push(StructData {
@@ -110,9 +110,11 @@ impl MysqlStructSinker {
         let dst_db = pg.table.schema_name.clone();
         let dst_tb = pg.table.table_name.clone();
 
-        let mut table = Table::default();
-        table.database_name = dst_db.clone();
-        table.table_name = dst_tb.clone();
+        let mut table = Table {
+            database_name: dst_db.clone(),
+            table_name: dst_tb.clone(),
+            ..Default::default()
+        };
 
         let mut mysql_col_types: HashMap<String, String> = HashMap::new();
         table.columns = pg
@@ -263,7 +265,8 @@ impl MysqlStructSinker {
         // - "varchar(10)"
         // - "character varying"
         static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-        let re = RE.get_or_init(|| Regex::new(r"^(?:character varying|varchar)\((\d+)\)$").unwrap());
+        let re =
+            RE.get_or_init(|| Regex::new(r"^(?:character varying|varchar)\((\d+)\)$").unwrap());
         if let Some(caps) = re.captures(t) {
             return caps.get(1)?.as_str().parse::<u32>().ok();
         }
@@ -538,12 +541,12 @@ impl MysqlStructSinker {
                     unsupported = true;
                     break;
                 }
-                let prefix_length =
-                    if mysql_ty.starts_with("text") || mysql_ty.starts_with("blob") {
-                        Some(255)
-                    } else {
-                        None
-                    };
+                let prefix_length = if mysql_ty.starts_with("text") || mysql_ty.starts_with("blob")
+                {
+                    Some(255)
+                } else {
+                    None
+                };
                 columns.push(IndexColumn {
                     column_name: col.clone(),
                     seq_in_index: (i as u32) + 1,
@@ -688,9 +691,9 @@ impl MysqlStructSinker {
                 i += 1;
             }
             out
-        } else if s.starts_with('`') {
-            let end = s[1..].find('`')?;
-            s[1..1 + end].to_string()
+        } else if let Some(stripped) = s.strip_prefix('`') {
+            let end = stripped.find('`')?;
+            stripped[..end].to_string()
         } else {
             s.split_whitespace().next()?.to_string()
         };
@@ -704,10 +707,7 @@ impl MysqlStructSinker {
             return None;
         }
         // Keep it conservative: only accept simple identifiers.
-        if !col
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_')
-        {
+        if !col.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
             return None;
         }
         Some(col.to_string())

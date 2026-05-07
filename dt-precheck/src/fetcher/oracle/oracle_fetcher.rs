@@ -2,10 +2,7 @@ use std::collections::HashMap;
 
 use anyhow::{bail, Context};
 use async_trait::async_trait;
-use dt_common::{
-    config::connection_auth_config::ConnectionAuthConfig,
-    rdb_filter::RdbFilter,
-};
+use dt_common::{config::connection_auth_config::ConnectionAuthConfig, rdb_filter::RdbFilter};
 use dt_connector::oracle::OracleSqlPlusClient;
 
 use crate::{
@@ -28,7 +25,7 @@ impl Fetcher for OracleFetcher {
         let client = OracleSqlPlusClient::new(self.url.clone(), self.connection_auth.clone());
         let lines = client.query_lines("SELECT USER FROM dual").await?;
         let user = lines
-            .get(0)
+            .first()
             .map(|s| s.trim().to_uppercase())
             .filter(|s| !s.is_empty())
             .context("oracle current user is empty")?;
@@ -80,7 +77,9 @@ impl Fetcher for OracleFetcher {
         let client = self.client.as_ref().context("oracle client not built")?;
         let user = self.current_user()?;
 
-        let lines = client.query_lines("SELECT table_name FROM user_tables").await?;
+        let lines = client
+            .query_lines("SELECT table_name FROM user_tables")
+            .await?;
         let mut tables = Vec::new();
         for line in lines {
             let table_name = line.trim().to_uppercase();
@@ -135,7 +134,8 @@ ORDER BY c.table_name, c.constraint_name
             let rel_schema_name = normalize_sqlplus_null(parts[3]).to_uppercase();
             let rel_table_name = normalize_sqlplus_null(parts[4]).to_uppercase();
 
-            if constraint_name.is_empty() || constraint_type_raw.is_empty() || table_name.is_empty() {
+            if constraint_name.is_empty() || constraint_type_raw.is_empty() || table_name.is_empty()
+            {
                 continue;
             }
 

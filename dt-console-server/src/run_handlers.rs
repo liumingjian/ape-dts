@@ -1088,7 +1088,7 @@ mod tests {
 
         // Second claim sees the slot is already taken.
         {
-            let mut active = active_runs.lock().await;
+            let active = active_runs.lock().await;
             assert!(active.contains_key(&task_id));
             // Attempting to claim again should detect the existing entry.
         }

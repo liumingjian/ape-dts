@@ -144,7 +144,8 @@ impl OraclePrechecker {
         }
 
         let schemas = self.fetcher.fetch_schemas().await?;
-        let current_schemas: HashSet<String> = schemas.iter().map(|s| s.schema_name.clone()).collect();
+        let current_schemas: HashSet<String> =
+            schemas.iter().map(|s| s.schema_name.clone()).collect();
 
         let not_existed_schemas: HashSet<String> = schema_names
             .iter()
@@ -212,8 +213,8 @@ impl OraclePrechecker {
         }
 
         let (schemas, tb_schemas, tbs) = DbTable::get_config_maps(&models).unwrap();
-        schema_names.extend(schemas.into_iter());
-        schema_names.extend(tb_schemas.into_iter());
+        schema_names.extend(schemas);
+        schema_names.extend(tb_schemas);
         (tbs, schema_names)
     }
 
