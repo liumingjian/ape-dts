@@ -1,0 +1,6 @@
+id,task,status,owner,started_at,completed_at,notes
+1,Inspect current PG-wire sinker behavior and identify failover error signatures,DONE,codex,2026-04-13,2026-04-13,Root cause: PgSinker batch path errors bypassed retry loop, causing failover read-only errors to shut down pipeline.
+2,Implement candidate RW resolution + dynamic write pool swap + retry in PgSinker for GaussDB targets,DONE,codex,2026-04-13,2026-04-13,PgSinker now retries failover-related errors, resolves RW primary from gaussdb_pg_candidate_hosts, and hot-swaps the write pool.
+3,Add dt-tests mysql_to_gaussdb_mysql CDC failover test (cm_ctl switchover + post-failover DML),DONE,codex,2026-04-13,2026-04-13,Added mysql_to_gaussdb_mysql::cdc_failover_test guarded by ENABLE_GAUSSDB_FAILOVER_TEST=1.
+4,Run validation (GaussDBMySQL CDC basic/type-matrix/resume + new failover) and archive evidence logs,DONE,codex,2026-04-13,2026-04-13,Validated cdc_basic/type_matrix/resume + cdc_failover against real HA env; logs archived in task raw/.
+5,Update tracker/docs if needed (runbook note: no VIP/LB requires candidate_hosts + self-heal),DONE,codex,2026-04-13,2026-04-13,Updated plan/tracker/e2e-plan/runbook to include MySQL->GaussDBMySQL target-side failover self-heal and the new dt-tests entry.

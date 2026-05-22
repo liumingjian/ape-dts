@@ -1,0 +1,9 @@
+dist
+coverage
+node_modules
+public/mockServiceWorker.js
+auto-imports.d.ts
+components.d.ts
+pnpm-lock.yaml
+src/locales/zh-CN.json
+src/locales/en-US.json

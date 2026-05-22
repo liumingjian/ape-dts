@@ -9,14 +9,21 @@ members = [
     "dt-pipeline",
     "dt-task",
     "dt-main",
-    "dt-tests"
+    "dt-tests",
+    "dt-console-server"
+]
+
+exclude = [
+    "vendor/rust-postgres",
+    "vendor/sqlx"
 ]
 
 [workspace.lints.clippy]
 assigning_clones = "allow"
+module_inception = "allow"
 
 [workspace.dependencies]
-sqlx = {git = "https://github.com/apecloud/sqlx", features = ["runtime-async-std-rustls", "mysql", "postgres", "bigdecimal", "ipnetwork", "mac_address", "bit-vec", "time", "chrono", "json", "uuid"]}
+sqlx = {path = "vendor/sqlx", features = ["runtime-async-std-rustls", "mysql", "postgres", "bigdecimal", "ipnetwork", "mac_address", "bit-vec", "time", "chrono", "json", "uuid"]}
 futures = "0.3.25"
 mysql-binlog-connector-rust = {git = "https://github.com/apecloud/mysql-binlog-connector-rust", tag = "v0.3.3"}
 serde = {version = "1", features = ["derive"]}
@@ -31,9 +38,10 @@ log4rs = "1.2.0"
 serial_test = "3.0.0"
 async-trait = "0.1.64"
 async-recursion = "1.0.2"
-tokio-postgres = {git = "https://github.com/apecloud/rust-postgres"}
-postgres-protocol = {git = "https://github.com/apecloud/rust-postgres"}
-postgres-types= {git = "https://github.com/apecloud/rust-postgres"}
+tokio-postgres = {path = "vendor/rust-postgres/tokio-postgres"}
+postgres-protocol = {path = "vendor/rust-postgres/postgres-protocol"}
+postgres-types= {path = "vendor/rust-postgres/postgres-types"}
+postgres-openssl = {path = "vendor/rust-postgres/postgres-openssl"}
 tokio = { version = "1.25.0", features = ["full"] }
 bytes = "1.0"
 configparser = "3.0.2"
@@ -66,6 +74,20 @@ percent-encoding = "2.3.1"
 urlencoding = "2.1.3"
 opendal = { version = "0.54.1", features = ["services-s3"] }
 governor = "0.10.4"
+actix-session = "0.11.0"
+actix-cors = "0.7.1"
+actix-files = "0.6.10"
+actix-web-lab = "0.24.3"
+bcrypt = "0.19.1"
+cookie = "0.18.1"
+prometheus-parse = "0.2.5"
+csnmp = "0.6.0"
+tracing = "0.1"
+async-stream = "0.3"
+serde_urlencoded = "0.7"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+sha2 = "0.10"
+base64 = "0.22"
 
 [profile.release]
 panic = 'unwind'

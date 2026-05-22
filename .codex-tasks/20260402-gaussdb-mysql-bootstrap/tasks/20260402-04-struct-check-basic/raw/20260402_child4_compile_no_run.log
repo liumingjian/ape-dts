@@ -1,0 +1,11 @@
+   Compiling dt-task v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-task)
+   Compiling dt-precheck v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-precheck)
+   Compiling dt-tests v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-tests)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 8.58s
+warning: the following packages contain code that will be rejected by a future version of Rust: snap v0.2.5
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 2`
+  Executable unittests src/lib.rs (target/debug/deps/dt_connector-baabdf9300955483)
+  Executable unittests src/lib.rs (target/debug/deps/dt_task-d3a7d1e0cdd45c41)
+  Executable unittests src/lib.rs (target/debug/deps/dt_tests-1b2688cae5b3a716)
+  Executable tests/integration_test.rs (target/debug/deps/integration_test-9b60f916ab830360)
+  Executable tests/test_config_util.rs (target/debug/deps/test_config_util-1a251a9f1f686cfc)

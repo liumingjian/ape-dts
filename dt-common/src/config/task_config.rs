@@ -102,6 +102,8 @@ const DDL_CONFLICT_POLICY: &str = "ddl_conflict_policy";
 const REPLACE: &str = "replace";
 const DISABLE_FOREIGN_KEY_CHECKS: &str = "disable_foreign_key_checks";
 const RESUME_TYPE: &str = "resume_type";
+const CDC_MODE: &str = "cdc_mode";
+const START_SCN: &str = "start_scn";
 // deprecated keys
 const RESUME_FROM_LOG: &str = "resume_from_log";
 const RESUME_LOG_DIR: &str = "resume_log_dir";
@@ -200,7 +202,7 @@ impl TaskConfig {
             Error::ConfigError(format!("extract type: {} not supported", extract_type));
 
         let extractor = match db_type {
-            DbType::Mysql => match extract_type {
+            DbType::Mysql | DbType::GaussDBMySQL => match extract_type {
                 ExtractType::Snapshot => ExtractorConfig::MysqlSnapshot {
                     url,
                     connection_auth,
@@ -311,6 +313,169 @@ impl TaskConfig {
                     heartbeat_interval_secs,
                     heartbeat_tb,
                     ddl_meta_tb: loader.get_optional(EXTRACTOR, "ddl_meta_tb"),
+                    start_time_utc: loader.get_optional(EXTRACTOR, "start_time_utc"),
+                    end_time_utc: loader.get_optional(EXTRACTOR, "end_time_utc"),
+                },
+
+                ExtractType::CheckLog => ExtractorConfig::PgCheck {
+                    url,
+                    connection_auth,
+                    check_log_dir: loader.get_required(EXTRACTOR, CHECK_LOG_DIR),
+                    batch_size: loader.get_with_default(EXTRACTOR, BATCH_SIZE, 200),
+                },
+
+                ExtractType::Struct => ExtractorConfig::PgStruct {
+                    url,
+                    connection_auth,
+                    schema: String::new(),
+                    schemas: Vec::new(),
+                    do_global_structs: false,
+                    db_batch_size: loader.get_with_default(
+                        EXTRACTOR,
+                        "db_batch_size",
+                        DEFAULT_DB_BATCH_SIZE,
+                    ),
+                },
+
+                _ => bail! { not_supported_err },
+            },
+
+            DbType::Oracle => match extract_type {
+                ExtractType::Snapshot => ExtractorConfig::OracleSnapshot {
+                    url,
+                    connection_auth,
+                    schema: String::new(),
+                    tb: String::new(),
+                    sample_interval: loader.get_with_default(EXTRACTOR, SAMPLE_INTERVAL, 1),
+                    parallel_size: loader.get_with_default(EXTRACTOR, PARALLEL_SIZE, 1),
+                    batch_size,
+                    partition_cols: loader.get_optional(EXTRACTOR, PARTITION_COLS),
+                },
+                ExtractType::Struct => ExtractorConfig::OracleStruct {
+                    url,
+                    connection_auth,
+                    schema: String::new(),
+                    schemas: Vec::new(),
+                    db_batch_size: loader.get_with_default(
+                        EXTRACTOR,
+                        "db_batch_size",
+                        DEFAULT_DB_BATCH_SIZE,
+                    ),
+                },
+                ExtractType::Cdc => {
+                    let cdc_mode: String = loader.get_optional(EXTRACTOR, CDC_MODE);
+                    let poll_interval_millis =
+                        loader.get_with_default(EXTRACTOR, "poll_interval_millis", 200_u64);
+                    let poll_batch_size =
+                        loader.get_with_default(EXTRACTOR, "poll_batch_size", 200);
+                    let start_time_utc = loader.get_optional(EXTRACTOR, "start_time_utc");
+                    let end_time_utc = loader.get_optional(EXTRACTOR, "end_time_utc");
+
+                    if cdc_mode.trim().eq_ignore_ascii_case("logminer") {
+                        ExtractorConfig::OracleLogMinerCdc {
+                            url,
+                            connection_auth,
+                            poll_interval_millis,
+                            poll_batch_size,
+                            start_scn: loader.get_optional(EXTRACTOR, START_SCN),
+                            start_time_utc,
+                            end_time_utc,
+                        }
+                    } else if cdc_mode.trim().is_empty()
+                        || cdc_mode.trim().eq_ignore_ascii_case("trigger")
+                    {
+                        ExtractorConfig::OracleCdc {
+                            url,
+                            connection_auth,
+                            poll_interval_millis,
+                            poll_batch_size,
+                            start_change_id: loader.get_optional(EXTRACTOR, "start_change_id"),
+                            start_time_utc,
+                            end_time_utc,
+                        }
+                    } else {
+                        bail!("unknown oracle cdc_mode: {}", cdc_mode);
+                    }
+                }
+                _ => bail! { not_supported_err },
+            },
+
+            DbType::GaussDBPg => match extract_type {
+                ExtractType::Snapshot => ExtractorConfig::PgSnapshot {
+                    url,
+                    connection_auth,
+                    schema: String::new(),
+                    tb: String::new(),
+                    sample_interval: loader.get_with_default(EXTRACTOR, SAMPLE_INTERVAL, 1),
+                    parallel_size: loader.get_with_default(EXTRACTOR, PARALLEL_SIZE, 1),
+                    batch_size,
+                    partition_cols: loader.get_optional(EXTRACTOR, PARTITION_COLS),
+                },
+
+                // GaussDB CDC is implemented via mppdb_decoding (see dt-connector extractor/gaussdb).
+                ExtractType::Cdc => ExtractorConfig::GaussDBCdc {
+                    url,
+                    connection_auth,
+                    slot_name: loader.get_required(EXTRACTOR, "slot_name"),
+                    start_lsn: loader.get_optional(EXTRACTOR, "start_lsn"),
+                    recreate_slot_if_exists: loader
+                        .get_optional(EXTRACTOR, "recreate_slot_if_exists"),
+                    keepalive_interval_secs,
+                    heartbeat_interval_secs,
+                    heartbeat_tb,
+                    start_time_utc: loader.get_optional(EXTRACTOR, "start_time_utc"),
+                    end_time_utc: loader.get_optional(EXTRACTOR, "end_time_utc"),
+                },
+
+                ExtractType::CheckLog => ExtractorConfig::PgCheck {
+                    url,
+                    connection_auth,
+                    check_log_dir: loader.get_required(EXTRACTOR, CHECK_LOG_DIR),
+                    batch_size: loader.get_with_default(EXTRACTOR, BATCH_SIZE, 200),
+                },
+
+                ExtractType::Struct => ExtractorConfig::PgStruct {
+                    url,
+                    connection_auth,
+                    schema: String::new(),
+                    schemas: Vec::new(),
+                    do_global_structs: false,
+                    db_batch_size: loader.get_with_default(
+                        EXTRACTOR,
+                        "db_batch_size",
+                        DEFAULT_DB_BATCH_SIZE,
+                    ),
+                },
+
+                _ => bail! { not_supported_err },
+            },
+
+            DbType::GaussDBOracle => match extract_type {
+                ExtractType::Snapshot => ExtractorConfig::PgSnapshot {
+                    url,
+                    connection_auth,
+                    schema: String::new(),
+                    tb: String::new(),
+                    sample_interval: loader.get_with_default(EXTRACTOR, SAMPLE_INTERVAL, 1),
+                    parallel_size: loader.get_with_default(EXTRACTOR, PARALLEL_SIZE, 1),
+                    batch_size,
+                    partition_cols: loader.get_optional(EXTRACTOR, PARTITION_COLS),
+                },
+
+                // GaussDB CDC is implemented via mppdb_decoding (see dt-connector extractor/gaussdb).
+                // NOTE: `GaussDBOracle` is expected to be reached via Postgres wire protocol
+                // with `sql_compatibility=A`. CDC support here is best-effort and depends on the
+                // server-side plugin availability/configuration.
+                ExtractType::Cdc => ExtractorConfig::GaussDBCdc {
+                    url,
+                    connection_auth,
+                    slot_name: loader.get_required(EXTRACTOR, "slot_name"),
+                    start_lsn: loader.get_optional(EXTRACTOR, "start_lsn"),
+                    recreate_slot_if_exists: loader
+                        .get_optional(EXTRACTOR, "recreate_slot_if_exists"),
+                    keepalive_interval_secs,
+                    heartbeat_interval_secs,
+                    heartbeat_tb,
                     start_time_utc: loader.get_optional(EXTRACTOR, "start_time_utc"),
                     end_time_utc: loader.get_optional(EXTRACTOR, "end_time_utc"),
                 },
@@ -484,7 +649,7 @@ impl TaskConfig {
             Error::ConfigError(format!("sinker db type: {} not supported", db_type));
 
         let sinker = match db_type {
-            DbType::Mysql | DbType::Tidb => match sink_type {
+            DbType::Mysql | DbType::GaussDBMySQL | DbType::Tidb => match sink_type {
                 SinkType::Write => SinkerConfig::Mysql {
                     url,
                     connection_auth,
@@ -532,12 +697,16 @@ impl TaskConfig {
                 _ => bail! { not_supported_err },
             },
 
-            DbType::Pg => match sink_type {
+            DbType::Pg | DbType::GaussDBPg | DbType::GaussDBOracle => match sink_type {
                 SinkType::Write => SinkerConfig::Pg {
                     url,
                     connection_auth,
                     batch_size,
-                    replace: loader.get_with_default(SINKER, REPLACE, true),
+                    replace: loader.get_with_default(
+                        SINKER,
+                        REPLACE,
+                        !matches!(db_type, DbType::GaussDBOracle),
+                    ),
                     disable_foreign_key_checks: loader.get_with_default(
                         SINKER,
                         DISABLE_FOREIGN_KEY_CHECKS,
@@ -576,6 +745,41 @@ impl TaskConfig {
                     reverse: loader.get_optional(SINKER, REVERSE),
                 },
 
+                _ => bail! { not_supported_err },
+            },
+
+            DbType::Oracle => match sink_type {
+                SinkType::Write => SinkerConfig::Oracle {
+                    url,
+                    connection_auth,
+                    batch_size,
+                    replace: loader.get_with_default(SINKER, REPLACE, true),
+                },
+                SinkType::Check => SinkerConfig::OracleCheck {
+                    url,
+                    connection_auth,
+                    batch_size,
+                    check_log_dir: loader.get_optional(SINKER, CHECK_LOG_DIR),
+                    check_log_file_size: loader.get_with_default(
+                        SINKER,
+                        CHECK_LOG_FILE_SIZE,
+                        DEFAULT_CHECK_LOG_FILE_SIZE.to_string(),
+                    ),
+                    output_full_row: loader.get_with_default(SINKER, OUTPUT_FULL_ROW, false),
+                    output_revise_sql: loader.get_with_default(SINKER, OUTPUT_REVISE_SQL, false),
+                    revise_match_full_row: loader.get_with_default(
+                        SINKER,
+                        REVISE_MATCH_FULL_ROW,
+                        false,
+                    ),
+                    retry_interval_secs: loader.get_with_default(SINKER, RETRY_INTERVAL_SECS, 0),
+                    max_retries: loader.get_with_default(SINKER, MAX_RETRIES, 1),
+                },
+                SinkType::Struct => SinkerConfig::OracleStruct {
+                    url,
+                    connection_auth,
+                    conflict_policy,
+                },
                 _ => bail! { not_supported_err },
             },
 

@@ -31,6 +31,26 @@ pub enum SinkerConfig {
         disable_foreign_key_checks: bool,
     },
 
+    Oracle {
+        url: String,
+        connection_auth: ConnectionAuthConfig,
+        batch_size: usize,
+        replace: bool,
+    },
+
+    OracleCheck {
+        url: String,
+        connection_auth: ConnectionAuthConfig,
+        batch_size: usize,
+        check_log_dir: String,
+        check_log_file_size: String,
+        output_full_row: bool,
+        output_revise_sql: bool,
+        revise_match_full_row: bool,
+        retry_interval_secs: u64,
+        max_retries: u32,
+    },
+
     Mongo {
         url: String,
         connection_auth: ConnectionAuthConfig,
@@ -84,6 +104,12 @@ pub enum SinkerConfig {
     },
 
     PgStruct {
+        url: String,
+        connection_auth: ConnectionAuthConfig,
+        conflict_policy: ConflictPolicyEnum,
+    },
+
+    OracleStruct {
         url: String,
         connection_auth: ConnectionAuthConfig,
         conflict_policy: ConflictPolicyEnum,
@@ -190,6 +216,10 @@ impl SinkerConfig {
                 ..
             } => *retry_interval_secs,
             SinkerConfig::PgCheck {
+                retry_interval_secs,
+                ..
+            } => *retry_interval_secs,
+            SinkerConfig::OracleCheck {
                 retry_interval_secs,
                 ..
             } => *retry_interval_secs,

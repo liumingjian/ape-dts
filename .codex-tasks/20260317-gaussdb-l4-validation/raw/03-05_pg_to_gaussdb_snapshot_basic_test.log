@@ -1,0 +1,144 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.22s
+warning: the following packages contain code that will be rejected by a future version of Rust: snap v0.2.5
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 2`
+     Running tests/integration_test.rs (target/debug/deps/integration_test-e223343e61fbfc15)
+
+running 1 test
+executing sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic
+executing sql: CREATE TABLE public.gaussdb_snapshot_basic ( id INTEGER PRIMARY KEY, val TEXT )
+executing sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic
+executing sql: CREATE TABLE public.gaussdb_snapshot_basic ( id INTEGER PRIMARY KEY, val TEXT )
+executing sql: INSERT INTO public.gaussdb_snapshot_basic (id, val) VALUES (1, 'a'), (2, 'b')
+2026-03-17T17:52:42.857120+08:00 INFO default_logger - start task: [taskID: c45864f49d56f842, taskType: Some(Snapshot)]
+2026-03-17T17:52:42.857498+08:00 WARN default_logger - recorder unsupported resumer config: Dummy
+2026-03-17T17:52:42.857529+08:00 WARN default_logger - recovery unsupported resumer config: Dummy
+2026-03-17T17:52:42.857576+08:00 INFO default_logger - recovery initialization for task_id: c45864f49d56f842 finished in 0 ms
+2026-03-17T17:52:43.600076+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-03-17T17:52:43.600174+08:00 ERROR default_logger - buffer_memory_mb=0 is too large and will be ignored to prevent overflow
+2026-03-17T17:52:43.600301+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-03-17T17:52:43.610325+08:00 INFO default_logger - begin to estimate record count
+2026-03-17T17:52:43.615537+08:00 INFO default_logger - estimate record count: 0
+2026-03-17T17:52:44.091377+08:00 INFO default_logger - PgSnapshotExtractor starts, schema: "public", tb: "gaussdb_snapshot_basic", batch_size: 4, parallel_size: 1
+2026-03-17T17:52:44.092889+08:00 INFO default_logger - SnapshotParallelizer starts, parallel_size: 1, checkpoint_interval_secs: 1
+2026-03-17T17:52:44.114514+08:00 INFO default_logger - ["public"."gaussdb_snapshot_basic"] recovery from [{}]
+2026-03-17T17:52:44.117471+08:00 INFO default_logger - end extracting data from "public"."gaussdb_snapshot_basic", all count: 2
+2026-03-17T17:52:44.197246+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-03-17T17:52:44.197634+08:00 INFO monitor_logger - extractor | public.gaussdb_snapshot_basic | data_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10
+2026-03-17T17:52:44.197681+08:00 INFO monitor_logger - extractor | public.gaussdb_snapshot_basic | extracted_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10
+2026-03-17T17:52:44.197717+08:00 INFO monitor_logger - extractor | public.gaussdb_snapshot_basic | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-03-17T17:52:44.197746+08:00 INFO monitor_logger - extractor | public.gaussdb_snapshot_basic | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-03-17T17:52:44.197846+08:00 INFO monitor_logger - pipeline | public.gaussdb_snapshot_basic | buffer_size | sum=2 | avg=2 | max=2
+2026-03-17T17:52:44.197870+08:00 INFO monitor_logger - pipeline | public.gaussdb_snapshot_basic | record_size | avg=5
+2026-03-17T17:52:44.197912+08:00 INFO monitor_logger - pipeline | public.gaussdb_snapshot_basic | sinked_bytes | latest=0
+2026-03-17T17:52:44.197934+08:00 INFO monitor_logger - pipeline | public.gaussdb_snapshot_basic | sinked_records | latest=0
+2026-03-17T17:52:44.627222+08:00 INFO monitor_logger - extractor | global | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2 | min_by_sec=0
+2026-03-17T17:52:44.627437+08:00 INFO monitor_logger - extractor | global | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2 | min_by_sec=0
+2026-03-17T17:52:44.627732+08:00 INFO monitor_logger - extractor | global | data_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10 | min_by_sec=0
+2026-03-17T17:52:44.627805+08:00 INFO monitor_logger - extractor | global | extracted_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10 | min_by_sec=0
+2026-03-17T17:52:44.628345+08:00 INFO monitor_logger - pipeline | global | buffer_size | sum=2 | avg=2 | max=2 | min=0
+2026-03-17T17:52:44.628576+08:00 INFO monitor_logger - pipeline | global | record_size | avg=5
+2026-03-17T17:52:44.628821+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=0
+2026-03-17T17:52:44.628932+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=0
+2026-03-17T17:52:45.627697+08:00 INFO monitor_logger - extractor | global | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:45.628037+08:00 INFO monitor_logger - extractor | global | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:45.628138+08:00 INFO monitor_logger - extractor | global | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:45.628235+08:00 INFO monitor_logger - extractor | global | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:45.628640+08:00 INFO monitor_logger - pipeline | global | buffer_size | sum=0 | avg=0 | max=0 | min=0
+2026-03-17T17:52:45.628738+08:00 INFO monitor_logger - pipeline | global | record_size | avg=0
+2026-03-17T17:52:45.628800+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=0
+2026-03-17T17:52:45.628875+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=0
+2026-03-17T17:52:46.627165+08:00 INFO monitor_logger - extractor | global | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:46.627233+08:00 INFO monitor_logger - extractor | global | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:46.627266+08:00 INFO monitor_logger - extractor | global | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:46.627295+08:00 INFO monitor_logger - extractor | global | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:46.627457+08:00 INFO monitor_logger - pipeline | global | record_size | avg=0
+2026-03-17T17:52:46.627481+08:00 INFO monitor_logger - pipeline | global | buffer_size | sum=0 | avg=0 | max=0 | min=0
+2026-03-17T17:52:46.627514+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=0
+2026-03-17T17:52:46.627548+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=0
+2026-03-17T17:52:47.628488+08:00 INFO monitor_logger - extractor | global | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:47.628801+08:00 INFO monitor_logger - extractor | global | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:47.628831+08:00 INFO monitor_logger - extractor | global | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:47.628860+08:00 INFO monitor_logger - extractor | global | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:47.629171+08:00 INFO monitor_logger - pipeline | global | buffer_size | sum=0 | avg=0 | max=0 | min=0
+2026-03-17T17:52:47.629203+08:00 INFO monitor_logger - pipeline | global | record_size | avg=0
+2026-03-17T17:52:47.629246+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=0
+2026-03-17T17:52:47.629285+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=0
+2026-03-17T17:52:48.626518+08:00 INFO monitor_logger - extractor | global | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:48.626591+08:00 INFO monitor_logger - extractor | global | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:48.626625+08:00 INFO monitor_logger - extractor | global | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:48.626659+08:00 INFO monitor_logger - extractor | global | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:48.626859+08:00 INFO monitor_logger - pipeline | global | record_size | avg=0
+2026-03-17T17:52:48.626898+08:00 INFO monitor_logger - pipeline | global | buffer_size | sum=0 | avg=0 | max=0 | min=0
+2026-03-17T17:52:48.626933+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=0
+2026-03-17T17:52:48.626969+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=0
+2026-03-17T17:52:49.627274+08:00 INFO monitor_logger - extractor | global | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:49.627422+08:00 INFO monitor_logger - extractor | global | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:49.627461+08:00 INFO monitor_logger - extractor | global | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:49.627491+08:00 INFO monitor_logger - extractor | global | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:49.627647+08:00 INFO monitor_logger - pipeline | global | buffer_size | sum=0 | avg=0 | max=0 | min=0
+2026-03-17T17:52:49.627671+08:00 INFO monitor_logger - pipeline | global | record_size | avg=0
+2026-03-17T17:52:49.627698+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=0
+2026-03-17T17:52:49.627724+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=0
+2026-03-17T17:52:50.626394+08:00 INFO monitor_logger - extractor | global | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:50.626500+08:00 INFO monitor_logger - extractor | global | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:50.626665+08:00 INFO monitor_logger - extractor | global | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:50.626768+08:00 INFO monitor_logger - extractor | global | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:50.627930+08:00 INFO monitor_logger - pipeline | global | buffer_size | sum=0 | avg=0 | max=0 | min=0
+2026-03-17T17:52:50.628327+08:00 INFO monitor_logger - pipeline | global | record_size | avg=0
+2026-03-17T17:52:50.629700+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=0
+2026-03-17T17:52:50.629795+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=0
+2026-03-17T17:52:51.628090+08:00 INFO monitor_logger - extractor | global | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:51.628243+08:00 INFO monitor_logger - extractor | global | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:51.628275+08:00 INFO monitor_logger - extractor | global | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:51.628307+08:00 INFO monitor_logger - extractor | global | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:51.628571+08:00 INFO monitor_logger - pipeline | global | buffer_size | sum=0 | avg=0 | max=0 | min=0
+2026-03-17T17:52:51.628607+08:00 INFO monitor_logger - pipeline | global | record_size | avg=0
+2026-03-17T17:52:51.628660+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=0
+2026-03-17T17:52:51.628704+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=0
+2026-03-17T17:52:52.627432+08:00 INFO monitor_logger - extractor | global | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:52.627493+08:00 INFO monitor_logger - extractor | global | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:52.627544+08:00 INFO monitor_logger - extractor | global | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:52.627617+08:00 INFO monitor_logger - extractor | global | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:52.627899+08:00 INFO monitor_logger - pipeline | global | record_size | avg=0
+2026-03-17T17:52:52.628002+08:00 INFO monitor_logger - pipeline | global | buffer_size | sum=0 | avg=0 | max=0 | min=0
+2026-03-17T17:52:52.628065+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=0
+2026-03-17T17:52:52.628231+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=0
+2026-03-17T17:52:53.627414+08:00 INFO monitor_logger - extractor | global | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:53.627460+08:00 INFO monitor_logger - extractor | global | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:53.627487+08:00 INFO monitor_logger - extractor | global | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:53.627691+08:00 INFO monitor_logger - extractor | global | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:53.628027+08:00 INFO monitor_logger - pipeline | global | buffer_size | sum=0 | avg=0 | max=0 | min=0
+2026-03-17T17:52:53.628132+08:00 INFO monitor_logger - pipeline | global | record_size | avg=0
+2026-03-17T17:52:53.628213+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=0
+2026-03-17T17:52:53.628270+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=0
+2026-03-17T17:52:54.628271+08:00 INFO monitor_logger - extractor | global | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:54.628517+08:00 INFO monitor_logger - extractor | global | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:54.628597+08:00 INFO monitor_logger - extractor | global | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:54.628731+08:00 INFO monitor_logger - extractor | global | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:54.630744+08:00 INFO monitor_logger - pipeline | global | buffer_size | sum=0 | avg=0 | max=0 | min=0
+2026-03-17T17:52:54.630842+08:00 INFO monitor_logger - pipeline | global | record_size | avg=0
+2026-03-17T17:52:54.630902+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=0
+2026-03-17T17:52:54.630962+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=0
+2026-03-17T17:52:55.627793+08:00 INFO monitor_logger - extractor | global | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:55.627877+08:00 INFO monitor_logger - extractor | global | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:55.627910+08:00 INFO monitor_logger - extractor | global | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:55.627946+08:00 INFO monitor_logger - extractor | global | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-03-17T17:52:55.628392+08:00 INFO monitor_logger - pipeline | global | record_size | avg=0
+2026-03-17T17:52:55.628542+08:00 INFO monitor_logger - pipeline | global | buffer_size | sum=0 | avg=0 | max=0 | min=0
+2026-03-17T17:52:55.628602+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=0
+2026-03-17T17:52:55.628647+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=0
+2026-03-17T17:52:56.169639+08:00 WARN sqlx_core::pool::connection - error occurred while testing the connection on-release: error communicating with database: unexpected end of file
+2026-03-17T17:52:56.171012+08:00 ERROR default_logger - panic: panicked at dt-tests/tests/test_runner/test_base.rs:25:46:
+called `Result::unwrap()` on an `Err` value: single task: [public.gaussdb_snapshot_basic] failed, error: pipeline.start failed
+backtrace:
+disabled backtrace
+test pg_to_gaussdb::snapshot_tests::test::snapshot_basic_test ... FAILED
+
+failures:
+
+failures:
+    pg_to_gaussdb::snapshot_tests::test::snapshot_basic_test
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 342 filtered out; finished in 15.33s
+
+error: test failed, to rerun pass `-p dt-tests --test integration_test`

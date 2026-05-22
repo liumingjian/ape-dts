@@ -1,0 +1,35 @@
+   Compiling dt-common v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-common)
+   Compiling dt-connector v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-connector)
+error[E0502]: cannot borrow `*self` as mutable because it is also borrowed as immutable
+  --> dt-connector/src/extractor/gaussdb/gaussdb_cdc_client.rs:67:15
+   |
+27 |           let username = if let ConnectionAuthConfig::Basic { username, .. } = &self.connection_auth {
+   |                                                                                --------------------- immutable borrow occurs here
+...
+67 |           match connect_with_port(
+   |  _______________^
+68 | |             self,
+69 | |             &host,
+70 | |             base_port,
+...  |
+73 | |             password,
+74 | |         )
+   | |_________^ mutable borrow occurs here
+...
+89 |                       return connect_with_port(self, &host, ha_port, dbname, username, password)
+   |                                                                              -------- immutable borrow later used here
+
+error[E0502]: cannot borrow `*self` as mutable because it is also borrowed as immutable
+  --> dt-connector/src/extractor/gaussdb/gaussdb_cdc_client.rs:89:28
+   |
+27 |         let username = if let ConnectionAuthConfig::Basic { username, .. } = &self.connection_auth {
+   |                                                                              --------------------- immutable borrow occurs here
+...
+89 |                     return connect_with_port(self, &host, ha_port, dbname, username, password)
+   |                            -----------------^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |                            |
+   |                            mutable borrow occurs here
+   |                            immutable borrow later used by call
+
+For more information about this error, try `rustc --explain E0502`.
+error: could not compile `dt-connector` (lib test) due to 2 previous errors

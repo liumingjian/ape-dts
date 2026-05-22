@@ -257,7 +257,10 @@ impl BaseExtractor {
         }
 
         self.monitor.try_flush(true).await;
-        self.shut_down.store(true, Ordering::Release);
+        let first = !self.shut_down.swap(true, Ordering::Release);
+        if first {
+            log_info!("shutdown triggered by BaseExtractor.wait_task_finish (extractor finished)");
+        }
         Ok(())
     }
 }

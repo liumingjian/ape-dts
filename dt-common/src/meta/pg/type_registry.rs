@@ -1,4 +1,5 @@
 use futures::TryStreamExt;
+use sqlx::postgres::types::Oid as PgOid;
 use sqlx::{postgres::PgRow, Pool, Postgres, Row};
 use std::collections::HashMap;
 
@@ -38,7 +39,7 @@ impl TypeRegistry {
             ON (t.oid = e.id)
             WHERE n.nspname != 'pg_toast'";
         let mut rows = sqlx::query(sql).fetch(&self.conn_pool);
-        while let Some(row) = rows.try_next().await.unwrap() {
+        while let Some(row) = rows.try_next().await? {
             let col_type = self.parse_col_meta(&row)?;
             self.oid_to_type.insert(col_type.oid, col_type.clone());
         }
@@ -46,20 +47,15 @@ impl TypeRegistry {
     }
 
     fn parse_col_meta(&mut self, row: &PgRow) -> anyhow::Result<PgColType> {
-        let oid: i32 = row.get_unchecked("oid");
-        let value_type = PgValueType::from_oid(oid);
+        let oid: i32 = row.try_get::<PgOid, _>("oid")?.0 as i32;
         let name: String = row.try_get("name")?;
         let alias = Self::name_to_alias(&name);
-        let element_oid: i32 = row.get_unchecked("element");
-        let parent_oid: i32 = row.get_unchecked("parentoid");
-        let category: String = row.get_unchecked("category");
-        let enum_values: Option<Vec<u8>> = row.get_unchecked("enum_values");
-        let enum_values = if enum_values.is_none() {
-            None
-        } else {
-            let enum_values: Vec<String> = row.try_get("enum_values")?;
-            Some(enum_values)
-        };
+        let value_type = Self::resolve_value_type(oid, &alias);
+        let element_oid: i32 = row.try_get::<PgOid, _>("element")?.0 as i32;
+        let parent_oid: i32 = row.try_get::<PgOid, _>("parentoid")?.0 as i32;
+        let category: i8 = row.try_get("category")?;
+        let category = (category as u8 as char).to_string();
+        let enum_values: Option<Vec<String>> = row.try_get("enum_values")?;
         let schema_name: String = row.try_get("schema_name")?;
 
         Ok(PgColType {
@@ -75,6 +71,15 @@ impl TypeRegistry {
         })
     }
 
+    fn resolve_value_type(oid: i32, alias: &str) -> PgValueType {
+        let value_type = PgValueType::from_oid(oid);
+        if value_type == PgValueType::String {
+            PgValueType::from_alias(alias)
+        } else {
+            value_type
+        }
+    }
+
     fn name_to_alias(name: &str) -> String {
         // refer to: https://www.postgresql.org/docs/17/datatype.html
         match name {
@@ -88,17 +93,60 @@ impl TypeRegistry {
             "character varying" => "varchar",
             "double precision" => "float8",
             "int" | "integer" => "int4",
+            "int1" => "int2",
             "decimal" => "numeric",
             "real" => "float4",
             "smallint" => "int2",
             "smallserial" => "serial2",
             "serial" => "serial4",
+            "smalldatetime" => "timestamp",
             "timestamp with time zone" => "timestamptz",
             "timestamp without time zone" => "timestamp",
+            "tinyint" => "int2",
             "time without time zone" => "time",
             "time with time zone" => "timetz",
+            "nvarchar2" => "varchar",
+            "clob" => "text",
+            "blob" => "bytea",
             _ => name,
         }
         .to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TypeRegistry;
+    use crate::meta::pg::pg_value_type::PgValueType;
+
+    #[test]
+    fn gaussdb_type_matrix_name_to_alias_maps_prd_specific_names() {
+        assert_eq!(TypeRegistry::name_to_alias("smalldatetime"), "timestamp");
+        assert_eq!(TypeRegistry::name_to_alias("int1"), "int2");
+        assert_eq!(TypeRegistry::name_to_alias("tinyint"), "int2");
+        assert_eq!(TypeRegistry::name_to_alias("nvarchar2"), "varchar");
+        assert_eq!(TypeRegistry::name_to_alias("clob"), "text");
+        assert_eq!(TypeRegistry::name_to_alias("blob"), "bytea");
+    }
+
+    #[test]
+    fn gaussdb_type_matrix_resolve_value_type_falls_back_to_alias_when_oid_unknown() {
+        let unknown_oid = 999999;
+        assert_eq!(
+            TypeRegistry::resolve_value_type(unknown_oid, "timestamp"),
+            PgValueType::Timestamp
+        );
+        assert_eq!(
+            TypeRegistry::resolve_value_type(unknown_oid, "int2"),
+            PgValueType::Int16
+        );
+        assert_eq!(
+            TypeRegistry::resolve_value_type(unknown_oid, "bytea"),
+            PgValueType::Bytes
+        );
+        assert_eq!(
+            TypeRegistry::resolve_value_type(unknown_oid, "varchar"),
+            PgValueType::String
+        );
     }
 }

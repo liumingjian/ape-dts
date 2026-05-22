@@ -1,0 +1,25 @@
+services:
+  gaussdb-oracle:
+    image: opengauss/opengauss:latest
+    container_name: gaussdb-oracle-local
+    environment:
+      # Password must include uppercase/lowercase/number/special and length >= 8.
+      GS_PASSWORD: "OpenGauss123!"
+    ports:
+      - "55432:5432"
+    volumes:
+      - gaussdb-oracle-data:/var/lib/opengauss
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "export PATH=/usr/local/opengauss/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; export LD_LIBRARY_PATH=/usr/local/opengauss/lib; /usr/local/opengauss/bin/gsql -d postgres -U gaussdb -W 'OpenGauss123!' -p 5432 -c 'show sql_compatibility;' >/dev/null 2>&1",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 30s
+
+volumes:
+  gaussdb-oracle-data:
+    name: gaussdb-oracle-data

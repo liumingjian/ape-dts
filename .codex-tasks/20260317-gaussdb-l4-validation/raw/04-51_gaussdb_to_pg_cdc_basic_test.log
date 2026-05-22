@@ -1,0 +1,22 @@
+   Compiling dt-tests v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-tests)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.30s
+warning: the following packages contain code that will be rejected by a future version of Rust: snap v0.2.5
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 2`
+     Running tests/integration_test.rs (target/debug/deps/integration_test-65ad912c08554e97)
+
+running 1 test
+test gaussdb_to_pg::cdc_tests::test::cdc_basic_test has been running for over 60 seconds
+
+thread 'gaussdb_to_pg::cdc_tests::test::cdc_basic_test' panicked at dt-tests/tests/test_runner/test_base.rs:72:9:
+cdc failed after 6 attempts: error communicating with database: Operation timed out (os error 60)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test gaussdb_to_pg::cdc_tests::test::cdc_basic_test ... FAILED
+
+failures:
+
+failures:
+    gaussdb_to_pg::cdc_tests::test::cdc_basic_test
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 344 filtered out; finished in 75.81s
+
+error: test failed, to rerun pass `-p dt-tests --test integration_test`

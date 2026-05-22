@@ -1,0 +1,1479 @@
+   Compiling dt-connector v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-connector)
+   Compiling dt-parallelizer v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-parallelizer)
+   Compiling dt-pipeline v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-pipeline)
+   Compiling dt-task v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-task)
+   Compiling dt-precheck v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-precheck)
+   Compiling dt-tests v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-tests)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.69s
+warning: the following packages contain code that will be rejected by a future version of Rust: snap v0.2.5
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 2`
+     Running tests/integration_test.rs (target/debug/deps/integration_test-65ad912c08554e97)
+
+running 1 test
+executing sql: DROP TABLE IF EXISTS public.gaussdb_cdc_basic
+executing sql: CREATE TABLE public.gaussdb_cdc_basic ( id INTEGER PRIMARY KEY, val TEXT )
+executing sql: DROP TABLE IF EXISTS public.gaussdb_cdc_basic
+executing sql: CREATE TABLE public.gaussdb_cdc_basic ( id INTEGER PRIMARY KEY, val TEXT )
+2026-03-26T09:14:03.937250+08:00 INFO default_logger - start task: [taskID: 47c551b14b7d2510, taskType: Some(Cdc)]
+2026-03-26T09:14:03.937505+08:00 WARN default_logger - recorder unsupported resumer config: Dummy
+2026-03-26T09:14:03.937540+08:00 WARN default_logger - recovery unsupported resumer config: Dummy
+2026-03-26T09:14:03.937594+08:00 INFO default_logger - recovery initialization for task_id: 47c551b14b7d2510 finished in 0 ms
+2026-03-26T09:14:04.422124+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-03-26T09:14:04.422213+08:00 ERROR default_logger - buffer_memory_mb=0 is too large and will be ignored to prevent overflow
+2026-03-26T09:14:04.422266+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-03-26T09:14:04.450251+08:00 INFO default_logger - GaussDBCdcExtractor starts, slot_name: ape_test_gaussdb, start_lsn: , keepalive_interval_secs: 10, heartbeat_interval_secs: 0, heartbeat_tb: heartbeat_db.ape_dts_heartbeat
+2026-03-26T09:14:04.462686+08:00 INFO default_logger - MergeParallelizer starts, parallel_size: 1, checkpoint_interval_secs: 1
+2026-03-26T09:14:04.890739+08:00 INFO default_logger - gaussdb sql connection starts (ssl=on)
+2026-03-26T09:14:05.042759+08:00 INFO default_logger - slot: ape_test_gaussdb exists: true
+2026-03-26T09:14:05.042815+08:00 INFO default_logger - slot confirmed_flush_lsn(confirmed_flush/restart_lsn): 0/5181BEA0
+2026-03-26T09:14:05.042849+08:00 WARN default_logger - start_lsn is empty, will use confirmed_flush_lsn
+2026-03-26T09:14:05.042863+08:00 INFO default_logger - execute: SELECT pg_drop_replication_slot ('ape_test_gaussdb')
+2026-03-26T09:14:05.171800+08:00 INFO default_logger - execute: SELECT * FROM pg_create_logical_replication_slot('ape_test_gaussdb', 'mppdb_decoding')
+2026-03-26T09:14:05.257181+08:00 INFO default_logger - slot created, returned start_lsn: 0/52344698
+2026-03-26T09:14:05.462857+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-26T09:14:05.462882+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-26T09:14:05.464861+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-26T09:14:05.464879+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-26T09:14:05.464891+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-26T09:14:05.469251+08:00 INFO default_logger - execute: START_REPLICATION SLOT ape_test_gaussdb LOGICAL 0/52344698
+2026-03-26T09:14:05.469328+08:00 INFO default_logger - gaussdb replication connection starts (ssl=off)
+2026-03-26T09:14:05.517631+08:00 INFO default_logger - try starting heartbeat, heartbeat_interval_secs: 0, heartbeat_tb: heartbeat_db.ape_dts_heartbeat, 
+2026-03-26T09:14:05.517643+08:00 INFO default_logger - heartbeat disabled, heartbeat_tb: heartbeat_db.ape_dts_heartbeat, heartbeat_interval_secs: 0
+executing sql: INSERT INTO public.gaussdb_cdc_basic (id, val) VALUES (1, 'a'), (2, 'b')
+2026-03-26T09:14:06.413463+08:00 INFO default_logger - gaussdb keepalive reply requested: server_lsn=0/52344800
+2026-03-26T09:14:06.463342+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52344AF0","timestamp":"2026-03-26 01:14:06.314"}
+2026-03-26T09:14:06.463370+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52344AF0","timestamp":"2026-03-26 01:14:06.314"}
+2026-03-26T09:14:06.464742+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10
+2026-03-26T09:14:06.464758+08:00 INFO monitor_logger - extractor |  | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-03-26T09:14:06.464772+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-03-26T09:14:06.464784+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10
+2026-03-26T09:14:06.464817+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=3 | avg=3 | max=3
+2026-03-26T09:14:06.464829+08:00 INFO monitor_logger - pipeline |  | record_size | avg=3
+2026-03-26T09:14:06.464849+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487646314
+2026-03-26T09:14:06.464859+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:14:06.464868+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:14:06.464877+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:06.464886+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:06.464908+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10
+2026-03-26T09:14:06.464920+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=2 | avg=2 | max=2
+2026-03-26T09:14:06.464933+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=1 | avg=1 | max=1
+2026-03-26T09:14:06.464944+08:00 INFO monitor_logger - sinker |  | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-03-26T09:14:07.463478+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52344AF0","timestamp":"2026-03-26 01:14:06.314"}
+2026-03-26T09:14:07.463526+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52344AF0","timestamp":"2026-03-26 01:14:06.314"}
+2026-03-26T09:14:07.464729+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:07.464748+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:07.464763+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:07.464776+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:07.464809+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:07.464821+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:07.464841+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487646314
+2026-03-26T09:14:07.464852+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:14:07.464863+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:14:07.464872+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:07.464880+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:07.464929+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:07.464946+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:07.464958+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:07.464969+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:08.463635+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52344AF0","timestamp":"2026-03-26 01:14:06.314"}
+2026-03-26T09:14:08.463686+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52344AF0","timestamp":"2026-03-26 01:14:06.314"}
+2026-03-26T09:14:08.464732+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:08.464747+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:08.464761+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:08.464773+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:08.464805+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:08.464817+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:08.464836+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487646314
+2026-03-26T09:14:08.464847+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:14:08.464856+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:14:08.464866+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:08.464876+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:08.464899+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:08.464909+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:08.464919+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:08.464929+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:09.463807+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52344AF0","timestamp":"2026-03-26 01:14:06.314"}
+2026-03-26T09:14:09.463860+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52344AF0","timestamp":"2026-03-26 01:14:06.314"}
+2026-03-26T09:14:09.464737+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:09.464754+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:09.464767+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:09.464779+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:09.464811+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:09.464823+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:09.464842+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487646314
+2026-03-26T09:14:09.464853+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:14:09.464862+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:14:09.464871+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:09.464902+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:09.464935+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:09.464952+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:09.464965+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:09.464978+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:10.463975+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52344AF0","timestamp":"2026-03-26 01:14:06.314"}
+2026-03-26T09:14:10.464024+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52344AF0","timestamp":"2026-03-26 01:14:06.314"}
+2026-03-26T09:14:10.464732+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:10.464752+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:10.464767+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:10.464779+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:10.464811+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:10.464822+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:10.464843+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487646314
+2026-03-26T09:14:10.464853+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:14:10.464862+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:14:10.464883+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:10.464898+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:10.464924+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:10.464937+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:10.464950+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:10.464963+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:11.464121+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52344AF0","timestamp":"2026-03-26 01:14:06.314"}
+2026-03-26T09:14:11.464165+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52344AF0","timestamp":"2026-03-26 01:14:06.314"}
+2026-03-26T09:14:11.464728+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:11.464744+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:11.464757+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:11.464769+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:11.464801+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:11.464812+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:11.464833+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487646314
+2026-03-26T09:14:11.464843+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:14:11.464852+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:14:11.464861+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:11.464895+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:11.464968+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:11.464981+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:11.464992+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:11.465001+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:12.464249+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52344AF0","timestamp":"2026-03-26 01:14:06.314"}
+2026-03-26T09:14:12.464286+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52344AF0","timestamp":"2026-03-26 01:14:06.314"}
+2026-03-26T09:14:12.464734+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:12.464752+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:12.464767+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:12.464780+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:12.464811+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:12.464823+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:12.464842+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487646314
+2026-03-26T09:14:12.464853+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:14:12.464861+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:14:12.464870+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:12.464879+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:12.464899+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:12.464909+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:12.464920+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:12.464931+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:13.464368+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52344AF0","timestamp":"2026-03-26 01:14:06.314"}
+2026-03-26T09:14:13.464404+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52344AF0","timestamp":"2026-03-26 01:14:06.314"}
+2026-03-26T09:14:13.464717+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:13.464731+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:13.464744+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:13.464756+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:13.464788+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:13.464801+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:13.464823+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487646314
+2026-03-26T09:14:13.464835+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:14:13.464845+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:14:13.464857+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:13.464869+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:13.464892+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:13.464903+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:13.464914+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:13.464924+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:14.464521+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52344AF0","timestamp":"2026-03-26 01:14:06.314"}
+2026-03-26T09:14:14.464565+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52344AF0","timestamp":"2026-03-26 01:14:06.314"}
+2026-03-26T09:14:14.464732+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:14.464753+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:14.464771+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:14.464784+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:14.464818+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:14.464829+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:14.464851+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487646314
+2026-03-26T09:14:14.464865+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:14:14.464884+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:14:14.464894+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:14.464903+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:14.464927+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:14.464939+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:14.464949+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:14.464958+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:15.464651+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52344AF0","timestamp":"2026-03-26 01:14:06.314"}
+2026-03-26T09:14:15.464686+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52344AF0","timestamp":"2026-03-26 01:14:06.314"}
+2026-03-26T09:14:15.464783+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:15.464806+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:15.464822+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:15.464834+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:15.464866+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:15.464877+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:15.464897+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487646314
+2026-03-26T09:14:15.464909+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:14:15.464918+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:14:15.464927+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:15.464936+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:15.464958+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:15.464968+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:15.464982+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:15.464995+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:15.518698+08:00 INFO default_logger - gaussdb keepalive tick: sending status update
+2026-03-26T09:14:16.464748+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:16.464781+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:16.464795+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:16.464809+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:16.464844+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:16.464856+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:16.464876+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487646314
+2026-03-26T09:14:16.464886+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:14:16.464895+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:14:16.464904+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:16.464915+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:16.464935+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:16.464947+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:16.464957+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:16.464968+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:16.465141+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52344AF0","timestamp":"2026-03-26 01:14:06.314"}
+2026-03-26T09:14:16.465162+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52344AF0","timestamp":"2026-03-26 01:14:06.314"}
+2026-03-26T09:14:17.464766+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:17.464807+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:17.464821+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:17.464833+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:17.464866+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:17.464877+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:17.464898+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487646314
+2026-03-26T09:14:17.464907+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:14:17.464916+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:14:17.464927+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:17.464954+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:17.464985+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:17.464999+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:17.465012+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:17.465026+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:17.465252+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52344AF0","timestamp":"2026-03-26 01:14:06.314"}
+2026-03-26T09:14:17.465298+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52344AF0","timestamp":"2026-03-26 01:14:06.314"}
+2026-03-26T09:14:17.656978+08:00 WARN sqlx::postgres::notice - Fast path bit num leak.
+comparing row data for src_tb: ("public", "gaussdb_cdc_basic"), dst_tb: ("public", "gaussdb_cdc_basic"), src_data count: 2, dst_data count: 2
+row index: 0, col: id, src_col_value: Long(1), dst_col_value: Long(1)
+row index: 0, col: val, src_col_value: String("a"), dst_col_value: String("a")
+row index: 1, col: val, src_col_value: String("b"), dst_col_value: String("b")
+row index: 1, col: id, src_col_value: Long(2), dst_col_value: Long(2)
+executing sql: UPDATE public.gaussdb_cdc_basic SET val = 'c' WHERE id = 2
+2026-03-26T09:14:18.464749+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=9 | avg_by_sec=9 | max_by_sec=9
+2026-03-26T09:14:18.464772+08:00 INFO monitor_logger - extractor |  | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-03-26T09:14:18.464797+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-03-26T09:14:18.464811+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=9 | avg_by_sec=9 | max_by_sec=9
+2026-03-26T09:14:18.464841+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=3 | avg=1 | max=2
+2026-03-26T09:14:18.464854+08:00 INFO monitor_logger - pipeline |  | record_size | avg=4
+2026-03-26T09:14:18.464873+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487646314
+2026-03-26T09:14:18.464885+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:14:18.464896+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:14:18.464911+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:18.464921+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:18.464942+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=9 | avg_by_sec=9 | max_by_sec=9
+2026-03-26T09:14:18.464952+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=2 | avg=1 | max=1
+2026-03-26T09:14:18.464963+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=4 | avg=2 | max=3
+2026-03-26T09:14:18.464974+08:00 INFO monitor_logger - sinker |  | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-03-26T09:14:18.465368+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:18.465391+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:19.464761+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:19.464792+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:19.464814+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:19.464826+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:19.464860+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:19.464872+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:19.464893+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487658190
+2026-03-26T09:14:19.464904+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:14:19.464913+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:14:19.464921+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:19.464929+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:19.464948+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:19.464959+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:19.464969+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:19.464979+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:19.465453+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:19.465474+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:20.464776+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:20.464800+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:20.464838+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:20.464851+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:20.464883+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:20.464896+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:20.464915+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487658190
+2026-03-26T09:14:20.464926+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:14:20.464936+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:14:20.464946+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:20.464955+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:20.464978+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:20.464991+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:20.465002+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:20.465014+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:20.465529+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:20.465548+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:21.464791+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:21.464821+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:21.464862+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:21.464878+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:21.464912+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:21.464925+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:21.464948+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487658190
+2026-03-26T09:14:21.464961+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:14:21.464975+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:14:21.464990+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:21.465057+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:21.465092+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:21.465110+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:21.465127+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:21.465142+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:21.465615+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:21.465632+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:22.464800+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:22.464828+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:22.464867+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:22.464883+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:22.464918+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:22.464933+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:22.464956+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487658190
+2026-03-26T09:14:22.464965+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:14:22.464974+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:14:22.464984+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:22.464995+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:22.465019+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:22.465034+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:22.465049+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:22.465064+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:22.465692+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:22.465714+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:23.464801+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:23.464827+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:23.464841+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:23.464883+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:23.464916+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:23.464928+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:23.464951+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487658190
+2026-03-26T09:14:23.464961+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:14:23.464971+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:14:23.464981+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:23.464991+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:23.465014+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:23.465027+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:23.465038+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:23.465054+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:23.465791+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:23.465813+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:24.464787+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:24.464820+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:24.464893+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:24.464930+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:24.464967+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:24.464981+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:24.465015+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487658190
+2026-03-26T09:14:24.465041+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:14:24.465059+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:14:24.465095+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:24.465109+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:24.465135+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:24.465149+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:24.465162+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:24.465173+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:24.465882+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:24.465902+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:25.464762+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:25.464788+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:25.464802+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:25.464814+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:25.464845+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:25.464859+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:25.464882+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487658190
+2026-03-26T09:14:25.464891+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:14:25.464901+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:14:25.464928+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:25.464939+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:25.464962+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:25.464975+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:25.464988+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:25.465001+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:25.465962+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:25.465983+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:25.518702+08:00 INFO default_logger - gaussdb keepalive tick: sending status update
+2026-03-26T09:14:26.464785+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:26.464812+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:26.464826+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:26.464842+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:26.464874+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:26.464885+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:26.464905+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487658190
+2026-03-26T09:14:26.464936+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:14:26.464946+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:14:26.464957+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:26.464966+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:26.464989+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:26.465001+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:26.465014+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:26.465025+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:26.466050+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:26.466072+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:27.464757+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:27.464782+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:27.464796+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:27.464809+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:27.464843+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:27.464855+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:27.464875+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487658190
+2026-03-26T09:14:27.464884+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:14:27.464893+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:14:27.464901+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:27.464910+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:27.464941+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:27.464952+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:27.464965+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:27.464976+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:27.466131+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:27.466153+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:28.464768+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:28.464792+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:28.464806+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:28.464818+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:28.464851+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:28.464863+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:28.464899+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487658190
+2026-03-26T09:14:28.464913+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:14:28.464937+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:14:28.464949+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:28.464959+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:28.464981+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:28.464996+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:28.465008+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:28.465021+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:28.466215+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:28.466236+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:29.464764+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:29.464791+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:29.464805+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:29.464819+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:29.464851+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:29.464863+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:29.464883+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487658190
+2026-03-26T09:14:29.464893+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:14:29.464902+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:14:29.464911+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:29.464919+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:29.464950+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:29.464960+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:29.464970+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:29.464981+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:29.466292+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:29.466312+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:30.464777+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:30.464803+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:30.464817+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:30.464833+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:30.464866+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:30.464879+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:30.464898+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487658190
+2026-03-26T09:14:30.464911+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:14:30.464920+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:14:30.464940+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:30.464952+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:30.464972+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:30.464983+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:30.464995+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:30.465008+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:30.466372+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:30.466394+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:31.464789+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:31.464815+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:31.464829+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:31.464842+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:31.464874+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:31.464885+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:31.464905+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487658190
+2026-03-26T09:14:31.464916+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:14:31.464925+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:14:31.464968+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:31.464989+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:31.465014+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:31.465027+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:31.465039+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:31.465055+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:31.466463+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:31.466481+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:32.464785+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:32.464811+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:32.464825+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:32.464841+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:32.464874+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:32.464885+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:32.464906+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487658190
+2026-03-26T09:14:32.464916+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:14:32.464926+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:14:32.464961+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:32.464971+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:32.464991+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:32.465002+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:32.465013+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:32.465026+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:32.466549+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:32.466571+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:33.464778+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:33.464803+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:33.464818+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:33.464832+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:33.464866+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:33.464879+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:33.464899+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487658190
+2026-03-26T09:14:33.464908+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:14:33.464918+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:14:33.464927+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:33.464959+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:33.464979+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:33.464990+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:33.465001+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:33.465011+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:33.466635+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:33.466653+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:34.464762+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:34.464788+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:34.464802+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:34.464818+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:34.464851+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:34.464863+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:34.464883+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487658190
+2026-03-26T09:14:34.464893+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:14:34.464904+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:14:34.464915+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:34.464924+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:34.464943+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:34.464964+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:34.464978+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:34.464992+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:34.466720+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:34.466741+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:35.464761+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:35.464792+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:35.464816+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:35.464834+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:35.464866+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:35.464884+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:35.464905+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487658190
+2026-03-26T09:14:35.464916+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:14:35.464925+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:14:35.464935+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:35.464944+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:35.464978+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:35.464989+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:35.465+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:35.465011+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:35.466803+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:35.466825+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:35.518718+08:00 INFO default_logger - gaussdb keepalive tick: sending status update
+2026-03-26T09:14:36.464776+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:36.464800+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:36.464813+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:36.464827+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:36.464859+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:36.464871+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:36.464890+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487658190
+2026-03-26T09:14:36.464899+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:14:36.464910+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:14:36.464920+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:36.464928+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:36.464950+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:36.464978+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:36.464988+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:36.465002+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:36.466898+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:36.466920+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:37.356148+08:00 INFO default_logger - gaussdb replication connection drops (ssl=off), error: connection closed
+2026-03-26T09:14:37.356395+08:00 WARN sqlx_core::pool::connection - error occurred while testing the connection on-release: error communicating with database: unexpected end of file
+cdc failed (attempt 1/6), will retry: error communicating with database: unexpected end of file
+2026-03-26T09:14:37.356925+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:37.356956+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52345358","timestamp":"2026-03-26 01:14:18.190"}
+2026-03-26T09:14:37.375134+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-03-26T09:14:37.375185+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:37.375199+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:37.375212+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:37.375223+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:37.375253+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:37.375269+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:37.375289+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487658190
+2026-03-26T09:14:37.375299+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:14:37.375308+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:14:37.375317+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:37.375326+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:37.375347+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:37.375357+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:37.375367+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:37.375378+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:37.375647+08:00 ERROR default_logger - panic: panicked at dt-tests/tests/test_runner/base_test_runner.rs:97:77:
+called `Result::unwrap()` on an `Err` value: extractor.extract failed: extractor error: connection closed
+backtrace:
+disabled backtrace
+executing sql: DROP TABLE IF EXISTS public.gaussdb_cdc_basic
+executing sql: CREATE TABLE public.gaussdb_cdc_basic ( id INTEGER PRIMARY KEY, val TEXT )
+2026-03-26T09:14:40.592938+08:00 INFO sqlx::postgres::notice - CREATE TABLE / PRIMARY KEY will create implicit index "gaussdb_cdc_basic_pkey" for table "gaussdb_cdc_basic"
+executing sql: DROP TABLE IF EXISTS public.gaussdb_cdc_basic
+executing sql: CREATE TABLE public.gaussdb_cdc_basic ( id INTEGER PRIMARY KEY, val TEXT )
+2026-03-26T09:14:40.652813+08:00 INFO default_logger - start task: [taskID: c1980ef5fbe2c4fc, taskType: Some(Cdc)]
+2026-03-26T09:14:40.652902+08:00 WARN default_logger - recorder unsupported resumer config: Dummy
+2026-03-26T09:14:40.652936+08:00 WARN default_logger - recovery unsupported resumer config: Dummy
+2026-03-26T09:14:40.652965+08:00 INFO default_logger - recovery initialization for task_id: c1980ef5fbe2c4fc finished in 0 ms
+2026-03-26T09:14:41.122775+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-03-26T09:14:41.122818+08:00 ERROR default_logger - buffer_memory_mb=0 is too large and will be ignored to prevent overflow
+2026-03-26T09:14:41.122847+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-03-26T09:14:41.153899+08:00 INFO default_logger - GaussDBCdcExtractor starts, slot_name: ape_test_gaussdb, start_lsn: , keepalive_interval_secs: 10, heartbeat_interval_secs: 0, heartbeat_tb: heartbeat_db.ape_dts_heartbeat
+2026-03-26T09:14:41.154432+08:00 INFO default_logger - MergeParallelizer starts, parallel_size: 1, checkpoint_interval_secs: 1
+2026-03-26T09:14:41.581542+08:00 INFO default_logger - gaussdb sql connection starts (ssl=on)
+2026-03-26T09:14:41.738374+08:00 INFO default_logger - slot: ape_test_gaussdb exists: true
+2026-03-26T09:14:41.738404+08:00 INFO default_logger - slot confirmed_flush_lsn(confirmed_flush/restart_lsn): 0/52344698
+2026-03-26T09:14:41.738417+08:00 WARN default_logger - start_lsn is empty, will use confirmed_flush_lsn
+2026-03-26T09:14:41.738433+08:00 INFO default_logger - execute: SELECT pg_drop_replication_slot ('ape_test_gaussdb')
+2026-03-26T09:14:41.868267+08:00 INFO default_logger - execute: SELECT * FROM pg_create_logical_replication_slot('ape_test_gaussdb', 'mppdb_decoding')
+2026-03-26T09:14:41.956873+08:00 INFO default_logger - slot created, returned start_lsn: 0/52E6D548
+2026-03-26T09:14:42.154497+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-26T09:14:42.154520+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-26T09:14:42.154757+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-26T09:14:42.154771+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-26T09:14:42.154787+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-26T09:14:42.172014+08:00 INFO default_logger - execute: START_REPLICATION SLOT ape_test_gaussdb LOGICAL 0/52E6D548
+2026-03-26T09:14:42.172048+08:00 INFO default_logger - gaussdb replication connection starts (ssl=off)
+2026-03-26T09:14:42.220916+08:00 INFO default_logger - try starting heartbeat, heartbeat_interval_secs: 0, heartbeat_tb: heartbeat_db.ape_dts_heartbeat, 
+2026-03-26T09:14:42.220929+08:00 INFO default_logger - heartbeat disabled, heartbeat_tb: heartbeat_db.ape_dts_heartbeat, heartbeat_interval_secs: 0
+executing sql: INSERT INTO public.gaussdb_cdc_basic (id, val) VALUES (1, 'a'), (2, 'b')
+2026-03-26T09:14:43.110255+08:00 INFO default_logger - gaussdb keepalive reply requested: server_lsn=0/52E6D6B0
+2026-03-26T09:14:43.154593+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E6D9A0","timestamp":"2026-03-26 01:14:43.021"}
+2026-03-26T09:14:43.154619+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E6D9A0","timestamp":"2026-03-26 01:14:43.021"}
+2026-03-26T09:14:43.154747+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10
+2026-03-26T09:14:43.154767+08:00 INFO monitor_logger - extractor |  | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-03-26T09:14:43.154780+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-03-26T09:14:43.154793+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10
+2026-03-26T09:14:43.154825+08:00 INFO monitor_logger - pipeline |  | record_size | avg=5
+2026-03-26T09:14:43.154839+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=3 | avg=1 | max=2
+2026-03-26T09:14:43.154860+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:14:43.154871+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:43.154883+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487683021
+2026-03-26T09:14:43.154894+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:14:43.154903+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:43.154972+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=2 | avg=2 | max=2
+2026-03-26T09:14:43.154992+08:00 INFO monitor_logger - sinker |  | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-03-26T09:14:43.155005+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:43.155020+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10
+2026-03-26T09:14:44.154712+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E6D9A0","timestamp":"2026-03-26 01:14:43.021"}
+2026-03-26T09:14:44.154745+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E6D9A0","timestamp":"2026-03-26 01:14:43.021"}
+2026-03-26T09:14:44.154839+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:44.154854+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:44.154866+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:44.154877+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:44.154908+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:44.154920+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:44.154940+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:14:44.154950+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:44.154959+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487683021
+2026-03-26T09:14:44.154970+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:14:44.154986+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:44.155007+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:44.155018+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:44.155029+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:44.155039+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:45.154769+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:45.154807+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:45.154822+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:45.154834+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:45.154873+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:45.154885+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:45.154910+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:14:45.154925+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:45.154936+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487683021
+2026-03-26T09:14:45.154945+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:14:45.154958+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:45.154978+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:45.154992+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:45.155006+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:45.155017+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:45.155179+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E6D9A0","timestamp":"2026-03-26 01:14:43.021"}
+2026-03-26T09:14:45.155194+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E6D9A0","timestamp":"2026-03-26 01:14:43.021"}
+2026-03-26T09:14:46.154791+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:46.154833+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:46.154847+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:46.154859+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:46.154896+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:46.154910+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:46.154930+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:14:46.154946+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:46.154954+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487683021
+2026-03-26T09:14:46.154963+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:14:46.154974+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:46.154994+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:46.155005+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:46.155016+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:46.155027+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:46.155267+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E6D9A0","timestamp":"2026-03-26 01:14:43.021"}
+2026-03-26T09:14:46.155290+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E6D9A0","timestamp":"2026-03-26 01:14:43.021"}
+2026-03-26T09:14:47.154780+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:47.154805+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:47.154831+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:47.154846+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:47.154877+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:47.154889+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:47.154917+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:14:47.154929+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:47.154941+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487683021
+2026-03-26T09:14:47.154954+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:14:47.154965+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:47.154984+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:47.154996+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:47.155009+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:47.155023+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:47.155348+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E6D9A0","timestamp":"2026-03-26 01:14:43.021"}
+2026-03-26T09:14:47.155368+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E6D9A0","timestamp":"2026-03-26 01:14:43.021"}
+2026-03-26T09:14:48.154794+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:48.154821+08:00 INFO monitor_logger - extractor |  | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-03-26T09:14:48.154856+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-03-26T09:14:48.154872+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:48.154904+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:48.154918+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=4 | avg=1 | max=1
+2026-03-26T09:14:48.154937+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:14:48.154949+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:48.154961+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487683021
+2026-03-26T09:14:48.154970+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:14:48.154978+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:48.154998+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:48.155009+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:48.155019+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:48.155029+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:48.155433+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E7CBB8","timestamp":"2026-03-26 01:14:48.002"}
+2026-03-26T09:14:48.155448+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E7CBB8","timestamp":"2026-03-26 01:14:48.002"}
+2026-03-26T09:14:49.154781+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:49.154808+08:00 INFO monitor_logger - extractor |  | record_count | sum=4 | avg_by_sec=4 | max_by_sec=4
+2026-03-26T09:14:49.154822+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=4 | avg_by_sec=4 | max_by_sec=4
+2026-03-26T09:14:49.154851+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:49.154883+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:49.154895+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=1 | avg=1 | max=1
+2026-03-26T09:14:49.154915+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:14:49.154927+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:49.154936+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487688002
+2026-03-26T09:14:49.154945+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:14:49.154958+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:49.154978+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:49.154989+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:49.154999+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:49.155009+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:49.155503+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E81870","timestamp":"2026-03-26 01:14:48.812"}
+2026-03-26T09:14:49.155523+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E81870","timestamp":"2026-03-26 01:14:48.812"}
+2026-03-26T09:14:50.154767+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:50.154792+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:50.154806+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:50.154819+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:50.154851+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:50.154871+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:50.154891+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:14:50.154901+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:50.154911+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487688812
+2026-03-26T09:14:50.154921+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:14:50.154929+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:50.154950+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:50.154961+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:50.154971+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:50.154981+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:50.155578+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E81870","timestamp":"2026-03-26 01:14:48.812"}
+2026-03-26T09:14:50.155600+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E81870","timestamp":"2026-03-26 01:14:48.812"}
+2026-03-26T09:14:51.154771+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:51.154798+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:51.154812+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:51.154825+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:51.154856+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:51.154878+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:51.154897+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:14:51.154907+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:51.154918+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487688812
+2026-03-26T09:14:51.154928+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:14:51.154938+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:51.154978+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:51.154993+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:51.155005+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:51.155018+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:51.155666+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E81870","timestamp":"2026-03-26 01:14:48.812"}
+2026-03-26T09:14:51.155685+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E81870","timestamp":"2026-03-26 01:14:48.812"}
+2026-03-26T09:14:52.154772+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:52.154802+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:52.154817+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:52.154830+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:52.154863+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:52.154885+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:52.154905+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:14:52.154916+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:52.154926+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487688812
+2026-03-26T09:14:52.154935+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:14:52.154943+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:52.154963+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:52.154973+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:52.154982+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:52.154993+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:52.155747+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E81870","timestamp":"2026-03-26 01:14:48.812"}
+2026-03-26T09:14:52.155766+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E81870","timestamp":"2026-03-26 01:14:48.812"}
+2026-03-26T09:14:52.221751+08:00 INFO default_logger - gaussdb keepalive tick: sending status update
+2026-03-26T09:14:53.154759+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:53.154787+08:00 INFO monitor_logger - extractor |  | record_count | sum=1 | avg_by_sec=1 | max_by_sec=1
+2026-03-26T09:14:53.154803+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=1 | avg_by_sec=1 | max_by_sec=1
+2026-03-26T09:14:53.154822+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:53.154856+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:53.154875+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=1 | avg=1 | max=1
+2026-03-26T09:14:53.154924+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:14:53.154939+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:53.154950+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487688812
+2026-03-26T09:14:53.154960+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:14:53.155021+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:53.155051+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:53.155069+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:53.155082+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:53.155099+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:53.155818+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E868F0","timestamp":"2026-03-26 01:14:52.970"}
+2026-03-26T09:14:53.155836+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E868F0","timestamp":"2026-03-26 01:14:52.970"}
+2026-03-26T09:14:54.154807+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:54.154836+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:54.154850+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:54.154864+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:54.154897+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:54.154933+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:54.154955+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:14:54.154965+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:54.154977+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487692970
+2026-03-26T09:14:54.154986+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:14:54.154995+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:54.155017+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:54.155029+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:54.155042+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:54.155053+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:54.155897+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E868F0","timestamp":"2026-03-26 01:14:52.970"}
+2026-03-26T09:14:54.155918+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E868F0","timestamp":"2026-03-26 01:14:52.970"}
+2026-03-26T09:14:54.456592+08:00 WARN sqlx::postgres::notice - Fast path bit num leak.
+comparing row data for src_tb: ("public", "gaussdb_cdc_basic"), dst_tb: ("public", "gaussdb_cdc_basic"), src_data count: 2, dst_data count: 2
+row index: 0, col: id, src_col_value: Long(1), dst_col_value: Long(1)
+row index: 0, col: val, src_col_value: String("a"), dst_col_value: String("a")
+row index: 1, col: val, src_col_value: String("b"), dst_col_value: String("b")
+row index: 1, col: id, src_col_value: Long(2), dst_col_value: Long(2)
+executing sql: UPDATE public.gaussdb_cdc_basic SET val = 'c' WHERE id = 2
+2026-03-26T09:14:55.154786+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=9 | avg_by_sec=9 | max_by_sec=9
+2026-03-26T09:14:55.154812+08:00 INFO monitor_logger - extractor |  | record_count | sum=1 | avg_by_sec=1 | max_by_sec=1
+2026-03-26T09:14:55.154826+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=1 | avg_by_sec=1 | max_by_sec=1
+2026-03-26T09:14:55.154838+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=9 | avg_by_sec=9 | max_by_sec=9
+2026-03-26T09:14:55.154870+08:00 INFO monitor_logger - pipeline |  | record_size | avg=4
+2026-03-26T09:14:55.154882+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=2 | avg=2 | max=2
+2026-03-26T09:14:55.154902+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:14:55.154922+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:55.154932+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487692970
+2026-03-26T09:14:55.154941+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:14:55.154949+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:55.154972+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=2 | avg=1 | max=1
+2026-03-26T09:14:55.154985+08:00 INFO monitor_logger - sinker |  | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-03-26T09:14:55.154997+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=4 | avg=2 | max=3
+2026-03-26T09:14:55.155007+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=9 | avg_by_sec=9 | max_by_sec=9
+2026-03-26T09:14:55.155968+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:14:55.155983+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:14:56.154776+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:56.154802+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:56.154816+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:56.154831+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:56.154861+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:56.154875+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:56.154900+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:14:56.154910+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:56.154929+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487694688
+2026-03-26T09:14:56.154938+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:14:56.154947+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:56.154968+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:56.154981+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:56.154991+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:56.155001+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:56.156037+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:14:56.156053+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:14:57.154813+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:57.154840+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:57.154853+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:57.154867+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:57.154905+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:57.154918+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:57.154964+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:14:57.154974+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:57.154987+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487694688
+2026-03-26T09:14:57.155+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:14:57.155013+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:57.155035+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:57.155046+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:57.155057+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:57.155068+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:57.156127+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:14:57.156148+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:14:58.154778+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:58.154804+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:58.154818+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:58.154831+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:58.154896+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:58.154916+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:58.154939+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:14:58.154961+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:58.154973+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487694688
+2026-03-26T09:14:58.154983+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:14:58.154992+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:58.155039+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:58.155057+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:58.155070+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:58.155082+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:58.156211+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:14:58.156230+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:14:59.154772+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:59.154803+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:59.154818+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:59.154831+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:59.154862+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:14:59.154873+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:14:59.154893+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:14:59.154905+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:14:59.154914+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487694688
+2026-03-26T09:14:59.154924+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:14:59.154933+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:14:59.154953+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:59.154976+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:59.154987+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:14:59.154998+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:14:59.156291+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:14:59.156311+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:00.154784+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:00.154811+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:00.154826+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:00.154839+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:00.154870+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:15:00.154883+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:15:00.154903+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:15:00.154914+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:15:00.154925+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487694688
+2026-03-26T09:15:00.154935+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:15:00.154944+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:15:00.154963+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:00.154985+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:00.154996+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:00.155008+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:00.156373+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:00.156395+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+test gaussdb_to_pg::cdc_tests::test::cdc_basic_test has been running for over 60 seconds
+2026-03-26T09:15:01.154761+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:01.154785+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:01.154799+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:01.154815+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:01.154847+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:15:01.154859+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:15:01.154879+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:15:01.154889+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:15:01.154898+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487694688
+2026-03-26T09:15:01.154909+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:15:01.154919+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:15:01.154939+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:01.154950+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:01.154960+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:01.154970+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:01.156465+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:01.156485+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:02.154769+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:02.154794+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:02.154807+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:02.154821+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:02.154852+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:15:02.154865+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:15:02.154885+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:15:02.154895+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:15:02.154904+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487694688
+2026-03-26T09:15:02.154916+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:15:02.154943+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:15:02.154972+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:02.154997+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:02.155010+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:02.155021+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:02.156550+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:02.156571+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:02.221716+08:00 INFO default_logger - gaussdb keepalive tick: sending status update
+2026-03-26T09:15:03.154754+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:03.154777+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:03.154791+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:03.154805+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:03.154835+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:15:03.154847+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:15:03.154872+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:15:03.154885+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:15:03.154894+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487694688
+2026-03-26T09:15:03.154903+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:15:03.154917+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:15:03.154937+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:03.154948+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:03.154959+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:03.154971+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:03.156628+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:03.156655+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:04.154773+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:04.154803+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:04.154817+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:04.154831+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:04.154863+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:15:04.154876+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:15:04.154896+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:15:04.154911+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:15:04.154920+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487694688
+2026-03-26T09:15:04.154932+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:15:04.154941+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:15:04.154982+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:04.155002+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:04.155020+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:04.155034+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:04.156717+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:04.156755+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:05.154797+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:05.154824+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:05.154838+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:05.154852+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:05.154890+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:15:05.154907+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:15:05.154930+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:15:05.154947+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:15:05.154956+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487694688
+2026-03-26T09:15:05.154966+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:15:05.154978+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:15:05.155+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:05.155023+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:05.155036+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:05.155048+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:05.156818+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:05.156845+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:06.154792+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:06.154816+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:06.154830+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:06.154843+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:06.154874+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:15:06.154885+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:15:06.154905+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:15:06.154914+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:15:06.154923+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487694688
+2026-03-26T09:15:06.154937+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:15:06.154946+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:15:06.154965+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:06.154975+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:06.154984+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:06.154994+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:06.156901+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:06.156938+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:07.154800+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:07.154828+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:07.154843+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:07.154857+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:07.154889+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:15:07.154903+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:15:07.154927+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:15:07.154941+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:15:07.154953+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487694688
+2026-03-26T09:15:07.154962+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:15:07.154971+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:15:07.154994+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:07.155010+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:07.155023+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:07.155044+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:07.157006+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:07.157052+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:08.154780+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:08.154807+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:08.154820+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:08.154833+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:08.154865+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:15:08.154879+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:15:08.154898+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:15:08.154907+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:15:08.154917+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487694688
+2026-03-26T09:15:08.154933+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:15:08.154943+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:15:08.154963+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:08.154975+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:08.154987+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:08.154997+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:08.157121+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:08.157155+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:09.154777+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:09.154807+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:09.154822+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:09.154834+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:09.154865+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:15:09.154877+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:15:09.154898+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:15:09.154911+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:15:09.154961+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487694688
+2026-03-26T09:15:09.155012+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:15:09.155036+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:15:09.155080+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:09.155102+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:09.155124+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:09.155136+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:09.157216+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:09.157241+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:10.154791+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:10.154818+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:10.154834+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:10.154850+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:10.154882+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:15:10.154894+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:15:10.154914+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:15:10.154926+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:15:10.154936+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487694688
+2026-03-26T09:15:10.154947+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:15:10.154958+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:15:10.154977+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:10.154988+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:10.154997+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:10.155007+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:10.157308+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:10.157335+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:11.154767+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:11.154793+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:11.154806+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:11.154820+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:11.154851+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:15:11.154864+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:15:11.154884+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:15:11.154896+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:15:11.154905+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487694688
+2026-03-26T09:15:11.154914+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:15:11.154923+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:15:11.154946+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:11.154957+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:11.154969+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:11.154981+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:11.157400+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:11.157429+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:12.154776+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:12.154801+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:12.154814+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:12.154827+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:12.154858+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:15:12.154870+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:15:12.154889+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:15:12.154911+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:15:12.154922+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487694688
+2026-03-26T09:15:12.154932+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:15:12.154941+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:15:12.154963+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:12.154976+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:12.154988+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:12.155006+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:12.157490+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:12.157514+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:12.221803+08:00 INFO default_logger - gaussdb keepalive tick: sending status update
+2026-03-26T09:15:13.154773+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:13.154798+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:13.154813+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:13.154825+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:13.154855+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:15:13.154868+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:15:13.154892+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:15:13.154902+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:15:13.154911+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487694688
+2026-03-26T09:15:13.154920+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:15:13.154928+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:15:13.154967+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:13.154986+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:13.155+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:13.155012+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:13.157575+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:13.157609+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:14.154762+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:14.154784+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:14.154796+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:14.154809+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:14.154838+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:15:14.154850+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:15:14.154870+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:15:14.154880+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:15:14.154893+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487694688
+2026-03-26T09:15:14.154903+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:15:14.154912+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:15:14.154932+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:14.154942+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:14.154952+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:14.154964+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:14.157667+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:14.157695+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:14.620529+08:00 INFO default_logger - gaussdb replication connection drops (ssl=off), error: connection closed
+2026-03-26T09:15:14.620723+08:00 WARN sqlx_core::pool::connection - error occurred while testing the connection on-release: error communicating with database: unexpected end of file
+cdc failed (attempt 2/6), will retry: error communicating with database: unexpected end of file
+2026-03-26T09:15:14.620995+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:14.621012+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/52E86AA0","timestamp":"2026-03-26 01:14:54.688"}
+2026-03-26T09:15:14.660185+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-03-26T09:15:14.660234+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:14.660249+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:14.660262+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:14.660275+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:14.660304+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:15:14.660317+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:15:14.660337+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:15:14.660347+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:15:14.660356+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487694688
+2026-03-26T09:15:14.660366+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:15:14.660375+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:15:14.660398+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:14.660409+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:14.660420+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:14.660430+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:14.660571+08:00 ERROR default_logger - panic: panicked at dt-tests/tests/test_runner/base_test_runner.rs:97:77:
+called `Result::unwrap()` on an `Err` value: extractor.extract failed: extractor error: connection closed
+backtrace:
+disabled backtrace
+skip gaussdb candidate (connect failed): postgres://10.250.0.51:8000/postgres?sslmode=require, error: error communicating with database: Connection reset by peer (os error 54)
+executing sql: DROP TABLE IF EXISTS public.gaussdb_cdc_basic
+executing sql: CREATE TABLE public.gaussdb_cdc_basic ( id INTEGER PRIMARY KEY, val TEXT )
+2026-03-26T09:15:18.978364+08:00 INFO sqlx::postgres::notice - CREATE TABLE / PRIMARY KEY will create implicit index "gaussdb_cdc_basic_pkey" for table "gaussdb_cdc_basic"
+executing sql: DROP TABLE IF EXISTS public.gaussdb_cdc_basic
+executing sql: CREATE TABLE public.gaussdb_cdc_basic ( id INTEGER PRIMARY KEY, val TEXT )
+2026-03-26T09:15:19.122122+08:00 INFO default_logger - start task: [taskID: 47c551b14b7d2510, taskType: Some(Cdc)]
+2026-03-26T09:15:19.122175+08:00 WARN default_logger - recorder unsupported resumer config: Dummy
+2026-03-26T09:15:19.122204+08:00 WARN default_logger - recovery unsupported resumer config: Dummy
+2026-03-26T09:15:19.122230+08:00 INFO default_logger - recovery initialization for task_id: 47c551b14b7d2510 finished in 0 ms
+2026-03-26T09:15:19.628950+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-03-26T09:15:19.628997+08:00 ERROR default_logger - buffer_memory_mb=0 is too large and will be ignored to prevent overflow
+2026-03-26T09:15:19.629031+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-03-26T09:15:19.656062+08:00 INFO default_logger - GaussDBCdcExtractor starts, slot_name: ape_test_gaussdb, start_lsn: , keepalive_interval_secs: 10, heartbeat_interval_secs: 0, heartbeat_tb: heartbeat_db.ape_dts_heartbeat
+2026-03-26T09:15:19.656590+08:00 INFO default_logger - MergeParallelizer starts, parallel_size: 1, checkpoint_interval_secs: 1
+2026-03-26T09:15:19.974208+08:00 INFO default_logger - gaussdb sql connection starts (ssl=on)
+2026-03-26T09:15:20.195541+08:00 INFO default_logger - slot: ape_test_gaussdb exists: true
+2026-03-26T09:15:20.195567+08:00 INFO default_logger - slot confirmed_flush_lsn(confirmed_flush/restart_lsn): 0/52E86AA0
+2026-03-26T09:15:20.195580+08:00 WARN default_logger - start_lsn is empty, will use confirmed_flush_lsn
+2026-03-26T09:15:20.195590+08:00 INFO default_logger - execute: SELECT pg_drop_replication_slot ('ape_test_gaussdb')
+2026-03-26T09:15:20.337865+08:00 INFO default_logger - execute: SELECT * FROM pg_create_logical_replication_slot('ape_test_gaussdb', 'mppdb_decoding')
+2026-03-26T09:15:20.419217+08:00 INFO default_logger - slot created, returned start_lsn: 0/539A8378
+2026-03-26T09:15:20.574509+08:00 INFO default_logger - execute: START_REPLICATION SLOT ape_test_gaussdb LOGICAL 0/539A8378
+2026-03-26T09:15:20.574538+08:00 INFO default_logger - gaussdb replication connection starts (ssl=off)
+2026-03-26T09:15:20.656631+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-26T09:15:20.656646+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-26T09:15:20.656770+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-26T09:15:20.656783+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-26T09:15:20.656797+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-26T09:15:20.709202+08:00 INFO default_logger - try starting heartbeat, heartbeat_interval_secs: 0, heartbeat_tb: heartbeat_db.ape_dts_heartbeat, 
+2026-03-26T09:15:20.709214+08:00 INFO default_logger - heartbeat disabled, heartbeat_tb: heartbeat_db.ape_dts_heartbeat, heartbeat_interval_secs: 0
+2026-03-26T09:15:20.861368+08:00 INFO default_logger - gaussdb keepalive reply requested: server_lsn=0/539A8608
+executing sql: INSERT INTO public.gaussdb_cdc_basic (id, val) VALUES (1, 'a'), (2, 'b')
+2026-03-26T09:15:21.656755+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/539A8940","timestamp":"2026-03-26 01:15:21.484"}
+2026-03-26T09:15:21.656819+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/539A8940","timestamp":"2026-03-26 01:15:21.484"}
+2026-03-26T09:15:21.656929+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10
+2026-03-26T09:15:21.656950+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-03-26T09:15:21.656965+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10
+2026-03-26T09:15:21.656979+08:00 INFO monitor_logger - extractor |  | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-03-26T09:15:21.657016+08:00 INFO monitor_logger - pipeline |  | record_size | avg=3
+2026-03-26T09:15:21.657029+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=3 | avg=3 | max=3
+2026-03-26T09:15:21.657051+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:15:21.657063+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487721484
+2026-03-26T09:15:21.657075+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:15:21.657088+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:15:21.657100+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:15:21.657119+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=1 | avg=1 | max=1
+2026-03-26T09:15:21.657130+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10
+2026-03-26T09:15:21.657141+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=2 | avg=2 | max=2
+2026-03-26T09:15:21.657150+08:00 INFO monitor_logger - sinker |  | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-03-26T09:15:22.656805+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:22.656852+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:22.656866+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:22.656879+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:22.656910+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:15:22.656923+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:15:22.656943+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:15:22.656953+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487721484
+2026-03-26T09:15:22.656963+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:15:22.656972+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:15:22.656980+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:15:22.657002+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:22.657013+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:22.657023+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:22.657035+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:22.657207+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/539A8940","timestamp":"2026-03-26 01:15:21.484"}
+2026-03-26T09:15:22.657223+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/539A8940","timestamp":"2026-03-26 01:15:21.484"}
+2026-03-26T09:15:23.656804+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:23.656832+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:23.656866+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:23.656878+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:23.656914+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:15:23.656926+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:15:23.656947+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:15:23.656956+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487721484
+2026-03-26T09:15:23.656965+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:15:23.656974+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:15:23.656983+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:15:23.657003+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:23.657015+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:23.657027+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:23.657037+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:23.657285+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/539A8940","timestamp":"2026-03-26 01:15:21.484"}
+2026-03-26T09:15:23.657307+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/539A8940","timestamp":"2026-03-26 01:15:21.484"}
+2026-03-26T09:15:24.656823+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:24.656850+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:24.656893+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:24.656907+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:24.656939+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:15:24.656953+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:15:24.656977+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:15:24.656989+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487721484
+2026-03-26T09:15:24.657001+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:15:24.657012+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:15:24.657022+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:15:24.657041+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:24.657055+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:24.657065+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:24.657075+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:24.657388+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/539A8940","timestamp":"2026-03-26 01:15:21.484"}
+2026-03-26T09:15:24.657421+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/539A8940","timestamp":"2026-03-26 01:15:21.484"}
+2026-03-26T09:15:25.656825+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:25.656852+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:25.656893+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:25.656909+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:25.656941+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:15:25.656956+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:15:25.656979+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:15:25.656989+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487721484
+2026-03-26T09:15:25.657001+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:15:25.657010+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:15:25.657019+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:15:25.657038+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:25.657049+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:25.657061+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:25.657071+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:25.657483+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/539A8940","timestamp":"2026-03-26 01:15:21.484"}
+2026-03-26T09:15:25.657518+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/539A8940","timestamp":"2026-03-26 01:15:21.484"}
+2026-03-26T09:15:26.656774+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:26.656795+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:26.656808+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:26.656819+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:26.656851+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:15:26.656863+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:15:26.656892+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:15:26.656921+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487721484
+2026-03-26T09:15:26.656936+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:15:26.656948+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:15:26.656958+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:15:26.656980+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:26.656993+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:26.657007+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:26.657019+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:26.657577+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/539A8940","timestamp":"2026-03-26 01:15:21.484"}
+2026-03-26T09:15:26.657595+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/539A8940","timestamp":"2026-03-26 01:15:21.484"}
+2026-03-26T09:15:27.656792+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:27.656819+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:27.656833+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:27.656848+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:27.656880+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:15:27.656916+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:15:27.656938+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:15:27.656947+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487721484
+2026-03-26T09:15:27.656964+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:15:27.656974+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:15:27.656982+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:15:27.657005+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:27.657014+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:27.657028+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:27.657044+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:27.657654+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/539A8940","timestamp":"2026-03-26 01:15:21.484"}
+2026-03-26T09:15:27.657669+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/539A8940","timestamp":"2026-03-26 01:15:21.484"}
+2026-03-26T09:15:28.656814+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:28.656841+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:28.656855+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:28.656868+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:28.656904+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:15:28.656941+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:15:28.657009+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:15:28.657026+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487721484
+2026-03-26T09:15:28.657038+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:15:28.657049+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:15:28.657059+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:15:28.657084+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:28.657097+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:28.657108+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:28.657120+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:28.657725+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/539A8940","timestamp":"2026-03-26 01:15:21.484"}
+2026-03-26T09:15:28.657741+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/539A8940","timestamp":"2026-03-26 01:15:21.484"}
+2026-03-26T09:15:29.656783+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:29.656807+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:29.656820+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:29.656833+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:29.656864+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:15:29.656877+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:15:29.656896+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:15:29.656906+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487721484
+2026-03-26T09:15:29.656935+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:15:29.656944+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:15:29.656953+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:15:29.656973+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:29.656984+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:29.656994+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:29.657005+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:29.657797+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/539A8940","timestamp":"2026-03-26 01:15:21.484"}
+2026-03-26T09:15:29.657812+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/539A8940","timestamp":"2026-03-26 01:15:21.484"}
+2026-03-26T09:15:30.656786+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:30.656811+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:30.656825+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:30.656839+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:30.656875+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:15:30.656887+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:15:30.656909+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:15:30.656938+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487721484
+2026-03-26T09:15:30.656947+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:15:30.656956+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:15:30.656965+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:15:30.656984+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:30.656995+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:30.657005+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:30.657015+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:30.657881+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/539A8940","timestamp":"2026-03-26 01:15:21.484"}
+2026-03-26T09:15:30.657903+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/539A8940","timestamp":"2026-03-26 01:15:21.484"}
+2026-03-26T09:15:30.709732+08:00 INFO default_logger - gaussdb keepalive tick: sending status update
+2026-03-26T09:15:31.656780+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:31.656804+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:31.656818+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:31.656830+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:31.656862+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:15:31.656874+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:15:31.656895+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:15:31.656906+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487721484
+2026-03-26T09:15:31.656916+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:15:31.656950+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:15:31.656959+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:15:31.656979+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:31.656989+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:31.656999+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:31.657009+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:31.657960+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/539A8940","timestamp":"2026-03-26 01:15:21.484"}
+2026-03-26T09:15:31.657976+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/539A8940","timestamp":"2026-03-26 01:15:21.484"}
+2026-03-26T09:15:32.656785+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:32.656812+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:32.656826+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:32.656838+08:00 INFO monitor_logger - extractor |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:32.656871+08:00 INFO monitor_logger - pipeline |  | record_size | avg=0
+2026-03-26T09:15:32.656885+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-03-26T09:15:32.656906+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:15:32.656919+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487721484
+2026-03-26T09:15:32.656956+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:15:32.656967+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=2
+2026-03-26T09:15:32.656977+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=10
+2026-03-26T09:15:32.657001+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:32.657014+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:32.657024+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-03-26T09:15:32.657034+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-26T09:15:32.658042+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/539A8940","timestamp":"2026-03-26 01:15:21.484"}
+2026-03-26T09:15:32.658065+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/539A8940","timestamp":"2026-03-26 01:15:21.484"}
+2026-03-26T09:15:32.920074+08:00 WARN sqlx::postgres::notice - Fast path bit num leak.
+comparing row data for src_tb: ("public", "gaussdb_cdc_basic"), dst_tb: ("public", "gaussdb_cdc_basic"), src_data count: 2, dst_data count: 2
+row index: 0, col: val, src_col_value: String("a"), dst_col_value: String("a")
+row index: 0, col: id, src_col_value: Long(1), dst_col_value: Long(1)
+row index: 1, col: val, src_col_value: String("b"), dst_col_value: String("b")
+row index: 1, col: id, src_col_value: Long(2), dst_col_value: Long(2)
+executing sql: UPDATE public.gaussdb_cdc_basic SET val = 'c' WHERE id = 2
+2026-03-26T09:15:33.656796+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=9 | avg_by_sec=9 | max_by_sec=9
+2026-03-26T09:15:33.656823+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-03-26T09:15:33.656837+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=9 | avg_by_sec=9 | max_by_sec=9
+2026-03-26T09:15:33.656851+08:00 INFO monitor_logger - extractor |  | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-03-26T09:15:33.656883+08:00 INFO monitor_logger - pipeline |  | record_size | avg=4
+2026-03-26T09:15:33.656895+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=2 | avg=2 | max=2
+2026-03-26T09:15:33.656915+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:15:33.656926+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=1774487721484
+2026-03-26T09:15:33.656959+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:15:33.656968+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=4
+2026-03-26T09:15:33.656977+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=19
+2026-03-26T09:15:33.656996+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=3 | avg=1 | max=2
+2026-03-26T09:15:33.657007+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=9 | avg_by_sec=9 | max_by_sec=9
+2026-03-26T09:15:33.657017+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=2 | avg=1 | max=1
+2026-03-26T09:15:33.657027+08:00 INFO monitor_logger - sinker |  | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-03-26T09:15:33.658125+08:00 INFO position_logger - current_position | {"type":"PgCdc","lsn":"0/539A8E50","timestamp":"2026-03-26 01:15:33.087"}
+2026-03-26T09:15:33.658146+08:00 INFO position_logger - checkpoint_position | {"type":"PgCdc","lsn":"0/539A8E50","timestamp":"2026-03-26 01:15:33.087"}

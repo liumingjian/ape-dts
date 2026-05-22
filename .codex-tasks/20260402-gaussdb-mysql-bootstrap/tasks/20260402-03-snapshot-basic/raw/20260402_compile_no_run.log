@@ -1,0 +1,26 @@
+   Compiling dt-connector v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-connector)
+   Compiling dt-parallelizer v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-parallelizer)
+   Compiling dt-pipeline v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-pipeline)
+   Compiling dt-task v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-task)
+   Compiling dt-precheck v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-precheck)
+   Compiling dt-tests v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-tests)
+warning: associated function `fetch_data_pg` is never used
+   --> dt-tests/tests/test_runner/rdb_util.rs:100:18
+    |
+26  | impl RdbUtil {
+    | ------------ associated function in this implementation
+...
+100 |     pub async fn fetch_data_pg(
+    |                  ^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: `dt-tests` (test "integration_test") generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 10.22s
+warning: the following packages contain code that will be rejected by a future version of Rust: snap v0.2.5
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 2`
+  Executable unittests src/lib.rs (target/debug/deps/dt_common-4bf9ea565ac4284e)
+  Executable unittests src/lib.rs (target/debug/deps/dt_task-d3a7d1e0cdd45c41)
+  Executable unittests src/lib.rs (target/debug/deps/dt_tests-2f6a7abe961fac27)
+  Executable tests/integration_test.rs (target/debug/deps/integration_test-9425336f006a26de)
+  Executable tests/test_config_util.rs (target/debug/deps/test_config_util-9a1dc6aae11aea04)

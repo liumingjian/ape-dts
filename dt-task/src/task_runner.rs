@@ -17,7 +17,6 @@ use tokio::{
     sync::{Mutex, RwLock},
     task::JoinSet,
     time::Duration,
-    try_join,
 };
 
 use super::{
@@ -106,6 +105,52 @@ const CHECK_LOG_FILE_SIZE_PLACEHOLDER: &str = "CHECK_LOG_FILE_SIZE_PLACEHOLDER";
 const DEFAULT_CHECK_LOG_DIR_PLACEHOLDER: &str = "LOG_DIR_PLACEHOLDER/check";
 const DEFAULT_STATISTIC_LOG_DIR_PLACEHOLDER: &str = "LOG_DIR_PLACEHOLDER/statistic";
 
+/// Tokio task cancellation only aborts the current future. JoinHandles spawned inside (extractor,
+/// pipeline, monitors, etc.) will keep running unless we explicitly stop them.
+///
+/// This guard ensures that dropping/aborting a `TaskRunner::start_task()` future triggers a best-
+/// effort shutdown of the internal tasks to avoid leaking long-running CDC jobs (replication slot
+/// stays active) across retries in integration tests.
+struct AbortGuard {
+    shut_down: Arc<AtomicBool>,
+    abort_handles: Vec<tokio::task::AbortHandle>,
+    armed: bool,
+}
+
+impl AbortGuard {
+    fn new(shut_down: Arc<AtomicBool>, abort_handles: Vec<tokio::task::AbortHandle>) -> Self {
+        Self {
+            shut_down,
+            abort_handles,
+            armed: true,
+        }
+    }
+
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for AbortGuard {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+
+        // Allow cooperative exit first, then force-abort if the inner tasks are stuck.
+        let first = !self.shut_down.swap(true, Ordering::Release);
+        if first {
+            log_warn!(
+                "shutdown triggered by AbortGuard drop (start_task future cancelled/dropped). Aborting {} inner tasks.",
+                self.abort_handles.len()
+            );
+        }
+        for h in &self.abort_handles {
+            h.abort();
+        }
+    }
+}
+
 impl TaskRunner {
     pub fn new(task_config_file: &str) -> anyhow::Result<Self> {
         let config = TaskConfig::new(task_config_file)
@@ -190,7 +235,8 @@ impl TaskRunner {
 
         let partition_cols = match &self.config.extractor {
             ExtractorConfig::MysqlSnapshot { partition_cols, .. }
-            | ExtractorConfig::PgSnapshot { partition_cols, .. } => Some(Arc::new(
+            | ExtractorConfig::PgSnapshot { partition_cols, .. }
+            | ExtractorConfig::OracleSnapshot { partition_cols, .. } => Some(Arc::new(
                 ExtractorUtil::parse_partition_cols(partition_cols)?,
             )),
             _ => None,
@@ -217,7 +263,9 @@ impl TaskRunner {
             .await;
 
         match &self.config.extractor {
-            ExtractorConfig::MysqlStruct { .. } | ExtractorConfig::PgStruct { .. } => {
+            ExtractorConfig::MysqlStruct { .. }
+            | ExtractorConfig::PgStruct { .. }
+            | ExtractorConfig::OracleStruct { .. } => {
                 let mut pending_tasks = self.build_pending_tasks(task_context, false).await?;
                 if let Some(task_context) = pending_tasks.pop_front() {
                     self.clone().start_single_task(task_context, false).await?
@@ -226,6 +274,7 @@ impl TaskRunner {
 
             ExtractorConfig::MysqlSnapshot { .. }
             | ExtractorConfig::PgSnapshot { .. }
+            | ExtractorConfig::OracleSnapshot { .. }
             | ExtractorConfig::MongoSnapshot { .. }
             | ExtractorConfig::FoxlakeS3 { .. } => self.start_multi_task(task_context).await?,
 
@@ -267,6 +316,10 @@ impl TaskRunner {
             )
             .await
         });
+        let mut global_abort_guard = AbortGuard::new(
+            global_shut_down.clone(),
+            vec![global_monitor_task.abort_handle()],
+        );
 
         let task_parallel_size = self.get_task_parallel_size();
         let semaphore = Arc::new(tokio::sync::Semaphore::new(task_parallel_size));
@@ -302,6 +355,7 @@ impl TaskRunner {
 
         global_shut_down.store(true, Ordering::Release);
         global_monitor_task.await?;
+        global_abort_guard.disarm();
         Ok(())
     }
 
@@ -484,15 +538,50 @@ impl TaskRunner {
         )
         .await?;
 
-        // start threads
+        // start threads (avoid unwrap-panics; propagate errors with context)
+        // If either side errors, flip `shut_down` so the other side can exit and avoid deadlock.
+        let shut_down_for_extractor = shut_down.clone();
         let f1 = tokio::spawn(async move {
-            extractor.extract().await.unwrap();
-            extractor.close().await.unwrap();
+            let extract_res = extractor.extract().await;
+            let close_res = extractor.close().await;
+            if extract_res.is_err() || close_res.is_err() {
+                let first = !shut_down_for_extractor.swap(true, Ordering::Release);
+                if first {
+                    log_error!("shutdown triggered by extractor error; forcing pipeline shutdown");
+                }
+            }
+            if let Err(e) = extract_res {
+                bail!("extractor.extract failed: {e:#}");
+            }
+            if let Err(e) = close_res {
+                bail!("extractor.close failed: {e:#}");
+            }
+            Ok::<(), anyhow::Error>(())
         });
 
+        let shut_down_for_pipeline = shut_down.clone();
         let f2 = tokio::spawn(async move {
-            pipeline.start().await.unwrap();
-            pipeline.stop().await.unwrap();
+            let start_res = pipeline.start().await;
+            let stop_res = pipeline.stop().await;
+            if start_res.is_err() || stop_res.is_err() {
+                let first = !shut_down_for_pipeline.swap(true, Ordering::Release);
+                if first {
+                    log_error!("shutdown triggered by pipeline error; forcing extractor shutdown");
+                }
+                if let Err(e) = &start_res {
+                    log_error!("pipeline.start returned error: {e:#}");
+                }
+                if let Err(e) = &stop_res {
+                    log_error!("pipeline.stop returned error: {e:#}");
+                }
+            }
+            if let Err(e) = start_res {
+                bail!("pipeline.start failed: {e:#}");
+            }
+            if let Err(e) = stop_res {
+                bail!("pipeline.stop failed: {e:#}");
+            }
+            Ok::<(), anyhow::Error>(())
         });
 
         let interval_secs = self.config.pipeline.checkpoint_interval_secs;
@@ -501,16 +590,28 @@ impl TaskRunner {
         } else {
             vec![self.task_monitor.clone()]
         };
+        let shut_down_for_monitors = shut_down.clone();
         let f3 = tokio::spawn(async move {
             Self::flush_monitors_generic::<Monitor, TaskMonitor>(
                 interval_secs,
-                shut_down,
+                shut_down_for_monitors,
                 &[extractor_monitor, pipeline_monitor, sinker_monitor],
                 &tasks,
             )
             .await
         });
-        try_join!(f1, f2, f3)?;
+
+        let mut abort_guard = AbortGuard::new(
+            shut_down.clone(),
+            vec![f1.abort_handle(), f2.abort_handle(), f3.abort_handle()],
+        );
+        // JoinHandle<T>::await -> Result<T, JoinError>
+        // Here f1/f2 return anyhow::Result<()>, so we need to unwrap twice.
+        let (r1, r2, r3) = tokio::join!(f1, f2, f3);
+        abort_guard.disarm();
+        r1??;
+        r2??;
+        r3?;
 
         // finished log
         let (schema, tb) = match &extractor_config {
@@ -639,6 +740,11 @@ impl TaskRunner {
                 ..
             }
             | SinkerConfig::PgCheck {
+                check_log_dir,
+                check_log_file_size,
+                ..
+            }
+            | SinkerConfig::OracleCheck {
                 check_log_dir,
                 check_log_file_size,
                 ..
@@ -841,7 +947,7 @@ impl TaskRunner {
                         &heartbeat_schema_tb[1],
                         &schema_sql,
                         &tb_sql,
-                        &DbType::Pg,
+                        &self.config.extractor_basic.db_type,
                     )
                     .await?
                 }
@@ -902,7 +1008,7 @@ impl TaskRunner {
                         &data_marker.marker_tb,
                         &schema_sql,
                         &tb_sql,
-                        &DbType::Pg,
+                        &self.config.sinker_basic.db_type,
                     )
                     .await?
                 }
@@ -959,7 +1065,9 @@ impl TaskRunner {
 
         let is_db_extractor_config = matches!(
             &self.config.extractor,
-            ExtractorConfig::MysqlStruct { .. } | ExtractorConfig::PgStruct { .. }
+            ExtractorConfig::MysqlStruct { .. }
+                | ExtractorConfig::PgStruct { .. }
+                | ExtractorConfig::OracleStruct { .. }
         );
         if is_db_extractor_config {
             let db_extractor_config = match &self.config.extractor {
@@ -988,6 +1096,19 @@ impl TaskRunner {
                     schema: schema.clone(),
                     schemas,
                     do_global_structs: true,
+                    db_batch_size: *db_batch_size,
+                },
+                ExtractorConfig::OracleStruct {
+                    url,
+                    connection_auth,
+                    schema,
+                    db_batch_size,
+                    ..
+                } => ExtractorConfig::OracleStruct {
+                    url: url.clone(),
+                    connection_auth: connection_auth.clone(),
+                    schema: schema.clone(),
+                    schemas,
                     db_batch_size: *db_batch_size,
                 },
                 _ => {
@@ -1071,6 +1192,24 @@ impl TaskRunner {
                             partition_cols: String::new(),
                         },
 
+                        ExtractorConfig::OracleSnapshot {
+                            url,
+                            connection_auth,
+                            sample_interval,
+                            parallel_size,
+                            batch_size,
+                            ..
+                        } => ExtractorConfig::OracleSnapshot {
+                            url: url.clone(),
+                            connection_auth: connection_auth.clone(),
+                            schema: schema.clone(),
+                            tb: tb.clone(),
+                            sample_interval: *sample_interval,
+                            parallel_size: *parallel_size,
+                            batch_size: *batch_size,
+                            partition_cols: String::new(),
+                        },
+
                         ExtractorConfig::MongoSnapshot {
                             url,
                             connection_auth,
@@ -1129,6 +1268,7 @@ impl TaskRunner {
         match &self.config.extractor {
             ExtractorConfig::MysqlSnapshot { .. }
             | ExtractorConfig::PgSnapshot { .. }
+            | ExtractorConfig::OracleSnapshot { .. }
             | ExtractorConfig::FoxlakeS3 { .. }
             | ExtractorConfig::MongoSnapshot { .. } => self.config.runtime.tb_parallel_size,
             _ => 1,

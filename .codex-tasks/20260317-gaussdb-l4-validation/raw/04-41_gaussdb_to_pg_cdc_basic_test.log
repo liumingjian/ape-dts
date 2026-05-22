@@ -1,0 +1,106 @@
+   Compiling dt-connector v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-connector)
+error[E0277]: `?` couldn't convert the error to `tokio_postgres::Error`
+   --> dt-connector/src/extractor/gaussdb/gaussdb_cdc_client.rs:104:70
+    |
+104 |             let mut builder = SslConnector::builder(SslMethod::tls())?;
+    |                                                                      ^ the trait `From<ErrorStack>` is not implemented for `tokio_postgres::Error`
+    |
+    = note: the question mark operation (`?`) implicitly performs a conversion on the error value using the `From` trait
+    = help: the trait `FromResidual<Result<Infallible, E>>` is implemented for `Result<T, F>`
+    = note: required for `Result<(Client, Connection<Socket, TlsStream<Socket>>), Error>` to implement `FromResidual<Result<Infallible, ErrorStack>>`
+    = note: the full name for the type has been written to '/Users/lmj/projects/ai-project/ape-dts/target/debug/deps/dt_connector-fe20a331905b147c.long-type-3832844322364484588.txt'
+    = note: consider using `--verbose` to print the full type name to the console
+
+error[E0308]: `match` arms have incompatible types
+   --> dt-connector/src/extractor/gaussdb/gaussdb_cdc_client.rs:115:21
+    |
+112 |               match connect_no_ssl().await {
+    |               ---------------------------- `match` arms have incompatible types
+113 |                   Ok(v) => Ok(v),
+    |                            ----- this is found to be of type `Result<(tokio_postgres::Client, tokio_postgres::Connection<Socket, NoTlsStream>), _>`
+114 |                   Err(e) => {
+115 | /                     if e.to_string().contains("SSL off") {
+116 | |                         connect_ssl().await
+117 | |                     } else {
+118 | |                         Err(e)
+119 | |                     }
+    | |_____________________^ expected `NoTlsStream`, found `postgres_openssl::TlsStream<Socket>`
+    |
+    = note: expected enum `Result<(tokio_postgres::Client, tokio_postgres::Connection<_, NoTlsStream>), _>`
+               found enum `Result<(tokio_postgres::Client, tokio_postgres::Connection<_, postgres_openssl::TlsStream<Socket>>), tokio_postgres::Error>`
+help: try wrapping the expression in `Err`
+    |
+115 ~                     Err(if e.to_string().contains("SSL off") {
+116 |                         connect_ssl().await
+117 |                     } else {
+118 |                         Err(e)
+119 ~                     })
+    |
+
+error[E0308]: `match` arms have incompatible types
+   --> dt-connector/src/extractor/gaussdb/gaussdb_cdc_client.rs:126:21
+    |
+123 |               match connect_ssl().await {
+    |               ------------------------- `match` arms have incompatible types
+124 |                   Ok(v) => Ok(v),
+    |                            ----- this is found to be of type `Result<(tokio_postgres::Client, tokio_postgres::Connection<Socket, postgres_openssl::TlsStream<Socket>>), _>`
+125 |                   Err(e) => {
+126 | /                     if e.to_string().contains("SSL on") {
+127 | |                         connect_no_ssl().await
+128 | |                     } else {
+129 | |                         Err(e)
+130 | |                     }
+    | |_____________________^ expected `postgres_openssl::TlsStream<Socket>`, found `NoTlsStream`
+    |
+    = note: expected enum `Result<(tokio_postgres::Client, tokio_postgres::Connection<_, postgres_openssl::TlsStream<Socket>>), _>`
+               found enum `Result<(tokio_postgres::Client, tokio_postgres::Connection<_, NoTlsStream>), tokio_postgres::Error>`
+help: try wrapping the expression in `Err`
+    |
+126 ~                     Err(if e.to_string().contains("SSL on") {
+127 |                         connect_no_ssl().await
+128 |                     } else {
+129 |                         Err(e)
+130 ~                     })
+    |
+
+error[E0277]: `?` couldn't convert the error to `tokio_postgres::Error`
+   --> dt-connector/src/extractor/gaussdb/gaussdb_cdc_client.rs:157:70
+    |
+157 |             let mut builder = SslConnector::builder(SslMethod::tls())?;
+    |                                                                      ^ the trait `From<ErrorStack>` is not implemented for `tokio_postgres::Error`
+    |
+    = note: the question mark operation (`?`) implicitly performs a conversion on the error value using the `From` trait
+    = help: the trait `FromResidual<Result<Infallible, E>>` is implemented for `Result<T, F>`
+    = note: required for `Result<(Client, Connection<Socket, TlsStream<Socket>>), Error>` to implement `FromResidual<Result<Infallible, ErrorStack>>`
+    = note: the full name for the type has been written to '/Users/lmj/projects/ai-project/ape-dts/target/debug/deps/dt_connector-fe20a331905b147c.long-type-3832844322364484588.txt'
+    = note: consider using `--verbose` to print the full type name to the console
+
+error[E0308]: `match` arms have incompatible types
+   --> dt-connector/src/extractor/gaussdb/gaussdb_cdc_client.rs:175:17
+    |
+171 |           let (client, connection) = match connect_ssl().await {
+    |                                      ------------------------- `match` arms have incompatible types
+172 |               Ok(v) => Ok(v),
+    |                        ----- this is found to be of type `Result<(tokio_postgres::Client, tokio_postgres::Connection<Socket, postgres_openssl::TlsStream<Socket>>), _>`
+...
+175 | /                 if e.to_string().contains("SSL on") {
+176 | |                     connect_no_ssl().await
+177 | |                 } else {
+178 | |                     Err(e)
+179 | |                 }
+    | |_________________^ expected `postgres_openssl::TlsStream<Socket>`, found `NoTlsStream`
+    |
+    = note: expected enum `Result<(tokio_postgres::Client, tokio_postgres::Connection<_, postgres_openssl::TlsStream<Socket>>), _>`
+               found enum `Result<(tokio_postgres::Client, tokio_postgres::Connection<_, NoTlsStream>), tokio_postgres::Error>`
+help: try wrapping the expression in `Err`
+    |
+175 ~                 Err(if e.to_string().contains("SSL on") {
+176 |                     connect_no_ssl().await
+177 |                 } else {
+178 |                     Err(e)
+179 ~                 })
+    |
+
+Some errors have detailed explanations: E0277, E0308.
+For more information about an error, try `rustc --explain E0277`.
+error: could not compile `dt-connector` (lib) due to 5 previous errors

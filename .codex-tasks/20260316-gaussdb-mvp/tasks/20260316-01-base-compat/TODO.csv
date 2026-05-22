@@ -1,0 +1,5 @@
+id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
+1,新增 DbType::GaussDBPg,DONE,DbType 可解析 gaussdb_pg,cargo test -p dt-common,2026-03-16 20:02 +0800,0,验证使用 docker: rust:1.85.0-bullseye
+2,补齐基础路由与公共工具分支,DONE,task_config/task_util/system_dbs/sql_util 等可编译,cargo test -p dt-common -p dt-task,2026-03-16 20:12 +0800,0,验证使用 docker: ape-dts-rust-dev:1.85.0
+3,Precheck 支持 GaussDBPg,DONE,dt-precheck 可识别并输出 Gauss 版本/CDC 能力,cargo test -p dt-precheck,2026-03-17 08:30 +0800,0,新增 GaussDBPg 分支并检查 mppdb_decoding；补齐系统 schema 过滤；本机安装 cmake 以通过 rdkafka-sys 构建
+4,子任务验收回归,DONE,子任务 1 验收命令通过,cargo test -p dt-common -p dt-task -p dt-precheck,2026-03-17 08:30 +0800,0,回归通过

@@ -1,0 +1,2 @@
+id,task,status,completed_at,notes
+1,更新 docs/agent-summary 入口与证据索引（Oracle<->GaussDBOracle）,DONE,2026-04-15 17:14:06 +0800,已更新 tracker/roadmap/e2e matrix 并通过 rg 验证

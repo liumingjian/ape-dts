@@ -1,0 +1,24 @@
+   Compiling dt-connector v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-connector)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.33s
+warning: the following packages contain code that will be rejected by a future version of Rust: snap v0.2.5
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 2`
+     Running unittests src/lib.rs (target/debug/deps/dt_connector-583ede34264c90a0)
+
+running 14 tests
+test extractor::gaussdb::gaussdb_json_decoder::tests::test_decode_begin_commit_plain_text ... ok
+test extractor::gaussdb::gaussdb_cdc_extractor::tests::parse_replication_xlogdata_is_big_endian ... ok
+test extractor::gaussdb::gaussdb_cdc_extractor::tests::parse_replication_keepalive_is_little_endian ... ok
+test extractor::gaussdb::gaussdb_cdc_extractor::tests::build_gaussdb_standby_status_update_matches_gsjdbc4_layout ... ok
+test extractor::gaussdb::gaussdb_json_decoder::tests::test_unquote_sql_literal ... ok
+test meta_fetcher::pg::pg_struct_check_fetcher::tests::gaussdb_foreign_key_query_avoids_partition_ancestors ... ok
+test extractor::gaussdb::gaussdb_json_decoder::tests::test_decode_delete ... ok
+test extractor::gaussdb::gaussdb_json_decoder::tests::test_decode_bytea_prefixes ... ok
+test extractor::gaussdb::gaussdb_json_decoder::tests::test_decode_insert_table_name ... ok
+test extractor::gaussdb::gaussdb_json_decoder::tests::test_decode_insert ... ok
+test extractor::gaussdb::gaussdb_json_decoder::tests::test_decode_update_fallback_to_after_as_before ... ok
+test meta_fetcher::pg::pg_struct_check_fetcher::tests::gaussdb_summary_query_omits_pg_only_columns ... ok
+test extractor::gaussdb::gaussdb_json_decoder::tests::test_decode_delete_fallback_to_columns ... ok
+test extractor::gaussdb::gaussdb_json_decoder::tests::test_decode_update ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 53 filtered out; finished in 0.00s
+

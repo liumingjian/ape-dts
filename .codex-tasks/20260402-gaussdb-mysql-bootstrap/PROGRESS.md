@@ -1,0 +1,91 @@
+# Progress Log
+
+## Context Recovery Block
+
+- **Epic**: `20260402-gaussdb-mysql-bootstrap`
+- **Truth file**: `.codex-tasks/20260402-gaussdb-mysql-bootstrap/SUBTASKS.csv`
+
+## 2026-04-02
+
+- Epic created for `MySQL -> GaussDBMySQL` target-first bootstrap.
+- Child 1 closed together with docs/tracker/template alignment.
+- Child 2 started:
+  - added `DbType::GaussDBMySQL`
+  - routed `gaussdb_mysql` through MySQL-compatible config / task / precheck paths
+  - added `mysql_to_gaussdb_mysql` smoke test namespace and task config
+- Automated validation currently targets compile / `--no-run`.
+- Validation executed:
+  - `cargo test -p dt-common test_db_type_gaussdb_mysql_parse_and_display -- --nocapture` PASS
+  - `cargo test -p dt-common -p dt-task -p dt-precheck --no-run` PASS
+  - `cargo test -p dt-tests --test integration_test --no-run` PASS
+- Local MySQL 8 source environment is now ready:
+  - Docker container `ape-dts-mysql8` on `127.0.0.1:3311`
+  - verified `VERSION()=8.0.44`, `binlog_format=ROW`, `binlog_row_image=FULL`, `gtid_mode=ON`
+  - evidence stored in child raw log `tasks/20260402-02-gaussdb-mysql-skeleton-smoke/raw/mysql8-local-setup.txt`
+- `docs/templates/mysql_to_gaussdb_mysql.md` now includes the Docker bootstrap command and a copy-ready `.env.local` snippet.
+- New environment fact confirmed by live probe:
+  - `postgres://root@10.250.0.51:8000/jyp_test_m?sslmode=require` is reachable
+  - `current_database()` = `jyp_test_m`
+  - `SHOW sql_compatibility;` = `M`
+  - evidence: `tasks/20260402-02-gaussdb-mysql-skeleton-smoke/raw/jyp_test_m_probe.txt`
+- Child 2 is now recorded as a visible failed exploratory path:
+  - its compile/no-run work remains useful
+  - but the original modeling assumption was invalidated by live HCS evidence
+- Child 6 opened as the active correction path:
+  - separate wire protocol from SQL compatibility mode
+  - document the connection model and env contract
+  - add minimal code foundations and tests before resuming smoke/snapshot work
+- Child 6 is now closed:
+  - added `docs/agent-summary/gaussdb-connection-model.md`
+  - added `WireProtocol` and `GaussDBSqlCompatibility` minimal abstractions in `dt-common`
+  - validation:
+    - `cargo test -p dt-common config_enums -- --nocapture` PASS
+    - `rg -n "wire protocol|sql_compatibility|jyp_test_m" docs/agent-summary/gaussdb-connection-model.md .codex-tasks/20260402-gaussdb-mysql-bootstrap/tasks/20260402-06-protocol-mode-realignment/PROGRESS.md` PASS
+- Next active implementation entry is child 3 (`MySQL→GaussDBMySQL snapshot basic`) on top of the corrected connection model.
+- Child 3 is now closed:
+  - implemented minimal `MySQL -> GaussDBMySQL` snapshot on top of `postgres://.../jyp_test_m`
+  - key runtime adaptations:
+    - `DbType::GaussDBMySQL + postgres://` writes reuse `PgSinker`
+    - `RdbQueryBuilder` supports pg-wire MySQL-mode placeholders/extract SQL
+    - target compare for `GaussDBMySQL` uses `tokio-postgres simple_query`
+    - candidate-first RW rewrite now also covers `GaussDBMySQL + postgres://`
+  - validation:
+    - `cargo test -p dt-common -p dt-task -p dt-tests --no-run` PASS
+    - `cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::snapshot_tests::test::smoke_test --nocapture` PASS
+    - `cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::snapshot_tests::test::snapshot_basic_test --nocapture` PASS
+  - residual note:
+    - target-side `DATETIME` currently compares through text in the simple-query path; record this for upcoming type-matrix / check work
+- Child 4 is now open:
+  - target scope: `MySQL -> GaussDBMySQL struct + check basic`
+  - early probe confirms `SHOW CREATE DATABASE/TABLE` works over pg wire on `jyp_test_m`
+  - this suggests struct validation can be built around pg-wire MySQL-compatible introspection instead of assuming a MySQL protocol endpoint
+- Child 4 is now closed:
+  - `MysqlStruct` / `MysqlCheck` runtime paths now support `DbType::GaussDBMySQL + postgres://`
+  - struct validation uses pg-wire `SHOW CREATE DATABASE/TABLE`
+  - check validation reuses `PgChecker` with `simple_query` row fetch
+  - first struct runtime miss was only a fixture collation mismatch (`utf8mb4_general_ci` vs `utf8mb4_0900_ai_ci`), which was corrected after direct probes
+  - validation:
+    - `cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::struct_tests::test::struct_basic_test --nocapture` PASS
+    - `cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::check_tests::test::check_basic_test --nocapture` PASS
+- Child 5 is now closed:
+  - `docs/templates/mysql_to_gaussdb_mysql.md` now reflects the validated env contract:
+    - local `mysql:8.0` source on `127.0.0.1:3311`
+    - target `GaussDBMySQL` reached through `postgres://.../<mysql-compatible-db>`
+  - template examples now use pg-wire sink URLs for snapshot / struct / check
+  - tracker and plan now show the first-wave bootstrap as delivered, while keeping CDC out of scope and child 2 visible as an exploratory failure
+- Current state:
+  - the target-first first wave of `GaussDBMySQL` bootstrap is delivered for `snapshot + struct + check + docs`
+  - the next natural implementation choice is either:
+    - open a new `GaussDBMySQL` capability spec beyond first-wave bootstrap, or
+    - shift focus to `GaussDBPg Quality Coverage`
+- 2026-04-09:
+  - child 7 opened to close the only remaining `GaussDBMySQL` tracker gap: standalone precheck automation + real-environment evidence
+  - early diagnosis shows `dt-precheck` still modeled `GaussDBMySQL` as `MySqlPrechecker + MysqlFetcher` only
+  - this is insufficient for the validated real environment, where the target is `DbType::GaussDBMySQL + postgres://.../jyp_test_m`
+  - active correction path:
+    - add a pg-wire MySQL-compatible fetcher for precheck metadata queries
+    - add `mysql_to_gaussdb_mysql` precheck tests and make precheck tests clean up after themselves
+  - child 7 is now closed:
+    - `GaussDBMySQL` precheck supports both mysql-wire and pg-wire targets
+    - added explicit `mysql_to_gaussdb_mysql` precheck automation and archived real-env evidence
+    - no-pollution verification passed on both source MySQL and target `jyp_test_m`

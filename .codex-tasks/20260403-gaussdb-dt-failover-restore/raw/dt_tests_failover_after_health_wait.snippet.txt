@@ -1,0 +1,6 @@
+rewrite gaussdb cdc slot_name for isolated dt-tests run: ape_test_gaussdb_failover -> ape_test_gaussdb_failover_0403121512_31754
+2026-04-03T20:15:25.913854+08:00 INFO default_logger - gaussdb cdc replication streaming started: 10.250.0.51:8001 (sql_port=8000)
+2026-04-03T20:16:16.883239+08:00 INFO default_logger - gaussdb cdc replication streaming started: 10.250.0.30:8001 (sql_port=8000)
+cm restore attempt 2/3: target_node=1 dn_instance=6001 (on current_primary_host=10.250.0.30)
+cleanup gaussdb cdc slot ok: slot=ape_test_gaussdb_failover_0403121512_31754 rw_url=postgres://10.250.0.51:8000/postgres?sslmode=require
+test gaussdb_to_pg::cdc_tests::test::cdc_failover_test ... ok

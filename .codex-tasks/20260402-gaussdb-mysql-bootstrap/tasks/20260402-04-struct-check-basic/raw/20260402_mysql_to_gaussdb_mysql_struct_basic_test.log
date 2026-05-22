@@ -1,0 +1,99 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.24s
+warning: the following packages contain code that will be rejected by a future version of Rust: snap v0.2.5
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 2`
+     Running tests/integration_test.rs (target/debug/deps/integration_test-9b60f916ab830360)
+
+running 1 test
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/jyp_test_m?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/jyp_test_m?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/jyp_test_m?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/jyp_test_m?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+selected gaussdb rw url: postgres://10.250.0.30:8000/jyp_test_m?sslmode=require (server_addr=192.168.1.30/32)
+executing sql: DROP DATABASE IF EXISTS gaussdb_mysql_struct_basic
+executing sql: CREATE DATABASE IF NOT EXISTS gaussdb_mysql_struct_basic DEFAULT CHARACTER SET utf8mb4
+executing sql: CREATE TABLE gaussdb_mysql_struct_basic.struct_basic ( id INT NOT NULL, name VARCHAR(32) NOT NULL COMMENT 'name_comment', amount DECIMAL(10,2) DEFAULT 0.00, PRIMARY KEY (id), KEY idx_name(name) ) COMMENT='struct_basic_comment'
+executing sql: DROP DATABASE IF EXISTS gaussdb_mysql_struct_basic
+2026-04-02T12:11:53.011675+08:00 INFO default_logger - start task: [taskID: cde9f00c45440c2e, taskType: Some(Struct)]
+2026-04-02T12:11:53.011823+08:00 WARN default_logger - recorder unsupported resumer config: Dummy
+2026-04-02T12:11:53.011843+08:00 WARN default_logger - recovery unsupported resumer config: Dummy
+2026-04-02T12:11:53.011873+08:00 INFO default_logger - recovery initialization for task_id: cde9f00c45440c2e finished in 0 ms
+2026-04-02T12:11:53.411440+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-02T12:11:53.411527+08:00 ERROR default_logger - buffer_memory_mb=0 is too large and will be ignored to prevent overflow
+2026-04-02T12:11:53.411565+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-02T12:11:53.422545+08:00 INFO default_logger - MysqlStructExtractor starts...
+2026-04-02T12:11:53.422822+08:00 INFO default_logger - MysqlStructExtractor extracts dbs: gaussdb_mysql_struct_basic
+2026-04-02T12:11:53.423393+08:00 INFO default_logger - SerialParallelizer starts, parallel_size: 1, checkpoint_interval_secs: 1
+2026-04-02T12:11:53.430974+08:00 INFO default_logger - ddl begin: CREATE DATABASE IF NOT EXISTS `gaussdb_mysql_struct_basic` DEFAULT CHARACTER SET utf8mb4 DEFAULT COLLATE utf8mb4_0900_ai_ci
+2026-04-02T12:11:53.590034+08:00 INFO default_logger - ddl succeed
+2026-04-02T12:11:53.590189+08:00 INFO default_logger - ddl begin: CREATE TABLE IF NOT EXISTS `gaussdb_mysql_struct_basic`.`struct_basic` (`id` int NOT NULL, `name` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci COMMENT 'name_comment' NOT NULL, `amount` decimal(10,2) DEFAULT '0.00' NULL, PRIMARY KEY (`id`)) ENGINE=InnoDB  DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='struct_basic_comment'
+2026-04-02T12:11:53.628655+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-04-02T12:11:53.628916+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-04-02T12:11:53.628933+08:00 INFO monitor_logger - extractor |  | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-04-02T12:11:53.629034+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-02T12:11:53.629094+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-02T12:11:53.629142+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=2 | avg=1 | max=1
+2026-04-02T12:11:53.629173+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-02T12:11:53.629188+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=1
+2026-04-02T12:11:53.629219+08:00 INFO monitor_logger - sinker |  | serial_writes | sum=1 | avg_by_sec=1 | max_by_sec=1
+2026-04-02T12:11:53.629238+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=1 | avg=1 | max=1
+2026-04-02T12:11:53.629251+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=159 | avg=159 | max=159
+2026-04-02T12:11:53.629264+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-02T12:11:53.629290+08:00 INFO monitor_logger - sinker |  | record_count | sum=1 | avg_by_sec=1 | max_by_sec=1
+2026-04-02T12:11:54.210218+08:00 INFO sqlx::postgres::notice - CREATE TABLE / PRIMARY KEY will create implicit index "struct_basic_pkey" for table "struct_basic"
+2026-04-02T12:11:54.210929+08:00 INFO default_logger - ddl succeed
+2026-04-02T12:11:54.211449+08:00 INFO default_logger - ddl begin: ALTER TABLE `gaussdb_mysql_struct_basic`.`struct_basic` ADD  INDEX `idx_name` (`name`) 
+2026-04-02T12:11:54.376546+08:00 INFO default_logger - ddl succeed
+2026-04-02T12:11:54.377930+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-04-02T12:11:54.377994+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-04-02T12:11:54.378588+08:00 INFO finished_logger - task finished
+src_ddl_sql: CREATE TABLE `struct_basic` (
+  `id` int NOT NULL,
+  `name` varchar(32) NOT NULL COMMENT 'name_comment',
+  `amount` decimal(10,2) DEFAULT '0.00',
+  PRIMARY KEY (`id`),
+  KEY `idx_name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='struct_basic_comment'
+
+dst_ddl_sql: SET search_path = gaussdb_mysql_struct_basic;
+CREATE TABLE struct_basic (
+    id integer NOT NULL,
+    name varchar(32) CHARACTER SET `UTF8` COLLATE utf8mb4_0900_ai_ci NOT NULL,
+    amount decimal(10,2) DEFAULT (0.00)
+)
+CHARACTER SET = "UTF8" COLLATE = "utf8mb4_0900_ai_ci"
+WITH (orientation=row, compression=no, storage_type=USTORE, segment=off);
+COMMENT ON TABLE struct_basic IS 'struct_basic_comment';
+COMMENT ON COLUMN struct_basic.name IS 'name_comment';
+CREATE INDEX idx_name USING ubtree ON gaussdb_mysql_struct_basic.struct_basic (name) WITH (storage_type=USTORE) TABLESPACE pg_default;
+ALTER TABLE struct_basic ADD CONSTRAINT struct_basic_pkey PRIMARY KEY USING ubtree  (id) WITH (storage_type=USTORE);
+
+expect_ddl_sql: SET search_path = gaussdb_mysql_struct_basic;
+CREATE TABLE struct_basic (
+    id integer NOT NULL,
+    name varchar(32) CHARACTER SET `UTF8` COLLATE utf8mb4_general_ci NOT NULL,
+    amount decimal(10,2) DEFAULT (0.00)
+)
+CHARACTER SET = "UTF8" COLLATE = "utf8mb4_general_ci"
+WITH (orientation=row, compression=no, storage_type=USTORE, segment=off);
+COMMENT ON TABLE struct_basic IS 'struct_basic_comment';
+COMMENT ON COLUMN struct_basic.name IS 'name_comment';
+CREATE INDEX idx_name USING ubtree ON gaussdb_mysql_struct_basic.struct_basic (name) WITH (storage_type=USTORE) TABLESPACE pg_default;
+ALTER TABLE struct_basic ADD CONSTRAINT struct_basic_pkey PRIMARY KEY USING ubtree  (id) WITH (storage_type=USTORE);
+
+dst_ddl_sql_line: COMMENT ON COLUMN struct_basic.name IS 'name_comment';
+dst_ddl_sql_line: name varchar(32) CHARACTER SET `UTF8` COLLATE utf8mb4_0900_ai_ci NOT NULL
+dst_ddl_sql_line NOT exists in expect_ddl_sql_lines
+2026-04-02T12:11:54.817328+08:00 ERROR default_logger - panic: panicked at dt-tests/tests/test_runner/rdb_struct_test_runner.rs:104:21:
+explicit panic
+backtrace:
+disabled backtrace
+test mysql_to_gaussdb_mysql::struct_tests::test::struct_basic_test ... FAILED
+
+failures:
+
+failures:
+    mysql_to_gaussdb_mysql::struct_tests::test::struct_basic_test
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 353 filtered out; finished in 6.56s
+
+error: test failed, to rerun pass `-p dt-tests --test integration_test`

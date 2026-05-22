@@ -1,0 +1,1098 @@
+{
+  "brand": {
+    "name": "数据库同步管理平台",
+    "tagline": "",
+    "full": "数据库同步管理平台"
+  },
+  "common": {
+    "confirm": "确定",
+    "cancel": "取消",
+    "submit": "提交",
+    "save": "保存",
+    "edit": "编辑",
+    "delete": "删除",
+    "create": "创建",
+    "search": "搜索",
+    "reset": "重置",
+    "refresh": "刷新",
+    "export": "导出",
+    "import": "导入",
+    "back": "返回",
+    "next": "下一步",
+    "prev": "上一步",
+    "loading": "加载中…",
+    "empty": "暂无数据",
+    "total": "总条数",
+    "all": "全部",
+    "enable": "启用",
+    "disable": "停用",
+    "yes": "是",
+    "no": "否",
+    "more": "更多",
+    "close": "关闭"
+  },
+  "auth": {
+    "loginTitle": "登录 ape-dts Console",
+    "username": "用户名",
+    "password": "密码",
+    "login": "登录",
+    "logout": "退出登录",
+    "hint": "默认账号：admin / admin123",
+    "heroTitle": "ape-dts Console",
+    "heroSubtitle": "面向 ape-dts 数据同步引擎的开源管理控制台 · 全量迁移 / 增量同步 / 数据校验 / 结构迁移",
+    "copyright": "© 2026 ape-dts · 开源版本 · MIT License",
+    "validation": {
+      "usernameRequired": "请输入用户名",
+      "passwordRequired": "请输入密码"
+    }
+  },
+  "nav": {
+    "dashboard": "工作台",
+    "tasks": {
+      "_label": "任务管理",
+      "snapshot": "全量迁移",
+      "cdc": "增量同步",
+      "check": "数据校验",
+      "struct": "结构迁移",
+      "sync": "同步任务"
+    },
+    "alerts": {
+      "_label": "告警管理",
+      "current": "当前告警",
+      "history": "历史告警"
+    },
+    "license": "License 管理",
+    "system": {
+      "_label": "系统管理",
+      "users": "用户管理",
+      "monitor": "系统监控",
+      "operateLog": "操作日志"
+    },
+    "ops": {
+      "_label": "运维管理",
+      "management": "运维管理",
+      "controlLog": "管控日志",
+      "globalParams": "全局参数"
+    },
+    "alertMonitor": {
+      "_label": "告警监控",
+      "metrics": "指标",
+      "events": "事件",
+      "monitorSetting": "监控设置",
+      "alarmSetting": "告警设置",
+      "alarmTemplate": "告警模板"
+    }
+  },
+  "topbar": {
+    "help": "帮助",
+    "notifications": "消息",
+    "profile": "个人中心",
+    "changePassword": "修改密码"
+  },
+  "dashboard": {
+    "title": "工作台",
+    "subtitle": "全局概览 · 最近 24 小时",
+    "licenseWarn": "License 将在 {n} 天后过期，请及时处理。",
+    "handle": "前往处理",
+    "kpi": {
+      "running": "运行中任务",
+      "todayAlerts": "今日告警",
+      "throughput": "总吞吐率",
+      "latency": "平均延迟",
+      "compareLabel": "对比昨日"
+    },
+    "section": {
+      "timeseries": "关键时序",
+      "distribution": "全局分布",
+      "recent": "近期动态",
+      "distributionHint": "当前任务/引擎/告警分布概览",
+      "recentHint": "统一时间线 · 任务/告警/系统事件"
+    },
+    "chart": {
+      "throughput24h": "近 24 小时吞吐率",
+      "latency24h": "近 24 小时同步延迟",
+      "taskStatus": "任务状态分布",
+      "engineDist": "引擎类型分布",
+      "alertTrend": "近 14 天告警趋势",
+      "combined": "吞吐 & 延迟 · 实时叠合",
+      "combinedSub": "近 60 分钟，按 1 分钟聚合",
+      "taskStatusSub": "总任务数",
+      "engineDistSub": "按源端引擎统计",
+      "alertTrendSub": "按告警级别堆叠（近 14 天）",
+      "totalTasks": "任务总数"
+    },
+    "recent": {
+      "tasks": "最近任务 Top 5",
+      "alerts": "高优先级告警 Top 5",
+      "tasksSub": "按更新时间排序，最近 5 个",
+      "alertsSub": "按告警级别排序，活跃 Top 5"
+    },
+    "badge": {
+      "live": "实时"
+    },
+    "top": {
+      "title": "吞吐 Top 5",
+      "sub": "按 RPS 排序的运行中任务"
+    },
+    "empty": {
+      "timeseries": "暂无运行中任务的时序数据",
+      "topRunning": "暂无运行中任务",
+      "statusDist": "暂无任务",
+      "engineDist": "暂无引擎数据",
+      "alertTrend": "近 14 天暂无告警",
+      "recentTasks": "当前筛选条件下暂无任务",
+      "recentAlerts": "当前没有高优先级告警",
+      "activity": "当前没有最近活动"
+    },
+    "filter": {
+      "all": "全部"
+    },
+    "activity": {
+      "title": "活动时间线",
+      "sub": "近 20 条事件，按发生时间倒序",
+      "cat": {
+        "task": "任务",
+        "alert": "告警",
+        "system": "系统"
+      }
+    }
+  },
+  "task": {
+    "status": {
+      "draft": "草稿",
+      "ready": "就绪",
+      "running": "运行中",
+      "paused": "已暂停",
+      "stopping": "停止中",
+      "stopped": "已停止",
+      "failed": "错误",
+      "completed": "已完成",
+      "creating": "创建中",
+      "pending": "等待启动"
+    },
+    "action": {
+      "pause": "暂停",
+      "resume": "续传",
+      "stop": "终止",
+      "delete": "删除",
+      "view": "查看任务",
+      "edit": "编辑",
+      "create": "创建任务",
+      "start": "启动"
+    },
+    "type": {
+      "snapshot": "全量迁移任务",
+      "cdc": "增量同步任务",
+      "check": "数据校验任务",
+      "struct": "结构迁移任务",
+      "sync": "同步任务"
+    }
+  },
+  "page": {
+    "wip": "该页面正在施工中",
+    "wipDesc": "我们正在按 P0/P1/P2 分档逐页交付，敬请期待。"
+  },
+  "forbidden": {
+    "title": "无访问权限",
+    "desc": "您没有权限访问此页面，请联系管理员。",
+    "back": "返回工作台"
+  },
+  "notfound": {
+    "title": "页面走丢了",
+    "desc": "请核对 URL 或返回工作台。",
+    "back": "返回工作台"
+  },
+  "profile": {
+    "username": "用户名",
+    "displayName": "显示名称",
+    "role": {
+      "label": "角色",
+      "admin": "管理员",
+      "operator": "操作员",
+      "viewer": "观察者"
+    }
+  },
+  "errors": {
+    "REQUEST_FAILED": "请求失败，请稍后重试",
+    "SERVER_ERROR": "服务器内部错误，请稍后重试",
+    "UNAUTHENTICATED": "未登录或会话已过期",
+    "INVALID_CREDENTIALS": "用户名或密码错误",
+    "ACCOUNT_DISABLED": "该账号已被禁用",
+    "SESSION_EXPIRED": "会话已过期，请重新登录",
+    "CSRF_TOKEN_MISSING": "CSRF 令牌缺失，请刷新页面",
+    "FORBIDDEN": "无权限执行此操作",
+    "USERNAME_TAKEN": "用户名已存在",
+    "LICENSE_LIMIT_EXCEEDED": "License 任务配额已达上限",
+    "LICENSE_EXPIRED": "License 已过期",
+    "INVALID_LICENSE_CODE": "激活码无效",
+    "TASK_NOT_FOUND": "任务不存在",
+    "RUN_ALREADY_ACTIVE": "任务已有活跃运行",
+    "RUN_NOT_ACTIVE": "任务当前无活跃运行",
+    "ILLEGAL_TRANSITION": "非法状态转换",
+    "VALIDATION_FAILED": "数据验证失败",
+    "PARSE_ERROR": "请求数据格式错误",
+    "TOO_MANY_ATTEMPTS": "请求过于频繁，请稍后重试",
+    "CANNOT_DEMOTE_SELF": "不能降低自身角色",
+    "LAST_ADMIN_PROTECTED": "无法删除最后一个管理员",
+    "RESOURCE_GROUP_NAME_TAKEN": "资源组名称已存在",
+    "DEFAULT_RESOURCE_GROUP_PROTECTED": "默认资源组不可修改或删除",
+    "RESOURCE_GROUP_HAS_TASKS": "资源组下存在任务，无法删除",
+    "UNKNOWN_RESOURCE_GROUP": "资源组不存在",
+    "TASK_HAS_ACTIVE_RUN": "任务存在活跃运行，无法操作",
+    "TASK_KIND_IMMUTABLE": "任务类型不可变更",
+    "GAUSSDB_SUB_MODE_REQUIRED": "GaussDB 引擎需要选择子模式",
+    "URL_SCHEME_ENGINE_MISMATCH": "URL 协议与引擎类型不匹配",
+    "INVALID_URL_SCHEME": "URL 协议无效",
+    "STRUCT_FILTER_REQUIRED": "结构迁移需要指定迁移对象",
+    "SYNC_MODE_INVALID_FOR_CATEGORY": "同步模式与任务类型不兼容",
+    "PATH_OUTSIDE_SANDBOX": "路径超出允许范围",
+    "ENDPOINT_HOST_BLOCKED": "目标地址不在允许范围内",
+    "TASK_ID_TAKEN": "任务 ID 已被占用",
+    "INVALID_TASK_ID_FORMAT": "任务 ID 格式无效",
+    "CONNECTION_FAILED": "连接失败"
+  },
+  "taskDetail": {
+    "back": "返回列表",
+    "tab": {
+      "config": "同步配置",
+      "objects": "同步对象",
+      "logs": "运行日志",
+      "monitor": "监控",
+      "alerts": "告警",
+      "history": "运行历史"
+    },
+    "kpi": {
+      "status": "状态",
+      "rps": "抽取速率",
+      "latency": "同步延迟",
+      "progress": "同步进度"
+    },
+    "chart": {
+      "rps": "抽取 / 写入 速率",
+      "latency": "同步延迟",
+      "buffer": "缓冲队列长度"
+    },
+    "objects": {
+      "col": {
+        "name": "对象名称",
+        "type": "类型",
+        "rows": "预估行数",
+        "status": "状态"
+      }
+    },
+    "log": {
+      "filter": {
+        "level": "级别"
+      },
+      "col": {
+        "time": "时间",
+        "level": "级别",
+        "source": "来源",
+        "msg": "日志内容"
+      },
+      "autoRefresh": "自动刷新",
+      "connected": "已连接",
+      "reconnecting": "重连中",
+      "disconnected": "已断开",
+      "reconnect": "重新连接",
+      "pause": "暂停滚动",
+      "resume": "恢复滚动",
+      "follow": "回到最新"
+    },
+    "editor": {
+      "title": "编辑任务配置",
+      "tip": "部分字段在任务启动后不可修改，仅可更新运行时与流速参数。"
+    },
+    "alerts": {
+      "none": "该任务暂无告警"
+    },
+    "history": {
+      "viewLogs": "查看日志",
+      "archivedLogs": "归档日志"
+    },
+    "action": {
+      "start": "启动",
+      "pause": "暂停",
+      "resume": "续传",
+      "stop": "终止",
+      "edit": "编辑",
+      "delete": "删除"
+    }
+  },
+  "wizard": {
+    "header": {
+      "create": "创建{type}",
+      "back": "返回列表"
+    },
+    "step": {
+      "source": "实例来源",
+      "test": "测试连接",
+      "objects": "选择迁移对象 & 设置迁移",
+      "processing": "数据加工",
+      "advanced": "高级设置",
+      "precheck": "预检查",
+      "confirm": "任务确认"
+    },
+    "alert": {
+      "beforeStart": "创建过程在第一步需要您创建起始资源，配置完源库及目标库基本信息后，系统会含创建资源，为后续数据迁移准备。一旦资源创建好后，不可修改。\n该页面中标注为不可修改的配置项，影响数据库资源的创建，一旦提交为配置项确认，将需要重新创建任务。"
+    },
+    "source": {
+      "section": {
+        "source": "源数据库信息",
+        "target": "目标数据库信息",
+        "basic": "任务基本信息",
+        "mode": "同步模式"
+      },
+      "notEditable": "不可修改项",
+      "editable": "可修改项",
+      "engineType": "实例引擎类型",
+      "subMode": {
+        "_label": "GaussDB 子模式",
+        "pg-mode": "pg-mode",
+        "mysql-mode": "mysql-mode",
+        "oracle-mode": "oracle-mode (gaussdboracle)",
+        "required": "GaussDB 引擎需要选择子模式（pg / mysql / oracle）",
+        "hint": "GaussDB 多模特性需要明确目标兼容协议；oracle-mode 即 gaussdboracle，对应 LogMiner CDC 链路。"
+      },
+      "host": "IP 地址 / 域名",
+      "port": "端口",
+      "username": "数据库用户名",
+      "password": "数据库密码",
+      "database": "数据库",
+      "ssl": "SSL 安全连接",
+      "pdb": "PDB 名称",
+      "name": "任务名称",
+      "desc": {
+        "_label": "描述",
+        "ph": "请写明项目背景及原因，方便后期回溯排查"
+      },
+      "drsType": {
+        "_label": "实例形态",
+        "standalone": "单机",
+        "primary_backup": "主备"
+      },
+      "rg": "资源组",
+      "instanceIp": "任务可用 IP 分配",
+      "instanceIpHint": "当前 IP 还能创建 {n} 个任务",
+      "ipHint": "多个 IP 使用英文逗号分隔",
+      "taskIdHint": "仅支持字母开头，2-64 位字母、数字、下划线、连字符",
+      "taskIdInvalid": "任务名称格式不正确",
+      "taskIdTaken": "任务名称已存在",
+      "topology": {
+        "_label": "实例形态",
+        "standalone": "单机",
+        "primary_backup": "主备"
+      }
+    },
+    "mode": {
+      "snapshot_cdc": {
+        "label": "全量 + 增量",
+        "desc": "适用于持续性迁移，对业务中断敏感的迁移场景",
+        "unsupported": "全量+增量模式当前仅支持 MySQL 和 Oracle 源端"
+      },
+      "snapshot": {
+        "label": "全量",
+        "desc": "适用于一次性迁移，可中断业务的迁移场景"
+      },
+      "cdc": {
+        "label": "增量",
+        "desc": "适用于持续性迁移，对业务中断敏感、定制化方案的迁移场景"
+      }
+    },
+    "test": {
+      "hint": "同步实例创建成功后，先测试与源端和目标端的连通性。若源端或目标端做了 IP 白名单控制，需要将 ape-dts Console 的 IP 127.0.0.1 放入源端及目标端的网络白名单，确保同步实例可访问源端和目标端。",
+      "run": "测试连接",
+      "running": "正在进行测试",
+      "success": "连接成功 · 延迟 {ms} ms",
+      "failure": "连接失败：{msg}",
+      "network": "网络信息",
+      "instanceIp": "ape-dts Console 实例私有 IP",
+      "bypass": "跳过连接测试"
+    },
+    "objects": {
+      "section": {
+        "rate": "配置限速",
+        "sync": "配置同步"
+      },
+      "rate": {
+        "_label": "流速模式",
+        "off": "不限速",
+        "on": "限速"
+      },
+      "fullType": {
+        "_label": "全量同步对象类型",
+        "schema": "同步表结构",
+        "data": "同步数据",
+        "index": "同步索引"
+      },
+      "conflict": {
+        "_label": "增量阶段冲突策略",
+        "insert": "插入（insert）",
+        "replace": "替换（replace）",
+        "ignore": "忽略（ignore）",
+        "hint": "当同步数据与目标库已有数据冲突时（主键/唯一一键复写等），将覆盖原来的冲突数据。"
+      },
+      "pickerTitle": "同步对象",
+      "picker": {
+        "manual": "手动选择",
+        "batch": "批量导入"
+      },
+      "ddlNotice": "此链路不支持 DDL 同步。源端执行 DDL 可能会导致数据同步错误、ape-dts 任务失败。",
+      "available": "可选择对象",
+      "selected": "已选择对象",
+      "search": "对展开的对象进行搜索，支持正则表达式",
+      "tableLevel": "表级同步",
+      "doDbs": "迁移库（do_dbs）",
+      "doTbs": "迁移表（do_tbs）",
+      "ignoreDbs": "忽略库（ignore_dbs）",
+      "ignoreTbs": "忽略表（ignore_tbs）",
+      "wildcardHint": "支持通配符 * 和 ?，多个用逗号分隔",
+      "atLeastOne": "至少选择一个迁移对象"
+    },
+    "processing": {
+      "removeInvalid": "一键去除无效对象",
+      "searchObj": "请输入对象名称",
+      "col": {
+        "obj": "选择加工对象",
+        "rule": "规则作用对象",
+        "filter": "过滤条件",
+        "rules": "配置规则",
+        "dml": "同步 DML 操作设置",
+        "colRules": "列加工数",
+        "actions": "操作"
+      },
+      "empty": "暂无表格数据",
+      "addRule": "添加规则",
+      "rule": {
+        "where": "WHERE 过滤",
+        "columnMap": "列名映射",
+        "dropCol": "剔除列"
+      },
+      "router": {
+        "_label": "路由映射",
+        "dbMap": "库映射 (db_map)",
+        "tbMap": "表映射 (tb_map)",
+        "colMap": "列映射 (col_map)",
+        "topicMap": "主题映射 (topic_map, Kafka 目标端)"
+      },
+      "lua": {
+        "_label": "Lua 处理器",
+        "none": "无",
+        "inline": "内联脚本",
+        "file": "文件上传",
+        "inlineLabel": "Lua 脚本",
+        "inlinePh": "if row_type == \"delete\" then row_type = \"\" end",
+        "fileLabel": "上传 .lua 文件",
+        "chooseFile": "选择文件",
+        "notLua": "仅支持 .lua 文件",
+        "tooLarge": "文件过大（上限 {max} MB）"
+      }
+    },
+    "advanced": {
+      "section": {
+        "runtime": "运行时"
+      },
+      "parallelizer": "并行模式",
+      "parallelSize": "并行度",
+      "bufferSize": "缓冲区大小",
+      "checkpoint": "断点提交间隔（秒）",
+      "maxRps": "单 Sinker 最大 RPS",
+      "resume": {
+        "_label": "断点续传策略",
+        "from_log": "from_log：基于解析位点",
+        "from_target": "from_target：从目标端游标",
+        "from_db": "from_db：从源端反查"
+      },
+      "metrics": "启用 Prometheus 监控",
+      "metricsHttpPort": "Metrics HTTP 端口",
+      "metricsHttpHost": "Metrics HTTP 主机",
+      "metricsLabels": "自定义标签 (k1:v1,k2:v2)",
+      "parallel": {
+        "snapshot": "snapshot（全量并行）",
+        "rdb_merge": "rdb_merge（合并写）",
+        "rdb_partition": "rdb_partition（分区并行）",
+        "rdb_check": "rdb_check（校验并行）",
+        "serial": "serial（串行保序）",
+        "table": "table（按表）"
+      }
+    },
+    "precheck": {
+      "title": "智能检查中",
+      "desc": "ape-dts Console 正在检查源端兼容配置，请耐心等待。预检查目的：1. 评估迁移对源端运行的潜在影响；2. 预检查结果仅供参考，最终以下次实时检查结果为准。",
+      "reset": "重新检查",
+      "col": {
+        "idx": "序号",
+        "item": "检查项",
+        "type": "所属类别",
+        "result": "检查结果",
+        "action": "操作"
+      },
+      "action": {
+        "detail": "点击确认详情"
+      },
+      "result": {
+        "pending": "请查看",
+        "running": "正在检查",
+        "pass": "通过",
+        "warn": "警告",
+        "fail": "失败",
+        "skip": "跳过"
+      },
+      "failBlock": "存在未通过的预检查项，确认提交任务？",
+      "failTitle": "预检查警告",
+      "allPass": "所有预检查项均通过",
+      "error": "预检查请求失败",
+      "envelopeTitle": "预检查请求失败:",
+      "requestIdLabel": "请把此请求 ID 发给运维 / 查 console-server 日志:"
+    },
+    "confirm": {
+      "section": {
+        "basic": "基本信息",
+        "taskInfo": "任务信息确认"
+      },
+      "field": {
+        "id": "任务 ID",
+        "name": "任务名称",
+        "createdAt": "创建时间"
+      },
+      "startTime": "启动时间",
+      "startNow": "立即启动",
+      "startLater": "稍后启动",
+      "delayThreshold": "时延阈值（s）",
+      "iniPreview": "查看生成的 task.ini",
+      "migrationSettings": "迁移设置",
+      "migrationMode": "迁移模式",
+      "rateMode": "流速模式",
+      "taskInfo": "任务信息",
+      "submitStart": "提交并启动",
+      "submitLater": "提交",
+      "syncObjects": "同步对象",
+      "syncObjectsCount": "同步对象数",
+      "syncScope": "同步范围",
+      "hidePreview": "收起预览",
+      "previewError": "无法加载 INI 预览"
+    },
+    "toast": {
+      "created": "任务已创建并启动",
+      "createdLater": "任务已创建，可稍后启动",
+      "createFailed": "创建失败",
+      "startFailed": "自动启动失败，请在详情页手动启动"
+    },
+    "draft": {
+      "discard": "放弃草稿",
+      "discardTitle": "放弃草稿确认",
+      "discardConfirm": "确定要放弃当前草稿吗？所有未保存的修改将丢失。",
+      "discardDone": "草稿已清除",
+      "leaveTitle": "离开确认",
+      "leaveConfirm": "当前有未保存的修改，是否放弃草稿并离开？",
+      "leaveDiscard": "放弃并离开",
+      "deepLinkRejected": "无法直接跳转到中间步骤，请从第一步开始",
+      "engineChangeCleared": "选择的迁移对象已重置，因源端引擎变更"
+    },
+    "action": {
+      "back": "上一步",
+      "next": "下一步",
+      "testFirst": "请先通过连接测试",
+      "precheckFirst": "请先完成预检查"
+    }
+  },
+  "license": {
+    "title": "License 管理",
+    "subtitle": "查看授权状态、ESN、节点容量与有效期，新增激活码可延长授权时长",
+    "esn": "ESN",
+    "esnPh": "请输入 ESN（设备序列号）",
+    "filter": {
+      "status": "全部状态",
+      "model": "全部型号"
+    },
+    "col": {
+      "name": "名称",
+      "status": "状态",
+      "curUse": "当前使用任务数",
+      "maxUse": "最大可用任务数",
+      "unit": "量纲",
+      "file": "文件名",
+      "expire": "到期时间",
+      "actions": "操作"
+    },
+    "status": {
+      "active": "已激活",
+      "expiring": "即将过期",
+      "expiring_soon": "即将过期",
+      "expired": "已过期",
+      "perpetual": "永久"
+    },
+    "action": {
+      "activate": "激活 / 续期",
+      "download": "下载授权文件"
+    },
+    "activate": {
+      "title": "激活 / 续期 License",
+      "codeLabel": "激活码",
+      "codePh": "请输入由销售提供的激活码",
+      "toast": {
+        "success": "License 激活成功",
+        "fail": "激活失败"
+      }
+    },
+    "summary": {
+      "active": "在用授权",
+      "expiring": "即将过期",
+      "expired": "已过期",
+      "maxTasks": "授权任务总配额"
+    }
+  },
+  "system": {
+    "users": {
+      "title": "用户管理",
+      "subtitle": "管理系统用户账号、角色分配与权限控制",
+      "createUser": "创建用户",
+      "username": "用户名",
+      "displayName": "显示名称",
+      "password": "密码",
+      "passwordPlaceholder": "留空则不修改",
+      "role": "角色",
+      "status": "状态",
+      "createdAt": "创建时间",
+      "requiredFields": "用户名和密码不能为空",
+      "created": "用户已创建",
+      "saved": "已保存",
+      "deleted": "用户已删除",
+      "deleteConfirm": "确定要删除用户 {name} 吗？此操作不可撤销。"
+    },
+    "monitor": {
+      "title": "系统监控",
+      "subtitle": "ape-dts 集群节点的主机层指标，CPU / 内存 / 磁盘，按节点状态聚合",
+      "filter": {
+        "host": "请输入主机名",
+        "ip": "请输入主机IP"
+      },
+      "col": {
+        "host": "主机名",
+        "ip": "IP地址",
+        "role": "角色",
+        "status": "状态",
+        "nodeType": "节点类型",
+        "cpu": "CPU 使用率",
+        "mem": "内存使用率",
+        "disk": "磁盘使用率",
+        "uptime": "运行时长"
+      },
+      "role": {
+        "master": "主节点",
+        "worker": "工作节点",
+        "manager": "管理节点"
+      },
+      "nodeType": {
+        "physical": "物理机",
+        "virtual": "虚拟机",
+        "container": "容器"
+      },
+      "status": {
+        "healthy": "健康",
+        "warning": "告警",
+        "error": "异常"
+      }
+    },
+    "operateLog": {
+      "title": "操作日志",
+      "subtitle": "用户对 ape-dts Console 的操作审计，保留最近 180 天",
+      "action": "操作名称",
+      "level": "操作级别",
+      "result": {
+        "_label": "操作结果",
+        "success": "成功",
+        "failure": "失败"
+      },
+      "target": "操作对象",
+      "user": "用户名",
+      "ip": "执行 IP",
+      "range": "操作时间",
+      "col": {
+        "action": "操作名称",
+        "level": "操作级别",
+        "target": "操作对象",
+        "type": "操作类型",
+        "result": "操作结果",
+        "user": "用户名",
+        "at": "操作时间",
+        "ip": "执行 IP"
+      },
+      "btn": {
+        "search": "查询",
+        "reset": "重置"
+      }
+    }
+  },
+  "ops": {
+    "management": {
+      "title": "运维管理",
+      "subtitle": "面向运维同学的任务全景与批量操作（含其他维度的引擎、任务状态过滤）",
+      "tab": {
+        "sync": "全量迁移",
+        "cdc": "增量同步",
+        "check": "数据校验",
+        "struct": "结构迁移"
+      }
+    },
+    "controlLog": {
+      "title": "管控日志",
+      "subtitle": "ape-dts Console 控制面写入的运维日志文件，可按日期/任务范围下载",
+      "filter": {
+        "scope": "管控日志范围"
+      },
+      "scope": {
+        "all": "全部",
+        "task": "按任务",
+        "controller": "控制器",
+        "engine": "执行引擎"
+      },
+      "btn": {
+        "search": "查询"
+      },
+      "col": {
+        "file": "文件名",
+        "date": "日期",
+        "size": "大小",
+        "actions": "操作"
+      },
+      "action": {
+        "download": "下载",
+        "preview": "预览"
+      },
+      "empty": "暂无日志文件"
+    },
+    "globalParams": {
+      "title": "全局参数管理",
+      "subtitle": "ape-dts 全局生效的运行参数，谨慎修改 (会立即作用于新启动的任务)",
+      "bilingual": "双语显示",
+      "col": {
+        "key": "参数名称",
+        "value": "值",
+        "desc": "说明",
+        "createdAt": "创建时间",
+        "updatedAt": "修改时间",
+        "actions": "操作"
+      },
+      "cat": {
+        "runtime": "运行时",
+        "pipeline": "Pipeline",
+        "security": "安全",
+        "alarm": "告警"
+      },
+      "toast": {
+        "saved": "参数已更新"
+      }
+    }
+  },
+  "monitor": {
+    "metric": {
+      "title": "指标告警规则",
+      "subtitle": "针对 ape-dts 各项 Prometheus 指标定义阈值告警",
+      "action": {
+        "create": "新建指标规则",
+        "edit": "编辑规则"
+      },
+      "col": {
+        "id": "ID",
+        "name": "告警名称",
+        "metric": "指标",
+        "category": "类型",
+        "status": "状态",
+        "threshold": "阈值告警",
+        "source": "告警来源",
+        "enabled": "是否开启",
+        "efficient": "有效期",
+        "period": "周期 (分钟)",
+        "trigger": "触发次数",
+        "recovery": "恢复阈值",
+        "actions": "操作"
+      },
+      "field": {
+        "name": "规则名称",
+        "metric": "监控指标",
+        "operator": "比较符",
+        "threshold": "阈值",
+        "level": "告警级别",
+        "period": "评估周期 (分钟)",
+        "trigger": "连续触发次数",
+        "recovery": "恢复阈值",
+        "description": "说明"
+      },
+      "empty": "暂无指标规则",
+      "toast": {
+        "created": "规则已创建",
+        "updated": "规则已更新",
+        "deleted": "规则已删除",
+        "toggled": "状态已切换"
+      }
+    },
+    "event": {
+      "title": "事件告警规则",
+      "subtitle": "ape-dts 系统事件触发的告警，例如任务停止、连接中断、位点重置等",
+      "col": {
+        "id": "ID",
+        "name": "事件名称",
+        "category": "类别",
+        "status": "状态",
+        "level": "级别",
+        "source": "告警来源",
+        "enabled": "是否开启",
+        "validUntil": "有效期",
+        "period": "周期 (分钟)",
+        "trigger": "触发次数",
+        "desc": "说明"
+      },
+      "cat": {
+        "task": "任务",
+        "system": "系统",
+        "security": "安全"
+      }
+    },
+    "setting": {
+      "title": "监控全局设置",
+      "subtitle": "调整告警评估、通道默认值、维护时段等全局参数",
+      "dataRetentionDays": "告警监控数据存储时间 (天)",
+      "dataRetentionHelp": "保留近 N 天的活动告警与历史告警，超期自动归档清理。",
+      "aggregationWindowMin": "聚合窗口 (分钟)",
+      "aggregationHelp": "在窗口内的相同告警将被合并为一条，避免噪声。",
+      "defaultChannel": "默认告警通道",
+      "defaultTemplate": "默认告警模板",
+      "silenceStart": "维护时段（开始）",
+      "silenceEnd": "维护时段（结束）",
+      "toast": {
+        "saved": "设置已保存"
+      }
+    },
+    "channel": {
+      "title": "告警通道设置",
+      "subtitle": "配置 Kafka / SNMP 等告警外发通道，可配置多个，按通道维度独立启停",
+      "create": "新增通道",
+      "edit": "编辑通道",
+      "field": {
+        "name": "通道名称",
+        "enabled": "告警开关",
+        "range": "执行时间",
+        "rangeHint": "执行时间的结束时间必须大于当前时间",
+        "period": "执行周期",
+        "periodHint": "在执行时间内，每隔多久执行一次。单位为分钟。",
+        "kind": "告警方式",
+        "brokers": "brokers",
+        "topic": "topic",
+        "distinguish": "是否区分告警类型",
+        "ssl": "SSL",
+        "snmp": {
+          "agent": "Agent 地址",
+          "community": "Community",
+          "version": "版本"
+        }
+      },
+      "action": {
+        "test": "测试连接"
+      },
+      "toast": {
+        "testOk": "通道连通正常",
+        "testFail": "测试失败",
+        "saved": "通道已保存",
+        "deleted": "通道已删除"
+      }
+    },
+    "template": {
+      "title": "告警模板设置",
+      "subtitle": "为不同告警通道配置消息模板，支持 JSON 与分行 (split) 两种格式",
+      "field": {
+        "kind": "告警方式",
+        "format": "类型",
+        "context": "Context",
+        "contextPh": "请填写模板内容，可使用 {{level}}、{{taskName}}、{{message}} 等占位符",
+        "preview": "预览结果"
+      },
+      "action": {
+        "init": "初始化",
+        "preview": "预览插值"
+      },
+      "toast": {
+        "saved": "模板已保存",
+        "reset": "已恢复默认模板"
+      },
+      "format": {
+        "json": "json",
+        "split": "split"
+      }
+    }
+  },
+  "alerts": {
+    "subtitle": {
+      "current": "近 24 小时未清除的活动告警 · 自动刷新可关闭",
+      "history": "已清除告警的归档（保留 30 天）· 支持按时间范围检索"
+    },
+    "summary": {
+      "critical": "紧急",
+      "major": "重要",
+      "minor": "次要",
+      "info": "提示",
+      "total": "活动告警总数"
+    },
+    "auto": {
+      "on": "自动刷新已开启 · 8s",
+      "off": "自动刷新已关闭",
+      "label": "自动刷新"
+    },
+    "filter": {
+      "level": "全部级别",
+      "source": "全部来源",
+      "engine": "全部引擎",
+      "taskId": "请输入任务ID",
+      "alertId": "请输入告警ID",
+      "ip": "请输入实例IP",
+      "range": "选择时间范围",
+      "search": "请输入告警 ID / 任务名称 / 描述"
+    },
+    "batch": {
+      "clear": "批量清除"
+    },
+    "col": {
+      "id": "告警ID",
+      "level": "级别",
+      "message": "告警内容",
+      "ip": "同步实例IP",
+      "engine": "数据库引擎",
+      "source": "告警来源",
+      "task": "关联任务",
+      "first": "首次发生时间",
+      "last": "最近发生时间",
+      "cleared": "清除时间",
+      "service": "服务",
+      "count": "次数",
+      "actions": "操作"
+    },
+    "action": {
+      "clear": "清除",
+      "viewTask": "查看任务"
+    },
+    "source": {
+      "rps": "吞吐速率",
+      "latency": "同步延迟",
+      "error_rate": "错误率",
+      "connection": "连接异常",
+      "disk": "磁盘容量",
+      "custom": "自定义"
+    },
+    "empty": {
+      "current": "当前没有活动告警 · 系统状态良好",
+      "history": "该时段没有历史告警"
+    },
+    "confirm": {
+      "clear": "确定清除告警「{id}」？",
+      "clearBatch": "确定清除已选中的 {n} 条告警？"
+    },
+    "toast": {
+      "cleared": "告警已清除",
+      "clearedBatch": "已清除 {n} 条告警",
+      "newAlert": "新告警"
+    },
+    "trend": {
+      "title": "近 14 天告警趋势"
+    }
+  },
+  "taskList": {
+    "empty": "暂无任务，快去创建一个吧",
+    "selectRow": "选择任务 {name}",
+    "subtitle": {
+      "snapshot": "源端到目标端的全量数据迁移，支持断点续传与多引擎组合",
+      "cdc": "基于 binlog/WAL/SCN 的持续增量同步，毫秒级延迟",
+      "check": "对比源端与目标端数据差异，支持抽样与全量校验",
+      "struct": "纯结构迁移：DDL、索引、约束、视图等模式对象",
+      "sync": "全量 / 增量 / 全量+增量 三种模式统一管理，可在列表中按模式过滤"
+    },
+    "action": {
+      "batch": "批量操作",
+      "export": "导出",
+      "import": "批量导入任务",
+      "exportTpl": "导出创建模板",
+      "downloadTpl": "下载创建模板",
+      "create": "创建{type}"
+    },
+    "batch": {
+      "pause": "批量暂停",
+      "resume": "批量续传",
+      "start": "批量启动",
+      "stop": "批量终止",
+      "delete": "批量删除"
+    },
+    "filter": {
+      "rg": "全部资源组",
+      "engine": "全部引擎",
+      "status": "全部状态",
+      "search": "请输入任务名称 / ID / 实例 IP",
+      "mode": "全部模式",
+      "clearAll": "清除全部"
+    },
+    "col": {
+      "name": "名称 / ID",
+      "status": "状态",
+      "rg": "资源组",
+      "flow": "源 → 目标",
+      "mode": "同步模式",
+      "ip": "实例 IP",
+      "rps": "吞吐 (rows/s)",
+      "latency": "时延 (ms)",
+      "progress": "进度",
+      "desc": "描述",
+      "actions": "操作",
+      "throughput": "吞吐 / 时延",
+      "createdAt": "创建时间",
+      "updatedAt": "更新时间",
+      "source": "源",
+      "target": "目标"
+    },
+    "create": {
+      "title": "创建{type}",
+      "modeTitle": "请选择任务模式",
+      "mode": {
+        "snapshot": "全量迁移",
+        "snapshotDesc": "一次性将源端存量数据迁移到目标端，适合停机窗口迁移",
+        "cdc": "增量同步",
+        "cdcDesc": "基于源端 Binlog/WAL/Oplog 持续同步增量变更",
+        "snapshot_cdc": "全量 + 增量",
+        "snapshot_cdcDesc": "先完成一次全量，再切换至增量，推荐业务不停机场景"
+      },
+      "next": "下一步：配置任务"
+    },
+    "mode": {
+      "snapshot": "全量",
+      "cdc": "增量",
+      "snapshot_cdc": "全量+增量"
+    },
+    "confirm": {
+      "delete": "确定删除任务「{name}」？该操作不可撤销。",
+      "stop": "确定终止任务「{name}」？",
+      "batchDelete": "确定删除已选中的 {n} 条任务？该操作不可撤销。"
+    },
+    "toast": {
+      "deleted": "任务已删除",
+      "action": {
+        "paused": "已暂停",
+        "resumed": "已续传",
+        "stopped": "已终止",
+        "started": "已启动"
+      },
+      "exported": "已导出任务列表 JSON",
+      "importHint": "演示环境：请上传符合 ape-dts 规范的 task.ini 批量包",
+      "imported": "成功导入 {n} 个任务",
+      "importedPartial": "导入完成：成功 {ok}，失败 {fail}",
+      "importFailed": "导入失败",
+      "loadFailed": "加载任务失败",
+      "actionFailed": "操作失败"
+    },
+    "cols": {
+      "manage": "列",
+      "title": "可见列",
+      "fixedHint": "名称、源、目标、状态、进度、操作 为固定列"
+    },
+    "density": {
+      "tip": "切换行高（紧凑 / 默认）"
+    },
+    "overCapTip": "License 任务配额已达上限（{current}/{max}），无法创建新任务。请联系管理员激活或升级 License。"
+  }
+}

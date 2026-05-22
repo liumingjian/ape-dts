@@ -1,0 +1,8 @@
+id,task,status,completed_at,notes
+1,Create taskmaster artifacts (SPEC/TODO/PROGRESS/raw),DONE,2026-03-31,
+2,Extend StructureType + do_structures to include view,DONE,2026-03-31,
+3,Add PgCreateViewStatement + plumbing (StructStatement/to_sqls/router),DONE,2026-03-31,
+4,Extend PgStructFetcher to fetch views+matviews,DONE,2026-03-31,
+5,Add dt-tests cases (pg_to_gaussdb + gaussdb_to_pg) and assertions,DONE,2026-03-31,Added test entrypoints + dst SELECT smoke check
+6,Run tests and record evidence (and sanitize excerpts),DONE,2026-03-31 21:53 +0800,dt-tests struct_view_routine_test PASS (both directions)
+7,Update tracker + epic status,DONE,2026-03-31 21:53 +0800,

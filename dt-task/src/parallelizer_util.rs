@@ -133,9 +133,16 @@ impl ParallelizerUtil {
     async fn create_rdb_merger(
         config: &TaskConfig,
     ) -> anyhow::Result<Box<dyn Merger + Send + Sync>> {
-        let rdb_merger = RdbMerger {
-            rdb_meta_manager: TaskUtil::create_rdb_meta_manager(config).await?.unwrap(),
+        let meta_manager = TaskUtil::create_rdb_meta_manager(config).await?;
+        let Some(rdb_meta_manager) = meta_manager else {
+            anyhow::bail!(
+                "parallelizer type '{}' requires rdb meta manager, but sinker db_type '{}' is not supported; set parallelizer.parallel_type=serial",
+                config.parallelizer.parallel_type,
+                config.sinker_basic.db_type
+            );
         };
+
+        let rdb_merger = RdbMerger { rdb_meta_manager };
         Ok(Box::new(rdb_merger))
     }
 
@@ -145,7 +152,15 @@ impl ParallelizerUtil {
     }
 
     async fn create_rdb_partitioner(config: &TaskConfig) -> anyhow::Result<RdbPartitioner> {
-        let meta_manager = TaskUtil::create_rdb_meta_manager(config).await?.unwrap();
+        let meta_manager = TaskUtil::create_rdb_meta_manager(config).await?;
+        let Some(meta_manager) = meta_manager else {
+            anyhow::bail!(
+                "parallelizer type '{}' requires rdb meta manager, but sinker db_type '{}' is not supported; set parallelizer.parallel_type=serial",
+                config.parallelizer.parallel_type,
+                config.sinker_basic.db_type
+            );
+        };
+
         Ok(RdbPartitioner { meta_manager })
     }
 }

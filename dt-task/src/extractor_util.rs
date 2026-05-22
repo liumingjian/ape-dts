@@ -31,6 +31,7 @@ use dt_connector::{
         base_extractor::BaseExtractor,
         extractor_monitor::ExtractorMonitor,
         foxlake::foxlake_s3_extractor::FoxlakeS3Extractor,
+        gaussdb::gaussdb_cdc_extractor::GaussDBCdcExtractor,
         kafka::kafka_extractor::KafkaExtractor,
         mongo::{
             mongo_cdc_extractor::MongoCdcExtractor, mongo_check_extractor::MongoCheckExtractor,
@@ -40,6 +41,12 @@ use dt_connector::{
             mysql_cdc_extractor::MysqlCdcExtractor, mysql_check_extractor::MysqlCheckExtractor,
             mysql_snapshot_extractor::MysqlSnapshotExtractor,
             mysql_struct_extractor::MysqlStructExtractor,
+        },
+        oracle::{
+            oracle_cdc_extractor::OracleCdcExtractor,
+            oracle_logminer_cdc_extractor::OracleLogMinerCdcExtractor,
+            oracle_snapshot_extractor::OracleSnapshotExtractor,
+            oracle_struct_extractor::OracleStructExtractor,
         },
         pg::{
             pg_cdc_extractor::PgCdcExtractor, pg_check_extractor::PgCheckExtractor,
@@ -260,6 +267,104 @@ impl ExtractorUtil {
                 Box::new(extractor)
             }
 
+            ExtractorConfig::OracleSnapshot {
+                schema,
+                tb,
+                sample_interval,
+                parallel_size,
+                batch_size,
+                ..
+            } => {
+                let client = match extractor_client {
+                    ConnClient::Oracle(client) => client,
+                    _ => {
+                        bail!("oracle client not found");
+                    }
+                };
+                let extractor = OracleSnapshotExtractor {
+                    client,
+                    batch_size,
+                    parallel_size,
+                    sample_interval: sample_interval as u64,
+                    schema,
+                    tb,
+                    base_extractor,
+                    filter,
+                    recovery,
+                };
+                Box::new(extractor)
+            }
+
+            ExtractorConfig::OracleStruct {
+                schemas,
+                db_batch_size,
+                ..
+            } => {
+                let client = match extractor_client {
+                    ConnClient::Oracle(client) => client,
+                    _ => bail!("oracle client not found"),
+                };
+                let db_batch_size = PgStructExtractor::validate_db_batch_size(db_batch_size)?;
+                let extractor = OracleStructExtractor {
+                    client,
+                    schemas,
+                    db_batch_size,
+                    base_extractor,
+                    filter,
+                };
+                Box::new(extractor)
+            }
+
+            ExtractorConfig::OracleCdc {
+                poll_interval_millis,
+                poll_batch_size,
+                start_change_id,
+                start_time_utc,
+                end_time_utc,
+                ..
+            } => {
+                let client = match extractor_client {
+                    ConnClient::Oracle(client) => client,
+                    _ => bail!("oracle client not found"),
+                };
+                base_extractor.time_filter = TimeFilter::new(&start_time_utc, &end_time_utc)?;
+                let extractor = OracleCdcExtractor {
+                    client,
+                    filter,
+                    poll_interval_millis,
+                    poll_batch_size,
+                    start_change_id,
+                    base_extractor,
+                    recovery,
+                };
+                Box::new(extractor)
+            }
+
+            ExtractorConfig::OracleLogMinerCdc {
+                poll_interval_millis,
+                poll_batch_size,
+                start_scn,
+                start_time_utc,
+                end_time_utc,
+                ..
+            } => {
+                let client = match extractor_client {
+                    ConnClient::Oracle(client) => client,
+                    _ => bail!("oracle client not found"),
+                };
+                base_extractor.time_filter = TimeFilter::new(&start_time_utc, &end_time_utc)?;
+                let extractor = OracleLogMinerCdcExtractor {
+                    client,
+                    filter,
+                    poll_interval_millis,
+                    poll_batch_size,
+                    start_scn,
+                    base_extractor,
+                    recovery,
+                };
+                Box::new(extractor)
+            }
+
             ExtractorConfig::PgCheck {
                 check_log_dir,
                 batch_size,
@@ -320,6 +425,42 @@ impl ExtractorUtil {
                     ddl_meta_tb,
                     base_extractor,
                     recovery,
+                };
+                Box::new(extractor)
+            }
+
+            ExtractorConfig::GaussDBCdc {
+                url,
+                connection_auth,
+                slot_name,
+                start_lsn,
+                recreate_slot_if_exists,
+                keepalive_interval_secs,
+                heartbeat_interval_secs,
+                heartbeat_tb,
+                start_time_utc,
+                end_time_utc,
+            } => {
+                let conn_pool = match extractor_client {
+                    ConnClient::PostgreSQL(conn_pool) => conn_pool,
+                    _ => bail!("connection pool not found"),
+                };
+                base_extractor.time_filter = TimeFilter::new(&start_time_utc, &end_time_utc)?;
+                let extractor = GaussDBCdcExtractor {
+                    filter,
+                    url,
+                    connection_auth,
+                    conn_pool,
+                    slot_name,
+                    start_lsn,
+                    recreate_slot_if_exists,
+                    syncer,
+                    keepalive_interval_secs,
+                    heartbeat_interval_secs,
+                    heartbeat_tb,
+                    base_extractor,
+                    recovery,
+                    last_success_endpoint: None,
                 };
                 Box::new(extractor)
             }
@@ -423,6 +564,7 @@ impl ExtractorUtil {
                     PgStructExtractor::validate_db_batch_size(db_batch_size)?;
                 let extractor = PgStructExtractor {
                     conn_pool,
+                    db_type: config.extractor_basic.db_type.clone(),
                     schemas,
                     do_global_structs,
                     filter,
@@ -605,14 +747,18 @@ impl ExtractorUtil {
         let connection_auth = &task_config.extractor_basic.connection_auth;
 
         let meta_manager = match task_config.extractor_basic.db_type {
-            DbType::Mysql => {
+            DbType::Mysql | DbType::GaussDBMySQL => {
                 let conn_pool =
                     TaskUtil::create_mysql_conn_pool(extractor_url, connection_auth, 1, true, None)
                         .await?;
-                let meta_manager = MysqlMetaManager::new(conn_pool.clone()).await?;
+                let meta_manager = MysqlMetaManager::new_mysql_compatible(
+                    conn_pool.clone(),
+                    task_config.extractor_basic.db_type.clone(),
+                )
+                .await?;
                 Some(RdbMetaManager::from_mysql(meta_manager))
             }
-            DbType::Pg => {
+            DbType::Pg | DbType::GaussDBPg | DbType::GaussDBOracle => {
                 let conn_pool =
                     TaskUtil::create_pg_conn_pool(extractor_url, connection_auth, 1, true, false)
                         .await?;

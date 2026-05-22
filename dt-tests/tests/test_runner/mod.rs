@@ -3,6 +3,8 @@ pub mod check_util;
 pub mod mock_utils;
 pub mod mongo_check_test_runner;
 pub mod mongo_test_runner;
+pub mod oracle_dst_struct_test_runner;
+pub mod oracle_struct_test_runner;
 pub mod precheck_test_runner;
 pub mod rdb_check_test_runner;
 pub mod rdb_clickhouse_test_runner;

@@ -1,0 +1,6 @@
+id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
+1,实现 MysqlStructSinker 对 PgCreateSchema/PgCreateTable 的 MySQL DDL 转换,DONE,dt-connector 编译通过,"cargo test -p dt-connector --no-run",2026-04-15 10:11:36 +0800,0,translate pg struct statements into mysql create db/table
+2,新增 gaussdb_to_mysql struct basic 测试模块与夹具,DONE,struct_tests.rs 与 basic_test fixture 落盘,"test -f dt-tests/tests/gaussdb_to_mysql/struct_tests.rs && test -f dt-tests/tests/gaussdb_to_mysql/struct/basic_test/task_config.ini",2026-04-15 10:11:36 +0800,0,added fixture + expect_ddl_5.7/8.0 baselines
+3,编译验证 dt-tests integration_test,DONE,`cargo test --no-run` 通过,"cargo test -p dt-tests --test integration_test --no-run",2026-04-15 10:11:36 +0800,0,compile passed
+4,真实环境运行 struct basic,DONE,struct 用例 PASS,"set -a; source dt-tests/tests/.env.local; set +a && cargo test -p dt-tests --test integration_test -- gaussdb_to_mysql::struct_tests::test::struct_basic_test --nocapture",2026-04-15 11:20:30 +0800,0,PASS after baseline sync for MySQL8 SHOW CREATE DATABASE output
+5,更新 tracker/e2e 矩阵并收口证据,DONE,docs 已更新且可检索到 struct 入口,"rg -n \"GaussDBPg -> MySQL.*struct|gaussdb_to_mysql::struct_tests\" docs/agent-summary/gaussdb-progress-tracker.md docs/agent-summary/gaussdb-e2e-test-plan.md",2026-04-15 11:22:13 +0800,0,gaussdb-progress-tracker + gaussdb-e2e-test-plan updated

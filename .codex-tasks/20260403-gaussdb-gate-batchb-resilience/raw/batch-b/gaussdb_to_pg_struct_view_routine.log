@@ -1,0 +1,198 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.21s
+warning: the following packages contain code that will be rejected by a future version of Rust: snap v0.2.5
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 2`
+     Running tests/integration_test.rs (target/debug/deps/integration_test-9b60f916ab830360)
+
+running 1 test
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.30:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.30:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.30:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.30:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+selected gaussdb rw url: postgres://10.250.0.51:8000/postgres?sslmode=require (server_addr=192.168.1.51/32)
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.30:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.30:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.30:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.30:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+selected gaussdb rw url: postgres://10.250.0.51:8000/postgres?sslmode=require (server_addr=192.168.1.51/32)
+executing sql: DO $ape_dts$
+BEGIN
+  BEGIN
+    EXECUTE 'DROP MATERIALIZED VIEW IF EXISTS public.gaussdb_struct_vr_matview';
+  EXCEPTION WHEN OTHERS THEN
+    EXECUTE 'DROP VIEW IF EXISTS public.gaussdb_struct_vr_matview';
+  END;
+END
+$ape_dts$
+executing sql: DROP VIEW IF EXISTS public.gaussdb_struct_vr_view
+executing sql: DROP PROCEDURE IF EXISTS public.gaussdb_struct_vr_proc()
+executing sql: DROP FUNCTION IF EXISTS public.gaussdb_struct_vr_func()
+executing sql: DROP TABLE IF EXISTS public.gaussdb_struct_vr_base
+executing sql: CREATE TABLE public.gaussdb_struct_vr_base ( id INTEGER PRIMARY KEY, val TEXT )
+executing sql: CREATE OR REPLACE FUNCTION public.gaussdb_struct_vr_func() RETURNS integer LANGUAGE sql AS 'SELECT 42'
+executing sql: CREATE OR REPLACE PROCEDURE public.gaussdb_struct_vr_proc() AS BEGIN PERFORM 1; END; /*ape_dts*/
+executing sql: CREATE VIEW public.gaussdb_struct_vr_view AS SELECT id, val FROM public.gaussdb_struct_vr_base
+executing sql: CREATE VIEW public.gaussdb_struct_vr_matview AS SELECT id, val FROM public.gaussdb_struct_vr_base
+executing sql: DO $ape_dts$
+BEGIN
+  BEGIN
+    EXECUTE 'DROP MATERIALIZED VIEW IF EXISTS public.gaussdb_struct_vr_matview';
+  EXCEPTION WHEN OTHERS THEN
+    EXECUTE 'DROP VIEW IF EXISTS public.gaussdb_struct_vr_matview';
+  END;
+END
+$ape_dts$
+executing sql: DROP VIEW IF EXISTS public.gaussdb_struct_vr_view
+executing sql: DROP PROCEDURE IF EXISTS public.gaussdb_struct_vr_proc()
+executing sql: DROP FUNCTION IF EXISTS public.gaussdb_struct_vr_func()
+executing sql: DROP TABLE IF EXISTS public.gaussdb_struct_vr_base
+2026-04-03T15:44:12.423558+08:00 INFO default_logger - start task: [taskID: 7d186cdacd55bd7a, taskType: Some(Struct)]
+2026-04-03T15:44:12.423781+08:00 WARN default_logger - recorder unsupported resumer config: Dummy
+2026-04-03T15:44:12.423811+08:00 WARN default_logger - recovery unsupported resumer config: Dummy
+2026-04-03T15:44:12.423834+08:00 INFO default_logger - recovery initialization for task_id: 7d186cdacd55bd7a finished in 0 ms
+2026-04-03T15:44:12.931957+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-03T15:44:12.931991+08:00 ERROR default_logger - buffer_memory_mb=0 is too large and will be ignored to prevent overflow
+2026-04-03T15:44:12.932010+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-03T15:44:13.104721+08:00 INFO default_logger - PgStructExtractor starts...
+2026-04-03T15:44:13.104765+08:00 INFO default_logger - PgStructExtractor extracts schemas: public
+2026-04-03T15:44:13.105028+08:00 INFO default_logger - SerialParallelizer starts, parallel_size: 1, checkpoint_interval_secs: 1
+2026-04-03T15:44:13.599281+08:00 INFO default_logger - ddl begin: CREATE SCHEMA IF NOT EXISTS "public"
+2026-04-03T15:44:13.601417+08:00 INFO sqlx::postgres::notice - schema "public" already exists, skipping
+2026-04-03T15:44:13.601475+08:00 INFO default_logger - ddl succeed
+2026-04-03T15:44:14.105160+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-04-03T15:44:14.105193+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-04-03T15:44:14.106120+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=1 | avg=1 | max=1
+2026-04-03T15:44:14.106159+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T15:44:14.106175+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-04-03T15:44:14.106187+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=1
+2026-04-03T15:44:14.106211+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=2 | avg=2 | max=2
+2026-04-03T15:44:14.106227+08:00 INFO monitor_logger - sinker |  | serial_writes | sum=1 | avg_by_sec=1 | max_by_sec=1
+2026-04-03T15:44:14.106238+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T15:44:14.106264+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=1 | avg=1 | max=1
+2026-04-03T15:44:14.106285+08:00 INFO monitor_logger - sinker |  | record_count | sum=1 | avg_by_sec=1 | max_by_sec=1
+2026-04-03T15:44:15.105299+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-04-03T15:44:15.105347+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-04-03T15:44:15.106091+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=0 | avg=0 | max=0
+2026-04-03T15:44:15.106124+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T15:44:15.106137+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-04-03T15:44:15.106149+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T15:44:15.106163+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T15:44:15.106176+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=1
+2026-04-03T15:44:15.106200+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=0 | avg=0 | max=0
+2026-04-03T15:44:15.106213+08:00 INFO monitor_logger - sinker |  | serial_writes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T15:44:15.106228+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T15:44:15.106240+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=0 | avg=0 | max=0
+2026-04-03T15:44:15.106251+08:00 INFO monitor_logger - sinker |  | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T15:44:15.351765+08:00 INFO default_logger - ddl begin: CREATE TABLE IF NOT EXISTS "public"."gaussdb_struct_vr_base" ("id" integer NOT NULL ,"val" text )
+2026-04-03T15:44:15.359202+08:00 INFO default_logger - ddl succeed
+2026-04-03T15:44:15.359224+08:00 INFO default_logger - ddl begin: ALTER TABLE "public"."gaussdb_struct_vr_base" ADD CONSTRAINT "gaussdb_struct_vr_base_pkey" PRIMARY KEY (id)
+2026-04-03T15:44:15.418032+08:00 INFO default_logger - ddl succeed
+2026-04-03T15:44:15.418059+08:00 INFO default_logger - ddl begin: CREATE UNIQUE INDEX IF NOT EXISTS "gaussdb_struct_vr_base_pkey" ON "public"."gaussdb_struct_vr_base" USING ubtree (id) WITH (storage_type=USTORE) TABLESPACE pg_default
+2026-04-03T15:44:15.419241+08:00 INFO sqlx::postgres::notice - relation "gaussdb_struct_vr_base_pkey" already exists, skipping
+2026-04-03T15:44:15.419282+08:00 INFO default_logger - ddl succeed
+2026-04-03T15:44:15.595767+08:00 INFO default_logger - ddl begin: CREATE OR REPLACE FUNCTION "public"."gaussdb_struct_vr_func"()
+ RETURNS integer
+ LANGUAGE sql
+AS $function$SELECT 42$function$;
+2026-04-03T15:44:15.598527+08:00 INFO default_logger - ddl succeed
+2026-04-03T15:44:15.603692+08:00 INFO default_logger - ddl begin: DO $ape_dts_proc_do$
+BEGIN
+  BEGIN
+    EXECUTE $ape_dts_proc_pg$
+CREATE OR REPLACE PROCEDURE "public"."gaussdb_struct_vr_proc"()
+ LANGUAGE plpgsql
+AS $ape_dts_proc_body$
+DECLARE  BEGIN PERFORM 1; END;
+$ape_dts_proc_body$
+$ape_dts_proc_pg$;
+  EXCEPTION WHEN OTHERS THEN
+    EXECUTE $ape_dts_proc_gauss$
+CREATE OR REPLACE PROCEDURE "public"."gaussdb_struct_vr_proc"() AS
+DECLARE  BEGIN PERFORM 1; END;
+$ape_dts_proc_gauss$;
+  END;
+END
+$ape_dts_proc_do$;
+2026-04-03T15:44:15.609217+08:00 INFO default_logger - ddl succeed
+2026-04-03T15:44:15.869934+08:00 WARN default_logger - skip materialized views (pg_matviews missing): error returned from database: Relation "pg_matviews" does not exist on dn_6001_6002_6003.
+2026-04-03T15:44:15.870637+08:00 INFO default_logger - ddl begin: CREATE OR REPLACE VIEW "public"."gaussdb_struct_vr_view" AS SELECT gaussdb_struct_vr_base.id, gaussdb_struct_vr_base.val FROM gaussdb_struct_vr_base
+2026-04-03T15:44:15.875718+08:00 INFO default_logger - ddl succeed
+2026-04-03T15:44:15.876034+08:00 INFO default_logger - ddl begin: CREATE OR REPLACE VIEW "public"."gaussdb_struct_vr_matview" AS SELECT gaussdb_struct_vr_base.id, gaussdb_struct_vr_base.val FROM gaussdb_struct_vr_base
+2026-04-03T15:44:15.878496+08:00 INFO default_logger - ddl succeed
+2026-04-03T15:44:15.878566+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-04-03T15:44:15.878581+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-04-03T15:44:15.917761+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-04-03T15:44:15.917842+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=6 | avg_by_sec=6 | max_by_sec=6
+2026-04-03T15:44:15.917860+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T15:44:15.917874+08:00 INFO monitor_logger - extractor |  | record_count | sum=6 | avg_by_sec=6 | max_by_sec=6
+2026-04-03T15:44:15.917885+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T15:44:15.917916+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=5 | avg=1 | max=2
+2026-04-03T15:44:15.917936+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-04-03T15:44:15.917947+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-04-03T15:44:15.917957+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-04-03T15:44:15.917966+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-04-03T15:44:15.917975+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=6
+2026-04-03T15:44:15.917996+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=15 | avg=3 | max=5
+2026-04-03T15:44:15.918007+08:00 INFO monitor_logger - sinker |  | serial_writes | sum=5 | avg_by_sec=5 | max_by_sec=5
+2026-04-03T15:44:15.918017+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-04-03T15:44:15.918028+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=5 | avg=1 | max=2
+2026-04-03T15:44:15.918037+08:00 INFO monitor_logger - sinker |  | record_count | sum=5 | avg_by_sec=5 | max_by_sec=5
+2026-04-03T15:44:15.918491+08:00 INFO finished_logger - task finished
+comparing src table: ("public", "gaussdb_struct_vr_base") with dst table: ("public", "gaussdb_struct_vr_base")
+
+index property: relname
+index property: indisprimary
+index property: indisunique
+index property: indisclustered
+index property: indisvalid
+index property: pg_get_constraintdef
+index property: contype
+index property: condeferrable
+index property: condeferred
+summary: src tables: [("public", "gaussdb_struct_vr_base")], dst tables: [("public", "gaussdb_struct_vr_base")]
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.30:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.30:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.30:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.30:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+selected gaussdb rw url: postgres://10.250.0.51:8000/postgres?sslmode=require (server_addr=192.168.1.51/32)
+executing sql: DO $ape_dts$
+BEGIN
+  BEGIN
+    EXECUTE 'DROP MATERIALIZED VIEW IF EXISTS public.gaussdb_struct_vr_matview';
+  EXCEPTION WHEN OTHERS THEN
+    EXECUTE 'DROP VIEW IF EXISTS public.gaussdb_struct_vr_matview';
+  END;
+END
+$ape_dts$
+executing sql: DROP VIEW IF EXISTS public.gaussdb_struct_vr_view
+executing sql: DROP PROCEDURE IF EXISTS public.gaussdb_struct_vr_proc()
+executing sql: DROP FUNCTION IF EXISTS public.gaussdb_struct_vr_func()
+executing sql: DROP TABLE IF EXISTS public.gaussdb_struct_vr_base
+executing sql: DO $ape_dts$
+BEGIN
+  BEGIN
+    EXECUTE 'DROP MATERIALIZED VIEW IF EXISTS public.gaussdb_struct_vr_matview';
+  EXCEPTION WHEN OTHERS THEN
+    EXECUTE 'DROP VIEW IF EXISTS public.gaussdb_struct_vr_matview';
+  END;
+END
+$ape_dts$
+executing sql: DROP VIEW IF EXISTS public.gaussdb_struct_vr_view
+executing sql: DROP PROCEDURE IF EXISTS public.gaussdb_struct_vr_proc()
+executing sql: DROP FUNCTION IF EXISTS public.gaussdb_struct_vr_func()
+executing sql: DROP TABLE IF EXISTS public.gaussdb_struct_vr_base
+test gaussdb_to_pg::struct_tests::test::struct_view_routine_test ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 356 filtered out; finished in 26.80s
+

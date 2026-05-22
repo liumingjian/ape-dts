@@ -1,0 +1,6 @@
+id,task,status,completed_at,notes
+1,Create taskmaster artifacts (SPEC/TODO/PROGRESS/raw) and confirm env inputs,DONE,2026-03-31,
+2,Adapt e2e runner to consume .local/e2e/.env (SRC_GAUSS_URL) and add optional sticky reconnect verification,DONE,2026-03-31,
+3,Run CDC e2e script using .local/e2e/.env and capture run artifacts,DONE,2026-03-31,
+4,Verify logs contain candidate-first + HA port + NoTLS evidence; verify sticky reconnect if enabled,DONE,2026-03-31,
+5,Summarize results and record evidence in PROGRESS/raw,DONE,2026-03-31,

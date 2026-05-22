@@ -1,0 +1,6 @@
+id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
+1,补齐 Oracle compose init（可选：创建 APE_DTS 用户）,DONE,oracle-xe 起来后能幂等创建用户/授权,docker compose -f dt-tests/docker-compose.oracle_xe.yml up -d,2026-04-15 16:28:57 +0800,0,已新增 oracle-xe-init 并验证 oracle-xe-local healthy + init Exited(0)
+2,RdbTestRunner 支持 Oracle 执行 prepare/test/clean SQL,DONE,Oracle 侧 SQL 文件可被执行,cargo test -p dt-tests --test integration_test --no-run,2026-04-15 17:07:19 +0800,0,PASS：prepare/clean/test SQL 已在两条 smoke 用例覆盖
+3,RdbTestRunner::fetch_data 支持 Oracle,DONE,compare_data 可读取 Oracle 表并生成 RowData,cargo test -p dt-tests --test integration_test --no-run,2026-04-15 17:07:19 +0800,0,PASS：`fetch_data_oracle` + compare_data 已在两条 smoke 用例覆盖
+4,dt-tests/.env 增加 oracle 默认配置占位（不含敏感）,DONE,oracle_* env 可被 token 替换与运行,test -f dt-tests/tests/.env,2026-04-15 16:36:46 +0800,0,已添加 ORACLE_SQLPLUS_DOCKER_CONTAINER + oracle_* 默认占位
+5,编译验证,DONE,dt-tests 编译通过,cargo test -p dt-tests --test integration_test --no-run,2026-04-15 16:36:46 +0800,0,cargo test -p dt-tests --test integration_test --no-run 已通过

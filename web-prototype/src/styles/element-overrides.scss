@@ -1,0 +1,37 @@
+/* Element Plus theme override — bind primary to ape-dts deep teal */
+@forward 'element-plus/theme-chalk/src/common/var.scss' with (
+  $colors: (
+    'primary': (
+      'base': #0F766E,
+    ),
+    'success': (
+      'base': #10B981,
+    ),
+    'warning': (
+      'base': #F59E0B,
+    ),
+    'danger': (
+      'base': #EF4444,
+    ),
+    'error': (
+      'base': #EF4444,
+    ),
+    'info': (
+      'base': #64748B,
+    ),
+  ),
+  $border-radius: (
+    'base': 6px,
+    'small': 4px,
+    'round': 20px,
+    'circle': 100%,
+  ),
+  $font-size: (
+    'extra-large': 20px,
+    'large': 16px,
+    'medium': 14px,
+    'base': 14px,
+    'small': 13px,
+    'extra-small': 12px,
+  )
+);

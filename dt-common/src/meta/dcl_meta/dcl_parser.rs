@@ -254,7 +254,7 @@ mod tests {
                     assert_ne!(dcl_data.dcl_type, dcl_type);
                 }
                 Ok(None) => {
-                    assert!(false);
+                    unreachable!()
                 }
                 Err(_) => {}
             };

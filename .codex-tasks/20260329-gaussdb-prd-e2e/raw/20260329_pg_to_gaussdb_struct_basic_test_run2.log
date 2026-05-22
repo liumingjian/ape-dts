@@ -1,0 +1,87 @@
+warning: value assigned to `should_reconnect` is never read
+   --> dt-connector/src/extractor/gaussdb/gaussdb_cdc_extractor.rs:191:21
+    |
+191 |             let mut should_reconnect = false;
+    |                     ^^^^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `#[warn(unused_assignments)]` on by default
+
+warning: `dt-connector` (lib) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.22s
+warning: the following packages contain code that will be rejected by a future version of Rust: snap v0.2.5
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running tests/integration_test.rs (target/debug/deps/integration_test-65ad912c08554e97)
+
+running 1 test
+selected gaussdb rw url: postgres://10.250.0.51:8000/postgres?sslmode=require (server_addr=192.168.1.51/32)
+executing sql: DROP TABLE IF EXISTS public.gaussdb_struct_basic
+executing sql: CREATE TABLE public.gaussdb_struct_basic ( id INTEGER PRIMARY KEY, val TEXT )
+skip gaussdb candidate (connect failed): postgres://10.250.0.30:8000/postgres?sslmode=require, error: error communicating with database: Connection reset by peer (os error 54)
+skip gaussdb candidate (connect failed): postgres://10.250.0.30:8000/postgres?sslmode=disable, error: error communicating with database: Connection reset by peer (os error 54)
+skip gaussdb candidate (standby/in_recovery): postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (standby/in_recovery): postgres://10.250.0.52:8000/postgres?sslmode=disable
+selected gaussdb rw url: postgres://10.250.0.51:8000/postgres?sslmode=require (server_addr=192.168.1.51/32)
+executing sql: DROP TABLE IF EXISTS public.gaussdb_struct_basic
+2026-03-29T17:21:32.719770+08:00 INFO default_logger - start task: [taskID: c715a7bc2f0f213, taskType: Some(Struct)]
+2026-03-29T17:21:32.720540+08:00 WARN default_logger - recorder unsupported resumer config: Dummy
+2026-03-29T17:21:32.720590+08:00 WARN default_logger - recovery unsupported resumer config: Dummy
+2026-03-29T17:21:32.720806+08:00 INFO default_logger - recovery initialization for task_id: c715a7bc2f0f213 finished in 0 ms
+2026-03-29T17:21:33.300556+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-03-29T17:21:33.300641+08:00 ERROR default_logger - buffer_memory_mb=0 is too large and will be ignored to prevent overflow
+2026-03-29T17:21:33.300699+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-03-29T17:21:33.322995+08:00 INFO default_logger - PgStructExtractor starts...
+2026-03-29T17:21:33.324422+08:00 INFO default_logger - PgStructExtractor extracts schemas: public
+2026-03-29T17:21:33.327004+08:00 INFO default_logger - SerialParallelizer starts, parallel_size: 1, checkpoint_interval_secs: 1
+2026-03-29T17:21:33.332708+08:00 INFO default_logger - ddl begin: DO $$ BEGIN CREATE SCHEMA "public"; EXCEPTION WHEN duplicate_schema THEN NULL; END $$;
+2026-03-29T17:21:33.586176+08:00 INFO default_logger - ddl succeed
+2026-03-29T17:21:33.590219+08:00 INFO default_logger - ddl begin: CREATE TABLE IF NOT EXISTS "public"."gaussdb_struct_basic" ("id" integer NOT NULL ,"val" text )
+2026-03-29T17:21:33.634793+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-03-29T17:21:33.635406+08:00 INFO monitor_logger - extractor |  | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-03-29T17:21:33.635450+08:00 INFO monitor_logger - extractor |  | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-03-29T17:21:33.635480+08:00 INFO monitor_logger - extractor |  | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-29T17:21:33.635506+08:00 INFO monitor_logger - extractor |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-29T17:21:33.635562+08:00 INFO monitor_logger - pipeline |  | buffer_size | sum=2 | avg=1 | max=1
+2026-03-29T17:21:33.635596+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-29T17:21:33.635689+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=1
+2026-03-29T17:21:33.635740+08:00 INFO monitor_logger - sinker |  | record_count | sum=1 | avg_by_sec=1 | max_by_sec=1
+2026-03-29T17:21:33.635771+08:00 INFO monitor_logger - sinker |  | serial_writes | sum=1 | avg_by_sec=1 | max_by_sec=1
+2026-03-29T17:21:33.635797+08:00 INFO monitor_logger - sinker |  | records_per_query | sum=1 | avg=1 | max=1
+2026-03-29T17:21:33.635824+08:00 INFO monitor_logger - sinker |  | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0
+2026-03-29T17:21:33.635868+08:00 INFO monitor_logger - sinker |  | rt_per_query | sum=253 | avg=253 | max=253
+2026-03-29T17:21:34.252843+08:00 INFO default_logger - ddl succeed
+2026-03-29T17:21:34.252965+08:00 INFO default_logger - ddl begin: ALTER TABLE "public"."gaussdb_struct_basic" ADD CONSTRAINT "gaussdb_struct_basic_pkey" PRIMARY KEY (id)
+2026-03-29T17:21:34.562881+08:00 INFO sqlx::postgres::notice - ALTER TABLE / ADD PRIMARY KEY will create implicit index "gaussdb_struct_basic_pkey" for table "gaussdb_struct_basic"
+2026-03-29T17:21:34.563043+08:00 INFO default_logger - ddl succeed
+2026-03-29T17:21:34.563081+08:00 INFO default_logger - ddl begin: CREATE UNIQUE INDEX IF NOT EXISTS "gaussdb_struct_basic_pkey" ON "public"."gaussdb_struct_basic" USING btree (id)
+2026-03-29T17:21:34.798360+08:00 INFO sqlx::postgres::notice - Index type btree is converted to index type ubtree.
+2026-03-29T17:21:34.798432+08:00 INFO sqlx::postgres::notice - relation "gaussdb_struct_basic_pkey" already exists, skipping
+2026-03-29T17:21:34.798591+08:00 INFO default_logger - ddl succeed
+2026-03-29T17:21:34.800078+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-29T17:21:34.800152+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-29T17:21:34.800246+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-29T17:21:34.800292+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-29T17:21:34.801425+08:00 INFO finished_logger - task finished
+comparing src table: ("public", "gaussdb_struct_basic") with dst table: ("public", "gaussdb_struct_basic")
+
+index property: relname
+index property: indisprimary
+index property: indisunique
+index property: indisclustered
+index property: indisvalid
+index property: pg_get_constraintdef
+index property: contype
+index property: condeferrable
+index property: condeferred
+summary: src tables: [("public", "gaussdb_struct_basic")], dst tables: [("public", "gaussdb_struct_basic")]
+executing sql: DROP TABLE IF EXISTS public.gaussdb_struct_basic
+skip gaussdb candidate (connect failed): postgres://10.250.0.30:8000/postgres?sslmode=require, error: error communicating with database: Connection reset by peer (os error 54)
+skip gaussdb candidate (connect failed): postgres://10.250.0.30:8000/postgres?sslmode=disable, error: error communicating with database: Connection reset by peer (os error 54)
+skip gaussdb candidate (standby/in_recovery): postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (standby/in_recovery): postgres://10.250.0.52:8000/postgres?sslmode=disable
+selected gaussdb rw url: postgres://10.250.0.51:8000/postgres?sslmode=require (server_addr=192.168.1.51/32)
+executing sql: DROP TABLE IF EXISTS public.gaussdb_struct_basic
+test pg_to_gaussdb::struct_tests::test::struct_basic_test ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 344 filtered out; finished in 14.70s
+

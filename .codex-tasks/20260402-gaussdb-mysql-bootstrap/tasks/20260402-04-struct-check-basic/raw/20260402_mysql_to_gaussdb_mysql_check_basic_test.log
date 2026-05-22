@@ -1,0 +1,86 @@
+
+running 1 test
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/jyp_test_m?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/jyp_test_m?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/jyp_test_m?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/jyp_test_m?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+selected gaussdb rw url: postgres://10.250.0.30:8000/jyp_test_m?sslmode=require (server_addr=192.168.1.30/32)
+executing sql: DROP DATABASE IF EXISTS gaussdb_mysql_check_basic
+executing sql: CREATE DATABASE IF NOT EXISTS gaussdb_mysql_check_basic DEFAULT CHARACTER SET utf8mb4
+executing sql: CREATE TABLE gaussdb_mysql_check_basic.check_basic ( id INT PRIMARY KEY, val VARCHAR(32) )
+executing sql: DROP DATABASE IF EXISTS gaussdb_mysql_check_basic
+executing sql: CREATE DATABASE IF NOT EXISTS gaussdb_mysql_check_basic DEFAULT CHARACTER SET utf8mb4
+executing sql: CREATE TABLE gaussdb_mysql_check_basic.check_basic ( id INT PRIMARY KEY, val VARCHAR(32) )
+executing sql: INSERT INTO gaussdb_mysql_check_basic.check_basic VALUES (1, 'alpha'), (2, 'beta')
+executing sql: INSERT INTO gaussdb_mysql_check_basic.check_basic VALUES (1, 'alpha'), (2, 'beta')
+2026-04-02T12:14:44.934089+08:00 INFO default_logger - start task: [taskID: 4b4106c66b511ca5, taskType: Some(Check)]
+2026-04-02T12:14:44.934216+08:00 WARN default_logger - recorder unsupported resumer config: Dummy
+2026-04-02T12:14:44.934236+08:00 WARN default_logger - recovery unsupported resumer config: Dummy
+2026-04-02T12:14:44.934254+08:00 INFO default_logger - recovery initialization for task_id: 4b4106c66b511ca5 finished in 0 ms
+2026-04-02T12:14:45.398133+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-02T12:14:45.398202+08:00 ERROR default_logger - buffer_memory_mb=0 is too large and will be ignored to prevent overflow
+2026-04-02T12:14:45.398238+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-02T12:14:45.403171+08:00 INFO default_logger - begin to estimate record count
+2026-04-02T12:14:45.403237+08:00 INFO default_logger - estimate record count: 0
+2026-04-02T12:14:46.543143+08:00 INFO default_logger - MysqlSnapshotExtractor starts, schema: `gaussdb_mysql_check_basic`, tb: `check_basic`, batch_size: 4, parallel_size: 1
+2026-04-02T12:14:46.543399+08:00 INFO default_logger - CheckParallelizer starts, parallel_size: 1, checkpoint_interval_secs: 1
+2026-04-02T12:14:46.555100+08:00 INFO default_logger - [`gaussdb_mysql_check_basic`.`check_basic`] recovery from [{}]
+2026-04-02T12:14:46.557134+08:00 INFO default_logger - end extracting data from `gaussdb_mysql_check_basic`.`check_basic`, all count: 2
+2026-04-02T12:14:46.646189+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-04-02T12:14:46.646298+08:00 INFO monitor_logger - extractor | gaussdb_mysql_check_basic.check_basic | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-04-02T12:14:46.646318+08:00 INFO monitor_logger - extractor | gaussdb_mysql_check_basic.check_basic | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-04-02T12:14:46.646334+08:00 INFO monitor_logger - extractor | gaussdb_mysql_check_basic.check_basic | data_bytes | sum=17 | avg_by_sec=17 | max_by_sec=17
+2026-04-02T12:14:46.646347+08:00 INFO monitor_logger - extractor | gaussdb_mysql_check_basic.check_basic | extracted_bytes | sum=17 | avg_by_sec=17 | max_by_sec=17
+2026-04-02T12:14:46.646388+08:00 INFO monitor_logger - pipeline | gaussdb_mysql_check_basic.check_basic | record_size | avg=8
+2026-04-02T12:14:46.646406+08:00 INFO monitor_logger - pipeline | gaussdb_mysql_check_basic.check_basic | buffer_size | sum=2 | avg=2 | max=2
+2026-04-02T12:14:46.646436+08:00 INFO monitor_logger - pipeline | gaussdb_mysql_check_basic.check_basic | sinked_records | latest=0
+2026-04-02T12:14:46.646449+08:00 INFO monitor_logger - pipeline | gaussdb_mysql_check_basic.check_basic | sinked_bytes | latest=0
+2026-04-02T12:14:47.412798+08:00 INFO monitor_logger - extractor | global | extracted_bytes | sum=17 | avg_by_sec=17 | max_by_sec=17 | min_by_sec=0
+2026-04-02T12:14:47.412869+08:00 INFO monitor_logger - extractor | global | data_bytes | sum=17 | avg_by_sec=17 | max_by_sec=17 | min_by_sec=0
+2026-04-02T12:14:47.412910+08:00 INFO monitor_logger - extractor | global | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2 | min_by_sec=0
+2026-04-02T12:14:47.412944+08:00 INFO monitor_logger - extractor | global | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2 | min_by_sec=0
+2026-04-02T12:14:47.413138+08:00 INFO monitor_logger - pipeline | global | buffer_size | sum=2 | avg=2 | max=2 | min=0
+2026-04-02T12:14:47.413170+08:00 INFO monitor_logger - pipeline | global | record_size | avg=8
+2026-04-02T12:14:47.413220+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=0
+2026-04-02T12:14:47.413255+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=0
+2026-04-02T12:14:48.412829+08:00 INFO monitor_logger - extractor | global | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-04-02T12:14:48.412940+08:00 INFO monitor_logger - extractor | global | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-04-02T12:14:48.412978+08:00 INFO monitor_logger - extractor | global | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-04-02T12:14:48.413104+08:00 INFO monitor_logger - extractor | global | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-04-02T12:14:48.413513+08:00 INFO monitor_logger - pipeline | global | record_size | avg=0
+2026-04-02T12:14:48.413579+08:00 INFO monitor_logger - pipeline | global | buffer_size | sum=0 | avg=0 | max=0 | min=0
+2026-04-02T12:14:48.413633+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=0
+2026-04-02T12:14:48.413669+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=0
+2026-04-02T12:14:49.411419+08:00 INFO monitor_logger - extractor | global | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-04-02T12:14:49.411449+08:00 INFO monitor_logger - extractor | global | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-04-02T12:14:49.411465+08:00 INFO monitor_logger - extractor | global | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-04-02T12:14:49.411478+08:00 INFO monitor_logger - extractor | global | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-04-02T12:14:49.411554+08:00 INFO monitor_logger - pipeline | global | buffer_size | sum=0 | avg=0 | max=0 | min=0
+2026-04-02T12:14:49.411575+08:00 INFO monitor_logger - pipeline | global | record_size | avg=0
+2026-04-02T12:14:49.411605+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=0
+2026-04-02T12:14:49.411621+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=0
+2026-04-02T12:14:50.411239+08:00 INFO monitor_logger - extractor | global | extracted_records | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-04-02T12:14:50.411360+08:00 INFO monitor_logger - extractor | global | data_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-04-02T12:14:50.411401+08:00 INFO monitor_logger - extractor | global | extracted_bytes | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-04-02T12:14:50.411432+08:00 INFO monitor_logger - extractor | global | record_count | sum=0 | avg_by_sec=0 | max_by_sec=0 | min_by_sec=0
+2026-04-02T12:14:50.411618+08:00 INFO monitor_logger - pipeline | global | record_size | avg=0
+2026-04-02T12:14:50.411661+08:00 INFO monitor_logger - pipeline | global | buffer_size | sum=0 | avg=0 | max=0 | min=0
+2026-04-02T12:14:50.411703+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=0
+2026-04-02T12:14:50.411737+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=0
+2026-04-02T12:14:50.624441+08:00 INFO position_logger - current_position | {"type":"RdbSnapshot","db_type":"mysql","schema":"gaussdb_mysql_check_basic","tb":"check_basic","order_key":{"single":["id","2"]}}
+2026-04-02T12:14:50.624476+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-04-02T12:14:50.624557+08:00 INFO position_logger - current_position | {"type":"RdbSnapshot","db_type":"mysql","schema":"gaussdb_mysql_check_basic","tb":"check_basic","order_key":{"single":["id","2"]}}
+2026-04-02T12:14:50.624574+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-04-02T12:14:50.624867+08:00 INFO finished_logger - {"type":"RdbSnapshotFinished","db_type":"mysql","schema":"gaussdb_mysql_check_basic","tb":"check_basic"}
+2026-04-02T12:14:50.719447+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-04-02T12:14:50.719661+08:00 INFO monitor_logger - pipeline | global | timestamp | latest=0
+2026-04-02T12:14:50.719682+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=17
+2026-04-02T12:14:50.719700+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=2
+2026-04-02T12:14:50.720122+08:00 INFO finished_logger - task finished
+executing sql: DROP DATABASE IF EXISTS gaussdb_mysql_check_basic
+executing sql: DROP DATABASE IF EXISTS gaussdb_mysql_check_basic
+2026-04-02T12:14:50.893352+08:00 INFO sqlx::postgres::notice - drop cascades to table gaussdb_mysql_check_basic.check_basic
+test mysql_to_gaussdb_mysql::check_tests::test::check_basic_test ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 353 filtered out; finished in 11.68s
+

@@ -4,6 +4,7 @@ use anyhow::bail;
 use async_trait::async_trait;
 use dt_common::{
     config::connection_auth_config::ConnectionAuthConfig, error::Error, rdb_filter::RdbFilter,
+    system_dbs::SystemDb,
 };
 use dt_task::task_util::TaskUtil;
 use futures::{Stream, TryStreamExt};
@@ -98,6 +99,9 @@ impl Fetcher for PgFetcher {
                 while let Some(row) = rows.try_next().await.unwrap() {
                     let (database_name, schema_name): (String, String) =
                         (row.get("catalog_name"), row.get("schema_name"));
+                    if SystemDb::is_system_db(&schema_name, &self.filter.db_type) {
+                        continue;
+                    }
                     if !self.filter.filter_schema(&schema_name) {
                         schemas.push(Schema {
                             database_name,
@@ -114,12 +118,29 @@ impl Fetcher for PgFetcher {
 
     async fn fetch_tables(&mut self) -> anyhow::Result<Vec<Table>> {
         let mut tables: Vec<Table> = vec![];
-        let table_sql = "SELECT table_catalog, table_schema, table_name 
-                         FROM information_schema.tables 
-                         WHERE table_type = 'BASE TABLE' 
-                         AND table_schema NOT IN ('pg_catalog', 'information_schema')";
+        let system_schemas = SystemDb::get_system_dbs(&self.filter.db_type);
+        let system_schemas = system_schemas
+            .unwrap_or_default()
+            .into_iter()
+            .map(|s| format!("'{}'", s.replace('\'', "''")))
+            .collect::<Vec<_>>()
+            .join(",");
+        let table_sql = if system_schemas.is_empty() {
+            "SELECT table_catalog, table_schema, table_name
+                         FROM information_schema.tables
+                         WHERE table_type = 'BASE TABLE'"
+                .to_string()
+        } else {
+            format!(
+                "SELECT table_catalog, table_schema, table_name
+                         FROM information_schema.tables
+                         WHERE table_type = 'BASE TABLE'
+                         AND table_schema NOT IN ({})",
+                system_schemas
+            )
+        };
 
-        let rows_result = self.fetch_row(table_sql, "pg query table sql");
+        let rows_result = self.fetch_row(&table_sql, "pg query table sql");
         match rows_result {
             Ok(mut rows) => {
                 while let Some(row) = rows.try_next().await.unwrap() {
@@ -145,17 +166,22 @@ impl Fetcher for PgFetcher {
 
     async fn fetch_constraints(&mut self) -> anyhow::Result<Vec<Constraint>> {
         let mut constraints: Vec<Constraint> = vec![];
+        // Avoid regnamespace casts for better compatibility with GaussDB (PG-compatible mode).
         let sql = "SELECT
           con.conname,
           con.contype::varchar as contype,
-          con.connamespace::regnamespace::text AS schema_name,
+          n.nspname::text AS schema_name,
           ct.relname::text AS table_name,
           rt.relname::text AS ref_table_name,
-          cs.relnamespace::regnamespace::text as ref_schema_name
+          rn.nspname::text as ref_schema_name
         FROM
              pg_constraint con
-        LEFT JOIN pg_class cs 
+        LEFT JOIN pg_namespace n
+        ON   con.connamespace = n.oid
+        LEFT JOIN pg_class cs
         ON   con.confrelid = cs.oid
+        LEFT JOIN pg_namespace rn
+        ON   cs.relnamespace = rn.oid
         LEFT JOIN pg_class ct
         ON   con.conrelid = ct.oid
         LEFT JOIN pg_class rt
@@ -164,7 +190,7 @@ impl Fetcher for PgFetcher {
         let rows_result = self.fetch_row(sql, "pg query constraint sql");
         match rows_result {
             Ok(mut rows) => {
-                while let Some(row) = rows.try_next().await.unwrap() {
+                while let Some(row) = rows.try_next().await? {
                     let (
                         schema_name,
                         table_name,
@@ -250,6 +276,16 @@ impl PgFetcher {
             Err(e) => bail! {e},
         }
         Ok(slots)
+    }
+
+    pub async fn extension_exists(&self, extension_name: &str) -> anyhow::Result<bool> {
+        let escaped = extension_name.replace('\'', "''");
+        let sql = format!(
+            "SELECT 1 FROM pg_available_extensions WHERE name = '{}' LIMIT 1",
+            escaped
+        );
+        let rows = self.fetch_all(sql, "pg query available extensions").await?;
+        Ok(!rows.is_empty())
     }
 
     fn get_text_with_null(row: &PgRow, col_name: &str) -> anyhow::Result<String> {

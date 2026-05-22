@@ -1,0 +1,7 @@
+id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
+1,初始化子任务 5 工程文件,DONE,本任务目录具备 SPEC/TODO/PROGRESS 三件套,ls .codex-tasks/20260316-gaussdb-mvp/tasks/20260316-05-docs-sha256-roadmap,2026-03-17 09:17 +0800,0,
+2,补齐 GaussDB 配置模板,DONE,docs/templates 下包含 pg_to_gaussdb 与 gaussdb_to_pg 模板,rg -n \"gaussdb_pg\" docs/templates > /dev/null,2026-03-17 09:19 +0800,0,
+3,补齐联调 runbook 与排查文档,DONE,docs/agent-summary 有 runbook/故障排查/证据归档说明,rg -n \"mppdb_decoding\" -S docs/agent-summary > /dev/null,2026-03-17 09:21 +0800,0,
+4,补齐 dt-tests GaussDB 环境变量说明,DONE,dt-tests README 提及 gaussdb_pg env 与用例目录,rg -n \"gaussdb_pg\" -S dt-tests/README.md dt-tests/README_ZH.md > /dev/null,2026-03-17 09:22 +0800,0,
+5,补齐 SHA256 后续路线,DONE,docs/agent-summary 记录 SHA256 推进边界与回切方式,rg -n \"SHA256\" -S docs/agent-summary > /dev/null,2026-03-17 09:23 +0800,0,
+6,子任务验收回归,DONE,子任务 5 验收命令通过,rg -n \"GaussDBPg\" -S docs/agent-summary > /dev/null,2026-03-17 09:24 +0800,0,

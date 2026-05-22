@@ -1,0 +1,7 @@
+services:
+  mysql-src:
+    image: mysql:8.0
+  mysql-dst:
+    image: mysql:8.0
+  mysql-meta:
+    image: mysql:8.0

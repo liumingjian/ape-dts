@@ -193,7 +193,7 @@ impl PgValueType {
     pub fn from_alias(alias: &str) -> Self {
         match alias {
             "bool" => PgValueType::Boolean,
-            "int2" => PgValueType::Int16,
+            "int1" | "int2" => PgValueType::Int16,
             "int4" => PgValueType::Int32,
             "int8" | "oid" => PgValueType::Int64,
             "float4" => PgValueType::Float32,
@@ -210,7 +210,7 @@ impl PgValueType {
             "date" => PgValueType::Date,
             "time" => PgValueType::Time,
             "timetz" => PgValueType::TimeTZ,
-            "timestamp" => PgValueType::Timestamp,
+            "timestamp" | "smalldatetime" => PgValueType::Timestamp,
             "timestamptz" => PgValueType::TimestampTZ,
             "numeric" => PgValueType::Numeric,
             "point" => PgValueType::Point,
@@ -224,6 +224,10 @@ impl PgValueType {
             "_timestamp" => PgValueType::ArrayTimestamp,
             "_timestamptz" => PgValueType::ArrayTimestampTZ,
             "_text" | "_varchar" | "_bpchar" => PgValueType::ArrayString,
+            "tinyint" => PgValueType::Int16,
+            "nvarchar2" => PgValueType::String,
+            "clob" => PgValueType::String,
+            "blob" => PgValueType::Bytes,
             _ => PgValueType::String,
         }
     }
@@ -253,5 +257,23 @@ impl PgValueType {
                 | PgValueType::Date
                 | PgValueType::String
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PgValueType;
+
+    #[test]
+    fn gaussdb_type_matrix_from_alias_maps_prd_specific_aliases() {
+        assert_eq!(
+            PgValueType::from_alias("smalldatetime"),
+            PgValueType::Timestamp
+        );
+        assert_eq!(PgValueType::from_alias("tinyint"), PgValueType::Int16);
+        assert_eq!(PgValueType::from_alias("int1"), PgValueType::Int16);
+        assert_eq!(PgValueType::from_alias("nvarchar2"), PgValueType::String);
+        assert_eq!(PgValueType::from_alias("clob"), PgValueType::String);
+        assert_eq!(PgValueType::from_alias("blob"), PgValueType::Bytes);
     }
 }

@@ -13,6 +13,7 @@ dt-precheck = { path = "../dt-precheck", version = "0.1.0" }
 dt-task = { path = "../dt-task", version = "0.1.0" }
 
 anyhow = { workspace = true }
+base64 = { workspace = true }
 chrono = { workspace = true }
 clickhouse = { workspace = true, features = ["time"] }
 concurrent-queue = { workspace = true }
@@ -29,15 +30,20 @@ redis = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
 serial_test = { workspace = true }
 sqlx = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
 rust_decimal = { workspace = true }
 uuid = { workspace = true }
+tokio-postgres = { workspace = true }
+postgres-openssl = { workspace = true }
+openssl = { workspace = true }
 
 [dev-dependencies]
 rand = "0.9.2"
+reqwest = { version = "0.12", features = ["json"] }
 fake = { version = "4.4.0", features = [
     "derive",
     "serde_json",

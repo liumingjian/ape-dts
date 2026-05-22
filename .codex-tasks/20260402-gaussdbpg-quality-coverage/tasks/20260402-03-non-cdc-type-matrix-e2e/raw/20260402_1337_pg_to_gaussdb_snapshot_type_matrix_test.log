@@ -1,0 +1,408 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.23s
+warning: the following packages contain code that will be rejected by a future version of Rust: snap v0.2.5
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 2`
+     Running tests/integration_test.rs (target/debug/deps/integration_test-9b60f916ab830360)
+
+running 1 test
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+selected gaussdb rw url: postgres://10.250.0.30:8000/postgres?sslmode=require (server_addr=192.168.1.30/32)
+executing sql: DROP TABLE IF EXISTS public.gaussdb_type_matrix_snapshot
+executing sql: CREATE TABLE public.gaussdb_type_matrix_snapshot ( id INTEGER PRIMARY KEY, ts_col TIMESTAMP, tiny_col SMALLINT, nvarchar_col VARCHAR(32), clob_col TEXT, blob_col BYTEA )
+executing sql: DROP TABLE IF EXISTS public.gaussdb_type_matrix_snapshot
+executing sql: CREATE TABLE public.gaussdb_type_matrix_snapshot ( id INTEGER PRIMARY KEY, ts_col TIMESTAMP, tiny_col SMALLINT, nvarchar_col VARCHAR(32), clob_col TEXT, blob_col BYTEA )
+executing sql: INSERT INTO public.gaussdb_type_matrix_snapshot ( id, ts_col, tiny_col, nvarchar_col, clob_col, blob_col ) VALUES (1, '2026-04-02 13:20:00', 7, 'alpha', 'first clob text', '\x0001ff'), (2, NULL, NULL, 'beta', '', NULL)
+2026-04-02T13:38:08.251346+08:00 INFO default_logger - start task: [taskID: b9dff47617337d7, taskType: Some(Snapshot)]
+2026-04-02T13:38:08.251540+08:00 WARN default_logger - recorder unsupported resumer config: Dummy
+2026-04-02T13:38:08.251560+08:00 WARN default_logger - recovery unsupported resumer config: Dummy
+2026-04-02T13:38:08.251577+08:00 INFO default_logger - recovery initialization for task_id: b9dff47617337d7 finished in 0 ms
+2026-04-02T13:38:08.792512+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-02T13:38:08.792576+08:00 ERROR default_logger - buffer_memory_mb=0 is too large and will be ignored to prevent overflow
+2026-04-02T13:38:08.792606+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-02T13:38:08.800063+08:00 INFO default_logger - begin to estimate record count
+2026-04-02T13:38:08.803797+08:00 INFO default_logger - estimate record count: 0
+2026-04-02T13:38:08.879394+08:00 INFO default_logger - schema: public, tb: gaussdb_cdc_failover, insert events filtered
+2026-04-02T13:38:09.224848+08:00 INFO default_logger - PgSnapshotExtractor starts, schema: "public", tb: "gaussdb_type_matrix_snapshot", batch_size: 4, parallel_size: 1
+2026-04-02T13:38:09.225119+08:00 INFO default_logger - SnapshotParallelizer starts, parallel_size: 1, checkpoint_interval_secs: 1
+2026-04-02T13:38:09.239289+08:00 INFO default_logger - ["public"."gaussdb_type_matrix_snapshot"] recovery from [{}]
+2026-04-02T13:38:09.241112+08:00 INFO default_logger - end extracting data from "public"."gaussdb_type_matrix_snapshot", all count: 2
+2026-04-02T13:38:09.328955+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-04-02T13:38:09.330289+08:00 INFO monitor_logger - extractor | public.gaussdb_type_matrix_snapshot | extracted_bytes | sum=56 | avg_by_sec=56 | max_by_sec=56
+2026-04-02T13:38:09.330335+08:00 INFO monitor_logger - extractor | public.gaussdb_type_matrix_snapshot | data_bytes | sum=56 | avg_by_sec=56 | max_by_sec=56
+2026-04-02T13:38:09.330357+08:00 INFO monitor_logger - extractor | public.gaussdb_type_matrix_snapshot | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-04-02T13:38:09.330375+08:00 INFO monitor_logger - extractor | public.gaussdb_type_matrix_snapshot | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-04-02T13:38:09.330461+08:00 INFO monitor_logger - pipeline | public.gaussdb_type_matrix_snapshot | record_size | avg=28
+2026-04-02T13:38:09.330486+08:00 INFO monitor_logger - pipeline | public.gaussdb_type_matrix_snapshot | buffer_size | sum=2 | avg=2 | max=2
+2026-04-02T13:38:09.330512+08:00 INFO monitor_logger - pipeline | public.gaussdb_type_matrix_snapshot | sinked_bytes | latest=0
+2026-04-02T13:38:09.330545+08:00 INFO monitor_logger - pipeline | public.gaussdb_type_matrix_snapshot | sinked_records | latest=0
+2026-04-02T13:38:09.884017+08:00 INFO monitor_logger - extractor | global | extracted_bytes | sum=56 | avg_by_sec=56 | max_by_sec=56 | min_by_sec=0
+2026-04-02T13:38:09.884142+08:00 INFO monitor_logger - extractor | global | data_bytes | sum=56 | avg_by_sec=56 | max_by_sec=56 | min_by_sec=0
+2026-04-02T13:38:09.884186+08:00 INFO monitor_logger - extractor | global | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2 | min_by_sec=0
+2026-04-02T13:38:09.884291+08:00 INFO monitor_logger - extractor | global | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2 | min_by_sec=0
+2026-04-02T13:38:09.884597+08:00 INFO monitor_logger - pipeline | global | record_size | avg=28
+2026-04-02T13:38:09.884651+08:00 INFO monitor_logger - pipeline | global | buffer_size | sum=2 | avg=2 | max=2 | min=0
+2026-04-02T13:38:09.884704+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=0
+2026-04-02T13:38:09.884747+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=0
+2026-04-02T13:38:10.333903+08:00 INFO position_logger - current_position | {"type":"RdbSnapshot","db_type":"pg","schema":"public","tb":"gaussdb_type_matrix_snapshot","order_key":{"single":["id","2"]}}
+2026-04-02T13:38:10.334017+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-04-02T13:38:10.334146+08:00 INFO position_logger - current_position | {"type":"RdbSnapshot","db_type":"pg","schema":"public","tb":"gaussdb_type_matrix_snapshot","order_key":{"single":["id","2"]}}
+2026-04-02T13:38:10.334170+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-04-02T13:38:10.334589+08:00 INFO finished_logger - {"type":"RdbSnapshotFinished","db_type":"pg","schema":"public","tb":"gaussdb_type_matrix_snapshot"}
+2026-04-02T13:38:10.395868+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-04-02T13:38:10.396422+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=56
+2026-04-02T13:38:10.396528+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=2
+2026-04-02T13:38:10.396563+08:00 INFO monitor_logger - pipeline | global | timestamp | latest=0
+2026-04-02T13:38:10.397729+08:00 INFO finished_logger - task finished
+comparing row data for src_tb: ("public", "gaussdb_type_matrix_snapshot"), dst_tb: ("public", "gaussdb_type_matrix_snapshot"), src_data count: 2, dst_data count: 2
+row index: 0, col: id, src_col_value: Long(1), dst_col_value: Long(1)
+row index: 0, col: blob_col, src_col_value: Blob([0, 1, 255]), dst_col_value: Blob([0, 1, 255])
+row index: 0, col: tiny_col, src_col_value: Short(7), dst_col_value: Short(7)
+row index: 0, col: clob_col, src_col_value: String("first clob text"), dst_col_value: String("first clob text")
+row index: 0, col: nvarchar_col, src_col_value: String("alpha"), dst_col_value: String("alpha")
+row index: 0, col: ts_col, src_col_value: DateTime("2026-04-02 13:20:00"), dst_col_value: DateTime("2026-04-02 13:20:00")
+row index: 1, col: nvarchar_col, src_col_value: String("beta"), dst_col_value: String("beta")
+row index: 1, col: ts_col, src_col_value: None, dst_col_value: None
+row index: 1, col: id, src_col_value: Long(2), dst_col_value: Long(2)
+row index: 1, col: tiny_col, src_col_value: None, dst_col_value: None
+row index: 1, col: clob_col, src_col_value: String(""), dst_col_value: None
+compare tb data failed, src_tb: ("public", "gaussdb_type_matrix_snapshot"), dst_tb: ("public", "gaussdb_type_matrix_snapshot")
+snapshot failed (attempt 1/6), will retry: compare tb data failed, src_tb: ("public", "gaussdb_type_matrix_snapshot"), dst_tb: ("public", "gaussdb_type_matrix_snapshot")
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+selected gaussdb rw url: postgres://10.250.0.30:8000/postgres?sslmode=require (server_addr=192.168.1.30/32)
+executing sql: DROP TABLE IF EXISTS public.gaussdb_type_matrix_snapshot
+executing sql: CREATE TABLE public.gaussdb_type_matrix_snapshot ( id INTEGER PRIMARY KEY, ts_col TIMESTAMP, tiny_col SMALLINT, nvarchar_col VARCHAR(32), clob_col TEXT, blob_col BYTEA )
+executing sql: DROP TABLE IF EXISTS public.gaussdb_type_matrix_snapshot
+executing sql: CREATE TABLE public.gaussdb_type_matrix_snapshot ( id INTEGER PRIMARY KEY, ts_col TIMESTAMP, tiny_col SMALLINT, nvarchar_col VARCHAR(32), clob_col TEXT, blob_col BYTEA )
+2026-04-02T13:38:17.409822+08:00 INFO sqlx::postgres::notice - CREATE TABLE / PRIMARY KEY will create implicit index "gaussdb_type_matrix_snapshot_pkey" for table "gaussdb_type_matrix_snapshot"
+executing sql: INSERT INTO public.gaussdb_type_matrix_snapshot ( id, ts_col, tiny_col, nvarchar_col, clob_col, blob_col ) VALUES (1, '2026-04-02 13:20:00', 7, 'alpha', 'first clob text', '\x0001ff'), (2, NULL, NULL, 'beta', '', NULL)
+2026-04-02T13:38:17.439284+08:00 INFO default_logger - start task: [taskID: b9dff47617337d7, taskType: Some(Snapshot)]
+2026-04-02T13:38:17.439330+08:00 WARN default_logger - recorder unsupported resumer config: Dummy
+2026-04-02T13:38:17.439348+08:00 WARN default_logger - recovery unsupported resumer config: Dummy
+2026-04-02T13:38:17.439366+08:00 INFO default_logger - recovery initialization for task_id: b9dff47617337d7 finished in 0 ms
+2026-04-02T13:38:17.984826+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-02T13:38:17.984857+08:00 ERROR default_logger - buffer_memory_mb=0 is too large and will be ignored to prevent overflow
+2026-04-02T13:38:17.984873+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-02T13:38:17.990431+08:00 INFO default_logger - begin to estimate record count
+2026-04-02T13:38:17.992650+08:00 INFO default_logger - estimate record count: 0
+2026-04-02T13:38:18.069875+08:00 INFO default_logger - schema: public, tb: gaussdb_cdc_failover, insert events filtered
+2026-04-02T13:38:18.459105+08:00 INFO default_logger - PgSnapshotExtractor starts, schema: "public", tb: "gaussdb_type_matrix_snapshot", batch_size: 4, parallel_size: 1
+2026-04-02T13:38:18.459229+08:00 INFO default_logger - SnapshotParallelizer starts, parallel_size: 1, checkpoint_interval_secs: 1
+2026-04-02T13:38:18.472991+08:00 INFO default_logger - ["public"."gaussdb_type_matrix_snapshot"] recovery from [{}]
+2026-04-02T13:38:18.474390+08:00 INFO default_logger - end extracting data from "public"."gaussdb_type_matrix_snapshot", all count: 2
+2026-04-02T13:38:18.560821+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-04-02T13:38:18.560943+08:00 INFO monitor_logger - extractor | public.gaussdb_type_matrix_snapshot | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-04-02T13:38:18.560974+08:00 INFO monitor_logger - extractor | public.gaussdb_type_matrix_snapshot | extracted_bytes | sum=56 | avg_by_sec=56 | max_by_sec=56
+2026-04-02T13:38:18.560991+08:00 INFO monitor_logger - extractor | public.gaussdb_type_matrix_snapshot | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-04-02T13:38:18.561007+08:00 INFO monitor_logger - extractor | public.gaussdb_type_matrix_snapshot | data_bytes | sum=56 | avg_by_sec=56 | max_by_sec=56
+2026-04-02T13:38:18.561062+08:00 INFO monitor_logger - pipeline | public.gaussdb_type_matrix_snapshot | buffer_size | sum=2 | avg=2 | max=2
+2026-04-02T13:38:18.561076+08:00 INFO monitor_logger - pipeline | public.gaussdb_type_matrix_snapshot | record_size | avg=28
+2026-04-02T13:38:18.561100+08:00 INFO monitor_logger - pipeline | public.gaussdb_type_matrix_snapshot | sinked_records | latest=0
+2026-04-02T13:38:18.561111+08:00 INFO monitor_logger - pipeline | public.gaussdb_type_matrix_snapshot | sinked_bytes | latest=0
+2026-04-02T13:38:19.071237+08:00 INFO monitor_logger - extractor | global | data_bytes | sum=56 | avg_by_sec=56 | max_by_sec=56 | min_by_sec=0
+2026-04-02T13:38:19.071276+08:00 INFO monitor_logger - extractor | global | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2 | min_by_sec=0
+2026-04-02T13:38:19.071293+08:00 INFO monitor_logger - extractor | global | extracted_bytes | sum=56 | avg_by_sec=56 | max_by_sec=56 | min_by_sec=0
+2026-04-02T13:38:19.071309+08:00 INFO monitor_logger - extractor | global | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2 | min_by_sec=0
+2026-04-02T13:38:19.071400+08:00 INFO monitor_logger - pipeline | global | buffer_size | sum=2 | avg=2 | max=2 | min=0
+2026-04-02T13:38:19.071413+08:00 INFO monitor_logger - pipeline | global | record_size | avg=28
+2026-04-02T13:38:19.071429+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=0
+2026-04-02T13:38:19.071441+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=0
+2026-04-02T13:38:19.555561+08:00 INFO position_logger - current_position | {"type":"RdbSnapshot","db_type":"pg","schema":"public","tb":"gaussdb_type_matrix_snapshot","order_key":{"single":["id","2"]}}
+2026-04-02T13:38:19.555672+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-04-02T13:38:19.555807+08:00 INFO position_logger - current_position | {"type":"RdbSnapshot","db_type":"pg","schema":"public","tb":"gaussdb_type_matrix_snapshot","order_key":{"single":["id","2"]}}
+2026-04-02T13:38:19.555858+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-04-02T13:38:19.556324+08:00 INFO finished_logger - {"type":"RdbSnapshotFinished","db_type":"pg","schema":"public","tb":"gaussdb_type_matrix_snapshot"}
+2026-04-02T13:38:19.582351+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-04-02T13:38:19.582518+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=56
+2026-04-02T13:38:19.582539+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=2
+2026-04-02T13:38:19.582569+08:00 INFO monitor_logger - pipeline | global | timestamp | latest=0
+2026-04-02T13:38:19.583031+08:00 INFO finished_logger - task finished
+comparing row data for src_tb: ("public", "gaussdb_type_matrix_snapshot"), dst_tb: ("public", "gaussdb_type_matrix_snapshot"), src_data count: 2, dst_data count: 2
+row index: 0, col: ts_col, src_col_value: DateTime("2026-04-02 13:20:00"), dst_col_value: DateTime("2026-04-02 13:20:00")
+row index: 0, col: blob_col, src_col_value: Blob([0, 1, 255]), dst_col_value: Blob([0, 1, 255])
+row index: 0, col: clob_col, src_col_value: String("first clob text"), dst_col_value: String("first clob text")
+row index: 0, col: tiny_col, src_col_value: Short(7), dst_col_value: Short(7)
+row index: 0, col: id, src_col_value: Long(1), dst_col_value: Long(1)
+row index: 0, col: nvarchar_col, src_col_value: String("alpha"), dst_col_value: String("alpha")
+row index: 1, col: clob_col, src_col_value: String(""), dst_col_value: None
+compare tb data failed, src_tb: ("public", "gaussdb_type_matrix_snapshot"), dst_tb: ("public", "gaussdb_type_matrix_snapshot")
+snapshot failed (attempt 2/6), will retry: compare tb data failed, src_tb: ("public", "gaussdb_type_matrix_snapshot"), dst_tb: ("public", "gaussdb_type_matrix_snapshot")
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+selected gaussdb rw url: postgres://10.250.0.30:8000/postgres?sslmode=require (server_addr=192.168.1.30/32)
+executing sql: DROP TABLE IF EXISTS public.gaussdb_type_matrix_snapshot
+executing sql: CREATE TABLE public.gaussdb_type_matrix_snapshot ( id INTEGER PRIMARY KEY, ts_col TIMESTAMP, tiny_col SMALLINT, nvarchar_col VARCHAR(32), clob_col TEXT, blob_col BYTEA )
+executing sql: DROP TABLE IF EXISTS public.gaussdb_type_matrix_snapshot
+executing sql: CREATE TABLE public.gaussdb_type_matrix_snapshot ( id INTEGER PRIMARY KEY, ts_col TIMESTAMP, tiny_col SMALLINT, nvarchar_col VARCHAR(32), clob_col TEXT, blob_col BYTEA )
+2026-04-02T13:38:25.894438+08:00 INFO sqlx::postgres::notice - CREATE TABLE / PRIMARY KEY will create implicit index "gaussdb_type_matrix_snapshot_pkey" for table "gaussdb_type_matrix_snapshot"
+executing sql: INSERT INTO public.gaussdb_type_matrix_snapshot ( id, ts_col, tiny_col, nvarchar_col, clob_col, blob_col ) VALUES (1, '2026-04-02 13:20:00', 7, 'alpha', 'first clob text', '\x0001ff'), (2, NULL, NULL, 'beta', '', NULL)
+2026-04-02T13:38:25.912695+08:00 INFO default_logger - start task: [taskID: b9dff47617337d7, taskType: Some(Snapshot)]
+2026-04-02T13:38:25.912738+08:00 WARN default_logger - recorder unsupported resumer config: Dummy
+2026-04-02T13:38:25.912755+08:00 WARN default_logger - recovery unsupported resumer config: Dummy
+2026-04-02T13:38:25.912769+08:00 INFO default_logger - recovery initialization for task_id: b9dff47617337d7 finished in 0 ms
+2026-04-02T13:38:26.411750+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-02T13:38:26.411824+08:00 ERROR default_logger - buffer_memory_mb=0 is too large and will be ignored to prevent overflow
+2026-04-02T13:38:26.411870+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-02T13:38:26.419076+08:00 INFO default_logger - begin to estimate record count
+2026-04-02T13:38:26.493680+08:00 INFO default_logger - estimate record count: 0
+2026-04-02T13:38:26.497631+08:00 INFO default_logger - schema: public, tb: gaussdb_cdc_failover, insert events filtered
+2026-04-02T13:38:26.899423+08:00 INFO default_logger - PgSnapshotExtractor starts, schema: "public", tb: "gaussdb_type_matrix_snapshot", batch_size: 4, parallel_size: 1
+2026-04-02T13:38:26.899634+08:00 INFO default_logger - SnapshotParallelizer starts, parallel_size: 1, checkpoint_interval_secs: 1
+2026-04-02T13:38:26.913611+08:00 INFO default_logger - ["public"."gaussdb_type_matrix_snapshot"] recovery from [{}]
+2026-04-02T13:38:26.915064+08:00 INFO default_logger - end extracting data from "public"."gaussdb_type_matrix_snapshot", all count: 2
+2026-04-02T13:38:27.003509+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-04-02T13:38:27.003607+08:00 INFO monitor_logger - extractor | public.gaussdb_type_matrix_snapshot | data_bytes | sum=56 | avg_by_sec=56 | max_by_sec=56
+2026-04-02T13:38:27.003629+08:00 INFO monitor_logger - extractor | public.gaussdb_type_matrix_snapshot | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-04-02T13:38:27.003646+08:00 INFO monitor_logger - extractor | public.gaussdb_type_matrix_snapshot | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-04-02T13:38:27.003661+08:00 INFO monitor_logger - extractor | public.gaussdb_type_matrix_snapshot | extracted_bytes | sum=56 | avg_by_sec=56 | max_by_sec=56
+2026-04-02T13:38:27.003697+08:00 INFO monitor_logger - pipeline | public.gaussdb_type_matrix_snapshot | record_size | avg=28
+2026-04-02T13:38:27.003711+08:00 INFO monitor_logger - pipeline | public.gaussdb_type_matrix_snapshot | buffer_size | sum=2 | avg=2 | max=2
+2026-04-02T13:38:27.003733+08:00 INFO monitor_logger - pipeline | public.gaussdb_type_matrix_snapshot | sinked_records | latest=0
+2026-04-02T13:38:27.003758+08:00 INFO monitor_logger - pipeline | public.gaussdb_type_matrix_snapshot | sinked_bytes | latest=0
+2026-04-02T13:38:27.500400+08:00 INFO monitor_logger - extractor | global | extracted_bytes | sum=56 | avg_by_sec=56 | max_by_sec=56 | min_by_sec=0
+2026-04-02T13:38:27.500448+08:00 INFO monitor_logger - extractor | global | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2 | min_by_sec=0
+2026-04-02T13:38:27.500470+08:00 INFO monitor_logger - extractor | global | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2 | min_by_sec=0
+2026-04-02T13:38:27.500487+08:00 INFO monitor_logger - extractor | global | data_bytes | sum=56 | avg_by_sec=56 | max_by_sec=56 | min_by_sec=0
+2026-04-02T13:38:27.500580+08:00 INFO monitor_logger - pipeline | global | record_size | avg=28
+2026-04-02T13:38:27.500596+08:00 INFO monitor_logger - pipeline | global | buffer_size | sum=2 | avg=2 | max=2 | min=0
+2026-04-02T13:38:27.500624+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=0
+2026-04-02T13:38:27.500643+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=0
+2026-04-02T13:38:27.998412+08:00 INFO position_logger - current_position | {"type":"RdbSnapshot","db_type":"pg","schema":"public","tb":"gaussdb_type_matrix_snapshot","order_key":{"single":["id","2"]}}
+2026-04-02T13:38:27.998615+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-04-02T13:38:27.998742+08:00 INFO position_logger - current_position | {"type":"RdbSnapshot","db_type":"pg","schema":"public","tb":"gaussdb_type_matrix_snapshot","order_key":{"single":["id","2"]}}
+2026-04-02T13:38:27.998773+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-04-02T13:38:27.999172+08:00 INFO finished_logger - {"type":"RdbSnapshotFinished","db_type":"pg","schema":"public","tb":"gaussdb_type_matrix_snapshot"}
+2026-04-02T13:38:28.011582+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-04-02T13:38:28.011899+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=56
+2026-04-02T13:38:28.011944+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=2
+2026-04-02T13:38:28.011980+08:00 INFO monitor_logger - pipeline | global | timestamp | latest=0
+2026-04-02T13:38:28.013081+08:00 INFO finished_logger - task finished
+comparing row data for src_tb: ("public", "gaussdb_type_matrix_snapshot"), dst_tb: ("public", "gaussdb_type_matrix_snapshot"), src_data count: 2, dst_data count: 2
+row index: 0, col: clob_col, src_col_value: String("first clob text"), dst_col_value: String("first clob text")
+row index: 0, col: tiny_col, src_col_value: Short(7), dst_col_value: Short(7)
+row index: 0, col: ts_col, src_col_value: DateTime("2026-04-02 13:20:00"), dst_col_value: DateTime("2026-04-02 13:20:00")
+row index: 0, col: blob_col, src_col_value: Blob([0, 1, 255]), dst_col_value: Blob([0, 1, 255])
+row index: 0, col: id, src_col_value: Long(1), dst_col_value: Long(1)
+row index: 0, col: nvarchar_col, src_col_value: String("alpha"), dst_col_value: String("alpha")
+row index: 1, col: id, src_col_value: Long(2), dst_col_value: Long(2)
+row index: 1, col: blob_col, src_col_value: None, dst_col_value: None
+row index: 1, col: tiny_col, src_col_value: None, dst_col_value: None
+row index: 1, col: ts_col, src_col_value: None, dst_col_value: None
+row index: 1, col: clob_col, src_col_value: String(""), dst_col_value: None
+compare tb data failed, src_tb: ("public", "gaussdb_type_matrix_snapshot"), dst_tb: ("public", "gaussdb_type_matrix_snapshot")
+snapshot failed (attempt 3/6), will retry: compare tb data failed, src_tb: ("public", "gaussdb_type_matrix_snapshot"), dst_tb: ("public", "gaussdb_type_matrix_snapshot")
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+selected gaussdb rw url: postgres://10.250.0.30:8000/postgres?sslmode=require (server_addr=192.168.1.30/32)
+executing sql: DROP TABLE IF EXISTS public.gaussdb_type_matrix_snapshot
+executing sql: CREATE TABLE public.gaussdb_type_matrix_snapshot ( id INTEGER PRIMARY KEY, ts_col TIMESTAMP, tiny_col SMALLINT, nvarchar_col VARCHAR(32), clob_col TEXT, blob_col BYTEA )
+executing sql: DROP TABLE IF EXISTS public.gaussdb_type_matrix_snapshot
+executing sql: CREATE TABLE public.gaussdb_type_matrix_snapshot ( id INTEGER PRIMARY KEY, ts_col TIMESTAMP, tiny_col SMALLINT, nvarchar_col VARCHAR(32), clob_col TEXT, blob_col BYTEA )
+2026-04-02T13:38:34.711858+08:00 INFO sqlx::postgres::notice - CREATE TABLE / PRIMARY KEY will create implicit index "gaussdb_type_matrix_snapshot_pkey" for table "gaussdb_type_matrix_snapshot"
+executing sql: INSERT INTO public.gaussdb_type_matrix_snapshot ( id, ts_col, tiny_col, nvarchar_col, clob_col, blob_col ) VALUES (1, '2026-04-02 13:20:00', 7, 'alpha', 'first clob text', '\x0001ff'), (2, NULL, NULL, 'beta', '', NULL)
+2026-04-02T13:38:34.732194+08:00 INFO default_logger - start task: [taskID: b9dff47617337d7, taskType: Some(Snapshot)]
+2026-04-02T13:38:34.732245+08:00 WARN default_logger - recorder unsupported resumer config: Dummy
+2026-04-02T13:38:34.732274+08:00 WARN default_logger - recovery unsupported resumer config: Dummy
+2026-04-02T13:38:34.732397+08:00 INFO default_logger - recovery initialization for task_id: b9dff47617337d7 finished in 0 ms
+2026-04-02T13:38:35.283906+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-02T13:38:35.283961+08:00 ERROR default_logger - buffer_memory_mb=0 is too large and will be ignored to prevent overflow
+2026-04-02T13:38:35.283993+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-02T13:38:35.287110+08:00 INFO default_logger - begin to estimate record count
+2026-04-02T13:38:35.290266+08:00 INFO default_logger - estimate record count: 0
+2026-04-02T13:38:35.361763+08:00 INFO default_logger - schema: public, tb: gaussdb_cdc_failover, insert events filtered
+2026-04-02T13:38:35.783440+08:00 INFO default_logger - PgSnapshotExtractor starts, schema: "public", tb: "gaussdb_type_matrix_snapshot", batch_size: 4, parallel_size: 1
+2026-04-02T13:38:35.783653+08:00 INFO default_logger - SnapshotParallelizer starts, parallel_size: 1, checkpoint_interval_secs: 1
+2026-04-02T13:38:35.798160+08:00 INFO default_logger - ["public"."gaussdb_type_matrix_snapshot"] recovery from [{}]
+2026-04-02T13:38:35.799512+08:00 INFO default_logger - end extracting data from "public"."gaussdb_type_matrix_snapshot", all count: 2
+2026-04-02T13:38:35.885975+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-04-02T13:38:35.886126+08:00 INFO monitor_logger - extractor | public.gaussdb_type_matrix_snapshot | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-04-02T13:38:35.886181+08:00 INFO monitor_logger - extractor | public.gaussdb_type_matrix_snapshot | data_bytes | sum=56 | avg_by_sec=56 | max_by_sec=56
+2026-04-02T13:38:35.886213+08:00 INFO monitor_logger - extractor | public.gaussdb_type_matrix_snapshot | extracted_bytes | sum=56 | avg_by_sec=56 | max_by_sec=56
+2026-04-02T13:38:35.886248+08:00 INFO monitor_logger - extractor | public.gaussdb_type_matrix_snapshot | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-04-02T13:38:35.886332+08:00 INFO monitor_logger - pipeline | public.gaussdb_type_matrix_snapshot | record_size | avg=28
+2026-04-02T13:38:35.886359+08:00 INFO monitor_logger - pipeline | public.gaussdb_type_matrix_snapshot | buffer_size | sum=2 | avg=2 | max=2
+2026-04-02T13:38:35.886403+08:00 INFO monitor_logger - pipeline | public.gaussdb_type_matrix_snapshot | sinked_records | latest=0
+2026-04-02T13:38:35.886439+08:00 INFO monitor_logger - pipeline | public.gaussdb_type_matrix_snapshot | sinked_bytes | latest=0
+2026-04-02T13:38:36.364530+08:00 INFO monitor_logger - extractor | global | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2 | min_by_sec=0
+2026-04-02T13:38:36.364593+08:00 INFO monitor_logger - extractor | global | extracted_bytes | sum=56 | avg_by_sec=56 | max_by_sec=56 | min_by_sec=0
+2026-04-02T13:38:36.364616+08:00 INFO monitor_logger - extractor | global | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2 | min_by_sec=0
+2026-04-02T13:38:36.364639+08:00 INFO monitor_logger - extractor | global | data_bytes | sum=56 | avg_by_sec=56 | max_by_sec=56 | min_by_sec=0
+2026-04-02T13:38:36.364742+08:00 INFO monitor_logger - pipeline | global | record_size | avg=28
+2026-04-02T13:38:36.364799+08:00 INFO monitor_logger - pipeline | global | buffer_size | sum=2 | avg=2 | max=2 | min=0
+2026-04-02T13:38:36.364834+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=0
+2026-04-02T13:38:36.364853+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=0
+2026-04-02T13:38:36.857247+08:00 INFO position_logger - current_position | {"type":"RdbSnapshot","db_type":"pg","schema":"public","tb":"gaussdb_type_matrix_snapshot","order_key":{"single":["id","2"]}}
+2026-04-02T13:38:36.857315+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-04-02T13:38:36.857387+08:00 INFO position_logger - current_position | {"type":"RdbSnapshot","db_type":"pg","schema":"public","tb":"gaussdb_type_matrix_snapshot","order_key":{"single":["id","2"]}}
+2026-04-02T13:38:36.857406+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-04-02T13:38:36.857606+08:00 INFO finished_logger - {"type":"RdbSnapshotFinished","db_type":"pg","schema":"public","tb":"gaussdb_type_matrix_snapshot"}
+2026-04-02T13:38:36.874252+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-04-02T13:38:36.874421+08:00 INFO monitor_logger - pipeline | global | timestamp | latest=0
+2026-04-02T13:38:36.874440+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=2
+2026-04-02T13:38:36.874457+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=56
+2026-04-02T13:38:36.874941+08:00 INFO finished_logger - task finished
+comparing row data for src_tb: ("public", "gaussdb_type_matrix_snapshot"), dst_tb: ("public", "gaussdb_type_matrix_snapshot"), src_data count: 2, dst_data count: 2
+row index: 0, col: ts_col, src_col_value: DateTime("2026-04-02 13:20:00"), dst_col_value: DateTime("2026-04-02 13:20:00")
+row index: 0, col: id, src_col_value: Long(1), dst_col_value: Long(1)
+row index: 0, col: tiny_col, src_col_value: Short(7), dst_col_value: Short(7)
+row index: 0, col: clob_col, src_col_value: String("first clob text"), dst_col_value: String("first clob text")
+row index: 0, col: nvarchar_col, src_col_value: String("alpha"), dst_col_value: String("alpha")
+row index: 0, col: blob_col, src_col_value: Blob([0, 1, 255]), dst_col_value: Blob([0, 1, 255])
+row index: 1, col: ts_col, src_col_value: None, dst_col_value: None
+row index: 1, col: id, src_col_value: Long(2), dst_col_value: Long(2)
+row index: 1, col: blob_col, src_col_value: None, dst_col_value: None
+row index: 1, col: nvarchar_col, src_col_value: String("beta"), dst_col_value: String("beta")
+row index: 1, col: clob_col, src_col_value: String(""), dst_col_value: None
+compare tb data failed, src_tb: ("public", "gaussdb_type_matrix_snapshot"), dst_tb: ("public", "gaussdb_type_matrix_snapshot")
+snapshot failed (attempt 4/6), will retry: compare tb data failed, src_tb: ("public", "gaussdb_type_matrix_snapshot"), dst_tb: ("public", "gaussdb_type_matrix_snapshot")
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+selected gaussdb rw url: postgres://10.250.0.30:8000/postgres?sslmode=require (server_addr=192.168.1.30/32)
+executing sql: DROP TABLE IF EXISTS public.gaussdb_type_matrix_snapshot
+executing sql: CREATE TABLE public.gaussdb_type_matrix_snapshot ( id INTEGER PRIMARY KEY, ts_col TIMESTAMP, tiny_col SMALLINT, nvarchar_col VARCHAR(32), clob_col TEXT, blob_col BYTEA )
+executing sql: DROP TABLE IF EXISTS public.gaussdb_type_matrix_snapshot
+executing sql: CREATE TABLE public.gaussdb_type_matrix_snapshot ( id INTEGER PRIMARY KEY, ts_col TIMESTAMP, tiny_col SMALLINT, nvarchar_col VARCHAR(32), clob_col TEXT, blob_col BYTEA )
+2026-04-02T13:38:44.147698+08:00 INFO sqlx::postgres::notice - CREATE TABLE / PRIMARY KEY will create implicit index "gaussdb_type_matrix_snapshot_pkey" for table "gaussdb_type_matrix_snapshot"
+executing sql: INSERT INTO public.gaussdb_type_matrix_snapshot ( id, ts_col, tiny_col, nvarchar_col, clob_col, blob_col ) VALUES (1, '2026-04-02 13:20:00', 7, 'alpha', 'first clob text', '\x0001ff'), (2, NULL, NULL, 'beta', '', NULL)
+2026-04-02T13:38:44.172198+08:00 INFO default_logger - start task: [taskID: b9dff47617337d7, taskType: Some(Snapshot)]
+2026-04-02T13:38:44.172260+08:00 WARN default_logger - recorder unsupported resumer config: Dummy
+2026-04-02T13:38:44.172290+08:00 WARN default_logger - recovery unsupported resumer config: Dummy
+2026-04-02T13:38:44.172317+08:00 INFO default_logger - recovery initialization for task_id: b9dff47617337d7 finished in 0 ms
+2026-04-02T13:38:44.720392+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-02T13:38:44.720480+08:00 ERROR default_logger - buffer_memory_mb=0 is too large and will be ignored to prevent overflow
+2026-04-02T13:38:44.720521+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-02T13:38:44.727619+08:00 INFO default_logger - begin to estimate record count
+2026-04-02T13:38:44.732996+08:00 INFO default_logger - estimate record count: 0
+2026-04-02T13:38:44.810743+08:00 INFO default_logger - schema: public, tb: gaussdb_cdc_failover, insert events filtered
+2026-04-02T13:38:45.196571+08:00 INFO default_logger - PgSnapshotExtractor starts, schema: "public", tb: "gaussdb_type_matrix_snapshot", batch_size: 4, parallel_size: 1
+2026-04-02T13:38:45.196696+08:00 INFO default_logger - SnapshotParallelizer starts, parallel_size: 1, checkpoint_interval_secs: 1
+2026-04-02T13:38:45.208256+08:00 INFO default_logger - ["public"."gaussdb_type_matrix_snapshot"] recovery from [{}]
+2026-04-02T13:38:45.210262+08:00 INFO default_logger - end extracting data from "public"."gaussdb_type_matrix_snapshot", all count: 2
+2026-04-02T13:38:45.300086+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-04-02T13:38:45.300177+08:00 INFO monitor_logger - extractor | public.gaussdb_type_matrix_snapshot | data_bytes | sum=56 | avg_by_sec=56 | max_by_sec=56
+2026-04-02T13:38:45.300198+08:00 INFO monitor_logger - extractor | public.gaussdb_type_matrix_snapshot | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-04-02T13:38:45.300215+08:00 INFO monitor_logger - extractor | public.gaussdb_type_matrix_snapshot | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-04-02T13:38:45.300230+08:00 INFO monitor_logger - extractor | public.gaussdb_type_matrix_snapshot | extracted_bytes | sum=56 | avg_by_sec=56 | max_by_sec=56
+2026-04-02T13:38:45.300272+08:00 INFO monitor_logger - pipeline | public.gaussdb_type_matrix_snapshot | buffer_size | sum=2 | avg=2 | max=2
+2026-04-02T13:38:45.300289+08:00 INFO monitor_logger - pipeline | public.gaussdb_type_matrix_snapshot | record_size | avg=28
+2026-04-02T13:38:45.300314+08:00 INFO monitor_logger - pipeline | public.gaussdb_type_matrix_snapshot | sinked_records | latest=0
+2026-04-02T13:38:45.300329+08:00 INFO monitor_logger - pipeline | public.gaussdb_type_matrix_snapshot | sinked_bytes | latest=0
+2026-04-02T13:38:45.812734+08:00 INFO monitor_logger - extractor | global | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2 | min_by_sec=0
+2026-04-02T13:38:45.812777+08:00 INFO monitor_logger - extractor | global | extracted_bytes | sum=56 | avg_by_sec=56 | max_by_sec=56 | min_by_sec=0
+2026-04-02T13:38:45.812797+08:00 INFO monitor_logger - extractor | global | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2 | min_by_sec=0
+2026-04-02T13:38:45.812816+08:00 INFO monitor_logger - extractor | global | data_bytes | sum=56 | avg_by_sec=56 | max_by_sec=56 | min_by_sec=0
+2026-04-02T13:38:45.813075+08:00 INFO monitor_logger - pipeline | global | record_size | avg=28
+2026-04-02T13:38:45.813129+08:00 INFO monitor_logger - pipeline | global | buffer_size | sum=2 | avg=2 | max=2 | min=0
+2026-04-02T13:38:45.813175+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=0
+2026-04-02T13:38:45.813203+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=0
+2026-04-02T13:38:46.245022+08:00 INFO position_logger - current_position | {"type":"RdbSnapshot","db_type":"pg","schema":"public","tb":"gaussdb_type_matrix_snapshot","order_key":{"single":["id","2"]}}
+2026-04-02T13:38:46.245138+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-04-02T13:38:46.245246+08:00 INFO position_logger - current_position | {"type":"RdbSnapshot","db_type":"pg","schema":"public","tb":"gaussdb_type_matrix_snapshot","order_key":{"single":["id","2"]}}
+2026-04-02T13:38:46.245278+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-04-02T13:38:46.245475+08:00 INFO finished_logger - {"type":"RdbSnapshotFinished","db_type":"pg","schema":"public","tb":"gaussdb_type_matrix_snapshot"}
+2026-04-02T13:38:46.323072+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-04-02T13:38:46.323307+08:00 INFO monitor_logger - pipeline | global | timestamp | latest=0
+2026-04-02T13:38:46.323335+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=2
+2026-04-02T13:38:46.323354+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=56
+2026-04-02T13:38:46.323829+08:00 INFO finished_logger - task finished
+comparing row data for src_tb: ("public", "gaussdb_type_matrix_snapshot"), dst_tb: ("public", "gaussdb_type_matrix_snapshot"), src_data count: 2, dst_data count: 2
+row index: 0, col: ts_col, src_col_value: DateTime("2026-04-02 13:20:00"), dst_col_value: DateTime("2026-04-02 13:20:00")
+row index: 0, col: tiny_col, src_col_value: Short(7), dst_col_value: Short(7)
+row index: 0, col: blob_col, src_col_value: Blob([0, 1, 255]), dst_col_value: Blob([0, 1, 255])
+row index: 0, col: clob_col, src_col_value: String("first clob text"), dst_col_value: String("first clob text")
+row index: 0, col: id, src_col_value: Long(1), dst_col_value: Long(1)
+row index: 0, col: nvarchar_col, src_col_value: String("alpha"), dst_col_value: String("alpha")
+row index: 1, col: blob_col, src_col_value: None, dst_col_value: None
+row index: 1, col: clob_col, src_col_value: String(""), dst_col_value: None
+compare tb data failed, src_tb: ("public", "gaussdb_type_matrix_snapshot"), dst_tb: ("public", "gaussdb_type_matrix_snapshot")
+snapshot failed (attempt 5/6), will retry: compare tb data failed, src_tb: ("public", "gaussdb_type_matrix_snapshot"), dst_tb: ("public", "gaussdb_type_matrix_snapshot")
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+selected gaussdb rw url: postgres://10.250.0.30:8000/postgres?sslmode=require (server_addr=192.168.1.30/32)
+executing sql: DROP TABLE IF EXISTS public.gaussdb_type_matrix_snapshot
+executing sql: CREATE TABLE public.gaussdb_type_matrix_snapshot ( id INTEGER PRIMARY KEY, ts_col TIMESTAMP, tiny_col SMALLINT, nvarchar_col VARCHAR(32), clob_col TEXT, blob_col BYTEA )
+executing sql: DROP TABLE IF EXISTS public.gaussdb_type_matrix_snapshot
+executing sql: CREATE TABLE public.gaussdb_type_matrix_snapshot ( id INTEGER PRIMARY KEY, ts_col TIMESTAMP, tiny_col SMALLINT, nvarchar_col VARCHAR(32), clob_col TEXT, blob_col BYTEA )
+2026-04-02T13:38:54.110525+08:00 INFO sqlx::postgres::notice - CREATE TABLE / PRIMARY KEY will create implicit index "gaussdb_type_matrix_snapshot_pkey" for table "gaussdb_type_matrix_snapshot"
+executing sql: INSERT INTO public.gaussdb_type_matrix_snapshot ( id, ts_col, tiny_col, nvarchar_col, clob_col, blob_col ) VALUES (1, '2026-04-02 13:20:00', 7, 'alpha', 'first clob text', '\x0001ff'), (2, NULL, NULL, 'beta', '', NULL)
+2026-04-02T13:38:54.126107+08:00 INFO default_logger - start task: [taskID: b9dff47617337d7, taskType: Some(Snapshot)]
+2026-04-02T13:38:54.126152+08:00 WARN default_logger - recorder unsupported resumer config: Dummy
+2026-04-02T13:38:54.126168+08:00 WARN default_logger - recovery unsupported resumer config: Dummy
+2026-04-02T13:38:54.126181+08:00 INFO default_logger - recovery initialization for task_id: b9dff47617337d7 finished in 0 ms
+2026-04-02T13:38:54.676775+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-02T13:38:54.676814+08:00 ERROR default_logger - buffer_memory_mb=0 is too large and will be ignored to prevent overflow
+2026-04-02T13:38:54.676829+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-02T13:38:54.681621+08:00 INFO default_logger - begin to estimate record count
+2026-04-02T13:38:54.684486+08:00 INFO default_logger - estimate record count: 0
+2026-04-02T13:38:54.758496+08:00 INFO default_logger - schema: public, tb: gaussdb_cdc_failover, insert events filtered
+2026-04-02T13:38:55.208750+08:00 INFO default_logger - PgSnapshotExtractor starts, schema: "public", tb: "gaussdb_type_matrix_snapshot", batch_size: 4, parallel_size: 1
+2026-04-02T13:38:55.208980+08:00 INFO default_logger - SnapshotParallelizer starts, parallel_size: 1, checkpoint_interval_secs: 1
+2026-04-02T13:38:55.221441+08:00 INFO default_logger - ["public"."gaussdb_type_matrix_snapshot"] recovery from [{}]
+2026-04-02T13:38:55.222543+08:00 INFO default_logger - end extracting data from "public"."gaussdb_type_matrix_snapshot", all count: 2
+2026-04-02T13:38:55.311622+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-04-02T13:38:55.311707+08:00 INFO monitor_logger - extractor | public.gaussdb_type_matrix_snapshot | data_bytes | sum=56 | avg_by_sec=56 | max_by_sec=56
+2026-04-02T13:38:55.311724+08:00 INFO monitor_logger - extractor | public.gaussdb_type_matrix_snapshot | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-04-02T13:38:55.311747+08:00 INFO monitor_logger - extractor | public.gaussdb_type_matrix_snapshot | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-04-02T13:38:55.311761+08:00 INFO monitor_logger - extractor | public.gaussdb_type_matrix_snapshot | extracted_bytes | sum=56 | avg_by_sec=56 | max_by_sec=56
+2026-04-02T13:38:55.311800+08:00 INFO monitor_logger - pipeline | public.gaussdb_type_matrix_snapshot | buffer_size | sum=2 | avg=2 | max=2
+2026-04-02T13:38:55.311812+08:00 INFO monitor_logger - pipeline | public.gaussdb_type_matrix_snapshot | record_size | avg=28
+2026-04-02T13:38:55.311834+08:00 INFO monitor_logger - pipeline | public.gaussdb_type_matrix_snapshot | sinked_records | latest=0
+2026-04-02T13:38:55.311844+08:00 INFO monitor_logger - pipeline | public.gaussdb_type_matrix_snapshot | sinked_bytes | latest=0
+2026-04-02T13:38:55.761406+08:00 INFO monitor_logger - extractor | global | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2 | min_by_sec=0
+2026-04-02T13:38:55.761440+08:00 INFO monitor_logger - extractor | global | extracted_bytes | sum=56 | avg_by_sec=56 | max_by_sec=56 | min_by_sec=0
+2026-04-02T13:38:55.761468+08:00 INFO monitor_logger - extractor | global | data_bytes | sum=56 | avg_by_sec=56 | max_by_sec=56 | min_by_sec=0
+2026-04-02T13:38:55.761482+08:00 INFO monitor_logger - extractor | global | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2 | min_by_sec=0
+2026-04-02T13:38:55.761562+08:00 INFO monitor_logger - pipeline | global | record_size | avg=28
+2026-04-02T13:38:55.761576+08:00 INFO monitor_logger - pipeline | global | buffer_size | sum=2 | avg=2 | max=2 | min=0
+2026-04-02T13:38:55.761593+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=0
+2026-04-02T13:38:55.761608+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=0
+2026-04-02T13:38:56.316611+08:00 INFO position_logger - current_position | {"type":"RdbSnapshot","db_type":"pg","schema":"public","tb":"gaussdb_type_matrix_snapshot","order_key":{"single":["id","2"]}}
+2026-04-02T13:38:56.316670+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-04-02T13:38:56.316733+08:00 INFO position_logger - current_position | {"type":"RdbSnapshot","db_type":"pg","schema":"public","tb":"gaussdb_type_matrix_snapshot","order_key":{"single":["id","2"]}}
+2026-04-02T13:38:56.316749+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-04-02T13:38:56.316918+08:00 INFO finished_logger - {"type":"RdbSnapshotFinished","db_type":"pg","schema":"public","tb":"gaussdb_type_matrix_snapshot"}
+2026-04-02T13:38:56.373864+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-04-02T13:38:56.374013+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=56
+2026-04-02T13:38:56.374029+08:00 INFO monitor_logger - pipeline | global | timestamp | latest=0
+2026-04-02T13:38:56.374046+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=2
+2026-04-02T13:38:56.374516+08:00 INFO finished_logger - task finished
+comparing row data for src_tb: ("public", "gaussdb_type_matrix_snapshot"), dst_tb: ("public", "gaussdb_type_matrix_snapshot"), src_data count: 2, dst_data count: 2
+row index: 0, col: ts_col, src_col_value: DateTime("2026-04-02 13:20:00"), dst_col_value: DateTime("2026-04-02 13:20:00")
+row index: 0, col: blob_col, src_col_value: Blob([0, 1, 255]), dst_col_value: Blob([0, 1, 255])
+row index: 0, col: clob_col, src_col_value: String("first clob text"), dst_col_value: String("first clob text")
+row index: 0, col: nvarchar_col, src_col_value: String("alpha"), dst_col_value: String("alpha")
+row index: 0, col: tiny_col, src_col_value: Short(7), dst_col_value: Short(7)
+row index: 0, col: id, src_col_value: Long(1), dst_col_value: Long(1)
+row index: 1, col: tiny_col, src_col_value: None, dst_col_value: None
+row index: 1, col: nvarchar_col, src_col_value: String("beta"), dst_col_value: String("beta")
+row index: 1, col: ts_col, src_col_value: None, dst_col_value: None
+row index: 1, col: id, src_col_value: Long(2), dst_col_value: Long(2)
+row index: 1, col: blob_col, src_col_value: None, dst_col_value: None
+row index: 1, col: clob_col, src_col_value: String(""), dst_col_value: None
+compare tb data failed, src_tb: ("public", "gaussdb_type_matrix_snapshot"), dst_tb: ("public", "gaussdb_type_matrix_snapshot")
+2026-04-02T13:38:56.672531+08:00 ERROR default_logger - panic: panicked at dt-tests/tests/test_runner/test_base.rs:75:9:
+snapshot failed after 6 attempts: compare tb data failed, src_tb: ("public", "gaussdb_type_matrix_snapshot"), dst_tb: ("public", "gaussdb_type_matrix_snapshot")
+backtrace:
+disabled backtrace
+test pg_to_gaussdb::snapshot_tests::test::type_matrix_test ... FAILED
+
+failures:
+
+failures:
+    pg_to_gaussdb::snapshot_tests::test::type_matrix_test
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 355 filtered out; finished in 53.73s
+
+error: test failed, to rerun pass `-p dt-tests --test integration_test`

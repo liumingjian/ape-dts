@@ -1,0 +1,4 @@
+id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
+1,实现候选选主与连接绑定,DONE,precheck 在 candidates 存在时连接到 RW 主,cargo test -p dt-precheck,2026-04-01 15:13 +0800,0,bind_to_gaussdb_primary_endpoint() + selected_endpoint
+2,实现权限/slot/HA 端口检查,DONE,错误信息可定位且 fail fast,TEST_NEG_SLOT_ACTIVE=1 bash scripts/e2e/gaussdb_to_pg_cdc.sh,2026-04-01 15:13 +0800,0,slot-active + HA port + permission checks covered via e2e negatives
+3,补验证与回归,DONE,相关测试通过,cargo test -p dt-precheck,2026-04-01 15:13 +0800,0,unit tests pass; real env precheck failures validated in e2e raw snippets

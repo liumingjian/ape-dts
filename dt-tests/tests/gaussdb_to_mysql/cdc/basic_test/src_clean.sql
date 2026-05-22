@@ -1,0 +1,2 @@
+-- Cleanup intentionally skipped for the shared GaussDB source.
+-- src_prepare.sql is already idempotent and recreates the table on rerun.

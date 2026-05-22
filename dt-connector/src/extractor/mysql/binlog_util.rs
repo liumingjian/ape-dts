@@ -1,4 +1,7 @@
-use dt_common::{log_info, utils::time_util::TimeUtil};
+use dt_common::{
+    config::connection_auth_config::ConnectionAuthConfig, error::Error, log_info,
+    utils::time_util::TimeUtil,
+};
 use futures::TryStreamExt;
 use mysql_binlog_connector_rust::{binlog_client::BinlogClient, event::event_data::EventData};
 use sqlx::{MySql, Pool, Row};
@@ -9,6 +12,7 @@ impl BinlogUtil {
     pub async fn find_last_binlog_before_timestamp(
         start_timestamp: u32,
         url: &str,
+        connection_auth: &ConnectionAuthConfig,
         server_id: u64,
         conn_pool: &Pool<MySql>,
     ) -> anyhow::Result<String> {
@@ -30,7 +34,7 @@ impl BinlogUtil {
 
             let binlog = &binlogs[mid];
             let binlog_start_timestamp =
-                Self::get_binlog_start_timestamp(url, server_id, binlog).await?;
+                Self::get_binlog_start_timestamp(url, connection_auth, server_id, binlog).await?;
 
             if binlog_start_timestamp == start_timestamp {
                 // found the binlog whose binlog_start_timestamp == start_timestamp, which happens rarely
@@ -54,7 +58,8 @@ impl BinlogUtil {
         if left == 0 {
             // start_time is earlier than binlog_start_time of the first binlog
             let binlog_start_timestamp =
-                Self::get_binlog_start_timestamp(url, server_id, &binlogs[0]).await?;
+                Self::get_binlog_start_timestamp(url, connection_auth, server_id, &binlogs[0])
+                    .await?;
             log_info!(
                 "start_time is earlier than the first binlog: {}, binlog_start_time: {}",
                 &binlogs[0],
@@ -64,7 +69,7 @@ impl BinlogUtil {
         } else {
             let binlog = binlogs[left - 1].to_owned();
             let binlog_start_timestamp =
-                Self::get_binlog_start_timestamp(url, server_id, &binlog).await?;
+                Self::get_binlog_start_timestamp(url, connection_auth, server_id, &binlog).await?;
             log_info!(
                 "found binlog: {}, binlog_start_time: {}",
                 binlog,
@@ -88,12 +93,15 @@ impl BinlogUtil {
 
     async fn get_binlog_start_timestamp(
         url: &str,
+        connection_auth: &ConnectionAuthConfig,
         server_id: u64,
         binlog: &str,
     ) -> anyhow::Result<u32> {
         let timestamp;
+        let final_url = ConnectionAuthConfig::merge_url_with_auth(url, connection_auth)
+            .map_err(|e| Error::ConfigError(format!("failed to merge url with auth: {}", e)))?;
         let mut client = BinlogClient {
-            url: url.into(),
+            url: final_url,
             binlog_filename: binlog.into(),
             binlog_position: 0,
             server_id,

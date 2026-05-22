@@ -26,6 +26,14 @@ pub enum ExtractorConfig {
         db_batch_size: usize,
     },
 
+    OracleStruct {
+        url: String,
+        connection_auth: ConnectionAuthConfig,
+        schema: String,
+        schemas: Vec<String>,
+        db_batch_size: usize,
+    },
+
     MysqlSnapshot {
         url: String,
         connection_auth: ConnectionAuthConfig,
@@ -73,6 +81,37 @@ pub enum ExtractorConfig {
         partition_cols: String,
     },
 
+    OracleSnapshot {
+        url: String,
+        connection_auth: ConnectionAuthConfig,
+        schema: String,
+        tb: String,
+        sample_interval: usize,
+        parallel_size: usize,
+        batch_size: usize,
+        partition_cols: String,
+    },
+
+    OracleCdc {
+        url: String,
+        connection_auth: ConnectionAuthConfig,
+        poll_interval_millis: u64,
+        poll_batch_size: usize,
+        start_change_id: u64,
+        start_time_utc: String,
+        end_time_utc: String,
+    },
+
+    OracleLogMinerCdc {
+        url: String,
+        connection_auth: ConnectionAuthConfig,
+        poll_interval_millis: u64,
+        poll_batch_size: usize,
+        start_scn: u64,
+        start_time_utc: String,
+        end_time_utc: String,
+    },
+
     PgCdc {
         url: String,
         connection_auth: ConnectionAuthConfig,
@@ -84,6 +123,19 @@ pub enum ExtractorConfig {
         heartbeat_interval_secs: u64,
         heartbeat_tb: String,
         ddl_meta_tb: String,
+        start_time_utc: String,
+        end_time_utc: String,
+    },
+
+    GaussDBCdc {
+        url: String,
+        connection_auth: ConnectionAuthConfig,
+        slot_name: String,
+        start_lsn: String,
+        recreate_slot_if_exists: bool,
+        keepalive_interval_secs: u64,
+        heartbeat_interval_secs: u64,
+        heartbeat_tb: String,
         start_time_utc: String,
         end_time_utc: String,
     },

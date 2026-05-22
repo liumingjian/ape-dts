@@ -1,0 +1,17 @@
+== docker containers ==
+ape-dts-mysql8
+ape-dts-pg15
+
+== local pg ==
+
+== remote gaussdb (sql) ==
+192.168.1.51/32|8000|true
+
+== remote gaussdb (candidate probe) ==
+10.250.0.52:8000 => t
+10.250.0.30:8000 => f
+10.250.0.51:8000 => t
+
+== local mysql ==
+version()
+8.0.44

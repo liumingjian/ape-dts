@@ -1,0 +1,108 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.26s
+warning: the following packages contain code that will be rejected by a future version of Rust: snap v0.2.5
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 2`
+     Running tests/integration_test.rs (target/debug/deps/integration_test-9b60f916ab830360)
+
+running 1 test
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.30:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.30:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.30:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.30:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+skip gaussdb candidate (connect failed): postgres://10.250.0.51:8000/postgres?sslmode=require, error: error communicating with database: Connection reset by peer (os error 54)
+skip gaussdb candidate (connect failed): postgres://10.250.0.51:8000/postgres?sslmode=disable, error: error communicating with database: connection aborted
+snapshot failed (attempt 1/6), will retry: error communicating with database: Connection reset by peer (os error 54): Connection reset by peer (os error 54)
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+selected gaussdb rw url: postgres://10.250.0.30:8000/postgres?sslmode=require (server_addr=192.168.1.30/32)
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.51:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.51:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.51:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.51:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+selected gaussdb rw url: postgres://10.250.0.30:8000/postgres?sslmode=require (server_addr=192.168.1.30/32)
+executing sql: DROP TABLE IF EXISTS public.gaussdb_to_pg_snapshot_basic
+executing sql: CREATE TABLE public.gaussdb_to_pg_snapshot_basic ( id INTEGER PRIMARY KEY, val TEXT )
+executing sql: DROP TABLE IF EXISTS public.gaussdb_to_pg_snapshot_basic
+executing sql: CREATE TABLE public.gaussdb_to_pg_snapshot_basic ( id INTEGER PRIMARY KEY, val TEXT )
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.51:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.51:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.51:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.51:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+selected gaussdb rw url: postgres://10.250.0.30:8000/postgres?sslmode=require (server_addr=192.168.1.30/32)
+executing sql: INSERT INTO public.gaussdb_to_pg_snapshot_basic (id, val) VALUES (1, 'a'), (2, 'b')
+2026-04-02T16:31:18.539212+08:00 INFO default_logger - start task: [taskID: 321e93e79b80ae31, taskType: Some(Snapshot)]
+2026-04-02T16:31:18.539905+08:00 WARN default_logger - recorder unsupported resumer config: Dummy
+2026-04-02T16:31:18.540002+08:00 WARN default_logger - recovery unsupported resumer config: Dummy
+2026-04-02T16:31:18.540040+08:00 INFO default_logger - recovery initialization for task_id: 321e93e79b80ae31 finished in 0 ms
+2026-04-02T16:31:19.414811+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-02T16:31:19.414864+08:00 ERROR default_logger - buffer_memory_mb=0 is too large and will be ignored to prevent overflow
+2026-04-02T16:31:19.414881+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-04-02T16:31:19.577038+08:00 INFO default_logger - begin to estimate record count
+2026-04-02T16:31:20.067588+08:00 INFO default_logger - estimate record count: 0
+2026-04-02T16:31:20.324984+08:00 INFO default_logger - schema: public, tb: __ape_dts_mv_base, insert events filtered
+2026-04-02T16:31:20.325587+08:00 INFO default_logger - schema: public, tb: _blob_probe, insert events filtered
+2026-04-02T16:31:20.325843+08:00 INFO default_logger - schema: public, tb: gaussdb_cdc_basic, insert events filtered
+2026-04-02T16:31:20.326019+08:00 INFO default_logger - schema: public, tb: gaussdb_cdc_failover, insert events filtered
+2026-04-02T16:31:20.326176+08:00 INFO default_logger - schema: public, tb: gaussdb_cdc_resume, insert events filtered
+2026-04-02T16:31:20.326320+08:00 INFO default_logger - schema: public, tb: gaussdb_cdc_type_matrix, insert events filtered
+2026-04-02T16:31:20.326438+08:00 INFO default_logger - schema: public, tb: gaussdb_check_basic, insert events filtered
+2026-04-02T16:31:20.326532+08:00 INFO default_logger - schema: public, tb: gaussdb_snapshot_basic, insert events filtered
+2026-04-02T16:31:20.326615+08:00 INFO default_logger - schema: public, tb: gaussdb_to_pg_check_basic, insert events filtered
+2026-04-02T16:31:20.326713+08:00 INFO default_logger - schema: public, tb: gaussdb_type_matrix_check, insert events filtered
+2026-04-02T16:31:20.326786+08:00 INFO default_logger - schema: public, tb: gaussdb_type_matrix_snapshot, insert events filtered
+2026-04-02T16:31:20.326870+08:00 INFO default_logger - schema: public, tb: pg_to_gaussdb_cdc_basic, insert events filtered
+2026-04-02T16:31:20.671248+08:00 INFO default_logger - PgSnapshotExtractor starts, schema: "public", tb: "gaussdb_to_pg_snapshot_basic", batch_size: 4, parallel_size: 1
+2026-04-02T16:31:20.671494+08:00 INFO default_logger - SnapshotParallelizer starts, parallel_size: 1, checkpoint_interval_secs: 1
+2026-04-02T16:31:21.179245+08:00 INFO default_logger - ["public"."gaussdb_to_pg_snapshot_basic"] recovery from [{}]
+2026-04-02T16:31:21.327829+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=0
+2026-04-02T16:31:21.327851+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=0
+2026-04-02T16:31:21.422892+08:00 INFO default_logger - end extracting data from "public"."gaussdb_to_pg_snapshot_basic", all count: 2
+2026-04-02T16:31:21.480849+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-04-02T16:31:21.480911+08:00 INFO monitor_logger - extractor | public.gaussdb_to_pg_snapshot_basic | data_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10
+2026-04-02T16:31:21.480925+08:00 INFO monitor_logger - extractor | public.gaussdb_to_pg_snapshot_basic | extracted_bytes | sum=10 | avg_by_sec=10 | max_by_sec=10
+2026-04-02T16:31:21.480937+08:00 INFO monitor_logger - extractor | public.gaussdb_to_pg_snapshot_basic | extracted_records | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-04-02T16:31:21.480948+08:00 INFO monitor_logger - extractor | public.gaussdb_to_pg_snapshot_basic | record_count | sum=2 | avg_by_sec=2 | max_by_sec=2
+2026-04-02T16:31:21.480975+08:00 INFO monitor_logger - pipeline | public.gaussdb_to_pg_snapshot_basic | record_size | avg=5
+2026-04-02T16:31:21.480986+08:00 INFO monitor_logger - pipeline | public.gaussdb_to_pg_snapshot_basic | buffer_size | sum=2 | avg=2 | max=2
+2026-04-02T16:31:21.481004+08:00 INFO monitor_logger - pipeline | public.gaussdb_to_pg_snapshot_basic | sinked_bytes | latest=0
+2026-04-02T16:31:21.481013+08:00 INFO monitor_logger - pipeline | public.gaussdb_to_pg_snapshot_basic | sinked_records | latest=0
+2026-04-02T16:31:21.493934+08:00 INFO position_logger - current_position | {"type":"RdbSnapshot","db_type":"pg","schema":"public","tb":"gaussdb_to_pg_snapshot_basic","order_key":{"single":["id","2"]}}
+2026-04-02T16:31:21.493952+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-04-02T16:31:21.494046+08:00 INFO finished_logger - {"type":"RdbSnapshotFinished","db_type":"gaussdb_pg","schema":"public","tb":"gaussdb_to_pg_snapshot_basic"}
+2026-04-02T16:31:21.531219+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-04-02T16:31:21.531349+08:00 INFO monitor_logger - pipeline | global | timestamp | latest=0
+2026-04-02T16:31:21.531364+08:00 INFO monitor_logger - pipeline | global | sinked_records | latest=2
+2026-04-02T16:31:21.531384+08:00 INFO monitor_logger - pipeline | global | sinked_bytes | latest=10
+2026-04-02T16:31:21.531679+08:00 INFO finished_logger - task finished
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.52:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.52:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.51:8000/postgres?sslmode=require
+skip gaussdb candidate (read-only): postgres://10.250.0.51:8000/postgres?sslmode=require (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+gaussdb candidate reports in_recovery=true, will still probe write: postgres://10.250.0.51:8000/postgres?sslmode=disable
+skip gaussdb candidate (read-only): postgres://10.250.0.51:8000/postgres?sslmode=disable (transaction_read_only=Some("on"), default_transaction_read_only=Some("off"))
+selected gaussdb rw url: postgres://10.250.0.30:8000/postgres?sslmode=require (server_addr=192.168.1.30/32)
+2026-04-02T16:31:28.497929+08:00 WARN sqlx::postgres::notice - Fast path bit num leak.
+comparing row data for src_tb: ("public", "gaussdb_to_pg_snapshot_basic"), dst_tb: ("public", "gaussdb_to_pg_snapshot_basic"), src_data count: 2, dst_data count: 2
+row index: 0, col: id, src_col_value: Long(1), dst_col_value: Long(1)
+row index: 0, col: val, src_col_value: String("a"), dst_col_value: String("a")
+row index: 1, col: val, src_col_value: String("b"), dst_col_value: String("b")
+row index: 1, col: id, src_col_value: Long(2), dst_col_value: Long(2)
+test gaussdb_to_pg::snapshot_tests::test::snapshot_basic_test ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 356 filtered out; finished in 41.79s
+

@@ -1,0 +1,25 @@
+psql:/tmp/gauss_show_create_probe.sql:1: NOTICE:  schema "gaussdb_mysql_struct_probe" does not exist, skipping
+DROP SCHEMA
+CREATE SCHEMA
+psql:/tmp/gauss_show_create_probe.sql:3: NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "t1_pkey" for table "t1"
+CREATE TABLE
+          Database          |                                         Create Database                                          
+----------------------------+--------------------------------------------------------------------------------------------------
+ gaussdb_mysql_struct_probe | CREATE DATABASE gaussdb_mysql_struct_probe DEFAULT CHARACTER SET UTF8 COLLATE utf8mb4_general_ci
+(1 row)
+
+ Table |                                                         Create Table                                                         
+-------+------------------------------------------------------------------------------------------------------------------------------
+ t1    | SET search_path = gaussdb_mysql_struct_probe;                                                                               +
+       | CREATE TABLE t1 (                                                                                                           +
+       |     id integer NOT NULL,                                                                                                    +
+       |     name varchar(32) CHARACTER SET `UTF8` COLLATE utf8mb4_general_ci                                                        +
+       | )                                                                                                                           +
+       | CHARACTER SET = "UTF8" COLLATE = "utf8mb4_general_ci"                                                                       +
+       | WITH (orientation=row, compression=no, storage_type=USTORE, segment=off);                                                   +
+       | CREATE INDEX idx_name USING ubtree ON gaussdb_mysql_struct_probe.t1 (name) WITH (storage_type=USTORE) TABLESPACE pg_default;+
+       | ALTER TABLE t1 ADD CONSTRAINT t1_pkey PRIMARY KEY USING ubtree  (id) WITH (storage_type=USTORE);
+(1 row)
+
+psql:/tmp/gauss_show_create_probe.sql:6: NOTICE:  drop cascades to table gaussdb_mysql_struct_probe.t1
+DROP SCHEMA

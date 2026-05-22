@@ -1,0 +1,1 @@
+ALTER TABLE licenses ADD COLUMN granted_to TEXT NOT NULL DEFAULT '';

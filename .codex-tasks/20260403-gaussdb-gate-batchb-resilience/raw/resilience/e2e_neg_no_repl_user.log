@@ -1,0 +1,28 @@
+[2026-04-03 18:25:06] detected gaussdb RW primary endpoint: 10.250.0.30:8000 (was 10.250.0.51:8000)
+[2026-04-03 18:25:06] run_dir: /Users/lmj/projects/ai-project/ape-dts/.local/e2e/gaussdb_to_pg_cdc_20260403_182503
+[2026-04-03 18:25:06] source: 10.250.0.30:8000/postgres (user=root)
+[2026-04-03 18:25:06] destination: postgres://127.0.0.1:5434/postgres (user=postgres)
+[2026-04-03 18:25:06] test objects: ape_dts_manual.gaussdb_to_pg_cdc_basic (slot=ape_manual_gaussdb_to_pg_20260403_182503)
+[2026-04-03 18:25:06] gaussdb_pg_candidate_hosts: 10.250.0.52:8000,10.250.0.30:8000,10.250.0.51:8000
+[2026-04-03 18:25:06] SKIP_DOCKER_PG=1, skip starting docker postgres
+[2026-04-03 18:25:06] cleanup source: drop table/schema + drop slot (best-effort)
+[2026-04-03 18:25:10] cleanup destination: drop table/schema (best-effort)
+[2026-04-03 18:25:10] prepare source table: ape_dts_manual.gaussdb_to_pg_cdc_basic
+NOTICE:  schema "ape_dts_manual" does not exist, skipping
+DROP SCHEMA
+CREATE SCHEMA
+NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "gaussdb_to_pg_cdc_basic_pkey" for table "gaussdb_to_pg_cdc_basic"
+CREATE TABLE
+[2026-04-03 18:25:12] prepare destination table: ape_dts_manual.gaussdb_to_pg_cdc_basic
+NOTICE:  schema "ape_dts_manual" does not exist, skipping
+DROP SCHEMA
+CREATE SCHEMA
+CREATE TABLE
+[2026-04-03 18:25:12] negative test: no replication privilege user (precheck should fail fast)
+[2026-04-03 18:25:15] creating temp role (login only): ape_dts_no_repl_20260403_182503
+NOTICE:  The encrypted password contains MD5 ciphertext, which is not secure.
+[2026-04-03 18:25:20] running precheck (expect FAIL) ...
+[2026-04-03 18:25:24] negative ok: precheck reported insufficient permission for CDC
+[2026-04-03 18:25:25] negative succeeded
+[2026-04-03 18:25:27] cleanup source: drop table/schema + drop slot (best-effort)
+[2026-04-03 18:25:32] cleanup destination: drop table/schema (best-effort)

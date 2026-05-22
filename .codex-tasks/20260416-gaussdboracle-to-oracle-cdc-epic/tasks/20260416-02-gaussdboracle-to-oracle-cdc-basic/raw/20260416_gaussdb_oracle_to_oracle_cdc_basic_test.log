@@ -1,0 +1,27 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.23s
+warning: the following packages contain code that will be rejected by a future version of Rust: snap v0.2.5
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 2`
+     Running tests/integration_test.rs (target/debug/deps/integration_test-9b60f916ab830360)
+
+running 1 test
+skip gaussdb candidate (connect failed): postgres://<REDACTED>:8000/testdb?sslmode=require, error: error communicating with database: Operation not permitted (os error 1)
+HINT: connection blocked with "Operation not permitted". This usually indicates the current execution sandbox has restricted network access to the GaussDB subnet. Please run the test from a normal terminal environment with network access.
+skip gaussdb candidate (connect failed): postgres://<REDACTED>:8000/testdb?sslmode=disable, error: error communicating with database: Operation not permitted (os error 1)
+skip gaussdb candidate (connect failed): postgres://<REDACTED>:8000/testdb?sslmode=require, error: error communicating with database: Operation not permitted (os error 1)
+skip gaussdb candidate (connect failed): postgres://<REDACTED>:8000/testdb?sslmode=disable, error: error communicating with database: Operation not permitted (os error 1)
+skip gaussdb candidate (connect failed): postgres://<REDACTED>:8000/testdb?sslmode=require, error: error communicating with database: Operation not permitted (os error 1)
+skip gaussdb candidate (connect failed): postgres://<REDACTED>:8000/testdb?sslmode=disable, error: error communicating with database: Operation not permitted (os error 1)
+
+thread 'gaussdb_oracle_to_oracle::cdc_tests::test::cdc_basic_test' panicked at dt-tests/tests/test_runner/test_base.rs:75:9:
+cdc failed after 6 attempts: error communicating with database: Operation not permitted (os error 1): Operation not permitted (os error 1)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test gaussdb_oracle_to_oracle::cdc_tests::test::cdc_basic_test ... FAILED
+
+failures:
+
+failures:
+    gaussdb_oracle_to_oracle::cdc_tests::test::cdc_basic_test
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 382 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `-p dt-tests --test integration_test`

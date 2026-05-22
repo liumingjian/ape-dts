@@ -2,7 +2,11 @@ use std::vec;
 
 use anyhow::bail;
 use dt_common::{
-    config::{config_enums::DbType, task_config::TaskConfig},
+    config::{
+        config_enums::{DbType, WireProtocol},
+        extractor_config::ExtractorConfig,
+        task_config::TaskConfig,
+    },
     rdb_filter::RdbFilter,
 };
 
@@ -10,12 +14,15 @@ use crate::{
     config::precheck_config::PrecheckConfig,
     fetcher::{
         mongo::mongo_fetcher::MongoFetcher, mysql::mysql_fetcher::MysqlFetcher,
-        postgresql::pg_fetcher::PgFetcher, redis::redis_fetcher::RedisFetcher,
+        mysql::pg_compatible_mysql_fetcher::PgCompatibleMysqlFetcher,
+        oracle::oracle_fetcher::OracleFetcher, postgresql::pg_fetcher::PgFetcher,
+        redis::redis_fetcher::RedisFetcher,
     },
     meta::check_result::CheckResult,
     prechecker::{
         mongo_prechecker::MongoPrechecker, mysql_prechecker::MySqlPrechecker,
-        pg_prechecker::PostgresqlPrechecker, redis_prechecker::RedisPrechecker, traits::Prechecker,
+        oracle_prechecker::OraclePrechecker, pg_prechecker::PostgresqlPrechecker,
+        redis_prechecker::RedisPrechecker, traits::Prechecker,
     },
 };
 
@@ -37,7 +44,10 @@ impl PrecheckerBuilder {
             && !self.task_config.sinker_basic.url.is_empty()
     }
 
-    pub fn build_checker(&self, is_source: bool) -> Option<Box<dyn Prechecker + Send>> {
+    pub fn build_checker(
+        &self,
+        is_source: bool,
+    ) -> anyhow::Result<Option<Box<dyn Prechecker + Send>>> {
         let (db_type, url, connection_auth) = if is_source {
             (
                 self.task_config.extractor_basic.db_type.clone(),
@@ -52,13 +62,61 @@ impl PrecheckerBuilder {
             )
         };
 
-        let filter = RdbFilter::from_config(&self.task_config.filter, &db_type).unwrap();
+        let slot_name = if is_source {
+            match &self.task_config.extractor {
+                ExtractorConfig::PgCdc { slot_name, .. } => Some(slot_name.clone()),
+                ExtractorConfig::GaussDBCdc { slot_name, .. } => Some(slot_name.clone()),
+                _ => None,
+            }
+        } else {
+            None
+        };
+
+        let filter = RdbFilter::from_config(&self.task_config.filter, &db_type)?;
         let checker: Option<Box<dyn Prechecker + Send>> = match db_type {
             DbType::Mysql => Some(Box::new(MySqlPrechecker {
+                db_type: DbType::Mysql,
                 filter_config: self.task_config.filter.clone(),
                 precheck_config: self.precheck_config.clone(),
                 is_source,
-                fetcher: MysqlFetcher {
+                fetcher: Box::new(MysqlFetcher {
+                    pool: None,
+                    url,
+                    connection_auth,
+                    is_source,
+                    filter,
+                }),
+            })),
+            DbType::GaussDBMySQL => Some(Box::new(MySqlPrechecker {
+                db_type: DbType::GaussDBMySQL,
+                filter_config: self.task_config.filter.clone(),
+                precheck_config: self.precheck_config.clone(),
+                is_source,
+                fetcher: match WireProtocol::from_url(&url) {
+                    Some(WireProtocol::PostgreSQL) => Box::new(PgCompatibleMysqlFetcher {
+                        pool: None,
+                        url,
+                        connection_auth,
+                        is_source,
+                        filter,
+                    }),
+                    _ => Box::new(MysqlFetcher {
+                        pool: None,
+                        url,
+                        connection_auth,
+                        is_source,
+                        filter,
+                    }),
+                },
+            })),
+            DbType::Pg => Some(Box::new(PostgresqlPrechecker {
+                db_type: DbType::Pg,
+                filter_config: self.task_config.filter.clone(),
+                precheck_config: self.precheck_config.clone(),
+                is_source,
+                slot_name,
+                selected_endpoint: None,
+                fetcher: PgFetcher {
                     pool: None,
                     url,
                     connection_auth,
@@ -66,10 +124,28 @@ impl PrecheckerBuilder {
                     filter,
                 },
             })),
-            DbType::Pg => Some(Box::new(PostgresqlPrechecker {
+            DbType::GaussDBPg => Some(Box::new(PostgresqlPrechecker {
+                db_type: DbType::GaussDBPg,
                 filter_config: self.task_config.filter.clone(),
                 precheck_config: self.precheck_config.clone(),
                 is_source,
+                slot_name,
+                selected_endpoint: None,
+                fetcher: PgFetcher {
+                    pool: None,
+                    url,
+                    connection_auth,
+                    is_source,
+                    filter,
+                },
+            })),
+            DbType::GaussDBOracle => Some(Box::new(PostgresqlPrechecker {
+                db_type: DbType::GaussDBOracle,
+                filter_config: self.task_config.filter.clone(),
+                precheck_config: self.precheck_config.clone(),
+                is_source,
+                slot_name,
+                selected_endpoint: None,
                 fetcher: PgFetcher {
                     pool: None,
                     url,
@@ -90,6 +166,13 @@ impl PrecheckerBuilder {
                 precheck_config: self.precheck_config.clone(),
                 is_source,
             })),
+            DbType::Oracle => Some(Box::new(OraclePrechecker {
+                db_type: DbType::Oracle,
+                filter_config: self.task_config.filter.clone(),
+                precheck_config: self.precheck_config.clone(),
+                is_source,
+                fetcher: OracleFetcher::new(url, connection_auth, is_source, filter),
+            })),
             DbType::Redis => Some(Box::new(RedisPrechecker {
                 fetcher: RedisFetcher {
                     conn: None,
@@ -104,7 +187,7 @@ impl PrecheckerBuilder {
             })),
             _ => None,
         };
-        checker
+        Ok(checker)
     }
 
     pub async fn check(&self) -> anyhow::Result<Vec<anyhow::Result<CheckResult>>> {
@@ -112,7 +195,7 @@ impl PrecheckerBuilder {
             bail! {"config is invalid."};
         }
         let (source_checker_option, sink_checker_option) =
-            (self.build_checker(true), self.build_checker(false));
+            (self.build_checker(true)?, self.build_checker(false)?);
         if source_checker_option.is_none() || sink_checker_option.is_none() {
             bail! {
                 "config is invalid when build checker.maybe db_type is wrong."

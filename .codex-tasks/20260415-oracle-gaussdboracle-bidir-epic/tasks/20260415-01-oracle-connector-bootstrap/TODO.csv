@@ -1,0 +1,7 @@
+id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
+1,新增 DbType::Oracle + 配置解析 wiring（Extractor/Sinker config）,DONE,编译通过并能解析 oracle db_type,cargo test -p dt-common --no-run,2026-04-15 16:17:24 +0800,0,已补齐 DbType::Oracle + ExtractorConfig::OracleSnapshot + SinkerConfig::Oracle，并通过 dt-common 编译
+2,实现 Oracle sqlplus client（支持 docker exec 模式）,DONE,可执行 DDL/DML/查询并返回 stdout,cargo test -p dt-connector --no-run,2026-04-15 17:07:19 +0800,0,已实现 `OracleSqlPlusClient`（支持 `ORACLE_SQLPLUS_DOCKER_CONTAINER`）并通过编译
+3,实现 OracleSnapshotExtractor（RowData::Insert）,DONE,最小表可读出并 push 到 pipeline,cargo test -p dt-connector --no-run,2026-04-15 17:07:19 +0800,0,已实现并在 `oracle_to_gaussdb_oracle` smoke 覆盖
+4,实现 OracleSinker(write)（插入写入）,DONE,最小表可写入（支持 INSERT）,cargo test -p dt-connector --no-run,2026-04-15 17:07:19 +0800,0,已实现并在 `gaussdb_oracle_to_oracle` smoke 覆盖
+5,dt-task 集成：ConnClient + TaskUtil list_schemas/list_tbs + TaskRunner pending tasks,DONE,可用 task_config 启动 snapshot 任务,cargo test -p dt-task --no-run,2026-04-15 17:07:19 +0800,0,已集成 `ConnClient::Oracle` + schema/table 列举并由 dt-tests 任务驱动验证
+6,全仓编译验证,DONE,关键 crate 均 --no-run 通过,cargo test -p dt-common --no-run && cargo test -p dt-connector --no-run && cargo test -p dt-task --no-run,2026-04-15 17:07:19 +0800,0,dt-common/dt-connector/dt-task `--no-run` 均 PASS

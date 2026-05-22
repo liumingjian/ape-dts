@@ -1,0 +1,7 @@
+[2026-04-03 17:34:46] failed to detect gaussdb RW primary within 60s; diagnostics (pg_is_in_recovery):
+[2026-04-03 17:34:46]   10.250.0.52:8000 -> psql: error: connection to server at "10.250.0.52", port 8000 failed: Operation not permitted
+[2026-04-03 17:34:46]   10.250.0.30:8000 -> psql: error: connection to server at "10.250.0.30", port 8000 failed: Operation not permitted
+[2026-04-03 17:34:46]   10.250.0.51:8000 -> psql: error: connection to server at "10.250.0.51", port 8000 failed: Operation not permitted
+ERROR: cannot find RW primary among gaussdb_pg_candidate_hosts/base (SELECT pg_is_in_recovery() never returned false)
+[2026-04-03 17:34:46] cleanup source: drop table/schema + drop slot (best-effort)
+[2026-04-03 17:34:46] cleanup destination: drop table/schema (best-effort)

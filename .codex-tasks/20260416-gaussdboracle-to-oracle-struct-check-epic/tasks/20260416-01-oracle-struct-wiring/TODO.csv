@@ -1,0 +1,5 @@
+id,task,status,completed_at,notes
+1,扩展 dt-common：Oracle sinker 支持 Struct 配置解析,DONE,2026-04-16 16:32:36 +0800,PASS
+2,实现 dt-connector：OracleStructSinker,DONE,2026-04-16 16:32:36 +0800,PASS
+3,扩展 dt-task wiring：ConnClient + SinkerUtil,DONE,2026-04-16 16:32:36 +0800,PASS
+4,编译验证（dt-task --no-run）,DONE,2026-04-16 16:32:36 +0800,PASS

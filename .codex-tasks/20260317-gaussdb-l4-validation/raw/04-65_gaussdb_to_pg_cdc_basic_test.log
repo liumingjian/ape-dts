@@ -1,0 +1,155 @@
+   Compiling dt-connector v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-connector)
+   Compiling dt-parallelizer v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-parallelizer)
+   Compiling dt-pipeline v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-pipeline)
+   Compiling dt-task v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-task)
+   Compiling dt-precheck v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-precheck)
+   Compiling dt-tests v0.1.0 (/Users/lmj/projects/ai-project/ape-dts/dt-tests)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 16.31s
+warning: the following packages contain code that will be rejected by a future version of Rust: snap v0.2.5
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 2`
+     Running tests/integration_test.rs (target/debug/deps/integration_test-65ad912c08554e97)
+
+running 1 test
+executing sql: DROP TABLE IF EXISTS public.gaussdb_cdc_basic
+executing sql: CREATE TABLE public.gaussdb_cdc_basic ( id INTEGER PRIMARY KEY, val TEXT )
+executing sql: DROP TABLE IF EXISTS public.gaussdb_cdc_basic
+executing sql: CREATE TABLE public.gaussdb_cdc_basic ( id INTEGER PRIMARY KEY, val TEXT )
+2026-03-26T09:19:17.199094+08:00 INFO default_logger - start task: [taskID: c1980ef5fbe2c4fc, taskType: Some(Cdc)]
+2026-03-26T09:19:17.199220+08:00 WARN default_logger - recorder unsupported resumer config: Dummy
+2026-03-26T09:19:17.199234+08:00 WARN default_logger - recovery unsupported resumer config: Dummy
+2026-03-26T09:19:17.199247+08:00 INFO default_logger - recovery initialization for task_id: c1980ef5fbe2c4fc finished in 0 ms
+executing sql: INSERT INTO public.gaussdb_cdc_basic (id, val) VALUES (1, 'a'), (2, 'b')
+2026-03-26T09:19:17.698931+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-03-26T09:19:17.698954+08:00 ERROR default_logger - buffer_memory_mb=0 is too large and will be ignored to prevent overflow
+2026-03-26T09:19:17.698984+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-03-26T09:19:17.720270+08:00 INFO default_logger - GaussDBCdcExtractor starts, slot_name: ape_test_gaussdb, start_lsn: , keepalive_interval_secs: 10, heartbeat_interval_secs: 0, heartbeat_tb: heartbeat_db.ape_dts_heartbeat
+2026-03-26T09:19:17.732974+08:00 INFO default_logger - MergeParallelizer starts, parallel_size: 1, checkpoint_interval_secs: 1
+2026-03-26T09:19:18.733124+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-26T09:19:18.733167+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-26T09:19:18.735063+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-26T09:19:18.735077+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-26T09:19:18.735096+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-26T09:19:19.733242+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-26T09:19:19.733281+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-26T09:19:19.734944+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:19:19.734959+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-26T09:19:19.734973+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-26T09:19:19.734983+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:19:19.734992+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-26T09:19:20.733339+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-26T09:19:20.733389+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-26T09:19:20.734920+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:19:20.734933+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-26T09:19:20.734943+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-26T09:19:20.734953+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:19:20.734966+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-26T09:19:21.733449+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-26T09:19:21.733489+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-26T09:19:21.734904+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:19:21.734917+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-26T09:19:21.734928+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-26T09:19:21.734937+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:19:21.734946+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-26T09:19:22.733561+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-26T09:19:22.733603+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-26T09:19:22.734894+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:19:22.734906+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-26T09:19:22.734920+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-26T09:19:22.734929+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:19:22.734938+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-26T09:19:23.733676+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-26T09:19:23.733714+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-26T09:19:23.734896+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:19:23.734911+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-26T09:19:23.734923+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-26T09:19:23.734933+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:19:23.734943+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-26T09:19:24.733798+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-26T09:19:24.733849+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-26T09:19:24.734883+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:19:24.734900+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-26T09:19:24.734913+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-26T09:19:24.734922+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:19:24.734933+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-26T09:19:25.733914+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-26T09:19:25.733960+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-26T09:19:25.734873+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:19:25.734889+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-26T09:19:25.734903+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-26T09:19:25.734915+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:19:25.734924+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-26T09:19:26.734015+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-26T09:19:26.734049+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-26T09:19:26.734863+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:19:26.734879+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-26T09:19:26.734891+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-26T09:19:26.734901+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:19:26.734912+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-26T09:19:27.734121+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-26T09:19:27.734162+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-26T09:19:27.734852+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:19:27.734867+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-26T09:19:27.734879+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-26T09:19:27.734889+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:19:27.734899+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-26T09:19:28.400295+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-26T09:19:28.400321+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+cdc failed (attempt 1/6), will retry: error communicating with database: Connection reset by peer (os error 54)
+2026-03-26T09:19:28.442879+08:00 INFO default_logger - task shutdown detected, do final flush
+2026-03-26T09:19:28.442965+08:00 INFO monitor_logger - pipeline |  | queued_records | latest=0
+2026-03-26T09:19:28.442978+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-26T09:19:28.442988+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-26T09:19:28.442997+08:00 INFO monitor_logger - pipeline |  | queued_bytes | latest=0
+2026-03-26T09:19:28.443008+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-26T09:19:28.443178+08:00 ERROR default_logger - panic: panicked at dt-tests/tests/test_runner/base_test_runner.rs:97:77:
+called `Result::unwrap()` on an `Err` value: extractor.extract failed: error communicating with the server: Connection reset by peer (os error 54): Connection reset by peer (os error 54)
+backtrace:
+disabled backtrace
+skip gaussdb candidate (connect failed): postgres://10.250.0.51:8000/postgres?sslmode=require, error: error communicating with database: Connection reset by peer (os error 54)
+executing sql: DROP TABLE IF EXISTS public.gaussdb_cdc_basic
+executing sql: CREATE TABLE public.gaussdb_cdc_basic ( id INTEGER PRIMARY KEY, val TEXT )
+2026-03-26T09:19:32.625945+08:00 INFO sqlx::postgres::notice - CREATE TABLE / PRIMARY KEY will create implicit index "gaussdb_cdc_basic_pkey" for table "gaussdb_cdc_basic"
+executing sql: DROP TABLE IF EXISTS public.gaussdb_cdc_basic
+executing sql: CREATE TABLE public.gaussdb_cdc_basic ( id INTEGER PRIMARY KEY, val TEXT )
+2026-03-26T09:19:32.662174+08:00 INFO default_logger - start task: [taskID: 47c551b14b7d2510, taskType: Some(Cdc)]
+2026-03-26T09:19:32.662226+08:00 WARN default_logger - recorder unsupported resumer config: Dummy
+2026-03-26T09:19:32.662253+08:00 WARN default_logger - recovery unsupported resumer config: Dummy
+2026-03-26T09:19:32.662279+08:00 INFO default_logger - recovery initialization for task_id: 47c551b14b7d2510 finished in 0 ms
+2026-03-26T09:19:33.148556+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-03-26T09:19:33.148599+08:00 ERROR default_logger - buffer_memory_mb=0 is too large and will be ignored to prevent overflow
+2026-03-26T09:19:33.148624+08:00 ERROR default_logger - max_mbps=0 is too large and will be ignored to prevent overflow
+2026-03-26T09:19:33.176415+08:00 INFO default_logger - GaussDBCdcExtractor starts, slot_name: ape_test_gaussdb, start_lsn: , keepalive_interval_secs: 10, heartbeat_interval_secs: 0, heartbeat_tb: heartbeat_db.ape_dts_heartbeat
+2026-03-26T09:19:33.176965+08:00 INFO default_logger - MergeParallelizer starts, parallel_size: 1, checkpoint_interval_secs: 1
+2026-03-26T09:19:33.612772+08:00 INFO default_logger - gaussdb sql connection starts (ssl=on)
+2026-03-26T09:19:33.762981+08:00 INFO default_logger - slot: ape_test_gaussdb exists: true
+2026-03-26T09:19:33.763020+08:00 INFO default_logger - slot confirmed_flush_lsn(confirmed_flush/restart_lsn): 0/571A31A8
+2026-03-26T09:19:33.763033+08:00 WARN default_logger - start_lsn is empty, will use confirmed_flush_lsn
+2026-03-26T09:19:33.763045+08:00 INFO default_logger - execute: SELECT pg_drop_replication_slot ('ape_test_gaussdb')
+2026-03-26T09:19:33.890320+08:00 INFO default_logger - execute: SELECT * FROM pg_create_logical_replication_slot('ape_test_gaussdb', 'mppdb_decoding')
+2026-03-26T09:19:33.991057+08:00 INFO default_logger - slot created, returned start_lsn: 0/57CD7C28
+2026-03-26T09:19:34.177017+08:00 INFO position_logger - current_position | {"type":"None"}
+2026-03-26T09:19:34.177038+08:00 INFO position_logger - checkpoint_position | {"type":"None"}
+2026-03-26T09:19:34.177800+08:00 INFO monitor_logger - pipeline |  | timestamp | latest=0
+2026-03-26T09:19:34.177815+08:00 INFO monitor_logger - pipeline |  | sinked_bytes | latest=0
+2026-03-26T09:19:34.177827+08:00 INFO monitor_logger - pipeline |  | sinked_records | latest=0
+2026-03-26T09:19:34.192487+08:00 INFO default_logger - execute: START_REPLICATION SLOT ape_test_gaussdb LOGICAL 0/57CD7C28
+2026-03-26T09:19:34.192530+08:00 INFO default_logger - gaussdb replication connection starts (ssl=off)
+2026-03-26T09:19:34.242325+08:00 INFO default_logger - try starting heartbeat, heartbeat_interval_secs: 0, heartbeat_tb: heartbeat_db.ape_dts_heartbeat, 
+2026-03-26T09:19:34.242349+08:00 INFO default_logger - heartbeat disabled, heartbeat_tb: heartbeat_db.ape_dts_heartbeat, heartbeat_interval_secs: 0
+2026-03-26T09:19:34.243876+08:00 INFO default_logger - gaussdb replication keepalive clock unit inferred: MicrosSince2000 (clock=827803174236455)
+executing sql: INSERT INTO public.gaussdb_cdc_basic (id, val) VALUES (1, 'a'), (2, 'b')
+2026-03-26T09:19:34.999582+08:00 INFO default_logger - gaussdb keepalive reply requested: server_lsn=0/57CD7D90
+2026-03-26T09:19:35.043766+08:00 ERROR default_logger - panic: panicked at dt-tests/tests/test_runner/rdb_util.rs:134:44:
+called `Result::unwrap()` on an `Err` value: Database(PgDatabaseError { severity: Error, code: "23505", message: "Duplicate key value violates unique constraint \"gaussdb_cdc_basic_pkey\".", detail: Some("Key (id)=(1) already exists."), hint: None, position: None, where: None, schema: None, table: None, column: Some("21409"), data_type: Some("BACKEND"), constraint: None, file: None, line: None, routine: None })
+backtrace:
+disabled backtrace
+test gaussdb_to_pg::cdc_tests::test::cdc_basic_test ... FAILED
+
+failures:
+
+failures:
+    gaussdb_to_pg::cdc_tests::test::cdc_basic_test
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 344 filtered out; finished in 20.68s
+
+error: test failed, to rerun pass `-p dt-tests --test integration_test`

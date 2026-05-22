@@ -1,0 +1,51 @@
+[2026-04-03 18:24:04] detected gaussdb RW primary endpoint: 10.250.0.30:8000 (was 10.250.0.51:8000)
+[2026-04-03 18:24:04] run_dir: /Users/lmj/projects/ai-project/ape-dts/.local/e2e/gaussdb_to_pg_cdc_20260403_182400
+[2026-04-03 18:24:04] source: 10.250.0.30:8000/postgres (user=root)
+[2026-04-03 18:24:04] destination: postgres://127.0.0.1:5434/postgres (user=postgres)
+[2026-04-03 18:24:04] test objects: ape_dts_manual.gaussdb_to_pg_cdc_basic (slot=ape_manual_gaussdb_to_pg_20260403_182400)
+[2026-04-03 18:24:04] gaussdb_pg_candidate_hosts: 10.250.0.52:8000,10.250.0.30:8000,10.250.0.51:8000
+[2026-04-03 18:24:04] SKIP_DOCKER_PG=1, skip starting docker postgres
+[2026-04-03 18:24:04] cleanup source: drop table/schema + drop slot (best-effort)
+[2026-04-03 18:24:07] cleanup destination: drop table/schema (best-effort)
+[2026-04-03 18:24:07] prepare source table: ape_dts_manual.gaussdb_to_pg_cdc_basic
+NOTICE:  schema "ape_dts_manual" does not exist, skipping
+DROP SCHEMA
+CREATE SCHEMA
+NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "gaussdb_to_pg_cdc_basic_pkey" for table "gaussdb_to_pg_cdc_basic"
+CREATE TABLE
+[2026-04-03 18:24:09] prepare destination table: ape_dts_manual.gaussdb_to_pg_cdc_basic
+NOTICE:  schema "ape_dts_manual" does not exist, skipping
+DROP SCHEMA
+CREATE SCHEMA
+CREATE TABLE
+[2026-04-03 18:24:10] starting dt-main (config=/Users/lmj/projects/ai-project/ape-dts/.local/e2e/gaussdb_to_pg_cdc_20260403_182400/task_config.ini)
+[2026-04-03 18:24:10] dt-main logs: /Users/lmj/projects/ai-project/ape-dts/.local/e2e/gaussdb_to_pg_cdc_20260403_182400/logs
+[2026-04-03 18:24:10] waiting for replication slot to appear on source (slot=ape_manual_gaussdb_to_pg_20260403_182400)
+[2026-04-03 18:24:13] slot is visible
+[2026-04-03 18:24:13] waiting for replication streaming to start...
+[2026-04-03 18:24:13] run source DML phase1 (insert/update/delete)
+INSERT 0 2
+UPDATE 1
+DELETE 1
+[2026-04-03 18:24:19] assert destination state (expect rows: 2|c)
+[2026-04-03 18:24:19] assert ok: 2|c
+[2026-04-03 18:24:19] waiting for checkpoint_position PgCdc lsn in position.log...
+[2026-04-03 18:24:19] checkpoint lsn (before stop): 2/C39F5638
+[2026-04-03 18:24:19] stopping dt-main (pid=81808)
+[2026-04-03 18:24:19] waiting for replication slot to become inactive (slot=ape_manual_gaussdb_to_pg_20260403_182400)
+[2026-04-03 18:24:20] checkpoint lsn (after stop): 2/C39F5638
+[2026-04-03 18:24:20] starting dt-main (config=/Users/lmj/projects/ai-project/ape-dts/.local/e2e/gaussdb_to_pg_cdc_20260403_182400/task_config.ini)
+[2026-04-03 18:24:20] dt-main logs: /Users/lmj/projects/ai-project/ape-dts/.local/e2e/gaussdb_to_pg_cdc_20260403_182400/logs
+[2026-04-03 18:24:20] waiting for recovery evidence in default.log: cdc recovery from lsn:[2/C39F5638]
+[2026-04-03 18:24:21] waiting for replication streaming to start...
+[2026-04-03 18:24:21] run source DML phase2 (verify resume/failover continues)
+UPDATE 1
+INSERT 0 1
+DELETE 1
+[2026-04-03 18:24:25] assert destination state (expect rows: 2|e)
+[2026-04-03 18:24:25] assert ok: 2|e
+[2026-04-03 18:24:25] assert dt-main logs (candidate-first + HA port + NoTLS)
+[2026-04-03 18:24:25] e2e succeeded
+[2026-04-03 18:24:25] stopping dt-main (pid=81917)
+[2026-04-03 18:24:29] cleanup source: drop table/schema + drop slot (best-effort)
+[2026-04-03 18:24:33] cleanup destination: drop table/schema (best-effort)

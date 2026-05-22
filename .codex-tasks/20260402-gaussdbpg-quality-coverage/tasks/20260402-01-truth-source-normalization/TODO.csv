@@ -1,0 +1,4 @@
+id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
+1,更新 plan.md,DONE,plan.md 明确双 Epic 与 blocked backlog,"rg -n \"GaussDBMySQL Bootstrap|GaussDBPg Quality Coverage|Blocked Backlog\" docs/agent-summary/plan.md",2026-04-02 09:53 +0800,0,
+2,更新 tracker,DONE,tracker 增加 active epic 与质量缺口入口,"rg -n \"20260402-gaussdb-mysql-bootstrap|20260402-gaussdbpg-quality-coverage|质量补齐\" docs/agent-summary/gaussdb-progress-tracker.md",2026-04-02 09:53 +0800,0,
+3,记录 blocked roadmap,DONE,Oracle roadmap 与 SHA256 backlog 有明确入口,"test -f docs/agent-summary/gaussdb-oracle-roadmap.md && test -f docs/agent-summary/gaussdb-sha256-roadmap.md",2026-04-02 09:53 +0800,0,

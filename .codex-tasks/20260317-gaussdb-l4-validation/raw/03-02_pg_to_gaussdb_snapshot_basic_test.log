@@ -1,0 +1,23 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.21s
+warning: the following packages contain code that will be rejected by a future version of Rust: snap v0.2.5
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 2`
+     Running tests/integration_test.rs (target/debug/deps/integration_test-e223343e61fbfc15)
+
+running 1 test
+executing sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic
+executing sql: CREATE TABLE public.gaussdb_snapshot_basic ( id INTEGER PRIMARY KEY, val TEXT )
+executing sql: DROP TABLE IF EXISTS public.gaussdb_snapshot_basic
+
+thread 'pg_to_gaussdb::snapshot_tests::test::snapshot_basic_test' panicked at dt-tests/tests/test_runner/rdb_util.rs:134:44:
+called `Result::unwrap()` on an `Err` value: Database(PgDatabaseError { severity: Error, code: "25006", message: "cannot execute DROP TABLE in a read-only transaction", detail: None, hint: None, position: None, where: None, schema: None, table: None, column: Some("20037"), data_type: Some("BACKEND"), constraint: None, file: None, line: None, routine: None })
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test pg_to_gaussdb::snapshot_tests::test::snapshot_basic_test ... FAILED
+
+failures:
+
+failures:
+    pg_to_gaussdb::snapshot_tests::test::snapshot_basic_test
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 342 filtered out; finished in 1.23s
+
+error: test failed, to rerun pass `-p dt-tests --test integration_test`

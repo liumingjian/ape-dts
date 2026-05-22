@@ -8,6 +8,16 @@
 - Designed for cloud-native stateless component scenarios.
 - In Rust.
 
+## Getting started (ape-dts Console)
+
+The management console consists of a Vue 3 SPA and an actix-web orchestrator. To run locally:
+
+1. Start the database stack: `cd dt-tests && docker compose -f docker-compose.ci.yml -f docker-compose.override.local.yml up -d`
+2. Start the orchestrator: `cargo run -p dt-console-server` (listens on :8080; SQLite at `./data/console.db`)
+3. Start the frontend: `cd web-prototype && pnpm install && pnpm dev` (listens on :5173)
+
+Log in with the default admin account, create a Task via the wizard, and start a Run — the orchestrator will fork-exec the `dt-main` binary with a rendered INI config.
+
 ## Key features
 
 - Supports data migration between various databases, both homogeneous and heterogeneous.

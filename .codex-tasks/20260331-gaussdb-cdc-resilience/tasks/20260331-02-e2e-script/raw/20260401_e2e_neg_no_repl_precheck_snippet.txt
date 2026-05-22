@@ -1,0 +1,32 @@
+# Source: .local/e2e/gaussdb_to_pg_cdc_20260401_145225/precheck_no_repl.log
+# Snippet (windows around key evidence lines)
+## Window 1: lines 4-14
+     4  [*]begin to check the database version
+     5  pg query database version: SELECT current_setting('server_version_num')::varchar
+     6  pg query database version: SELECT current_setting('server_version_num')::varchar
+     7  [*]begin to check the cdc setting
+     8  pg query config settings: SELECT name,setting::varchar FROM pg_settings WHERE name in ('wal_level','max_wal_senders','max_replication_slots')
+     9  pg query slots: select slot_name from pg_catalog.pg_replication_slots
+    10  [*]begin to check the if the structs is existed or not
+    11  pg query schema sql: select catalog_name,schema_name from information_schema.schemata
+    12  pg query schema sql: select catalog_name,schema_name from information_schema.schemata
+    13  [*]begin to check the database structs
+    14  pg query table sql: SELECT table_catalog, table_schema, table_name
+
+## Window 2: lines 90-104
+    90  [warn_message]:server_version_num: 150015 
+    91  [advise_message]:
+    92  
+    93  ======================================
+    94  [check_type_name]:CheckIfDatabaseSupportCdc 
+    95  [is_validate]:false 
+    96  [check_desc]:check whether the source database configuration supports cdc 
+    97  [error_messaeg]:insufficient permission for CDC: current_user=ape_dts_no_repl_20260401_145225 rolsuper=false rolreplication=false (need superuser or replication role) 
+    98  [warn_message]: 
+    99  [advise_message]:(1)install/enable 'mppdb_decoding' plugin. (2)set 'wal_level' to 'logical'. (3)make sure that 'max_replication_slots' and 'max_wal_senders' are sufficient.
+   100  
+   101  ======================================
+   102  [check_type_name]:CheckIfStructExisted 
+   103  [is_validate]:false 
+   104  [check_desc]:check whether the data structure of the source database is existed 
+

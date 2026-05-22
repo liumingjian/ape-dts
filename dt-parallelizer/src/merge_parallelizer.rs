@@ -116,7 +116,8 @@ impl MergeParallelizer {
         sinkers: &[Arc<async_mutex::Mutex<Box<dyn Sinker + Send>>>],
         merge_type: MergeType,
     ) -> anyhow::Result<DataSize> {
-        let mut futures = Vec::new();
+        let mut join_set = tokio::task::JoinSet::new();
+        let mut task_idx: usize = 0;
         let mut data_size = DataSize::default();
         for tb_merged_data in tb_merged_data_items.iter_mut() {
             let data: Vec<RowData> = match merge_type {
@@ -144,28 +145,26 @@ impl MergeParallelizer {
                     while i < data.len() {
                         let sub_size = cmp::min(batch_size, data.len() - i);
                         let sub_data = data[i..i + sub_size].to_vec();
-                        let sinker = sinkers[futures.len() % self.parallel_size].clone();
-                        let future = tokio::spawn(async move {
-                            sinker.lock().await.sink_dml(sub_data, true).await.unwrap();
+                        let sinker = sinkers[task_idx % self.parallel_size].clone();
+                        task_idx += 1;
+                        join_set.spawn(async move {
+                            sinker.lock().await.sink_dml(sub_data, true).await
                         });
-                        futures.push(future);
                         i += batch_size;
                     }
                 }
 
                 MergeType::Unmerged => {
-                    let sinker = sinkers[futures.len() % self.parallel_size].clone();
-                    let future = tokio::spawn(async move {
-                        Self::sink_unmerged_rows(sinker, data).await.unwrap();
-                    });
-                    futures.push(future);
+                    let sinker = sinkers[task_idx % self.parallel_size].clone();
+                    task_idx += 1;
+                    join_set.spawn(async move { Self::sink_unmerged_rows(sinker, data).await });
                 }
             }
         }
 
-        // wait for sub sinkers to finish and unwrap errors
-        for future in futures {
-            future.await.unwrap();
+        // Wait for sub sinkers to finish and propagate errors (no panics on transient I/O).
+        while let Some(result) = join_set.join_next().await {
+            result??;
         }
         Ok(data_size)
     }

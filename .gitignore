@@ -18,6 +18,7 @@ Session.vim
 
 ## Build
 /target
+/data
 /images/**/ape-dts
 /images/**/dt-struct
 /images/**/dt-precheck
@@ -30,6 +31,10 @@ Session.vim
 ## local env settings
 /**/.env.local
 
+## local scratch (manual runs / secrets)
+.local/
+.cargo-cache/
+
 /**/pkg/*
 
 /release
@@ -38,3 +43,10 @@ Session.vim
 .cursor
 .claude
 context_portal
+.factory/sdd-cache/
+.factory/.simplify-ignore-cache/
+
+## cc-connect
+.cc-connect/
+cc-connect.config.toml
+/data/

@@ -8,6 +8,8 @@ use anyhow::{bail, Context};
 use futures::TryStreamExt;
 use sqlx::{Pool, Postgres, Row};
 
+use crate::{log_warn, utils::time_util::TimeUtil};
+
 use crate::meta::{
     foreign_key::ForeignKey, rdb_meta_manager::RdbMetaManager, rdb_tb_meta::RdbTbMeta,
     row_data::RowData,
@@ -78,37 +80,36 @@ impl PgMetaManager {
     ) -> anyhow::Result<&'a PgTbMeta> {
         let full_name = format!(r#""{}"."{}""#, schema, tb);
         if !self.name_to_tb_meta.contains_key(&full_name) {
-            let oid = Self::get_oid(&self.conn_pool, schema, tb).await?;
-            let (cols, col_origin_type_map, col_type_map, nullable_cols) =
-                Self::parse_cols(&self.conn_pool, &mut self.type_registry, schema, tb).await?;
-            let key_map = Self::parse_keys(&self.conn_pool, schema, tb).await?;
-            let (order_cols, partition_col, id_cols) =
-                RdbMetaManager::parse_rdb_cols(&key_map, &cols, &nullable_cols)?;
-            // disable get_foreign_keys since we don't support foreign key check
-            let (foreign_keys, ref_by_foreign_keys) = (vec![], vec![]);
-            // let (foreign_keys, ref_by_foreign_keys) =
-            //     Self::get_foreign_keys(&self.conn_pool, schema, tb).await?;
-
-            let basic = RdbTbMeta {
-                schema: schema.to_string(),
-                tb: tb.to_string(),
-                cols,
-                nullable_cols,
-                col_origin_type_map,
-                key_map,
-                order_cols,
-                partition_col,
-                id_cols,
-                foreign_keys,
-                ref_by_foreign_keys,
-            };
-            let tb_meta = PgTbMeta {
-                oid,
-                col_type_map,
-                basic,
-            };
-            self.oid_to_tb_meta.insert(oid, tb_meta.clone());
-            self.name_to_tb_meta.insert(full_name.clone(), tb_meta);
+            let mut last_err: Option<anyhow::Error> = None;
+            for attempt in 1..=3 {
+                match self.build_tb_meta(schema, tb).await {
+                    Ok(tb_meta) => {
+                        self.oid_to_tb_meta.insert(tb_meta.oid, tb_meta.clone());
+                        self.name_to_tb_meta.insert(full_name.clone(), tb_meta);
+                        last_err = None;
+                        break;
+                    }
+                    Err(e) => {
+                        let retryable = Self::is_retryable_metadata_error(&e);
+                        if attempt < 3 && retryable {
+                            log_warn!(
+                                "get_tb_meta failed for {}.{} (attempt {}/3), will retry: {}",
+                                schema,
+                                tb,
+                                attempt,
+                                e
+                            );
+                            last_err = Some(e);
+                            TimeUtil::sleep_millis(300 * attempt as u64).await;
+                            continue;
+                        }
+                        return Err(e);
+                    }
+                }
+            }
+            if let Some(e) = last_err {
+                return Err(e);
+            }
         }
         Ok(self.name_to_tb_meta.get(&full_name).unwrap())
     }
@@ -126,6 +127,47 @@ impl PgMetaManager {
     pub fn invalidate_cache_by_ddl_data(&mut self, ddl_data: &DdlData) {
         let (schema, tb) = ddl_data.get_schema_tb();
         self.invalidate_cache(&schema, &tb);
+    }
+
+    async fn build_tb_meta(&mut self, schema: &str, tb: &str) -> anyhow::Result<PgTbMeta> {
+        let oid = Self::get_oid(&self.conn_pool, schema, tb).await?;
+        let (cols, col_origin_type_map, col_type_map, nullable_cols) =
+            Self::parse_cols(&self.conn_pool, &mut self.type_registry, schema, tb).await?;
+        let key_map = Self::parse_keys(&self.conn_pool, schema, tb).await?;
+        let (order_cols, partition_col, id_cols) =
+            RdbMetaManager::parse_rdb_cols(&key_map, &cols, &nullable_cols)?;
+        // disable get_foreign_keys since we don't support foreign key check
+        let (foreign_keys, ref_by_foreign_keys) = (vec![], vec![]);
+
+        let basic = RdbTbMeta {
+            schema: schema.to_string(),
+            tb: tb.to_string(),
+            cols,
+            nullable_cols,
+            col_origin_type_map,
+            key_map,
+            order_cols,
+            partition_col,
+            id_cols,
+            foreign_keys,
+            ref_by_foreign_keys,
+        };
+        Ok(PgTbMeta {
+            oid,
+            col_type_map,
+            basic,
+        })
+    }
+
+    fn is_retryable_metadata_error(err: &anyhow::Error) -> bool {
+        let msg = format!("{:#}", err).to_lowercase();
+        msg.contains("unexpected end of file")
+            || msg.contains("connection reset")
+            || msg.contains("broken pipe")
+            || msg.contains("connection refused")
+            || msg.contains("pool timed out")
+            || msg.contains("terminating connection")
+            || msg.contains("server closed the connection")
     }
 
     async fn parse_cols(
@@ -151,7 +193,7 @@ impl PgMetaManager {
             ORDER BY ordinal_position;",
             schema, tb
         );
-        let mut rows = sqlx::query(&sql).fetch(conn_pool);
+        let mut rows = sqlx::query(&sql).disable_arguments().fetch(conn_pool);
         while let Some(row) = rows.try_next().await? {
             let col: String = row.try_get("column_name")?;
             cols.push(col.clone());
@@ -172,7 +214,7 @@ impl PgMetaManager {
             tb, schema
         );
 
-        let mut rows = sqlx::query(&sql).fetch(conn_pool);
+        let mut rows = sqlx::query(&sql).disable_arguments().fetch(conn_pool);
         while let Some(row) = rows.try_next().await? {
             let col: String = row.try_get("col_name")?;
             if !cols.contains(&col) {
@@ -197,29 +239,36 @@ impl PgMetaManager {
         schema: &str,
         tb: &str,
     ) -> anyhow::Result<HashMap<String, Vec<String>>> {
-        let sql = format!(
-            "SELECT kcu.column_name as col_name, 
+        let mut key_map: HashMap<String, Vec<String>> = HashMap::new();
+
+        // Primary attempt: use information_schema (works for vanilla Postgres).
+        //
+        // NOTE: In GaussDB MySQL-compat databases (pg-wire), information_schema.table_constraints
+        // may not expose PK/UK constraints, even though pg_constraint does. We fallback below.
+        let info_schema_sql = format!(
+            "SELECT kcu.column_name as col_name,
                 kcu.constraint_name as constraint_name,
                 tc.constraint_type as constraint_type
-            FROM 
+            FROM
                 information_schema.table_constraints AS tc
-            JOIN 
+            JOIN
                 information_schema.key_column_usage AS kcu
-            ON 
+            ON
                 tc.constraint_name = kcu.constraint_name
                 AND tc.table_schema = kcu.table_schema
                 AND tc.table_name = kcu.table_name
-            WHERE 
-                tc.table_schema = '{}' 
+            WHERE
+                tc.table_schema = '{}'
                 AND tc.table_name = '{}'
                 AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')
-            ORDER BY 
+            ORDER BY
                 kcu.ordinal_position;",
             schema, tb
         );
 
-        let mut key_map: HashMap<String, Vec<String>> = HashMap::new();
-        let mut rows = sqlx::query(&sql).fetch(conn_pool);
+        let mut rows = sqlx::query(&info_schema_sql)
+            .disable_arguments()
+            .fetch(conn_pool);
         while let Some(row) = rows.try_next().await? {
             let col_name: String = row.try_get("col_name")?;
             let constraint_type: String = row.try_get("constraint_type")?;
@@ -228,27 +277,99 @@ impl PgMetaManager {
                 key_name = RDB_PRIMARY_KEY_FLAG.to_string();
             }
 
-            // key_map
             if let Some(key_cols) = key_map.get_mut(&key_name) {
                 key_cols.push(col_name);
             } else {
                 key_map.insert(key_name, vec![col_name]);
             }
         }
+
+        if !key_map.is_empty() {
+            return Ok(key_map);
+        }
+
+        // Fallback: use pg_catalog (works in GaussDB MySQL-compat databases where information_schema
+        // omits constraints). Keep ordering best-effort by attnum (composite key order may differ).
+        let pg_catalog_sql = format!(
+            "SELECT c.conname as constraint_name,
+                    -- NOTE: In GaussDB MySQL-compat databases, `CAST(... AS TEXT/VARCHAR/CHAR)` may
+                    -- fail due to MySQL-style CAST rules. Postgres-style `::text` works reliably.
+                    c.contype::text as constraint_type,
+                    a.attname as col_name
+             FROM pg_constraint c
+             JOIN pg_class t ON t.oid = c.conrelid
+             JOIN pg_namespace n ON n.oid = t.relnamespace
+             JOIN pg_attribute a ON a.attrelid = t.oid
+             WHERE n.nspname = '{}'
+               AND t.relname = '{}'
+               AND c.contype IN ('p','u')
+               AND a.attnum = ANY(c.conkey)
+             ORDER BY c.conname, a.attnum;",
+            schema, tb
+        );
+
+        let mut rows = sqlx::query(&pg_catalog_sql)
+            .disable_arguments()
+            .fetch(conn_pool);
+        while let Some(row) = rows.try_next().await? {
+            let col_name: String = row.try_get("col_name")?;
+            let constraint_type: String = row.try_get("constraint_type")?;
+            let mut key_name: String = row.try_get("constraint_name")?;
+            if constraint_type == "p" {
+                key_name = RDB_PRIMARY_KEY_FLAG.to_string();
+            }
+
+            if let Some(key_cols) = key_map.get_mut(&key_name) {
+                key_cols.push(col_name);
+            } else {
+                key_map.insert(key_name, vec![col_name]);
+            }
+        }
+
         Ok(key_map)
     }
 
     async fn get_oid(conn_pool: &Pool<Postgres>, schema: &str, tb: &str) -> anyhow::Result<i32> {
-        let sql = format!(r#"SELECT '"{}"."{}"'::regclass::oid;"#, schema, tb);
-        let mut rows = sqlx::query(&sql).fetch(conn_pool);
+        // Primary: regclass cast (works on vanilla Postgres/GaussDBPg).
+        //
+        // NOTE: In GaussDB MySQL-compat databases, `regclass` may be unsupported, so we fallback
+        // to a pg_catalog join query below.
+        let regclass_sql = format!(r#"SELECT '"{}"."{}"'::regclass::oid as oid;"#, schema, tb);
+        let mut rows = sqlx::query(&regclass_sql)
+            .disable_arguments()
+            .fetch(conn_pool);
+        match rows.try_next().await {
+            Ok(Some(row)) => {
+                let oid: i32 = row.try_get_unchecked("oid")?;
+                return Ok(oid);
+            }
+            Ok(None) => {
+                // continue to fallback
+            }
+            Err(_) => {
+                // continue to fallback
+            }
+        }
+
+        // Fallback: pg_catalog join (works in GaussDB MySQL-compat databases too).
+        let fallback_sql = format!(
+            "SELECT t.oid as oid
+             FROM pg_class t
+             JOIN pg_namespace n ON n.oid = t.relnamespace
+             WHERE n.nspname = '{}' AND t.relname = '{}';",
+            schema, tb
+        );
+        let mut rows = sqlx::query(&fallback_sql)
+            .disable_arguments()
+            .fetch(conn_pool);
         if let Some(row) = rows.try_next().await? {
             let oid: i32 = row.try_get_unchecked("oid")?;
             return Ok(oid);
         }
 
         bail! {Error::MetadataError(format!(
-            "failed to get oid for: {} by query: {}",
-            tb, sql
+            "failed to get oid for: {} by query: {}; fallback query: {}",
+            tb, regclass_sql, fallback_sql
         ))}
     }
 
