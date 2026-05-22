@@ -5,6 +5,7 @@ use dt_common::meta::col_value::ColValue;
 use dt_common::meta::row_type::RowType;
 
 type ColMap = Option<HashMap<String, ColValue>>;
+const ORACLE_ROWID_PSEUDO_COLUMN: &str = "ROWID";
 
 pub(crate) fn row_images_from_logminer(
     row_type: &RowType,
@@ -101,7 +102,7 @@ fn parse_eq_assignments(clause: &str) -> anyhow::Result<HashMap<String, ColValue
         let (lhs, rhs) = trimmed
             .split_once('=')
             .with_context(|| format!("logminer assignment missing '=': {}", trimmed))?;
-        out.insert(normalize_ident(lhs), parse_literal(rhs)?);
+        insert_if_real_column(&mut out, lhs, rhs)?;
     }
     Ok(out)
 }
@@ -117,7 +118,7 @@ fn parse_where_eqs(where_clause: &str) -> anyhow::Result<HashMap<String, ColValu
         let Some((lhs, rhs)) = trimmed.split_once('=') else {
             continue;
         };
-        out.insert(normalize_ident(lhs), parse_literal(rhs)?);
+        insert_if_real_column(&mut out, lhs, rhs)?;
     }
     Ok(out)
 }
@@ -131,11 +132,54 @@ fn normalize_ident(raw: &str) -> String {
     last.trim().trim_matches('"').to_uppercase()
 }
 
+fn insert_if_real_column(
+    out: &mut HashMap<String, ColValue>,
+    lhs: &str,
+    rhs: &str,
+) -> anyhow::Result<()> {
+    let ident = normalize_ident(lhs);
+    if ident == ORACLE_ROWID_PSEUDO_COLUMN {
+        return Ok(());
+    }
+
+    out.insert(ident, parse_literal(rhs)?);
+    Ok(())
+}
+
 fn split_csv(raw: &str) -> Vec<&str> {
-    raw.split(',')
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-        .collect()
+    let mut out = Vec::new();
+    let mut start = 0usize;
+    let mut in_single = false;
+    let mut in_double = false;
+    let bytes = raw.as_bytes();
+    let mut i = 0usize;
+
+    while i < bytes.len() {
+        let c = bytes[i] as char;
+        if c == '\'' && !in_double {
+            if in_single && i + 1 < bytes.len() && bytes[i + 1] as char == '\'' {
+                i += 2;
+                continue;
+            }
+            in_single = !in_single;
+        } else if c == '"' && !in_single {
+            in_double = !in_double;
+        } else if c == ',' && !in_single && !in_double {
+            push_csv_part(&mut out, raw, start, i);
+            start = i + 1;
+        }
+        i += 1;
+    }
+
+    push_csv_part(&mut out, raw, start, raw.len());
+    out
+}
+
+fn push_csv_part<'a>(out: &mut Vec<&'a str>, raw: &'a str, start: usize, end: usize) {
+    let part = raw[start..end].trim();
+    if !part.is_empty() {
+        out.push(part);
+    }
 }
 
 fn parse_literal(raw: &str) -> anyhow::Result<ColValue> {
@@ -208,4 +252,49 @@ fn find_matching_paren(s: &str, open_pos: usize) -> anyhow::Result<usize> {
     }
 
     bail!("matching ')' not found in sql: {}", s)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn update_parser_ignores_oracle_rowid_pseudo_column() {
+        let sql = "update \"APE_SRC\".\"CDC_SMOKE\" set \"TRACER\" = 'cdc_update' where \"ID\" = '1' and ROWID = 'AAAFR6AABAAALDBAAA';";
+
+        let (set_values, where_values) = parse_update_set_and_where(sql).unwrap();
+
+        assert!(set_values.contains_key("TRACER"));
+        assert!(where_values.contains_key("ID"));
+        assert!(!set_values.contains_key("ROWID"));
+        assert!(!where_values.contains_key("ROWID"));
+    }
+
+    #[test]
+    fn insert_parser_handles_commas_inside_literals() {
+        let sql = "insert into \"APE_DTS\".\"T_ORACLE_TO_GAUSSDB_ORACLE\"(\"ID\",\"TRACER\",\"PAYLOAD\") values ('101','manual_insert_001','boss,insert,payload');";
+
+        let values = parse_insert_values(sql).unwrap();
+
+        assert_eq!(values.get("ID"), Some(&ColValue::LongLong(101)));
+        assert_eq!(
+            values.get("PAYLOAD"),
+            Some(&ColValue::String("boss,insert,payload".to_string()))
+        );
+    }
+
+    #[test]
+    fn delete_parser_uses_logminer_undo_insert_values() {
+        let undo = "insert into \"APE_DTS\".\"T_ORACLE_TO_GAUSSDB_ORACLE\"(\"ID\",\"TRACER\",\"PAYLOAD\") values ('1','cdc_update111','after_update111');";
+
+        let (before, after) = row_images_from_logminer(&RowType::Delete, "", undo).unwrap();
+
+        assert_eq!(after, None);
+        let before = before.unwrap();
+        assert_eq!(before.get("ID"), Some(&ColValue::LongLong(1)));
+        assert_eq!(
+            before.get("TRACER"),
+            Some(&ColValue::String("cdc_update111".to_string()))
+        );
+    }
 }

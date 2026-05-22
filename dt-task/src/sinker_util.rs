@@ -81,6 +81,72 @@ macro_rules! create_router {
 }
 
 impl SinkerUtil {
+    async fn load_oracle_replace_key_cols(
+        config: &TaskConfig,
+        extractor_config: &ExtractorConfig,
+    ) -> anyhow::Result<Vec<String>> {
+        let mut source_meta = Self::source_pg_meta_manager(config, extractor_config).await?;
+        let (schema, tb) = Self::source_snapshot_table(config, extractor_config)?;
+        let source_meta = source_meta.get_tb_meta(&schema, &tb).await?;
+        if source_meta.basic.id_cols.is_empty() {
+            bail!(
+                "oracle replace requires primary or unique key for {}.{}",
+                schema,
+                tb
+            );
+        }
+        Ok(source_meta.basic.id_cols.clone())
+    }
+
+    fn source_snapshot_table(
+        config: &TaskConfig,
+        extractor_config: &ExtractorConfig,
+    ) -> anyhow::Result<(String, String)> {
+        match extractor_config {
+            ExtractorConfig::PgSnapshot { schema, tb, .. } => Ok((schema.clone(), tb.clone())),
+            _ => {
+                let filter =
+                    RdbFilter::from_config(&config.filter, &config.extractor_basic.db_type)?;
+                Self::single_explicit_table(&filter)
+            }
+        }
+    }
+
+    async fn source_pg_meta_manager(
+        config: &TaskConfig,
+        extractor_config: &ExtractorConfig,
+    ) -> anyhow::Result<PgMetaManager> {
+        let url = match extractor_config {
+            ExtractorConfig::PgSnapshot { url, .. }
+            | ExtractorConfig::PgCdc { url, .. }
+            | ExtractorConfig::GaussDBCdc { url, .. } => url,
+            _ => bail!("oracle replace requires a pg-compatible source"),
+        };
+        let conn_pool = TaskUtil::create_pg_conn_pool(
+            url,
+            &config.extractor_basic.connection_auth,
+            1,
+            TaskUtil::check_enable_sqlx_log(&config.runtime.log_level),
+            false,
+        )
+        .await?;
+        PgMetaManager::new(conn_pool).await
+    }
+
+    fn single_explicit_table(filter: &RdbFilter) -> anyhow::Result<(String, String)> {
+        let mut tables = filter
+            .do_tbs
+            .iter()
+            .filter(|(schema, tb)| schema != "*" && tb != "*")
+            .cloned()
+            .collect::<Vec<_>>();
+        tables.sort();
+        if tables.len() != 1 {
+            bail!("oracle replace requires exactly one explicit do_tbs table");
+        }
+        Ok(tables.remove(0))
+    }
+
     pub async fn create_sinkers(
         config: &TaskConfig,
         extractor_config: &ExtractorConfig,
@@ -295,18 +361,29 @@ impl SinkerUtil {
                 }
             }
 
-            SinkerConfig::Oracle { batch_size, .. } => {
+            SinkerConfig::Oracle {
+                batch_size,
+                replace,
+                ..
+            } => {
                 let client = match client {
                     ConnClient::Oracle(client) => client,
                     _ => {
                         bail!("oracle client not found");
                     }
                 };
+                let key_cols = if replace {
+                    Self::load_oracle_replace_key_cols(config, extractor_config).await?
+                } else {
+                    Vec::new()
+                };
 
                 for _ in 0..parallel_size {
                     let sinker = OracleSinker {
                         client: client.clone(),
                         batch_size,
+                        replace,
+                        key_cols: key_cols.clone(),
                         monitor: monitor.clone(),
                         monitor_interval,
                     };
@@ -406,19 +483,19 @@ impl SinkerUtil {
                 let meta_manager = PgMetaManager::new(conn_pool.clone()).await?;
 
                 for _ in 0..parallel_size {
-                        let sinker = PgChecker {
-                            url: url.to_string(),
-                            connection_auth: connection_auth.clone(),
-                            db_type: config.sinker_basic.db_type.clone(),
-                            conn_pool: conn_pool.clone(),
-                            meta_manager: meta_manager.clone(),
-                            common: CheckerCommon {
-                                extractor_meta_manager: extractor_meta_manager.clone(),
-                                reverse_router: reverse_router.clone(),
-                                batch_size,
-                                monitor: monitor.clone(),
-                                filter: filter.clone(),
-                                output_full_row,
+                    let sinker = PgChecker {
+                        url: url.to_string(),
+                        connection_auth: connection_auth.clone(),
+                        db_type: config.sinker_basic.db_type.clone(),
+                        conn_pool: conn_pool.clone(),
+                        meta_manager: meta_manager.clone(),
+                        common: CheckerCommon {
+                            extractor_meta_manager: extractor_meta_manager.clone(),
+                            reverse_router: reverse_router.clone(),
+                            batch_size,
+                            monitor: monitor.clone(),
+                            filter: filter.clone(),
+                            output_full_row,
                             output_revise_sql,
                             revise_match_full_row,
                             retry_interval_secs,

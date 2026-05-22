@@ -13,12 +13,17 @@ members = [
     "dt-console-server"
 ]
 
+exclude = [
+    "vendor/rust-postgres",
+    "vendor/sqlx"
+]
+
 [workspace.lints.clippy]
 assigning_clones = "allow"
 module_inception = "allow"
 
 [workspace.dependencies]
-sqlx = {git = "https://github.com/apecloud/sqlx", features = ["runtime-async-std-rustls", "mysql", "postgres", "bigdecimal", "ipnetwork", "mac_address", "bit-vec", "time", "chrono", "json", "uuid"]}
+sqlx = {path = "vendor/sqlx", features = ["runtime-async-std-rustls", "mysql", "postgres", "bigdecimal", "ipnetwork", "mac_address", "bit-vec", "time", "chrono", "json", "uuid"]}
 futures = "0.3.25"
 mysql-binlog-connector-rust = {git = "https://github.com/apecloud/mysql-binlog-connector-rust", tag = "v0.3.3"}
 serde = {version = "1", features = ["derive"]}
@@ -33,10 +38,10 @@ log4rs = "1.2.0"
 serial_test = "3.0.0"
 async-trait = "0.1.64"
 async-recursion = "1.0.2"
-tokio-postgres = {git = "https://github.com/apecloud/rust-postgres"}
-postgres-protocol = {git = "https://github.com/apecloud/rust-postgres"}
-postgres-types= {git = "https://github.com/apecloud/rust-postgres"}
-postgres-openssl = {git = "https://github.com/apecloud/rust-postgres"}
+tokio-postgres = {path = "vendor/rust-postgres/tokio-postgres"}
+postgres-protocol = {path = "vendor/rust-postgres/postgres-protocol"}
+postgres-types= {path = "vendor/rust-postgres/postgres-types"}
+postgres-openssl = {path = "vendor/rust-postgres/postgres-openssl"}
 tokio = { version = "1.25.0", features = ["full"] }
 bytes = "1.0"
 configparser = "3.0.2"

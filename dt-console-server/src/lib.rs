@@ -30,6 +30,7 @@ pub mod sse_session_tracker;
 pub mod system_handlers;
 pub mod task_handlers;
 pub mod time_series_store;
+pub mod two_phase;
 pub mod user_handlers;
 pub mod validation;
 
@@ -74,6 +75,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(task_handlers::export_task)
             .service(task_handlers::import_tasks)
             .service(task_handlers::clone_task)
+            .service(task_handlers::list_task_runs)
             .service(resource_group_handlers::list_resource_groups)
             .service(resource_group_handlers::create_resource_group)
             .service(resource_group_handlers::get_resource_group)

@@ -13,6 +13,13 @@ fn shell_quote_single(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
 }
 
+fn has_sqlplus_error(text: &str) -> bool {
+    text.lines().any(|line| {
+        let trimmed = line.trim_start();
+        trimmed.starts_with("ORA-") || trimmed.starts_with("SP2-")
+    })
+}
+
 #[derive(Clone, Debug)]
 pub struct OracleSqlPlusClient {
     pub url: String,
@@ -51,10 +58,9 @@ impl OracleSqlPlusClient {
 
     fn get_basic_auth(&self) -> anyhow::Result<(String, String)> {
         match &self.connection_auth {
-            ConnectionAuthConfig::Basic { username, password } => Ok((
-                username.clone(),
-                password.clone().unwrap_or_default(),
-            )),
+            ConnectionAuthConfig::Basic { username, password } => {
+                Ok((username.clone(), password.clone().unwrap_or_default()))
+            }
             ConnectionAuthConfig::NoAuth => bail!("oracle connection_auth requires username"),
         }
     }
@@ -109,19 +115,22 @@ impl OracleSqlPlusClient {
     async fn run_sqlplus(&self, script: &str) -> anyhow::Result<(String, String)> {
         let login = self.build_login()?;
 
-        let mut cmd = if let Some(container) = Self::docker_container() {
+        let docker_container = Self::docker_container();
+        let mut uses_docker = false;
+        let mut cmd = if let Some(container) = docker_container {
+            uses_docker = true;
             let quoted_login = shell_quote_single(&login);
-            let script = format!(
-                "export ORACLE_HOME={}; export PATH=$ORACLE_HOME/bin:$PATH; export LD_LIBRARY_PATH=$ORACLE_HOME/lib; sqlplus -s {}",
-                ORACLE_HOME, quoted_login
+            let quoted_script = shell_quote_single(script);
+            let command = format!(
+                "export ORACLE_HOME={}; export PATH=$ORACLE_HOME/bin:$PATH; export LD_LIBRARY_PATH=$ORACLE_HOME/lib; tmp=$(mktemp /tmp/ape-dts-sql.XXXXXX); printf %s {} > \"$tmp\"; sqlplus -s {} @\"$tmp\"; rc=$?; rm -f \"$tmp\"; exit $rc",
+                ORACLE_HOME, quoted_script, quoted_login
             );
             let mut c = Command::new("docker");
             c.arg("exec")
-                .arg("-i")
                 .arg(container)
                 .arg("bash")
                 .arg("-lc")
-                .arg(script);
+                .arg(command);
             c
         } else {
             let mut c = Command::new("sqlplus");
@@ -129,23 +138,33 @@ impl OracleSqlPlusClient {
             c
         };
 
-        cmd.stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+        cmd.stdin(if uses_docker {
+            Stdio::null()
+        } else {
+            Stdio::piped()
+        })
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
 
         let mut child = cmd.spawn().context("failed to spawn sqlplus")?;
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin
-                .write_all(script.as_bytes())
-                .await
-                .context("failed to write sqlplus script")?;
+        if !uses_docker {
+            if let Some(mut stdin) = child.stdin.take() {
+                stdin
+                    .write_all(script.as_bytes())
+                    .await
+                    .context("failed to write sqlplus script")?;
+                stdin
+                    .shutdown()
+                    .await
+                    .context("failed to close sqlplus stdin")?;
+            }
         }
 
         let output = child.wait_with_output().await?;
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
-        if !output.status.success() {
+        if !output.status.success() || has_sqlplus_error(&stdout) || has_sqlplus_error(&stderr) {
             bail!(
                 "sqlplus failed (exit={:?}). stderr: {}\nstdout: {}",
                 output.status.code(),
@@ -170,5 +189,28 @@ impl OracleSqlPlusClient {
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .collect())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::has_sqlplus_error;
+
+    #[test]
+    fn detects_oracle_error_in_sqlplus_stdout() {
+        let stdout = "ERROR:\nORA-12514: TNS:listener does not currently know of service requested";
+        assert!(has_sqlplus_error(stdout));
+    }
+
+    #[test]
+    fn detects_sqlplus_error_in_sqlplus_stdout() {
+        let stdout = "SP2-0306: Invalid option.";
+        assert!(has_sqlplus_error(stdout));
+    }
+
+    #[test]
+    fn allows_normal_sqlplus_query_output() {
+        let stdout = "APE_DTS\n11.2.0.2.0\n";
+        assert!(!has_sqlplus_error(stdout));
     }
 }

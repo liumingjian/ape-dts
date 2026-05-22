@@ -8,7 +8,9 @@ use crate::extractor::{base_extractor::BaseExtractor, resumer::recovery::Recover
 use crate::oracle::OracleSqlPlusClient;
 use crate::Extractor;
 use dt_common::log_info;
-use dt_common::meta::{col_value::ColValue, position::Position, row_data::RowData, row_type::RowType};
+use dt_common::meta::{
+    col_value::ColValue, position::Position, row_data::RowData, row_type::RowType,
+};
 use dt_common::rdb_filter::RdbFilter;
 
 #[derive(Debug, Clone)]
@@ -53,11 +55,7 @@ impl OracleSnapshotExtractor {
     async fn extract_internal(&mut self) -> anyhow::Result<()> {
         let columns = self.fetch_columns().await?;
         if columns.is_empty() {
-            bail!(
-                "oracle columns not found for {}.{}",
-                self.schema,
-                self.tb
-            );
+            bail!("oracle columns not found for {}.{}", self.schema, self.tb);
         }
 
         let ignore_cols = self.filter.get_ignore_cols(&self.schema, &self.tb);
@@ -133,7 +131,9 @@ impl OracleSnapshotExtractor {
                 None,
                 Some(after),
             );
-            self.base_extractor.push_row(row_data, Position::None).await?;
+            self.base_extractor
+                .push_row(row_data, Position::None)
+                .await?;
         }
 
         Ok(())
@@ -188,4 +188,3 @@ impl OracleSnapshotExtractor {
         }
     }
 }
-

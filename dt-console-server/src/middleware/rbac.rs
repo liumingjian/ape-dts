@@ -46,6 +46,31 @@ pub enum RbacAction {
     ResourceGroupRead,
     ResourceGroupUpdate,
     ResourceGroupDelete,
+
+    // Alert rules
+    AlertRuleCreate,
+    AlertRuleRead,
+    AlertRuleUpdate,
+    AlertRuleDelete,
+
+    // Alarm channels
+    AlarmChannelCreate,
+    AlarmChannelRead,
+    AlarmChannelUpdate,
+    AlarmChannelDelete,
+
+    // Alarm templates
+    AlarmTemplateCreate,
+    AlarmTemplateRead,
+    AlarmTemplateUpdate,
+    AlarmTemplateDelete,
+
+    // System hosts
+    SystemHostRead,
+
+    // Global params
+    GlobalParamRead,
+    GlobalParamUpdate,
 }
 
 impl std::fmt::Display for RbacAction {
@@ -71,6 +96,21 @@ impl std::fmt::Display for RbacAction {
             RbacAction::ResourceGroupRead => "resource_group.read",
             RbacAction::ResourceGroupUpdate => "resource_group.update",
             RbacAction::ResourceGroupDelete => "resource_group.delete",
+            RbacAction::AlertRuleCreate => "alert_rule.create",
+            RbacAction::AlertRuleRead => "alert_rule.read",
+            RbacAction::AlertRuleUpdate => "alert_rule.update",
+            RbacAction::AlertRuleDelete => "alert_rule.delete",
+            RbacAction::AlarmChannelCreate => "alarm_channel.create",
+            RbacAction::AlarmChannelRead => "alarm_channel.read",
+            RbacAction::AlarmChannelUpdate => "alarm_channel.update",
+            RbacAction::AlarmChannelDelete => "alarm_channel.delete",
+            RbacAction::AlarmTemplateCreate => "alarm_template.create",
+            RbacAction::AlarmTemplateRead => "alarm_template.read",
+            RbacAction::AlarmTemplateUpdate => "alarm_template.update",
+            RbacAction::AlarmTemplateDelete => "alarm_template.delete",
+            RbacAction::SystemHostRead => "system_host.read",
+            RbacAction::GlobalParamRead => "global_param.read",
+            RbacAction::GlobalParamUpdate => "global_param.update",
         };
         write!(f, "{s}")
     }
@@ -92,10 +132,22 @@ pub fn is_allowed(role: &str, action: RbacAction) -> bool {
                 | RbacAction::AlertClear
                 | RbacAction::LicenseRead
                 | RbacAction::ResourceGroupRead
+                | RbacAction::AlertRuleRead
+                | RbacAction::AlarmChannelRead
+                | RbacAction::AlarmTemplateRead
+                | RbacAction::SystemHostRead
+                | RbacAction::GlobalParamRead
         ),
         "viewer" => matches!(
             action,
-            RbacAction::TaskRead | RbacAction::LicenseRead | RbacAction::ResourceGroupRead
+            RbacAction::TaskRead
+                | RbacAction::LicenseRead
+                | RbacAction::ResourceGroupRead
+                | RbacAction::AlertRuleRead
+                | RbacAction::AlarmChannelRead
+                | RbacAction::AlarmTemplateRead
+                | RbacAction::SystemHostRead
+                | RbacAction::GlobalParamRead
         ),
         _ => false, // unknown role → deny all
     }
@@ -163,6 +215,21 @@ mod tests {
             RbacAction::ResourceGroupRead,
             RbacAction::ResourceGroupUpdate,
             RbacAction::ResourceGroupDelete,
+            RbacAction::AlertRuleCreate,
+            RbacAction::AlertRuleRead,
+            RbacAction::AlertRuleUpdate,
+            RbacAction::AlertRuleDelete,
+            RbacAction::AlarmChannelCreate,
+            RbacAction::AlarmChannelRead,
+            RbacAction::AlarmChannelUpdate,
+            RbacAction::AlarmChannelDelete,
+            RbacAction::AlarmTemplateCreate,
+            RbacAction::AlarmTemplateRead,
+            RbacAction::AlarmTemplateUpdate,
+            RbacAction::AlarmTemplateDelete,
+            RbacAction::SystemHostRead,
+            RbacAction::GlobalParamRead,
+            RbacAction::GlobalParamUpdate,
         ] {
             assert!(
                 is_allowed("admin", action),
@@ -190,6 +257,11 @@ mod tests {
             RbacAction::AlertClear,
             RbacAction::LicenseRead,
             RbacAction::ResourceGroupRead,
+            RbacAction::AlertRuleRead,
+            RbacAction::AlarmChannelRead,
+            RbacAction::AlarmTemplateRead,
+            RbacAction::SystemHostRead,
+            RbacAction::GlobalParamRead,
         ];
         for action in &allowed {
             assert!(
@@ -215,6 +287,16 @@ mod tests {
             RbacAction::ResourceGroupCreate,
             RbacAction::ResourceGroupUpdate,
             RbacAction::ResourceGroupDelete,
+            RbacAction::AlertRuleCreate,
+            RbacAction::AlertRuleUpdate,
+            RbacAction::AlertRuleDelete,
+            RbacAction::AlarmChannelCreate,
+            RbacAction::AlarmChannelUpdate,
+            RbacAction::AlarmChannelDelete,
+            RbacAction::AlarmTemplateCreate,
+            RbacAction::AlarmTemplateUpdate,
+            RbacAction::AlarmTemplateDelete,
+            RbacAction::GlobalParamUpdate,
         ];
         let op = user_context("operator");
         for action in &denied {
@@ -245,6 +327,11 @@ mod tests {
             RbacAction::TaskRead,
             RbacAction::LicenseRead,
             RbacAction::ResourceGroupRead,
+            RbacAction::AlertRuleRead,
+            RbacAction::AlarmChannelRead,
+            RbacAction::AlarmTemplateRead,
+            RbacAction::SystemHostRead,
+            RbacAction::GlobalParamRead,
         ];
         for action in &allowed {
             assert!(
@@ -275,6 +362,16 @@ mod tests {
             RbacAction::ResourceGroupCreate,
             RbacAction::ResourceGroupUpdate,
             RbacAction::ResourceGroupDelete,
+            RbacAction::AlertRuleCreate,
+            RbacAction::AlertRuleUpdate,
+            RbacAction::AlertRuleDelete,
+            RbacAction::AlarmChannelCreate,
+            RbacAction::AlarmChannelUpdate,
+            RbacAction::AlarmChannelDelete,
+            RbacAction::AlarmTemplateCreate,
+            RbacAction::AlarmTemplateUpdate,
+            RbacAction::AlarmTemplateDelete,
+            RbacAction::GlobalParamUpdate,
         ];
         let viewer = user_context("viewer");
         for action in &denied {
@@ -454,6 +551,56 @@ mod tests {
             ("viewer", RbacAction::ResourceGroupRead, true),
             ("viewer", RbacAction::ResourceGroupUpdate, false),
             ("viewer", RbacAction::ResourceGroupDelete, false),
+            // Alert rules
+            ("admin", RbacAction::AlertRuleCreate, true),
+            ("admin", RbacAction::AlertRuleRead, true),
+            ("admin", RbacAction::AlertRuleUpdate, true),
+            ("admin", RbacAction::AlertRuleDelete, true),
+            ("operator", RbacAction::AlertRuleCreate, false),
+            ("operator", RbacAction::AlertRuleRead, true),
+            ("operator", RbacAction::AlertRuleUpdate, false),
+            ("operator", RbacAction::AlertRuleDelete, false),
+            ("viewer", RbacAction::AlertRuleCreate, false),
+            ("viewer", RbacAction::AlertRuleRead, true),
+            ("viewer", RbacAction::AlertRuleUpdate, false),
+            ("viewer", RbacAction::AlertRuleDelete, false),
+            // Alarm channels
+            ("admin", RbacAction::AlarmChannelCreate, true),
+            ("admin", RbacAction::AlarmChannelRead, true),
+            ("admin", RbacAction::AlarmChannelUpdate, true),
+            ("admin", RbacAction::AlarmChannelDelete, true),
+            ("operator", RbacAction::AlarmChannelCreate, false),
+            ("operator", RbacAction::AlarmChannelRead, true),
+            ("operator", RbacAction::AlarmChannelUpdate, false),
+            ("operator", RbacAction::AlarmChannelDelete, false),
+            ("viewer", RbacAction::AlarmChannelCreate, false),
+            ("viewer", RbacAction::AlarmChannelRead, true),
+            ("viewer", RbacAction::AlarmChannelUpdate, false),
+            ("viewer", RbacAction::AlarmChannelDelete, false),
+            // Alarm templates
+            ("admin", RbacAction::AlarmTemplateCreate, true),
+            ("admin", RbacAction::AlarmTemplateRead, true),
+            ("admin", RbacAction::AlarmTemplateUpdate, true),
+            ("admin", RbacAction::AlarmTemplateDelete, true),
+            ("operator", RbacAction::AlarmTemplateCreate, false),
+            ("operator", RbacAction::AlarmTemplateRead, true),
+            ("operator", RbacAction::AlarmTemplateUpdate, false),
+            ("operator", RbacAction::AlarmTemplateDelete, false),
+            ("viewer", RbacAction::AlarmTemplateCreate, false),
+            ("viewer", RbacAction::AlarmTemplateRead, true),
+            ("viewer", RbacAction::AlarmTemplateUpdate, false),
+            ("viewer", RbacAction::AlarmTemplateDelete, false),
+            // System hosts
+            ("admin", RbacAction::SystemHostRead, true),
+            ("operator", RbacAction::SystemHostRead, true),
+            ("viewer", RbacAction::SystemHostRead, true),
+            // Global params
+            ("admin", RbacAction::GlobalParamRead, true),
+            ("admin", RbacAction::GlobalParamUpdate, true),
+            ("operator", RbacAction::GlobalParamRead, true),
+            ("operator", RbacAction::GlobalParamUpdate, false),
+            ("viewer", RbacAction::GlobalParamRead, true),
+            ("viewer", RbacAction::GlobalParamUpdate, false),
         ];
 
         for (role, action, expected) in matrix {

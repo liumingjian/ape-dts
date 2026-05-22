@@ -7,20 +7,20 @@ use tokio::time::Instant;
 
 use crate::oracle::OracleSqlPlusClient;
 use crate::sinker::base_sinker::BaseSinker;
+use crate::sinker::oracle::oracle_name::{oracle_constraint_ident, oracle_ident, oracle_table_ref};
+use crate::sinker::oracle::oracle_pg_type::pg_type_to_oracle;
 use crate::Sinker;
 use dt_common::config::config_enums::ConflictPolicyEnum;
 use dt_common::log_error;
 use dt_common::log_info;
 use dt_common::meta::struct_meta::statement::struct_statement::StructStatement;
+use dt_common::meta::struct_meta::struct_data::StructData;
 use dt_common::meta::struct_meta::structure::column::ColumnDefault;
 use dt_common::meta::struct_meta::structure::constraint::ConstraintType;
 use dt_common::meta::struct_meta::structure::structure_type::StructureType;
-use dt_common::meta::struct_meta::struct_data::StructData;
 use dt_common::monitor::monitor::Monitor;
 use dt_common::rdb_filter::RdbFilter;
 use dt_common::utils::limit_queue::LimitedQueue;
-
-const ORACLE_IDENT_MAX_LEN: usize = 30;
 
 #[derive(Clone)]
 pub struct OracleStructSinker {
@@ -93,7 +93,7 @@ fn oracle_struct_sqls(
     match statement {
         StructStatement::PgCreateTable(s) => {
             let mut out = Vec::new();
-            let schema = oracle_ident(&s.table.schema_name)?;
+            let schema = s.table.schema_name.clone();
             let table = oracle_ident(&s.table.table_name)?;
 
             if !filter.filter_structure(&StructureType::Table) {
@@ -111,7 +111,7 @@ fn oracle_struct_sqls(
                             "constraint.{}.{}.{}",
                             schema,
                             table,
-                            oracle_ident(&c.constraint_name)?
+                            oracle_constraint_ident(&c.constraint_name)?
                         ),
                         sql,
                     ));
@@ -186,12 +186,8 @@ fn build_oracle_create_table_sql(
         parts.push(seg);
     }
 
-    Ok(format!(
-        "CREATE TABLE {}.{} ({})",
-        schema,
-        table,
-        parts.join(", ")
-    ))
+    let table_ref = oracle_table_ref(schema, table)?;
+    Ok(format!("CREATE TABLE {} ({})", table_ref, parts.join(", ")))
 }
 
 fn build_oracle_constraint_sql(
@@ -202,11 +198,11 @@ fn build_oracle_constraint_sql(
     match constraint.constraint_type {
         ConstraintType::Primary => {
             let cols = parse_constraint_cols(&constraint.definition)?;
-            let name = oracle_ident(&constraint.constraint_name)?;
+            let name = oracle_constraint_ident(&constraint.constraint_name)?;
+            let table_ref = oracle_table_ref(schema, table)?;
             Ok(Some(format!(
-                "ALTER TABLE {}.{} ADD CONSTRAINT {} PRIMARY KEY ({})",
-                schema,
-                table,
+                "ALTER TABLE {} ADD CONSTRAINT {} PRIMARY KEY ({})",
+                table_ref,
                 name,
                 cols.into_iter()
                     .map(|c| oracle_ident(&c))
@@ -216,11 +212,11 @@ fn build_oracle_constraint_sql(
         }
         ConstraintType::Unique => {
             let cols = parse_constraint_cols(&constraint.definition)?;
-            let name = oracle_ident(&constraint.constraint_name)?;
+            let name = oracle_constraint_ident(&constraint.constraint_name)?;
+            let table_ref = oracle_table_ref(schema, table)?;
             Ok(Some(format!(
-                "ALTER TABLE {}.{} ADD CONSTRAINT {} UNIQUE ({})",
-                schema,
-                table,
+                "ALTER TABLE {} ADD CONSTRAINT {} UNIQUE ({})",
+                table_ref,
                 name,
                 cols.into_iter()
                     .map(|c| oracle_ident(&c))
@@ -239,27 +235,17 @@ fn build_oracle_constraint_sql(
     }
 }
 
-fn oracle_ident(raw: &str) -> anyhow::Result<String> {
-    let ident = raw.trim().trim_matches('"').to_uppercase();
-    if ident.is_empty() {
-        bail!("oracle ident is empty");
-    }
-    if ident.len() > ORACLE_IDENT_MAX_LEN {
-        bail!(
-            "oracle ident too long (max={}): {}",
-            ORACLE_IDENT_MAX_LEN,
-            ident
-        );
-    }
-    Ok(ident)
-}
-
 fn parse_constraint_cols(definition: &str) -> anyhow::Result<Vec<String>> {
     let def = definition.trim();
     let open = def.find('(').context("constraint definition missing '('")?;
-    let close = def.rfind(')').context("constraint definition missing ')'")?;
+    let close = def
+        .rfind(')')
+        .context("constraint definition missing ')'")?;
     if close <= open + 1 {
-        bail!("constraint definition has empty column list: {}", definition);
+        bail!(
+            "constraint definition has empty column list: {}",
+            definition
+        );
     }
     let inner = &def[open + 1..close];
     let cols = inner
@@ -273,71 +259,27 @@ fn parse_constraint_cols(definition: &str) -> anyhow::Result<Vec<String>> {
     Ok(cols)
 }
 
-fn pg_type_to_oracle(pg_type: &str) -> anyhow::Result<String> {
-    let t = pg_type.trim().to_lowercase();
-    if t.contains("[]") {
-        bail!("oracle struct: array types are not supported: {}", pg_type);
-    }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dt_common::meta::struct_meta::structure::column::Column;
 
-    match t.as_str() {
-        "integer" | "int" | "int4" => return Ok("NUMBER(10)".to_string()),
-        "bigint" | "int8" => return Ok("NUMBER(19)".to_string()),
-        "smallint" | "int2" => return Ok("NUMBER(5)".to_string()),
-        "boolean" | "bool" => return Ok("NUMBER(1)".to_string()),
-        "real" | "float4" => return Ok("BINARY_FLOAT".to_string()),
-        "double precision" | "float8" => return Ok("BINARY_DOUBLE".to_string()),
-        "text" => return Ok("CLOB".to_string()),
-        "date" => return Ok("DATE".to_string()),
-        "bytea" => return Ok("BLOB".to_string()),
-        "json" | "jsonb" => return Ok("CLOB".to_string()),
-        "timestamp without time zone" => return Ok("TIMESTAMP".to_string()),
-        "timestamp with time zone" => return Ok("TIMESTAMP WITH TIME ZONE".to_string()),
-        _ => {}
-    };
+    #[test]
+    fn create_table_uses_current_oracle_schema_for_pg_public() {
+        let columns = vec![Column {
+            column_name: "id".to_string(),
+            ordinal_position: 1,
+            column_type: "integer".to_string(),
+            is_nullable: false,
+            ..Default::default()
+        }];
 
-    if let Some((prec, scale)) = parse_numeric(&t, "numeric").or_else(|| parse_numeric(&t, "decimal"))
-    {
-        return Ok(match (prec, scale) {
-            (Some(p), Some(s)) => format!("NUMBER({},{})", p, s),
-            (Some(p), None) => format!("NUMBER({})", p),
-            _ => "NUMBER".to_string(),
-        });
-    }
+        let sql = build_oracle_create_table_sql("public", "t_gaussdb_oracle_to_oracle", &columns)
+            .unwrap();
 
-    if let Some(len) = parse_len_type(&t, &["character varying", "varchar", "character"]) {
-        return Ok(format!("VARCHAR2({})", len));
+        assert_eq!(
+            sql,
+            "CREATE TABLE T_GAUSSDB_ORACLE_TO_ORACLE (ID NUMBER(10) NOT NULL)"
+        );
     }
-
-    bail!("oracle struct: unsupported pg column type: {}", pg_type);
-}
-
-fn parse_numeric(s: &str, prefix: &str) -> Option<(Option<u32>, Option<u32>)> {
-    let s = s.trim();
-    if !s.starts_with(prefix) {
-        return None;
-    }
-    if s == prefix {
-        return Some((None, None));
-    }
-    let open = s.find('(')?;
-    let close = s.rfind(')')?;
-    if close <= open + 1 {
-        return Some((None, None));
-    }
-    let inner = &s[open + 1..close];
-    let mut parts = inner.split(',').map(|p| p.trim());
-    let p = parts.next()?.parse::<u32>().ok();
-    let sc = parts.next().and_then(|v| v.parse::<u32>().ok());
-    Some((p, sc))
-}
-
-fn parse_len_type(s: &str, prefixes: &[&str]) -> Option<u32> {
-    let s = s.trim();
-    let prefix = prefixes.iter().find(|p| s.starts_with(**p))?;
-    let rest = s.strip_prefix(prefix)?.trim();
-    if !rest.starts_with('(') {
-        return None;
-    }
-    let close = rest.find(')')?;
-    rest[1..close].trim().parse::<u32>().ok()
 }

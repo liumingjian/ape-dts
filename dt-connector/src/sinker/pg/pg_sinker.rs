@@ -503,6 +503,7 @@ impl PgSinker {
         let mut rts = LimitedQueue::new(cmp::min(100, data.len()));
         for row_data in data.iter() {
             data_size += row_data.data_size;
+            data_len += 1;
 
             let tb_meta = self
                 .meta_manager
@@ -516,6 +517,20 @@ impl PgSinker {
                 })?;
             let query_builder =
                 RdbQueryBuilder::new_for_pg_compatible(tb_meta, None, self.db_type.clone());
+
+            if self.replace
+                && self.db_type == DbType::GaussDBOracle
+                && row_data.row_type == RowType::Insert
+            {
+                let delete_info = query_builder.get_replace_delete_query(row_data)?;
+                let delete_query = query_builder.create_pg_query(&delete_info)?;
+                delete_query.execute(&mut tx).await.with_context(|| {
+                    format!(
+                        "gaussdb_oracle replace delete failed, row_data: [{}]",
+                        row_data
+                    )
+                })?;
+            }
 
             let query_info = query_builder.get_query_info(row_data, self.replace)?;
             let query = query_builder.create_pg_query(&query_info)?;

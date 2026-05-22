@@ -11,4 +11,3 @@ mod test {
         TestBase::run_cdc_test("oracle_to_gaussdb_oracle/cdc/basic_test", 10_000, 10_000).await;
     }
 }
-

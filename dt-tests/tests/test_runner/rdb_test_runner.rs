@@ -25,10 +25,10 @@ use dt_common::meta::{
     col_value::ColValue, ddl_meta::ddl_parser::DdlParser,
     mysql::mysql_meta_manager::MysqlMetaManager, position::Position, row_data::RowData,
 };
+use dt_connector::oracle::OracleSqlPlusClient;
 use dt_connector::{
     meta_fetcher::mysql::mysql_struct_check_fetcher::MysqlStructCheckFetcher, rdb_router::RdbRouter,
 };
-use dt_connector::oracle::OracleSqlPlusClient;
 use dt_task::{task_runner::TaskRunner, task_util::TaskUtil};
 
 use sqlx::{query, types::BigDecimal, MySql, Pool, Postgres, Row};
@@ -134,20 +134,22 @@ impl RdbTestRunner {
             }
             DbType::Pg | DbType::GaussDBPg | DbType::GaussDBOracle => {
                 let disable_fk_checks = matches!(src_db_type, DbType::Pg);
-                let max_connections = if matches!(src_db_type, DbType::GaussDBPg | DbType::GaussDBOracle) {
-                    // GaussDB cluster endpoints may be behind VIP/LB; using multiple pooled
-                    // connections can intermittently hit standby nodes (read-only transaction)
-                    // or trigger unstable behavior during tests. Keep a single connection for
-                    // deterministic DDL/DML and comparison queries.
-                    1
-                } else {
-                    5
-                };
-                let pool_timeout = if matches!(src_db_type, DbType::GaussDBPg | DbType::GaussDBOracle) {
-                    std::time::Duration::from_secs(90)
-                } else {
-                    std::time::Duration::from_secs(30)
-                };
+                let max_connections =
+                    if matches!(src_db_type, DbType::GaussDBPg | DbType::GaussDBOracle) {
+                        // GaussDB cluster endpoints may be behind VIP/LB; using multiple pooled
+                        // connections can intermittently hit standby nodes (read-only transaction)
+                        // or trigger unstable behavior during tests. Keep a single connection for
+                        // deterministic DDL/DML and comparison queries.
+                        1
+                    } else {
+                        5
+                    };
+                let pool_timeout =
+                    if matches!(src_db_type, DbType::GaussDBPg | DbType::GaussDBOracle) {
+                        std::time::Duration::from_secs(90)
+                    } else {
+                        std::time::Duration::from_secs(30)
+                    };
                 src_conn_pool_pg = Some(
                     tokio::time::timeout(
                         pool_timeout,
@@ -225,16 +227,16 @@ impl RdbTestRunner {
                     let disable_fk_checks = matches!(dst_db_type, DbType::Pg);
                     let max_connections =
                         if matches!(dst_db_type, DbType::GaussDBPg | DbType::GaussDBOracle) {
-                        1
-                    } else {
-                        5
-                    };
+                            1
+                        } else {
+                            5
+                        };
                     let pool_timeout =
                         if matches!(dst_db_type, DbType::GaussDBPg | DbType::GaussDBOracle) {
-                        std::time::Duration::from_secs(90)
-                    } else {
-                        std::time::Duration::from_secs(30)
-                    };
+                            std::time::Duration::from_secs(90)
+                        } else {
+                            std::time::Duration::from_secs(30)
+                        };
                     dst_conn_pool_pg = Some(
                         tokio::time::timeout(
                             pool_timeout,
@@ -3031,12 +3033,11 @@ Please run the test from a normal terminal environment with network access."
                 matches!(
                     self.config.extractor_basic.db_type,
                     DbType::GaussDBPg | DbType::GaussDBOracle
-                )
-                    || (matches!(self.config.extractor_basic.db_type, DbType::GaussDBMySQL)
-                        && matches!(
-                            WireProtocol::from_url(&self.config.extractor_basic.url),
-                            Some(WireProtocol::PostgreSQL)
-                        ));
+                ) || (matches!(self.config.extractor_basic.db_type, DbType::GaussDBMySQL)
+                    && matches!(
+                        WireProtocol::from_url(&self.config.extractor_basic.url),
+                        Some(WireProtocol::PostgreSQL)
+                    ));
             if extractor_is_pg_wire_gaussdb && env::var("gaussdb_pg_candidate_hosts").is_ok() {
                 if let Some((_, rw_pool)) = Self::create_gaussdb_rw_pg_pool_with_wait(
                     &self.config.extractor_basic.url,
@@ -3074,12 +3075,11 @@ Please run the test from a normal terminal environment with network access."
                 matches!(
                     self.config.sinker_basic.db_type,
                     DbType::GaussDBPg | DbType::GaussDBOracle
-                )
-                    || (matches!(self.config.sinker_basic.db_type, DbType::GaussDBMySQL)
-                        && matches!(
-                            WireProtocol::from_url(&self.config.sinker_basic.url),
-                            Some(WireProtocol::PostgreSQL)
-                        ));
+                ) || (matches!(self.config.sinker_basic.db_type, DbType::GaussDBMySQL)
+                    && matches!(
+                        WireProtocol::from_url(&self.config.sinker_basic.url),
+                        Some(WireProtocol::PostgreSQL)
+                    ));
             if sinker_is_pg_wire_gaussdb && env::var("gaussdb_pg_candidate_hosts").is_ok() {
                 if let Some((_, rw_pool)) = Self::create_gaussdb_rw_pg_pool_with_wait(
                     &self.config.sinker_basic.url,
@@ -3610,8 +3610,7 @@ Please run the test from a normal terminal environment with network access."
             let prefer_gaussdb_rw = matches!(
                 db_type,
                 DbType::GaussDBPg | DbType::GaussDBMySQL | DbType::GaussDBOracle
-            )
-                && env::var("gaussdb_pg_candidate_hosts").is_ok();
+            ) && env::var("gaussdb_pg_candidate_hosts").is_ok();
             if prefer_gaussdb_rw {
                 if let Some((rw_url, rw_pool)) =
                     Self::create_gaussdb_rw_pg_pool_with_wait(url, connection_auth, 20_000).await?

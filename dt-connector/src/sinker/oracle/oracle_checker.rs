@@ -7,6 +7,7 @@ use tokio::sync::Mutex;
 
 use crate::oracle::OracleSqlPlusClient;
 use crate::sinker::base_checker::{Checker, CheckerCommon, CheckerTbMeta};
+use crate::sinker::oracle::oracle_name::{oracle_owner_expr, oracle_table_ref};
 use crate::sinker::oracle::oracle_sinker::OracleSinker;
 use dt_common::meta::col_value::ColValue;
 use dt_common::meta::rdb_meta_manager::RdbMetaManager;
@@ -65,9 +66,17 @@ impl OracleChecker {
         Ok(meta)
     }
 
-    async fn fetch_one(&self, meta: &RdbTbMeta, src_row: &RowData) -> anyhow::Result<Option<RowData>> {
+    async fn fetch_one(
+        &self,
+        meta: &RdbTbMeta,
+        src_row: &RowData,
+    ) -> anyhow::Result<Option<RowData>> {
         if meta.id_cols.is_empty() {
-            bail!("oracle checker requires non-empty id_cols for {}.{}", meta.schema, meta.tb);
+            bail!(
+                "oracle checker requires non-empty id_cols for {}.{}",
+                meta.schema,
+                meta.tb
+            );
         }
 
         let src_cols = match src_row.row_type {
@@ -95,10 +104,9 @@ impl OracleChecker {
         select_cols.sort();
 
         let sql = format!(
-            "SELECT {} FROM {}.{} WHERE {}",
-            select_cols.join(","),
-            meta.schema,
-            meta.tb,
+            "SELECT {} FROM {} WHERE {}",
+            OracleSinker::column_list(&select_cols)?,
+            oracle_table_ref(&meta.schema, &meta.tb)?,
             where_sql
         );
         let lines = self.client.query_lines(&sql).await?;
@@ -126,12 +134,13 @@ impl OracleChecker {
                 .map(|s| s.as_str())
                 .context("oracle checker missing column type in meta")?;
             let expected = src_cols.get(col);
-            let v = parse_oracle_value(raw_values[idx], oracle_type, expected).with_context(|| {
-                format!(
-                    "oracle checker parse col failed: {}.{} col={} oracle_type={} raw={}",
-                    meta.schema, meta.tb, col, oracle_type, raw_values[idx]
-                )
-            })?;
+            let v =
+                parse_oracle_value(raw_values[idx], oracle_type, expected).with_context(|| {
+                    format!(
+                        "oracle checker parse col failed: {}.{} col={} oracle_type={} raw={}",
+                        meta.schema, meta.tb, col, oracle_type, raw_values[idx]
+                    )
+                })?;
             after.insert(col.clone(), v);
         }
 
@@ -150,13 +159,13 @@ async fn fetch_oracle_tb_meta(
     schema: &str,
     tb: &str,
 ) -> anyhow::Result<RdbTbMeta> {
-    let owner = escape_sql_literal(&schema.to_uppercase());
+    let owner = oracle_owner_expr(schema)?;
     let table = escape_sql_literal(&tb.to_uppercase());
 
     let col_sql = format!(
         "SELECT column_name, data_type, nullable, column_id \
          FROM all_tab_columns \
-         WHERE owner='{}' AND table_name='{}' \
+         WHERE owner={} AND table_name='{}' \
          ORDER BY column_id ASC",
         owner, table
     );
@@ -194,7 +203,7 @@ async fn fetch_oracle_tb_meta(
          FROM all_constraints cons \
          JOIN all_cons_columns cols \
            ON cons.owner=cols.owner AND cons.constraint_name=cols.constraint_name \
-         WHERE cons.owner='{}' AND cons.table_name='{}' \
+         WHERE cons.owner={} AND cons.table_name='{}' \
            AND cons.constraint_type IN ('P','U') \
          ORDER BY cons.constraint_name ASC, cols.position ASC",
         owner, table
@@ -221,7 +230,10 @@ async fn fetch_oracle_tb_meta(
         entries.sort_by(|a, b| a.0.cmp(&b.0));
         let cols = entries.into_iter().map(|(_, c)| c).collect::<Vec<_>>();
         if ty.eq_ignore_ascii_case("P") {
-            key_map.insert(dt_common::meta::rdb_meta_manager::RDB_PRIMARY_KEY_FLAG.to_string(), cols);
+            key_map.insert(
+                dt_common::meta::rdb_meta_manager::RDB_PRIMARY_KEY_FLAG.to_string(),
+                cols,
+            );
         } else if ty.eq_ignore_ascii_case("U") {
             key_map.insert(name, cols);
         }
@@ -321,4 +333,3 @@ fn parse_with_expected(raw: &str, expected: &ColValue) -> anyhow::Result<ColValu
 fn escape_sql_literal(s: &str) -> String {
     s.replace('\'', "''")
 }
-

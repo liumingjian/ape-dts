@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::{bail, Context};
@@ -5,6 +6,7 @@ use async_trait::async_trait;
 
 use crate::oracle::OracleSqlPlusClient;
 use crate::sinker::base_sinker::BaseSinker;
+use crate::sinker::oracle::oracle_name::{oracle_ident, oracle_table_ref};
 use crate::Sinker;
 use dt_common::log_info;
 use dt_common::meta::{
@@ -16,6 +18,8 @@ use dt_common::monitor::monitor::Monitor;
 pub struct OracleSinker {
     pub client: OracleSqlPlusClient,
     pub batch_size: usize,
+    pub replace: bool,
+    pub key_cols: Vec<String>,
     pub monitor: Arc<Monitor>,
     pub monitor_interval: u64,
 }
@@ -32,7 +36,7 @@ impl Sinker for OracleSinker {
         for row in &data {
             data_size += row.data_size as u64;
             let sql = match row.row_type {
-                RowType::Insert => Self::build_insert_sql(row)?,
+                RowType::Insert => Self::build_insert_sql(row, self.replace, &self.key_cols)?,
                 RowType::Update => Self::build_update_sql(row)?,
                 RowType::Delete => Self::build_delete_sql(row)?,
             };
@@ -66,7 +70,11 @@ impl Sinker for OracleSinker {
 }
 
 impl OracleSinker {
-    pub(crate) fn build_insert_sql(row: &RowData) -> anyhow::Result<String> {
+    pub(crate) fn build_insert_sql(
+        row: &RowData,
+        replace: bool,
+        key_cols: &[String],
+    ) -> anyhow::Result<String> {
         let after = row.require_after()?;
         let mut cols = after.keys().cloned().collect::<Vec<_>>();
         cols.sort();
@@ -79,13 +87,19 @@ impl OracleSinker {
             values.push(Self::to_oracle_literal(v)?);
         }
 
-        Ok(format!(
-            "INSERT INTO {}.{} ({}) VALUES ({})",
-            row.schema,
-            row.tb,
-            cols.join(","),
+        let insert_sql = format!(
+            "INSERT INTO {} ({}) VALUES ({})",
+            Self::table_ref(row)?,
+            Self::column_list(&cols)?,
             values.join(",")
-        ))
+        );
+
+        if !replace {
+            return Ok(insert_sql);
+        }
+
+        let delete_sql = Self::build_replace_delete_sql(row, key_cols)?;
+        Ok(format!("{};\n{}", delete_sql, insert_sql))
     }
 
     pub(crate) fn build_update_sql(row: &RowData) -> anyhow::Result<String> {
@@ -106,15 +120,18 @@ impl OracleSinker {
             let v = after
                 .get(col)
                 .with_context(|| format!("missing col {} in oracle row_data.after", col))?;
-            set_pairs.push(format!("{}={}", col, Self::to_oracle_literal(v)?));
+            set_pairs.push(format!(
+                "{}={}",
+                oracle_ident(col)?,
+                Self::to_oracle_literal(v)?
+            ));
         }
 
         let where_sql = Self::build_where_sql(before)?;
 
         Ok(format!(
-            "UPDATE {}.{} SET {} WHERE {}",
-            row.schema,
-            row.tb,
+            "UPDATE {} SET {} WHERE {}",
+            Self::table_ref(row)?,
             set_pairs.join(","),
             where_sql
         ))
@@ -128,8 +145,9 @@ impl OracleSinker {
 
         let where_sql = Self::build_where_sql(before)?;
         Ok(format!(
-            "DELETE FROM {}.{} WHERE {}",
-            row.schema, row.tb, where_sql
+            "DELETE FROM {} WHERE {}",
+            Self::table_ref(row)?,
+            where_sql
         ))
     }
 
@@ -144,12 +162,63 @@ impl OracleSinker {
                 .get(col)
                 .with_context(|| format!("missing col {} in oracle row_data.before", col))?;
             if matches!(v, ColValue::None) {
-                clauses.push(format!("{} IS NULL", col));
+                clauses.push(format!("{} IS NULL", oracle_ident(col)?));
             } else {
-                clauses.push(format!("{}={}", col, Self::to_oracle_literal(v)?));
+                clauses.push(format!(
+                    "{}={}",
+                    oracle_ident(col)?,
+                    Self::to_oracle_literal(v)?
+                ));
             }
         }
         Ok(clauses.join(" AND "))
+    }
+
+    pub(crate) fn column_list(cols: &[String]) -> anyhow::Result<String> {
+        cols.iter()
+            .map(|col| oracle_ident(col))
+            .collect::<anyhow::Result<Vec<_>>>()
+            .map(|cols| cols.join(","))
+    }
+
+    fn table_ref(row: &RowData) -> anyhow::Result<String> {
+        oracle_table_ref(&row.schema, &row.tb)
+    }
+
+    fn build_replace_delete_sql(row: &RowData, key_cols: &[String]) -> anyhow::Result<String> {
+        let after = row.require_after()?;
+        if after.is_empty() {
+            bail!("oracle replace requires non-empty row_data.after");
+        }
+        let key_values = Self::replace_key_values(row, key_cols)?;
+        let where_sql = Self::build_where_sql(&key_values)?;
+        Ok(format!(
+            "DELETE FROM {} WHERE {}",
+            Self::table_ref(row)?,
+            where_sql
+        ))
+    }
+
+    fn replace_key_values(
+        row: &RowData,
+        key_cols: &[String],
+    ) -> anyhow::Result<HashMap<String, ColValue>> {
+        if key_cols.is_empty() {
+            bail!("oracle replace requires non-empty key columns");
+        }
+
+        let after = row.require_after()?;
+        let mut key_values = HashMap::new();
+        for key_col in key_cols {
+            let key_value = after
+                .get(key_col)
+                .with_context(|| format!("oracle replace missing key column {}", key_col))?;
+            if matches!(key_value, ColValue::None) {
+                bail!("oracle replace key column {} is NULL", key_col);
+            }
+            key_values.insert(key_col.clone(), key_value.clone());
+        }
+        Ok(key_values)
     }
 
     pub(crate) fn escape_str(s: &str) -> String {
@@ -243,5 +312,52 @@ mod tests {
 
         let sql = OracleSinker::build_delete_sql(&row).unwrap();
         assert_eq!(sql, "DELETE FROM APE_DTS.T WHERE ID IS NULL");
+    }
+
+    #[test]
+    fn build_insert_sql_uses_current_oracle_schema_for_pg_public() {
+        let mut after = HashMap::new();
+        after.insert("id".to_string(), ColValue::Long(1));
+        after.insert(
+            "payload".to_string(),
+            ColValue::String("before".to_string()),
+        );
+
+        let row = RowData::new(
+            "public".to_string(),
+            "t_gaussdb_oracle_to_oracle".to_string(),
+            RowType::Insert,
+            None,
+            Some(after),
+        );
+
+        let sql = OracleSinker::build_insert_sql(&row, false, &[]).unwrap();
+        assert_eq!(
+            sql,
+            "INSERT INTO T_GAUSSDB_ORACLE_TO_ORACLE (ID,PAYLOAD) VALUES (1,'before')"
+        );
+    }
+
+    #[test]
+    fn build_insert_sql_with_replace_deletes_by_key_before_insert() {
+        let mut after = HashMap::new();
+        after.insert("tenant_id".to_string(), ColValue::Long(8));
+        after.insert("order_id".to_string(), ColValue::Long(1));
+        after.insert("payload".to_string(), ColValue::String("after".to_string()));
+
+        let row = RowData::new(
+            "APE_DTS".to_string(),
+            "T".to_string(),
+            RowType::Insert,
+            None,
+            Some(after),
+        );
+
+        let key_cols = vec!["tenant_id".to_string(), "order_id".to_string()];
+        let sql = OracleSinker::build_insert_sql(&row, true, &key_cols).unwrap();
+        assert_eq!(
+            sql,
+            "DELETE FROM APE_DTS.T WHERE ORDER_ID=1 AND TENANT_ID=8;\nINSERT INTO APE_DTS.T (ORDER_ID,PAYLOAD,TENANT_ID) VALUES (1,'after',8)"
+        );
     }
 }

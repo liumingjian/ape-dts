@@ -1,7 +1,8 @@
-mod gaussdb_to_mysql;
-mod gaussdb_to_pg;
 mod gaussdb_oracle_to_oracle;
 mod gaussdb_oracle_to_pg;
+mod gaussdb_snapshot_cdc_e2e;
+mod gaussdb_to_mysql;
+mod gaussdb_to_pg;
 mod log_reader;
 mod mongo_to_mongo;
 mod mysql_to_clickhouse;

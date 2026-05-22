@@ -1,8 +1,8 @@
 {
   "brand": {
-    "name": "ape-dts Console",
-    "tagline": "Management Console",
-    "full": "ape-dts Console"
+    "name": "数据库同步管理平台",
+    "tagline": "",
+    "full": "数据库同步管理平台"
   },
   "common": {
     "confirm": "Confirm",
@@ -324,7 +324,8 @@
     "mode": {
       "snapshot_cdc": {
         "label": "Snapshot + CDC",
-        "desc": "Continuous migration with minimal downtime."
+        "desc": "Continuous migration with minimal downtime.",
+        "unsupported": "Snapshot+CDC mode is currently only supported for MySQL and Oracle sources"
       },
       "snapshot": {
         "label": "Snapshot",
@@ -477,7 +478,9 @@
       "failBlock": "Some precheck items failed. Submit anyway?",
       "failTitle": "Precheck Warning",
       "allPass": "All precheck items passed.",
-      "error": "Precheck request failed"
+      "error": "Precheck request failed",
+      "envelopeTitle": "Precheck request failed:",
+      "requestIdLabel": "Send this request ID to ops or grep console-server logs:"
     },
     "confirm": {
       "section": {
@@ -509,7 +512,8 @@
     "toast": {
       "created": "Task created and started.",
       "createdLater": "Task created. You can start it later.",
-      "createFailed": "Task creation failed."
+      "createFailed": "Task creation failed.",
+      "startFailed": "Auto-start failed. Please start manually from the detail page."
     },
     "draft": {
       "discard": "Discard draft",
@@ -993,6 +997,7 @@
   },
   "taskList": {
     "empty": "No tasks yet. Create one to begin.",
+    "selectRow": "Select task {name}",
     "subtitle": {
       "snapshot": "One-shot bulk copy from source to target with resumable checkpoints",
       "cdc": "Continuous incremental sync via binlog/WAL/SCN with millisecond latency",
@@ -1074,6 +1079,9 @@
       },
       "exported": "Task list exported as JSON",
       "importHint": "Demo: please upload an ape-dts task.ini bundle",
+      "imported": "Imported {n} tasks",
+      "importedPartial": "Import finished: {ok} succeeded, {fail} failed",
+      "importFailed": "Import failed",
       "loadFailed": "Failed to load tasks",
       "actionFailed": "Action failed"
     },

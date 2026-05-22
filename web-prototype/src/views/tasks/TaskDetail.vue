@@ -171,6 +171,15 @@
               </el-button>
             </div>
           </div>
+          <el-alert
+            v-if="latestRun?.status === 'failed' && latestRun.exitCode !== null"
+            type="error"
+            :closable="false"
+            show-icon
+            class="detail__run-alert"
+          >
+            Run {{ latestRun.id }} failed with exit code {{ latestRun.exitCode }}.
+          </el-alert>
           <div ref="logPaneRef" class="detail__log-view" @scroll="onLogScroll">
             <div
               v-for="(ln, i) in filteredLogLines"
@@ -252,8 +261,8 @@
             <el-table-column label="结束时间" width="170">
               <template #default="{ row }">{{ row.stoppedAt ? dayjs(row.stoppedAt).format('YYYY-MM-DD HH:mm:ss') : '—' }}</template>
             </el-table-column>
-            <el-table-column label="Exit Status" width="120" align="center">
-              <template #default="{ row }">{{ row.exitStatus ?? '—' }}</template>
+            <el-table-column label="Exit Code" width="120" align="center">
+              <template #default="{ row }">{{ row.exitCode ?? '—' }}</template>
             </el-table-column>
             <el-table-column label="断点续传状态" min-width="200">
               <template #default="{ row }">
@@ -446,8 +455,9 @@ async function doLifecycle(action: string) {
     await api.post(`/tasks/${taskId.value}/${action}`);
     ElMessage.success('操作成功');
     await loadTask();
-  } catch {
-    ElMessage.error('操作失败');
+  } catch (err: unknown) {
+    const msg = (err as { message?: string })?.message ?? '操作失败';
+    ElMessage.error(msg);
   }
 }
 
@@ -504,6 +514,9 @@ function onTabChange(tab: string | number) {
   const query: Record<string, string | undefined> = { ...route.query, tab: tabStr };
   if (tabStr !== 'config') delete (query as Partial<typeof query>).edit;
   router.replace({ query });
+  if (tabStr === 'logs') {
+    reopenLogStream();
+  }
 }
 
 watch(() => route.query.tab, (v) => {
@@ -533,6 +546,7 @@ async function loadDetailMetrics() {
 
 const detailMetricSeries = ref<MetricQueryResponse[]>([]);
 const currentRunId = ref('');
+const latestRun = ref<Run | null>(null);
 
 function baseLine(name: string, xs: string[], sData: { name: string; data: number[]; color: string }[]) {
   return {
@@ -591,12 +605,13 @@ const objectRows = computed(() => {
 
 /* ---------- Logs tab (SSE) ---------- */
 const logFile = ref('default');
-const logFiles = ['default', 'position', 'monitor', 'commit', 'finished', 'task', 'http'];
+const logFiles = ['task', 'default', 'position', 'monitor', 'commit', 'finished', 'http'];
 const logLevelFilter = ref('ALL');
 const logPaused = ref(false);
 const logPaneRef = ref<HTMLElement | null>(null);
 const showFollowBtn = ref(false);
 const logStreamHandle = shallowRef<LogStreamHandle | null>(null);
+const archivedLogLines = ref<LogLine[]>([]);
 
 /** Derive SSE state from the handle's state ref so it stays in sync after reconnect. */
 const sseState = computed<'connected' | 'reconnecting' | 'disconnected'>(() => {
@@ -612,12 +627,18 @@ const sseStateLabel = computed(() => {
 
 const filteredLogLines = computed<LogLine[]>(() => {
   const handle = logStreamHandle.value;
-  if (!handle) return [];
+  if (!handle) {
+    return filterLogLines(archivedLogLines.value);
+  }
   // handle.lines is Ref<LogLine[]>, need .value to unwrap
   const rawLines: LogLine[] = unref(handle.lines);
+  return filterLogLines(rawLines);
+});
+
+function filterLogLines(rawLines: LogLine[]): LogLine[] {
   if (logLevelFilter.value === 'ALL') return rawLines;
   return rawLines.filter((l: LogLine) => l.level === logLevelFilter.value);
-});
+}
 
 function formatLogTime(ts: number): string {
   return dayjs(ts).format('HH:mm:ss');
@@ -626,6 +647,11 @@ function formatLogTime(ts: number): string {
 function reopenLogStream() {
   logStreamHandle.value?.close();
   if (!currentRunId.value) return;
+  if (latestRun.value && !['running', 'paused'].includes(latestRun.value.status)) {
+    loadArchivedLogIntoPane(latestRun.value);
+    return;
+  }
+  archivedLogLines.value = [];
   logStreamHandle.value = useLogStream({
     runId: currentRunId.value,
     file: logFile.value,
@@ -753,10 +779,30 @@ async function viewArchivedLogs(run: Run) {
   archivedDialogVisible.value = true;
   archivedLoading.value = true;
   try {
-    const res = await api.get<{ lines: LogLine[] }>(`/runs/${run.id}/logs?file=default`);
-    archivedLines.value = res.lines ?? [];
+    const text = await api.get<string>(`/runs/${run.id}/logs?file=${logFile.value}`, { parseAs: 'text' });
+    archivedLines.value = parseLogText(text);
   } catch { archivedLines.value = []; }
   finally { archivedLoading.value = false; }
+}
+
+function parseLogText(text: string): LogLine[] {
+  return text
+    .split('\n')
+    .filter((line) => line.trim().length > 0)
+    .map(parseLogLine);
+}
+
+function parseLogLine(line: string): LogLine {
+  const match = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?) - (DEBUG|INFO|WARN|ERROR) - (?:\[[^\]]+\] - )?(.*)$/);
+  if (!match) {
+    return { ts: Date.now(), level: 'info', source: 'default', message: line };
+  }
+  return {
+    ts: dayjs(match[1]).valueOf(),
+    level: match[2].toLowerCase() as LogLine['level'],
+    source: 'default',
+    message: match[3],
+  };
 }
 
 /* ---------- load current run ---------- */
@@ -764,12 +810,12 @@ async function loadCurrentRunId() {
   try {
     const res = await api.get<{ items: Run[] }>(`/tasks/${taskId.value}/runs?page=1&size=1`);
     const runs = res.items ?? [];
-    if (runs.length > 0 && (runs[0].status === 'running' || runs[0].status === 'paused')) {
-      currentRunId.value = runs[0].id;
-    } else {
-      currentRunId.value = '';
-    }
-  } catch { currentRunId.value = ''; }
+    latestRun.value = runs[0] ?? null;
+    currentRunId.value = latestRun.value?.id ?? '';
+  } catch {
+    latestRun.value = null;
+    currentRunId.value = '';
+  }
 }
 
 /* ---------- lifecycle ---------- */
@@ -779,6 +825,9 @@ const POLL_INTERVAL_MS = 5_000;
 onMounted(async () => {
   await loadTask();
   await loadCurrentRunId();
+  if (latestRun.value?.status === 'failed') {
+    await loadArchivedLogIntoPane(latestRun.value);
+  }
   loadDetailMetrics();
   loadAlerts();
   loadHistory();
@@ -796,6 +845,17 @@ onMounted(async () => {
     }
   }, POLL_INTERVAL_MS);
 });
+
+async function loadArchivedLogIntoPane(run: Run) {
+  try {
+    const text = await api.get<string>(`/runs/${run.id}/logs?file=${logFile.value}`, { parseAs: 'text' });
+    logStreamHandle.value?.close();
+    logStreamHandle.value = null;
+    archivedLogLines.value = parseLogText(text);
+  } catch {
+    archivedLogLines.value = [];
+  }
+}
 
 onUnmounted(() => {
   if (pollId) clearInterval(pollId);

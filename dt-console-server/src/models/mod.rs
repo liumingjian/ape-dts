@@ -298,6 +298,10 @@ pub struct CreateTaskRequest {
     #[serde(default)]
     pub sub_mode: Option<String>,
     #[serde(default)]
+    pub source_sub_mode: Option<String>,
+    #[serde(default)]
+    pub target_sub_mode: Option<String>,
+    #[serde(default)]
     pub source_endpoint: serde_json::Value,
     #[serde(default)]
     pub target_endpoint: serde_json::Value,

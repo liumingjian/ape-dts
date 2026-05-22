@@ -69,12 +69,12 @@ LicenseBanner (global, except /dashboard)
    └─ click "前往处理" → /license
 
 Dashboard
-   ├─ KPI 运行中任务 → /tasks/snapshot?status=running
-   ├─ KPI 今日告警 → /alerts/current
-   ├─ 状态饼图扇区 → /tasks/snapshot?status=<status>
+   ├─ KPI 运行中任务 → /tasks/snapshot?status=running  (KpiCard click — FIX-011 2026-05-11)
+   ├─ KPI 今日告警 → /alerts/current  (KpiCard click)
+   ├─ 状态饼图扇区 → /tasks/snapshot?status=<status>  (onStatusClick)
    ├─ 最近任务 row → /tasks/{category}/{id}
    ├─ 高优先级告警 row → /tasks/{category}/{id}?tab=alerts
-   ├─ "查看全部任务" → /tasks/snapshot
+   ├─ "查看全部任务" → /tasks/snapshot  (RunningTaskGrid @more, was /tasks/sync prior to FIX-011 2026-05-11)
    ├─ "查看全部告警" → /alerts/current
    └─ License banner (built-in) → /license
 

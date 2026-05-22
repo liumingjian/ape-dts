@@ -1,8 +1,8 @@
 {
   "brand": {
-    "name": "ape-dts Console",
-    "tagline": "管理控制台",
-    "full": "ape-dts Console"
+    "name": "数据库同步管理平台",
+    "tagline": "",
+    "full": "数据库同步管理平台"
   },
   "common": {
     "confirm": "确定",
@@ -387,7 +387,8 @@
     "mode": {
       "snapshot_cdc": {
         "label": "全量 + 增量",
-        "desc": "适用于持续性迁移，对业务中断敏感的迁移场景"
+        "desc": "适用于持续性迁移，对业务中断敏感的迁移场景",
+        "unsupported": "全量+增量模式当前仅支持 MySQL 和 Oracle 源端"
       },
       "snapshot": {
         "label": "全量",
@@ -540,7 +541,9 @@
       "failBlock": "存在未通过的预检查项，确认提交任务？",
       "failTitle": "预检查警告",
       "allPass": "所有预检查项均通过",
-      "error": "预检查请求失败"
+      "error": "预检查请求失败",
+      "envelopeTitle": "预检查请求失败:",
+      "requestIdLabel": "请把此请求 ID 发给运维 / 查 console-server 日志:"
     },
     "confirm": {
       "section": {
@@ -572,7 +575,8 @@
     "toast": {
       "created": "任务已创建并启动",
       "createdLater": "任务已创建，可稍后启动",
-      "createFailed": "创建失败"
+      "createFailed": "创建失败",
+      "startFailed": "自动启动失败，请在详情页手动启动"
     },
     "draft": {
       "discard": "放弃草稿",
@@ -993,6 +997,7 @@
   },
   "taskList": {
     "empty": "暂无任务，快去创建一个吧",
+    "selectRow": "选择任务 {name}",
     "subtitle": {
       "snapshot": "源端到目标端的全量数据迁移，支持断点续传与多引擎组合",
       "cdc": "基于 binlog/WAL/SCN 的持续增量同步，毫秒级延迟",
@@ -1074,6 +1079,9 @@
       },
       "exported": "已导出任务列表 JSON",
       "importHint": "演示环境：请上传符合 ape-dts 规范的 task.ini 批量包",
+      "imported": "成功导入 {n} 个任务",
+      "importedPartial": "导入完成：成功 {ok}，失败 {fail}",
+      "importFailed": "导入失败",
       "loadFailed": "加载任务失败",
       "actionFailed": "操作失败"
     },

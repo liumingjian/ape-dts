@@ -65,6 +65,17 @@ fn extract_url(endpoint: &serde_json::Value) -> String {
         .to_string()
 }
 
+fn sub_mode_for_side<'a>(
+    engine: &str,
+    side_sub_mode: Option<&'a String>,
+    legacy_sub_mode: Option<&'a String>,
+) -> Option<&'a str> {
+    if engine == "gaussdb" {
+        return side_sub_mode.or(legacy_sub_mode).map(String::as_str);
+    }
+    None
+}
+
 /// Write an audit log for task management actions.
 async fn write_task_audit_log(
     pool: &SqlitePool,
@@ -151,9 +162,18 @@ pub async fn create_task(
         .map(|a| a.to_string())
         .unwrap_or_else(|| "unknown".to_string());
 
-    // Resolve db_type from engine + sub_mode
-    let db_type_source = validation::resolve_db_type(&body.engine_source, body.sub_mode.as_deref());
-    let db_type_target = validation::resolve_db_type(&body.engine_target, body.sub_mode.as_deref());
+    let source_sub_mode = sub_mode_for_side(
+        &body.engine_source,
+        body.source_sub_mode.as_ref(),
+        body.sub_mode.as_ref(),
+    );
+    let target_sub_mode = sub_mode_for_side(
+        &body.engine_target,
+        body.target_sub_mode.as_ref(),
+        body.sub_mode.as_ref(),
+    );
+    let db_type_source = validation::resolve_db_type(&body.engine_source, source_sub_mode);
+    let db_type_target = validation::resolve_db_type(&body.engine_target, target_sub_mode);
 
     // Validate task payload
     let source_url = extract_url(&body.source_endpoint);
@@ -168,7 +188,8 @@ pub async fn create_task(
         &body.extractor,
         &body.sinker,
         &body.filter,
-        body.sub_mode.as_deref(),
+        source_sub_mode,
+        target_sub_mode,
         true,
     );
 
@@ -317,6 +338,8 @@ pub async fn list_tasks(
         query.engine.as_deref(),
         query.q.as_deref(),
         query.resource_group.as_deref(),
+        query.sort.as_deref(),
+        query.order.as_deref(),
         page,
         page_size,
     )
@@ -479,6 +502,7 @@ pub async fn update_task(
         &sinker,
         &filter,
         None,
+        None,
         false,
     );
 
@@ -606,6 +630,8 @@ pub struct TaskListQuery {
     pub engine: Option<String>,
     pub q: Option<String>,
     pub resource_group: Option<String>,
+    pub sort: Option<String>,
+    pub order: Option<String>,
     pub page: Option<i64>,
     pub page_size: Option<i64>,
 }
@@ -726,6 +752,10 @@ pub struct ImportTaskRequest {
     #[serde(default)]
     pub sub_mode: Option<String>,
     #[serde(default)]
+    pub source_sub_mode: Option<String>,
+    #[serde(default)]
+    pub target_sub_mode: Option<String>,
+    #[serde(default)]
     pub source_endpoint: serde_json::Value,
     #[serde(default)]
     pub target_endpoint: serde_json::Value,
@@ -841,11 +871,18 @@ async fn import_single_task(
         })
     })?;
 
-    // Resolve db_type
-    let db_type_source =
-        validation::resolve_db_type(&import_req.engine_source, import_req.sub_mode.as_deref());
-    let db_type_target =
-        validation::resolve_db_type(&import_req.engine_target, import_req.sub_mode.as_deref());
+    let source_sub_mode = sub_mode_for_side(
+        &import_req.engine_source,
+        import_req.source_sub_mode.as_ref(),
+        import_req.sub_mode.as_ref(),
+    );
+    let target_sub_mode = sub_mode_for_side(
+        &import_req.engine_target,
+        import_req.target_sub_mode.as_ref(),
+        import_req.sub_mode.as_ref(),
+    );
+    let db_type_source = validation::resolve_db_type(&import_req.engine_source, source_sub_mode);
+    let db_type_target = validation::resolve_db_type(&import_req.engine_target, target_sub_mode);
 
     // Validate
     let source_url = import_req
@@ -870,7 +907,8 @@ async fn import_single_task(
         &import_req.extractor,
         &import_req.sinker,
         &import_req.filter,
-        import_req.sub_mode.as_deref(),
+        source_sub_mode,
+        target_sub_mode,
         true,
     );
 
@@ -1110,4 +1148,50 @@ async fn find_next_copy_number(pool: &SqlitePool, base_task_id: &str) -> u32 {
         }
     }
     max_n + 1
+}
+
+/// GET /api/tasks/{id}/runs — list runs for a task (paginated).
+#[get("/tasks/{id}/runs")]
+pub async fn list_task_runs(
+    pool: web::Data<SqlitePool>,
+    user: UserContext,
+    path: web::Path<String>,
+    query: web::Query<PageQuery>,
+) -> HttpResponse {
+    if let Err(e) = rbac::require_action(&user, RbacAction::TaskRead) {
+        return e.error_response();
+    }
+
+    let task_id = path.into_inner();
+    let page = query.page.unwrap_or(1).max(1);
+    let size = query.size.unwrap_or(25).min(100);
+
+    let runs = match RunRepository::list_by_task(&pool, &task_id).await {
+        Ok(r) => r,
+        Err(e) => {
+            return ApiError::new(codes::INTERNAL_ERROR, format!("run list failed: {e}"))
+                .error_response();
+        }
+    };
+
+    let total = runs.len();
+    let start = ((page - 1) * size) as usize;
+    let items: Vec<_> = runs
+        .into_iter()
+        .skip(start)
+        .take(size as usize)
+        .map(|r| crate::run_handlers::run_to_response_public(&r))
+        .collect();
+
+    HttpResponse::Ok().json(serde_json::json!({
+        "items": items,
+        "total": total,
+    }))
+}
+
+/// Query parameters for paginated run list.
+#[derive(Debug, serde::Deserialize)]
+struct PageQuery {
+    page: Option<u32>,
+    size: Option<u32>,
 }

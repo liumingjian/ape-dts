@@ -366,7 +366,8 @@ impl TaskConfig {
                     let cdc_mode: String = loader.get_optional(EXTRACTOR, CDC_MODE);
                     let poll_interval_millis =
                         loader.get_with_default(EXTRACTOR, "poll_interval_millis", 200_u64);
-                    let poll_batch_size = loader.get_with_default(EXTRACTOR, "poll_batch_size", 200);
+                    let poll_batch_size =
+                        loader.get_with_default(EXTRACTOR, "poll_batch_size", 200);
                     let start_time_utc = loader.get_optional(EXTRACTOR, "start_time_utc");
                     let end_time_utc = loader.get_optional(EXTRACTOR, "end_time_utc");
 
@@ -701,7 +702,11 @@ impl TaskConfig {
                     url,
                     connection_auth,
                     batch_size,
-                    replace: loader.get_with_default(SINKER, REPLACE, true),
+                    replace: loader.get_with_default(
+                        SINKER,
+                        REPLACE,
+                        !matches!(db_type, DbType::GaussDBOracle),
+                    ),
                     disable_foreign_key_checks: loader.get_with_default(
                         SINKER,
                         DISABLE_FOREIGN_KEY_CHECKS,
@@ -748,6 +753,7 @@ impl TaskConfig {
                     url,
                     connection_auth,
                     batch_size,
+                    replace: loader.get_with_default(SINKER, REPLACE, true),
                 },
                 SinkType::Check => SinkerConfig::OracleCheck {
                     url,

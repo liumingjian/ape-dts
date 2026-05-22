@@ -169,6 +169,14 @@ async function seedSourceRow(tableName: string, tracerValue: string) {
   execSync(cmd, { timeout: 15_000 });
 }
 
+/** Ensure the target schema exists on mysql-dst so snapshot has somewhere to write. */
+async function ensureTargetTable(tableName: string) {
+  const createSql = `CREATE TABLE IF NOT EXISTS ${tableName} (id INT PRIMARY KEY, tracer VARCHAR(128), payload VARCHAR(256))`;
+  const cmd = `docker exec mysql-dst-ci mysql -u${DB_USER} -p${DB_PASS} -h 127.0.0.1 ${DB_NAME} -e "${createSql}"`;
+  const { execSync } = await import('child_process');
+  execSync(cmd, { timeout: 15_000 });
+}
+
 /** Ensure the target database exists on mysql-dst. */
 async function ensureTargetDb(dbName: string) {
   const cmd = `docker exec mysql-dst-ci mysql -u${DB_USER} -p${DB_PASS} -h 127.0.0.1 -e "CREATE DATABASE IF NOT EXISTS ${dbName}"`;
@@ -208,14 +216,14 @@ test.describe('full happy path — login → wizard → start → metrics → st
 
     // Fill source connection details
     const sourceCard = page.getByTestId('source-card');
-    await sourceCard.locator('input[placeholder="192.168.1.116"]').fill(SRC_HOST);
+    await sourceCard.getByTestId('source-host-input').fill(SRC_HOST);
     // Source port (el-input-number)
-    const srcPortInput = sourceCard.locator('.el-input-number input').first();
+    const srcPortInput = sourceCard.getByTestId('source-port-input').locator('input');
     await srcPortInput.clear();
     await srcPortInput.fill(String(SRC_PORT));
-    await sourceCard.locator('input[placeholder="root"]').first().fill(DB_USER);
-    await sourceCard.locator('input[type="password"]').first().fill(DB_PASS);
-    await sourceCard.locator('input[placeholder="app_db"]').fill(DB_NAME);
+    await sourceCard.getByTestId('source-username-input').fill(DB_USER);
+    await sourceCard.getByTestId('source-password-input').fill(DB_PASS);
+    await sourceCard.getByTestId('source-database-input').fill(DB_NAME);
 
     // Select MySQL for target engine (second card)
     const targetCard = page.getByTestId('target-card');
@@ -223,16 +231,16 @@ test.describe('full happy path — login → wizard → start → metrics → st
     await tgtEngineChip.click();
 
     // Fill target connection details
-    await targetCard.locator('input[placeholder="10.250.0.52"]').fill(DST_HOST);
-    const tgtPortInput = targetCard.locator('.el-input-number input').first();
+    await targetCard.getByTestId('target-host-input').fill(DST_HOST);
+    const tgtPortInput = targetCard.getByTestId('target-port-input').locator('input');
     await tgtPortInput.clear();
     await tgtPortInput.fill(String(DST_PORT));
-    await targetCard.locator('input[placeholder="root"]').first().fill(DB_USER);
-    await targetCard.locator('input[type="password"]').first().fill(DB_PASS);
+    await targetCard.getByTestId('target-username-input').fill(DB_USER);
+    await targetCard.getByTestId('target-password-input').fill(DB_PASS);
 
     // Fill basic section (task name)
     const basicSection = page.getByTestId('basic-section');
-    const taskNameInput = basicSection.locator('input').first();
+    const taskNameInput = basicSection.getByTestId('task-name-input');
     await taskNameInput.clear();
     await taskNameInput.fill(`e2e_wizard_${Date.now().toString(36)}`);
 
@@ -328,8 +336,15 @@ test.describe('full happy path — login → wizard → start → metrics → st
       await startBtn.click();
     }
 
-    // Wait for running or stopped (small datasets finish fast)
-    const status = await waitForAnyStatus(page, taskId, ['running', 'stopped'], 30_000);
+    // Wait for running / terminal states. Start is async — dt-main may still
+    // be spawning when this first polls, so accept intermediate states too and
+    // extend the window to 60s.
+    const status = await waitForAnyStatus(
+      page,
+      taskId,
+      ['running', 'stopped', 'completed', 'failed'],
+      60_000,
+    );
 
     // ── Check Monitor tab ──
     const monitorTab = page.locator('.el-tabs__item').filter({ hasText: /Monitor|监控/i });
@@ -340,10 +355,13 @@ test.describe('full happy path — login → wizard → start → metrics → st
     // ── Verify metrics API is reachable with both metric names ──
     const metricsCheck = await page.evaluate(async (id) => {
       try {
-        const taskRes = await fetch(`/api/tasks/${id}`);
-        if (!taskRes.ok) return { ok: false, reason: 'task_fetch_failed' };
-        const task = await taskRes.json();
-        const runId = task.latestRunId ?? task.latest_run_id;
+        // TaskResponse has no latestRunId field — fetch the latest run via
+        // /api/tasks/{id}/runs?size=1 instead.
+        const runsRes = await fetch(`/api/tasks/${id}/runs?size=1`);
+        if (!runsRes.ok) return { ok: false, reason: 'task_fetch_failed' };
+        const runsData = await runsRes.json();
+        const latest = Array.isArray(runsData.items) ? runsData.items[0] : null;
+        const runId = latest?.runId ?? latest?.run_id ?? latest?.id;
         if (!runId) return { ok: false, reason: 'no_run_id' };
         const now = Date.now();
         // Check extractor_rps_avg
@@ -388,14 +406,36 @@ test.describe('full happy path — login → wizard → start → metrics → st
 
     if (currentStatus === 'running') {
       await page.waitForTimeout(3_000);
-      const stopBtn = page.getByRole('button', { name: /终止|Stop/i });
+      // Call stop API directly — the UI uses ElMessageBox (a DOM modal, not a
+      // native dialog), so `page.on('dialog')` would not fire. Bypass the UI
+      // for deterministic test teardown. Must pull XSRF-TOKEN from the
+      // browser's cookie and echo it in X-XSRF-TOKEN (double-submit CSRF).
+      const stopResp = await page.evaluate(async (id) => {
+        const token = document.cookie
+          .split('; ')
+          .find((c) => c.startsWith('XSRF-TOKEN='))
+          ?.split('=')[1] ?? '';
+        const r = await fetch(`/api/tasks/${id}/stop`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'X-XSRF-TOKEN': decodeURIComponent(token) },
+        });
+        return { status: r.status, body: await r.text().catch(() => '') };
+      }, taskId);
+      // If stop request fails, log it so we can diagnose future regressions.
+      if (stopResp.status >= 400) {
+        console.log(`stop API returned ${stopResp.status}: ${stopResp.body}`);
+      }
       try {
-        await expect(stopBtn).toBeVisible({ timeout: 5_000 });
-        page.on('dialog', (d) => d.accept());
-        await stopBtn.click();
-        await waitForStatus(page, taskId, 'stopped', 30_000);
+        await waitForAnyStatus(
+          page,
+          taskId,
+          ['stopped', 'completed', 'failed'],
+          45_000,
+        );
       } catch {
-        // Task may have finished naturally — that's OK
+        // Task may still be in transition — final status assertion below will
+        // catch it if it actually stuck.
       }
     }
 
@@ -403,10 +443,12 @@ test.describe('full happy path — login → wizard → start → metrics → st
     const runInfo = await getLatestRun(page, taskId);
     if (runInfo) {
       // finished_at / stopped_at must be non-null for a completed run
-      const finishedAt = runInfo.finished_at ?? runInfo.stopped_at ?? null;
+      const finishedAt =
+        runInfo.finishedAt ?? runInfo.finished_at ?? runInfo.stoppedAt ?? runInfo.stopped_at ?? null;
       expect(finishedAt).not.toBeNull();
       // exit_code / exit_status must be 0 for successful run
-      const exitCode = runInfo.exit_code ?? runInfo.exit_status ?? null;
+      const exitCode =
+        runInfo.exitCode ?? runInfo.exit_code ?? runInfo.exitStatus ?? runInfo.exit_status ?? null;
       if (exitCode !== null) {
         expect(exitCode).toBe(0);
       }
@@ -761,13 +803,15 @@ test.describe('stop while running', () => {
     const stopRes = await authedFetch(`/tasks/${taskId}/stop`, 'POST');
     expect([200, 202, 409]).toContain(stopRes.status);
 
-    // Wait for stopped
-    await waitForAnyStatus(page, taskId, ['stopped', 'failed'], 30_000);
+    // Wait for stopped / completed / failed (task may finish before stop is honored)
+    const finalStatus = await waitForAnyStatus(page, taskId, ['stopped', 'completed', 'failed'], 30_000);
+    expect(['stopped', 'completed', 'failed']).toContain(finalStatus);
 
-    // Verify the page shows stopped/failed status
+    // Verify the page shows stopped/completed/failed status. `failed` is
+    // rendered as "错误" in zh-CN, not "失败" — cover both.
     const bodyText = await page.locator('body').textContent() ?? '';
-    const hasStopped = /stopped|已停止|停止|failed|失败/i.test(bodyText);
-    expect(hasStopped).toBeTruthy();
+    const hasTerminal = /stopped|已停止|completed|已完成|failed|错误|失败/i.test(bodyText);
+    expect(hasTerminal).toBeTruthy();
   });
 });
 
@@ -834,8 +878,12 @@ test.describe('snapshot data verification', () => {
     // ── Seed a row in the source DB ──
     const tracer = `e2e_tracer_${Date.now().toString(36)}`;
     const tableName = 'e2e_test_t1';
-    // Ensure the target DB exists before the snapshot runs
+    // Ensure the target DB + table exist before the snapshot runs so dt-main
+    // can fetch table metadata and copy rows in. Without a pre-created target
+    // table, snapshot panics (BUG-002). FIX-001 makes the panic a clean exit,
+    // but data verification still requires a destination to write into.
     await ensureTargetDb(DB_NAME);
+    await ensureTargetTable(tableName);
     await seedSourceRow(tableName, tracer);
 
     // ── Create a snapshot task targeting the seeded table ──
@@ -945,7 +993,7 @@ test.describe('wizard draft persistence', () => {
     await page.waitForSelector('[data-testid="wizard"]', { timeout: 15_000 });
 
     // Fill task name
-    const taskNameInput = page.getByTestId('basic-section').locator('input').first();
+    const taskNameInput = page.getByTestId('basic-section').getByTestId('task-name-input');
     if (await taskNameInput.count() > 0) {
       await taskNameInput.fill('draft_test_001');
     }
@@ -956,7 +1004,7 @@ test.describe('wizard draft persistence', () => {
 
     // The draft should be restored
     await page.waitForTimeout(2_000);
-    const taskNameInputAfter = page.getByTestId('basic-section').locator('input').first();
+    const taskNameInputAfter = page.getByTestId('basic-section').getByTestId('task-name-input');
     if (await taskNameInputAfter.count() > 0) {
       const value = await taskNameInputAfter.inputValue();
       expect(value).toBe('draft_test_001');
@@ -1006,13 +1054,13 @@ test.describe('wizard precheck soft-warn submit', () => {
     await srcEngineChip.click();
 
     const sourceCard = page.getByTestId('source-card');
-    await sourceCard.locator('input[placeholder="192.168.1.116"]').fill(SRC_HOST);
-    const srcPortInput = sourceCard.locator('.el-input-number input').first();
+    await sourceCard.getByTestId('source-host-input').fill(SRC_HOST);
+    const srcPortInput = sourceCard.getByTestId('source-port-input').locator('input');
     await srcPortInput.clear();
     await srcPortInput.fill(String(SRC_PORT));
-    await sourceCard.locator('input[placeholder="root"]').first().fill(DB_USER);
-    await sourceCard.locator('input[type="password"]').first().fill(DB_PASS);
-    await sourceCard.locator('input[placeholder="app_db"]').fill(DB_NAME);
+    await sourceCard.getByTestId('source-username-input').fill(DB_USER);
+    await sourceCard.getByTestId('source-password-input').fill(DB_PASS);
+    await sourceCard.getByTestId('source-database-input').fill(DB_NAME);
 
     // Set sync mode to CDC
     const cdcModeBtn = page.getByTestId('mode-card-cdc');
@@ -1023,15 +1071,15 @@ test.describe('wizard precheck soft-warn submit', () => {
     const targetCard = page.getByTestId('target-card');
     const tgtEngineChip = page.getByTestId('engine-chip-target-mysql');
     await tgtEngineChip.click();
-    await targetCard.locator('input[placeholder="10.250.0.52"]').fill(DST_HOST);
-    const tgtPortInput = targetCard.locator('.el-input-number input').first();
+    await targetCard.getByTestId('target-host-input').fill(DST_HOST);
+    const tgtPortInput = targetCard.getByTestId('target-port-input').locator('input');
     await tgtPortInput.clear();
     await tgtPortInput.fill(String(DST_PORT));
-    await targetCard.locator('input[placeholder="root"]').first().fill(DB_USER);
-    await targetCard.locator('input[type="password"]').first().fill(DB_PASS);
+    await targetCard.getByTestId('target-username-input').fill(DB_USER);
+    await targetCard.getByTestId('target-password-input').fill(DB_PASS);
 
     const basicSection = page.getByTestId('basic-section');
-    const taskNameInput = basicSection.locator('input').first();
+    const taskNameInput = basicSection.getByTestId('task-name-input');
     await taskNameInput.clear();
     await taskNameInput.fill(`e2e_cdc_precheck_${Date.now().toString(36)}`);
 
@@ -1046,7 +1094,11 @@ test.describe('wizard precheck soft-warn submit', () => {
     await page.waitForTimeout(1_000);
     const sourceTestBtn = page.getByTestId('conn-card-source-test-btn');
     await sourceTestBtn.click();
-    await expect(page.getByTestId('conn-card-source').getByTestId('conn-status-ok, [data-testid="conn-status-fail"]')).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.getByTestId('conn-card-source').getByTestId('conn-status-ok').or(
+        page.getByTestId('conn-card-source').getByTestId('conn-status-fail'),
+      ),
+    ).toBeVisible({ timeout: 15_000 });
 
     // If test fails, use bypass (admin can bypass)
     const srcOk = await page.getByTestId('conn-card-source').getByTestId('conn-status-ok').count();
@@ -1075,7 +1127,17 @@ test.describe('wizard precheck soft-warn submit', () => {
       await page.getByTestId('wizard-next').click();
     }
 
-    // Steps 3-5: Skip through
+    // Steps 3-5: Skip through. Step 3 needs do_dbs/do_tbs filled, otherwise
+    // the Next button stays disabled.
+    await page.waitForTimeout(500);
+    const doDbsField = page.getByTestId('filter-do-dbs');
+    if (await doDbsField.count() > 0) {
+      await doDbsField.fill('*');
+    }
+    const doTbsField = page.getByTestId('filter-do-tbs');
+    if (await doTbsField.count() > 0) {
+      await doTbsField.fill('*.*');
+    }
     for (let i = 0; i < 3; i++) {
       await page.waitForTimeout(500);
       try {
@@ -1254,9 +1316,20 @@ test.describe('SSE alert stream closes on logout', () => {
     // Capture session cookie
     const cookies = await page.context().cookies();
     const sessionCookie = cookies.find((c) => c.name === 'session');
+    const xsrfCookie = cookies.find((c) => c.name === 'XSRF-TOKEN');
 
-    // Logout via API
-    const logoutRes = await authedFetch('/auth/logout', 'POST');
+    // Logout via API using the *page* session (not a fresh login). Without
+    // this, authedFetch's fallback helper re-logs-in and invalidates a brand
+    // new session while the page's session remains valid (BUG-004).
+    const pageAuth = sessionCookie
+      ? {
+          cookieHeader: `session=${sessionCookie.value}${
+            xsrfCookie ? `; XSRF-TOKEN=${xsrfCookie.value}` : ''
+          }`,
+          xsrfToken: xsrfCookie?.value ?? '',
+        }
+      : undefined;
+    const logoutRes = await authedFetch('/auth/logout', 'POST', undefined, pageAuth);
     expect([200, 204]).toContain(logoutRes.status);
 
     // Verify subsequent API calls with old cookie return 401
@@ -1308,8 +1381,21 @@ test.describe('cookie-session idle expiry', () => {
       // Try to interact — the next API call should return 401
       await page.reload();
     } else {
-      // Force session invalidation via API logout (simulates what idle expiry does)
-      await authedFetch('/auth/logout', 'POST');
+      // Force session invalidation from the PAGE context so its own session
+      // cookie is the one that gets destroyed. A node-level authedFetch uses
+      // a different cookie jar and would not affect the browser page.
+      // POST /auth/logout is CSRF-protected — echo XSRF-TOKEN from cookie.
+      await page.evaluate(async () => {
+        const token = document.cookie
+          .split('; ')
+          .find((c) => c.startsWith('XSRF-TOKEN='))
+          ?.split('=')[1] ?? '';
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'X-XSRF-TOKEN': decodeURIComponent(token) },
+        });
+      });
       // Now try to interact with the page — the next API call should return 401
       await page.reload();
     }
@@ -1406,11 +1492,13 @@ test.describe('metrics and completion assertions', () => {
 
     if (runInfo) {
       // finished_at / stopped_at must be non-null for a completed run
-      const finishedAt = runInfo.finished_at ?? runInfo.stopped_at ?? null;
+      const finishedAt =
+        runInfo.finishedAt ?? runInfo.finished_at ?? runInfo.stoppedAt ?? runInfo.stopped_at ?? null;
       expect(finishedAt).not.toBeNull();
 
       // exit_code / exit_status should be 0 for a successful run
-      const exitCode = runInfo.exit_code ?? runInfo.exit_status ?? null;
+      const exitCode =
+        runInfo.exitCode ?? runInfo.exit_code ?? runInfo.exitStatus ?? runInfo.exit_status ?? null;
       if (exitCode !== null) {
         expect(exitCode).toBe(0);
       }

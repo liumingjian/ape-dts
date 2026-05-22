@@ -18,13 +18,16 @@ use crate::ini_renderer;
 use crate::metrics_scraper::{self, ScraperState};
 use crate::middleware::rbac::{self, RbacAction};
 use crate::models::{
-    is_legal_transition, run_status, ControlLog, Run, RunResponse, StartRunResponse, UserContext,
+    is_legal_transition, run_status, ControlLog, Run, RunResponse, StartRunResponse, Task,
+    UserContext,
 };
 use crate::precheck_handlers::PrecheckItem;
 use crate::repositories::control_log_repository::ControlLogRepository;
 use crate::repositories::operate_log_repository::OperateLogRepository;
 use crate::repositories::run_repository::RunRepository;
 use crate::repositories::task_repository::TaskRepository;
+
+const GAUSSDB_CANDIDATE_HOSTS_ENV: &str = "gaussdb_pg_candidate_hosts";
 
 /// Shared state for active Run handles, keyed by task_id.
 ///
@@ -45,6 +48,250 @@ pub fn new_active_runs() -> ActiveRuns {
 /// Public accessor for the executor's run_data_dir.
 pub fn executor_run_data_dir() -> String {
     executor::run_data_dir()
+}
+
+const STRUCT_INIT_POLL_MILLIS: u64 = 200;
+const STRUCT_INIT_STRUCTURES: &str = "database,table,constraint";
+const STRUCT_INIT_STRUCTURES_WITH_INDEX: &str = "database,table,constraint,index";
+const STRUCT_INIT_ORACLE_STRUCTURES: &str = "table,constraint";
+const STRUCT_INIT_ORACLE_STRUCTURES_WITH_INDEX: &str = "table,constraint,index";
+
+async fn run_struct_init_if_requested(
+    task: &Task,
+    binary_override: Option<&str>,
+) -> Result<(), ApiError> {
+    if !should_run_struct_init(task) {
+        return Ok(());
+    }
+
+    let struct_task = build_struct_init_task(task)?;
+    let ini_content = ini_renderer::render(&struct_task);
+    let run_id = format!("{}-struct-init-{}", task.id, uuid::Uuid::new_v4().simple());
+    let engine_env = engine_extra_env(task);
+    let handle = executor::LocalExecutor::spawn_with_env(
+        &run_id,
+        &ini_content,
+        binary_override,
+        &engine_env,
+    )
+    .await
+    .map_err(|e| struct_init_error(task, &run_id, format!("spawn failed: {e}")))?;
+
+    loop {
+        match executor::LocalExecutor::status(&handle).await {
+            ChildStatus::Running => {
+                tokio::time::sleep(tokio::time::Duration::from_millis(STRUCT_INIT_POLL_MILLIS))
+                    .await;
+            }
+            ChildStatus::Exited(exit) => {
+                return match exit {
+                    ExitStatus::Exited { code: 0 } => Ok(()),
+                    ExitStatus::Exited { code } => Err(struct_init_error(
+                        task,
+                        &run_id,
+                        format!("engine exited with code {code}"),
+                    )),
+                    ExitStatus::Signaled { signal } => Err(struct_init_error(
+                        task,
+                        &run_id,
+                        format!("engine terminated by signal {signal}"),
+                    )),
+                };
+            }
+        }
+    }
+}
+
+fn engine_extra_env(task: &Task) -> Vec<(String, String)> {
+    gaussdb_candidate_hosts(task)
+        .map(|hosts| vec![(GAUSSDB_CANDIDATE_HOSTS_ENV.to_string(), hosts)])
+        .unwrap_or_default()
+}
+
+fn gaussdb_candidate_hosts(task: &Task) -> Option<String> {
+    let mut values = Vec::new();
+    if is_gaussdb_type(&task.db_type_source) {
+        let source = parse_endpoint_config(&task.source_endpoint);
+        values.extend(candidate_hosts_from_endpoint(&source));
+    }
+    if is_gaussdb_type(&task.db_type_target) {
+        let target = parse_endpoint_config(&task.target_endpoint);
+        values.extend(candidate_hosts_from_endpoint(&target));
+    }
+    let hosts = values
+        .into_iter()
+        .filter(|host| !host.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join(",");
+    if hosts.is_empty() {
+        None
+    } else {
+        Some(hosts)
+    }
+}
+
+fn is_gaussdb_type(db_type: &str) -> bool {
+    db_type.starts_with("gaussdb_")
+}
+
+fn parse_endpoint_config(raw: &str) -> serde_json::Value {
+    serde_json::from_str(raw).unwrap_or_default()
+}
+
+fn candidate_hosts_from_endpoint(endpoint: &serde_json::Value) -> Vec<String> {
+    endpoint
+        .get("candidateHosts")
+        .or_else(|| endpoint.get("candidate_hosts"))
+        .and_then(|value| value.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.as_str().map(str::trim))
+                .filter(|item| !item.is_empty())
+                .map(ToOwned::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn should_run_struct_init(task: &Task) -> bool {
+    if task.kind != "snapshot" {
+        return false;
+    }
+    let runtime = parse_json_object(&task.runtime_config);
+    runtime
+        .get("sync_schema")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+}
+
+fn build_struct_init_task(task: &Task) -> Result<Task, ApiError> {
+    let mut struct_task = task.clone();
+    struct_task.id = format!("{}-struct-init", task.id);
+    struct_task.task_id = format!("{}_struct_init", task.task_id);
+    struct_task.kind = "struct".to_string();
+    struct_task.extractor_config = merge_config(
+        &task.extractor_config,
+        &[
+            ("extractType", serde_json::json!("struct")),
+            ("extract_type", serde_json::json!("struct")),
+        ],
+    );
+    struct_task.sinker_config = merge_config(
+        &task.sinker_config,
+        &[
+            ("sinkType", serde_json::json!("struct")),
+            ("sink_type", serde_json::json!("struct")),
+            ("batch_size", serde_json::json!(1)),
+            ("conflict_policy", serde_json::json!("ignore")),
+        ],
+    );
+    struct_task.filter_config = build_struct_filter_config(task)?;
+    struct_task.parallelizer_config =
+        serde_json::json!({"parallel_type":"serial","parallel_size":1}).to_string();
+    struct_task.pipeline_config =
+        serde_json::json!({"buffer_size":100,"checkpoint_interval_secs":1}).to_string();
+    struct_task.resumer_config = "{}".to_string();
+    struct_task.processor_config = "{}".to_string();
+    Ok(struct_task)
+}
+
+fn build_struct_filter_config(task: &Task) -> Result<String, ApiError> {
+    let mut filter = parse_json_object(&task.filter_config);
+    let do_dbs_empty = string_field_is_empty(&filter, "do_dbs");
+    let do_tbs_empty = string_field_is_empty(&filter, "do_tbs");
+    if do_dbs_empty && do_tbs_empty {
+        return Err(ApiError::new(
+            codes::STRUCT_FILTER_REQUIRED,
+            "Struct initialization requires do_dbs or do_tbs",
+        ));
+    }
+    let runtime = parse_json_object(&task.runtime_config);
+    let structures = struct_init_structures(task, &runtime);
+    narrow_struct_filter_to_explicit_tables(&mut filter);
+    filter.insert(
+        "do_structures".to_string(),
+        serde_json::Value::String(structures.to_string()),
+    );
+    filter.insert(
+        "do_events".to_string(),
+        serde_json::Value::String(String::new()),
+    );
+    Ok(serde_json::Value::Object(filter).to_string())
+}
+
+fn narrow_struct_filter_to_explicit_tables(
+    filter: &mut serde_json::Map<String, serde_json::Value>,
+) {
+    if !string_field_equals(filter, "do_dbs", "*") {
+        return;
+    }
+    if string_field_is_empty(filter, "do_tbs") || string_field_equals(filter, "do_tbs", "*.*") {
+        return;
+    }
+    filter.insert(
+        "do_dbs".to_string(),
+        serde_json::Value::String(String::new()),
+    );
+}
+
+fn struct_init_structures(
+    task: &Task,
+    runtime: &serde_json::Map<String, serde_json::Value>,
+) -> &'static str {
+    let with_index = runtime
+        .get("sync_index")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    match (task.db_type_target.as_str(), with_index) {
+        ("oracle", true) | ("gaussdb_oracle", true) => STRUCT_INIT_ORACLE_STRUCTURES_WITH_INDEX,
+        ("oracle", false) | ("gaussdb_oracle", false) => STRUCT_INIT_ORACLE_STRUCTURES,
+        (_, true) => STRUCT_INIT_STRUCTURES_WITH_INDEX,
+        (_, false) => STRUCT_INIT_STRUCTURES,
+    }
+}
+
+fn merge_config(config: &str, fields: &[(&str, serde_json::Value)]) -> String {
+    let mut object = parse_json_object(config);
+    for (key, value) in fields {
+        object.insert((*key).to_string(), value.clone());
+    }
+    serde_json::Value::Object(object).to_string()
+}
+
+fn parse_json_object(config: &str) -> serde_json::Map<String, serde_json::Value> {
+    match serde_json::from_str::<serde_json::Value>(config) {
+        Ok(serde_json::Value::Object(map)) => map,
+        _ => serde_json::Map::new(),
+    }
+}
+
+fn string_field_is_empty(map: &serde_json::Map<String, serde_json::Value>, key: &str) -> bool {
+    map.get(key)
+        .and_then(|v| v.as_str())
+        .is_none_or(|s| s.trim().is_empty())
+}
+
+fn string_field_equals(
+    map: &serde_json::Map<String, serde_json::Value>,
+    key: &str,
+    expected: &str,
+) -> bool {
+    map.get(key)
+        .and_then(|v| v.as_str())
+        .is_some_and(|s| s.trim() == expected)
+}
+
+fn struct_init_error(task: &Task, run_id: &str, reason: String) -> ApiError {
+    ApiError::with_details(
+        codes::STRUCT_INIT_FAILED,
+        format!("Struct initialization failed before starting snapshot: {reason}"),
+        serde_json::json!({
+            "taskId": task.id,
+            "runId": run_id,
+            "reason": reason,
+        }),
+    )
 }
 
 /// Write a control_log intent row.
@@ -135,6 +382,11 @@ async fn write_run_audit_log(
 }
 
 /// Convert a Run model to a RunResponse DTO, including position data.
+/// Public so `task_handlers::list_task_runs` can reuse it.
+pub fn run_to_response_public(run: &Run) -> RunResponse {
+    run_to_response(run)
+}
+
 fn run_to_response(run: &Run) -> RunResponse {
     let position = run.log_dir.as_ref().and_then(|log_dir| {
         let run_dir = PathBuf::from(log_dir)
@@ -270,7 +522,8 @@ pub async fn start_task(
             .error_response();
         }
         Err(join_err) => {
-            // Task panicked — extract the panic message
+            // Task panicked — extract the panic message and log with task_id
+            // so operators can grep server logs from a UI bug report.
             let panic_msg = if join_err.is_panic() {
                 let payload = join_err.into_panic();
                 match payload.downcast_ref::<String>() {
@@ -283,10 +536,26 @@ pub async fn start_task(
             } else {
                 "precheck task was cancelled".to_string()
             };
+            let request_id = uuid::Uuid::new_v4()
+                .simple()
+                .to_string()
+                .chars()
+                .take(8)
+                .collect::<String>();
+            tracing::error!(
+                request_id = %request_id,
+                task_id = %task_id,
+                panic_message = %panic_msg,
+                "start_task: precheck panicked — refusing to start engine",
+            );
             return ApiError::with_details(
-                codes::PRECHECK_BLOCKING_FAILED,
-                "Precheck panicked",
+                codes::PRECHECK_PANIC,
+                format!(
+                    "precheck task crashed unexpectedly (request_id={request_id}). \
+                     Send this request ID to ops or grep console-server logs."
+                ),
                 serde_json::json!({
+                    "requestId": request_id,
                     "panicMessage": panic_msg,
                 }),
             )
@@ -327,6 +596,28 @@ pub async fn start_task(
         .error_response();
     }
 
+    let binary_override = if std::env::var("APE_DTS_BINARY_PATH").is_ok() {
+        Some(std::env::var("APE_DTS_BINARY_PATH").unwrap())
+    } else {
+        None
+    };
+    if let Err(e) = run_struct_init_if_requested(&task, binary_override.as_deref()).await {
+        {
+            let mut active = active_runs.lock().await;
+            active.remove(&task_id);
+        }
+        let _ = write_run_audit_log(
+            &pool,
+            &user.username,
+            "tasks.start",
+            "failure",
+            &task_id,
+            &ip,
+        )
+        .await;
+        return e.error_response();
+    }
+
     // Create the Run record in pending state.
     let run_id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
@@ -354,62 +645,96 @@ pub async fn start_task(
     // Write control log intent.
     let _ = write_control_intent(&pool, &task_id, &run_id, "start", &user.username).await;
 
-    // Render INI from the Task.
-    let ini_content = ini_renderer::render(&task);
-
-    // Spawn the engine subprocess.
-    let binary_override = if std::env::var("APE_DTS_BINARY_PATH").is_ok() {
-        Some(std::env::var("APE_DTS_BINARY_PATH").unwrap())
-    } else {
-        None
-    };
-
-    let handle =
-        match executor::LocalExecutor::spawn(&run_id, &ini_content, binary_override.as_deref())
-            .await
-        {
-            Ok(h) => h,
+    // Render INI from the Task. For managed `snapshot_and_cdc` tasks the
+    // engine runs in two phases (snapshot → cdc); pre-stage the phase 2 INI
+    // and capture the CDC start marker BEFORE we spawn so phase 2 picks up
+    // every change made during phase 1.
+    let ini_content = if crate::two_phase::is_two_phase_task(&task) {
+        let run_dir_path = std::path::PathBuf::from(&run_dir_str);
+        let phase2_start = match crate::two_phase::capture_phase2_start(&task).await {
+            Ok(start) => start,
             Err(e) => {
-                // Spawn failed — mark the Run as failed, clean up Starting slot.
-                run.status = run_status::FAILED.to_string();
-                run.exit_code = Some(-1);
-                run.stopped_at =
-                    Some(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
-                run.updated_at =
-                    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-
-                if let Ok(_saved) = RunRepository::create(&pool, &run).await {
-                    let _ = write_control_result(
-                        &pool,
-                        &task_id,
-                        &run_id,
-                        "start",
-                        "error",
-                        &user.username,
-                    )
-                    .await;
-                }
-
-                // Remove the Starting slot so the task_id can be re-used.
                 {
                     let mut active = active_runs.lock().await;
                     active.remove(&task_id);
                 }
-
-                let _ = write_run_audit_log(
-                    &pool,
-                    &user.username,
-                    "tasks.start",
-                    "failure",
-                    &task_id,
-                    &ip,
+                return ApiError::new(
+                    codes::INTERNAL_ERROR,
+                    format!("two-phase start marker capture failed: {e}"),
                 )
-                .await;
-
-                return ApiError::new(codes::INTERNAL_ERROR, format!("engine spawn failed: {e}"))
-                    .error_response();
+                .error_response();
             }
         };
+        match crate::two_phase::prepare_run_dir(&task, &run_dir_path, phase2_start) {
+            Ok(prep) => prep.phase1_ini,
+            Err(e) => {
+                {
+                    let mut active = active_runs.lock().await;
+                    active.remove(&task_id);
+                }
+                return ApiError::new(
+                    codes::INTERNAL_ERROR,
+                    format!("two-phase preparation failed: {e}"),
+                )
+                .error_response();
+            }
+        }
+    } else {
+        ini_renderer::render(&task)
+    };
+
+    // Spawn the engine subprocess.
+    let engine_env = engine_extra_env(&task);
+    let handle = match executor::LocalExecutor::spawn_with_env(
+        &run_id,
+        &ini_content,
+        binary_override.as_deref(),
+        &engine_env,
+    )
+    .await
+    {
+        Ok(h) => h,
+        Err(e) => {
+            // Spawn failed — mark the Run as failed, clean up Starting slot.
+            run.status = run_status::FAILED.to_string();
+            run.exit_code = Some(-1);
+            run.stopped_at =
+                Some(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
+            run.updated_at =
+                chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+            if let Ok(_saved) = RunRepository::create(&pool, &run).await {
+                let _ = write_control_result(
+                    &pool,
+                    &task_id,
+                    &run_id,
+                    "start",
+                    "error",
+                    &user.username,
+                )
+                .await;
+            }
+
+            // Remove the Starting slot so the task_id can be re-used.
+            {
+                let mut active = active_runs.lock().await;
+                active.remove(&task_id);
+            }
+
+            let _ = write_run_audit_log(
+                &pool,
+                &user.username,
+                "tasks.start",
+                "failure",
+                &task_id,
+                &ip,
+            )
+            .await;
+
+            return ApiError::new(codes::INTERNAL_ERROR, format!("engine spawn failed: {e}"))
+                .error_response();
+        }
+    };
 
     // Update the Run with PID and running status.
     run.pid = Some(handle.pid as i64);
@@ -940,6 +1265,40 @@ pub async fn supervise_run(
                         continue;
                     }
                     ChildStatus::Exited(exit) => {
+                        let clean_exit = matches!(&exit, ExitStatus::Exited { code: 0 });
+
+                        // Two-phase MySQL snapshot+cdc: on a clean phase 1
+                        // exit, transparently spawn phase 2 (cdc) using the
+                        // INI we pre-staged before phase 1 started.
+                        if clean_exit {
+                            if let Some(state) = crate::two_phase::read_phase_state(&handle.run_dir)
+                            {
+                                if state.current_phase == 1 {
+                                    match advance_to_phase2(
+                                        &pool,
+                                        &active_runs,
+                                        &task_id,
+                                        &run_id,
+                                        &handle.run_dir,
+                                        &state.phase2_ini_path,
+                                    )
+                                    .await
+                                    {
+                                        Ok(()) => continue,
+                                        Err(e) => {
+                                            tracing::warn!(
+                                                "phase2 transition failed for run {}: {}",
+                                                run_id,
+                                                e
+                                            );
+                                            // Fall through and mark FAILED so the user sees the
+                                            // bug instead of a silent stop.
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         // Child exited — update the Run record.
                         let mut run = match RunRepository::find_by_id(&pool, &run_id).await {
                             Ok(r) => r,
@@ -1025,6 +1384,77 @@ pub async fn supervise_run(
             }
         }
     }
+}
+
+/// Spawn phase 2 (cdc) of a two-phase MySQL `snapshot_and_cdc` Run after
+/// phase 1 (snapshot) has exited cleanly. The phase 2 INI was pre-staged
+/// at run start by `crate::two_phase::prepare_run_dir`.
+///
+/// On success: the phase state file is updated to `current_phase=2`, the
+/// `RunSlot` is replaced with a fresh `Active(handle)` for the new child,
+/// the persisted Run record is updated with the new PID, and a control
+/// log entry is written so operators can see the transition.
+async fn advance_to_phase2(
+    pool: &sqlx::SqlitePool,
+    active_runs: &ActiveRuns,
+    task_id: &str,
+    run_id: &str,
+    run_dir: &std::path::Path,
+    phase2_ini_path: &str,
+) -> Result<(), String> {
+    let phase2_ini = std::fs::read_to_string(phase2_ini_path)
+        .map_err(|e| format!("read phase2 ini failed: {e}"))?;
+
+    let binary_override = std::env::var("APE_DTS_BINARY_PATH").ok();
+    let task = TaskRepository::find_by_id(pool, task_id)
+        .await
+        .map_err(|e| format!("phase2: load task failed: {e}"))?;
+    let engine_env = engine_extra_env(&task);
+    let new_handle = executor::LocalExecutor::spawn_with_env(
+        run_id,
+        &phase2_ini,
+        binary_override.as_deref(),
+        &engine_env,
+    )
+    .await?;
+
+    // Persist the phase advance so the marker survives orchestrator restarts.
+    if let Err(e) = crate::two_phase::mark_phase_advanced(run_dir) {
+        tracing::warn!(
+            "phase2: failed to mark phase advanced for {}: {}",
+            run_id,
+            e
+        );
+    }
+
+    // Replace the active slot with the new child handle.
+    {
+        let mut active = active_runs.lock().await;
+        active.insert(task_id.to_string(), RunSlot::Active(new_handle.clone()));
+    }
+
+    // Update the Run row with the new PID and keep status=running.
+    if let Ok(mut run) = RunRepository::find_by_id(pool, run_id).await {
+        run.pid = Some(new_handle.pid as i64);
+        run.status = run_status::RUNNING.to_string();
+        run.updated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        if let Err(e) = RunRepository::update(pool, &run).await {
+            tracing::warn!("phase2: run update failed for {}: {}", run_id, e);
+        }
+    }
+
+    let operator = find_operator_for_run(pool, run_id).await;
+    let _ = write_control_result(
+        pool,
+        task_id,
+        run_id,
+        "phase_transition",
+        "snapshot_to_cdc",
+        &operator,
+    )
+    .await;
+
+    Ok(())
 }
 
 /// Update the Task's status field based on the latest Run status.
@@ -1127,6 +1557,147 @@ mod tests {
         let slot = RunSlot::Starting;
         assert!(slot.as_handle().is_none());
         assert!(slot.into_handle().is_none());
+    }
+
+    #[test]
+    fn test_engine_extra_env_uses_gaussdb_candidate_hosts() {
+        let mut task = make_snapshot_task_for_struct_init();
+        task.db_type_source = "gaussdb_oracle".into();
+        task.source_endpoint =
+            r#"{"url":"postgres://10.250.0.157:8000/db","candidateHosts":["10.250.0.157:8000","10.250.0.223:8000"]}"#
+                .into();
+
+        assert_eq!(
+            engine_extra_env(&task),
+            vec![(
+                GAUSSDB_CANDIDATE_HOSTS_ENV.to_string(),
+                "10.250.0.157:8000,10.250.0.223:8000".to_string()
+            )]
+        );
+    }
+
+    #[test]
+    fn test_engine_extra_env_supports_snake_case_candidate_hosts() {
+        let mut task = make_snapshot_task_for_struct_init();
+        task.db_type_target = "gaussdb_oracle".into();
+        task.target_endpoint =
+            r#"{"url":"postgres://10.250.0.157:8000/db","candidate_hosts":["10.250.0.223:8000"]}"#
+                .into();
+
+        assert_eq!(
+            engine_extra_env(&task),
+            vec![(
+                GAUSSDB_CANDIDATE_HOSTS_ENV.to_string(),
+                "10.250.0.223:8000".to_string()
+            )]
+        );
+    }
+
+    #[test]
+    fn test_engine_extra_env_ignores_non_gaussdb_candidate_hosts() {
+        let mut task = make_snapshot_task_for_struct_init();
+        task.source_endpoint =
+            r#"{"url":"postgres://10.250.0.157:8000/db","candidateHosts":["10.250.0.223:8000"]}"#
+                .into();
+
+        assert!(engine_extra_env(&task).is_empty());
+    }
+
+    fn make_snapshot_task_for_struct_init() -> Task {
+        Task {
+            id: "task-id".into(),
+            task_id: "snapshot_mysql_mysql_test".into(),
+            name: "test".into(),
+            kind: "snapshot".into(),
+            db_type_source: "mysql".into(),
+            db_type_target: "mysql".into(),
+            source_endpoint: r#"{"url":"mysql://src:3306/test_db"}"#.into(),
+            target_endpoint: r#"{"url":"mysql://dst:3306/test_db"}"#.into(),
+            extractor_config: r#"{"extract_type":"snapshot","batch_size":16000}"#.into(),
+            sinker_config: r#"{"sink_type":"write"}"#.into(),
+            filter_config:
+                r#"{"do_dbs":"test_db","do_tbs":"test_db.manual_smoke","ignore_dbs":"","ignore_tbs":"","do_events":"insert"}"#
+                    .into(),
+            router_config: r#"{"db_map":"","tb_map":"","col_map":""}"#.into(),
+            parallelizer_config: r#"{"parallel_type":"snapshot","parallel_size":4}"#.into(),
+            pipeline_config: r#"{"buffer_size":16000,"checkpoint_interval_secs":10}"#.into(),
+            resumer_config: r#"{"resume_type":"from_log"}"#.into(),
+            processor_config: "{}".into(),
+            runtime_config: r#"{"sync_schema":true,"sync_index":false}"#.into(),
+            metrics_config: "{}".into(),
+            resource_group_id: "default".into(),
+            owner_user_id: Some("admin".into()),
+            status: "draft".into(),
+            created_at: "2026-01-01T00:00:00.000Z".into(),
+            updated_at: "2026-01-01T00:00:00.000Z".into(),
+        }
+    }
+
+    #[test]
+    fn test_should_run_struct_init_only_for_snapshot_with_runtime_flag() {
+        let mut task = make_snapshot_task_for_struct_init();
+        assert!(should_run_struct_init(&task));
+
+        task.runtime_config = r#"{"sync_schema":false}"#.into();
+        assert!(!should_run_struct_init(&task));
+
+        task.runtime_config = r#"{"sync_schema":true}"#.into();
+        task.kind = "cdc".into();
+        assert!(!should_run_struct_init(&task));
+    }
+
+    #[test]
+    fn test_build_struct_init_task_renders_struct_ini() {
+        let task = make_snapshot_task_for_struct_init();
+        let struct_task = build_struct_init_task(&task).unwrap();
+        let ini = ini_renderer::render(&struct_task);
+
+        assert_eq!(struct_task.kind, "struct");
+        assert!(ini.contains("extract_type=struct"));
+        assert!(ini.contains("sink_type=struct"));
+        assert!(ini.contains("conflict_policy=ignore"));
+        assert!(ini.contains("do_structures=database,table,constraint"));
+        assert!(ini.contains("parallel_type=serial"));
+        assert!(!ini.contains("do_events=insert"));
+    }
+
+    #[test]
+    fn test_build_struct_init_task_includes_index_when_requested() {
+        let mut task = make_snapshot_task_for_struct_init();
+        task.runtime_config = r#"{"sync_schema":true,"sync_index":true}"#.into();
+
+        let struct_task = build_struct_init_task(&task).unwrap();
+        let ini = ini_renderer::render(&struct_task);
+
+        assert!(ini.contains("do_structures=database,table,constraint,index"));
+    }
+
+    #[test]
+    fn test_build_struct_init_task_omits_database_for_oracle_target() {
+        let mut task = make_snapshot_task_for_struct_init();
+        task.db_type_source = "oracle".into();
+        task.db_type_target = "oracle".into();
+        task.runtime_config = r#"{"sync_schema":true,"sync_index":true}"#.into();
+
+        let struct_task = build_struct_init_task(&task).unwrap();
+        let ini = ini_renderer::render(&struct_task);
+
+        assert!(ini.contains("do_structures=table,constraint,index"));
+        assert!(!ini.contains("do_structures=database"));
+    }
+
+    #[test]
+    fn test_struct_init_prefers_explicit_tables_over_wildcard_dbs() {
+        let mut task = make_snapshot_task_for_struct_init();
+        task.filter_config =
+            r#"{"do_dbs":"*","do_tbs":"public.t_gaussdb_oracle_to_oracle","ignore_dbs":"","ignore_tbs":"","do_events":"insert,update,delete"}"#
+                .into();
+
+        let struct_task = build_struct_init_task(&task).unwrap();
+        let ini = ini_renderer::render(&struct_task);
+
+        assert!(ini.contains("do_dbs=\n"));
+        assert!(ini.contains("do_tbs=public.t_gaussdb_oracle_to_oracle"));
     }
 
     #[tokio::test]

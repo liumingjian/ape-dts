@@ -13,4 +13,3 @@ mod test {
         TestBase::run_cdc_test("gaussdb_oracle_to_pg/cdc/basic_test", 60000, 30000).await;
     }
 }
-

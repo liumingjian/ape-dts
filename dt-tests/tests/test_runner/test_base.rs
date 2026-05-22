@@ -19,8 +19,7 @@ use super::{
     rdb_lua_test_runner::RdbLuaTestRunner, rdb_redis_test_runner::RdbRedisTestRunner,
     rdb_sql_test_runner::RdbSqlTestRunner, rdb_starrocks_test_runner::RdbStarRocksTestRunner,
     rdb_struct_test_runner::RdbStructTestRunner, rdb_test_runner::RdbTestRunner,
-    redis_statistic_runner::RedisStatisticTestRunner,
-    redis_test_runner::RedisTestRunner,
+    redis_statistic_runner::RedisStatisticTestRunner, redis_test_runner::RedisTestRunner,
 };
 
 pub struct TestBase {}

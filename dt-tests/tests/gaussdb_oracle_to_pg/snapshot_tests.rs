@@ -11,4 +11,3 @@ mod test {
         TestBase::run_snapshot_test("gaussdb_oracle_to_pg/snapshot/smoke_test").await;
     }
 }
-

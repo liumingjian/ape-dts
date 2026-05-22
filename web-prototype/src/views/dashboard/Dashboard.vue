@@ -171,7 +171,7 @@
               :empty-hint="t('dashboard.empty.topRunning')"
               :more-label="t('common.more')"
               @select="(task) => go(`/tasks/${task.category}/${task.id}`)"
-              @more="go('/tasks/sync?status=running')"
+              @more="go('/tasks/snapshot?status=running')"
             />
           </div>
         </div>

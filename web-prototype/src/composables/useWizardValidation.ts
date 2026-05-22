@@ -7,6 +7,7 @@ export interface WizardFormEndpoint {
   engine: EngineType;
   subMode?: GaussdbSubMode;
   host: string;
+  candidateHosts?: string[];
   port: number;
   username: string;
   password: string;

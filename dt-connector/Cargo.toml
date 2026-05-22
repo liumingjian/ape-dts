@@ -49,3 +49,4 @@ percent-encoding = { workspace = true }
 opendal = { workspace = true }
 dashmap = {workspace = true}
 openssl = { workspace = true }
+sha2 = { workspace = true }

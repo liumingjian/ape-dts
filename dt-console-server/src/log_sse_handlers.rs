@@ -414,10 +414,20 @@ async fn enforce_rg_ownership(
     Ok(())
 }
 
+/// Wait for the cancel signal to change. If no cancel receiver, never resolves.
+async fn wait_cancel_change(cancel_rx: &mut Option<tokio::sync::watch::Receiver<bool>>) {
+    if let Some(rx) = cancel_rx {
+        let _ = rx.changed().await;
+    } else {
+        std::future::pending::<()>().await;
+    }
+}
+
 /// Produce SSE events from a log file and send them through the channel.
 ///
-/// If a cancellation receiver is provided, the producer checks it on each
-/// iteration and stops when cancellation is signalled (e.g. on logout).
+/// If a cancellation receiver is provided, the producer listens for
+/// cancellation via `tokio::select!` so the SSE stream closes promptly
+/// when the session is invalidated (logout, expiry, disable).
 #[allow(clippy::too_many_arguments)]
 async fn produce_sse_events(
     run_id: String,
@@ -427,7 +437,7 @@ async fn produce_sse_events(
     last_event_id: Option<u64>,
     sse_state: LogSseState,
     event_tx: tokio::sync::mpsc::Sender<SseEvent>,
-    cancel_rx: Option<tokio::sync::watch::Receiver<bool>>,
+    mut cancel_rx: Option<tokio::sync::watch::Receiver<bool>>,
 ) {
     let poll_interval = Duration::from_millis(log_tailer::DEFAULT_POLL_INTERVAL_MS);
 
@@ -501,77 +511,80 @@ async fn produce_sse_events(
     let mut pending_lines: Vec<String> = Vec::new();
 
     loop {
-        // Check if the session was invalidated (logout, expiry, disable).
-        // The producer should stop immediately when cancelled.
-        if let Some(ref rx) = cancel_rx {
-            if *rx.borrow() {
-                break;
-            }
+        // Check if the session was already invalidated before entering select.
+        if cancel_rx.as_ref().is_some_and(|rx| *rx.borrow()) {
+            break;
         }
 
-        // Check for new chunks with timeout for heartbeat
-        match tokio::time::timeout(
-            Duration::from_secs(DEFAULT_HEARTBEAT_INTERVAL_SECS),
-            my_chunk_rx.recv(),
-        )
-        .await
-        {
-            Ok(Ok(chunk)) => {
-                // Apply level filter per-line: only buffer lines that match
-                let filtered: Vec<&String> = match level_filter {
-                    Some(ref level) => chunk
-                        .lines
-                        .iter()
-                        .filter(|l| level.matches_line(l))
-                        .collect(),
-                    None => chunk.lines.iter().collect(),
-                };
+        // Wait for new chunks (with heartbeat timeout) or cancel signal.
+        tokio::select! {
+            result = tokio::time::timeout(
+                Duration::from_secs(DEFAULT_HEARTBEAT_INTERVAL_SECS),
+                my_chunk_rx.recv()
+            ) => {
+                match result {
+                    Ok(Ok(chunk)) => {
+                        // Apply level filter per-line: only buffer lines that match
+                        let filtered: Vec<&String> = match level_filter {
+                            Some(ref level) => chunk
+                                .lines
+                                .iter()
+                                .filter(|l| level.matches_line(l))
+                                .collect(),
+                            None => chunk.lines.iter().collect(),
+                        };
 
-                if filtered.is_empty() {
-                    continue;
-                }
+                        if filtered.is_empty() {
+                            continue;
+                        }
 
-                // Buffer only matching lines for potential coalescing
-                for line in filtered {
-                    pending_lines.push(line.to_string());
-                }
+                        // Buffer only matching lines for potential coalescing
+                        for line in filtered {
+                            pending_lines.push(line.to_string());
+                        }
 
-                // Try to emit
-                if rate_limit.check() {
-                    event_id += 1;
-                    let data = pending_lines.join("\n");
-                    let event =
-                        SseEvent::Data(Data::new(data).id(event_id.to_string()).event("log"));
-                    if event_tx.send(event).await.is_err() {
-                        break; // Client disconnected
+                        // Try to emit
+                        if rate_limit.check() {
+                            event_id += 1;
+                            let data = pending_lines.join("\n");
+                            let event =
+                                SseEvent::Data(Data::new(data).id(event_id.to_string()).event("log"));
+                            if event_tx.send(event).await.is_err() {
+                                break; // Client disconnected
+                            }
+                            pending_lines.clear();
+                        }
+                        // If rate-limited, lines stay buffered for next emission
+                        // (burst coalescing)
                     }
-                    pending_lines.clear();
+                    Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(n))) => {
+                        // We missed some events — emit replay-gap
+                        event_id += 1;
+                        let gap_event = SseEvent::Data(
+                            Data::new(format!("Missed {n} events due to buffer overflow"))
+                                .id(event_id.to_string())
+                                .event("replay-gap"),
+                        );
+                        if event_tx.send(gap_event).await.is_err() {
+                            break;
+                        }
+                    }
+                    Ok(Err(_)) => {
+                        // Channel closed — tailer stopped
+                        break;
+                    }
+                    Err(_) => {
+                        // Timeout — emit heartbeat comment
+                        let heartbeat = SseEvent::Comment("heartbeat".into());
+                        if event_tx.send(heartbeat).await.is_err() {
+                            break;
+                        }
+                    }
                 }
-                // If rate-limited, lines stay buffered for next emission
-                // (burst coalescing)
             }
-            Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(n))) => {
-                // We missed some events — emit replay-gap
-                event_id += 1;
-                let gap_event = SseEvent::Data(
-                    Data::new(format!("Missed {n} events due to buffer overflow"))
-                        .id(event_id.to_string())
-                        .event("replay-gap"),
-                );
-                if event_tx.send(gap_event).await.is_err() {
-                    break;
-                }
-            }
-            Ok(Err(_)) => {
-                // Channel closed — tailer stopped
+            _ = wait_cancel_change(&mut cancel_rx) => {
+                // Session invalidated — close the SSE stream.
                 break;
-            }
-            Err(_) => {
-                // Timeout — emit heartbeat comment
-                let heartbeat = SseEvent::Comment("heartbeat".into());
-                if event_tx.send(heartbeat).await.is_err() {
-                    break;
-                }
             }
         }
 

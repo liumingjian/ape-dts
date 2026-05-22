@@ -1,8 +1,5 @@
 use std::{
-    sync::{
-        atomic::Ordering,
-        Arc,
-    },
+    sync::{atomic::Ordering, Arc},
     time::{Duration, UNIX_EPOCH},
 };
 
@@ -62,7 +59,7 @@ impl OracleLogMinerCdcExtractor {
         let redo_logs = logminer::redo_log_files(&self.client).await?;
         let poll_interval = self.poll_interval();
         let poll_batch_size = self.poll_batch_size();
-        let mut last_scn = self.init_last_scn().await?;
+        let mut cursor = logminer::LogMinerCursor::new(self.init_last_scn().await?);
 
         let mut idle_ticks: u64 = 0;
         loop {
@@ -71,19 +68,19 @@ impl OracleLogMinerCdcExtractor {
             }
 
             let outcome = self
-                .poll_once(&captured, &redo_logs, last_scn, poll_batch_size)
+                .poll_once(&captured, &redo_logs, &cursor, poll_batch_size)
                 .await?;
             match outcome {
-                PollOutcome::Idle { end_scn } => {
+                PollOutcome::Idle { next_cursor } => {
                     idle_ticks += 1;
-                    self.maybe_log_idle(idle_ticks, last_scn, captured.len(), "no new scn");
-                    last_scn = end_scn;
+                    self.maybe_log_idle(idle_ticks, cursor.scn, captured.len(), "no new scn");
+                    cursor = next_cursor;
                     tokio::time::sleep(poll_interval).await;
                 }
-                PollOutcome::Rows { end_scn, rows } => {
+                PollOutcome::Rows { next_cursor, rows } => {
                     idle_ticks = 0;
                     self.process_rows(rows).await?;
-                    last_scn = end_scn;
+                    cursor = next_cursor;
                 }
             }
         }
@@ -92,7 +89,9 @@ impl OracleLogMinerCdcExtractor {
     fn require_username(&self) -> anyhow::Result<String> {
         match &self.client.connection_auth {
             ConnectionAuthConfig::Basic { username, .. } => Ok(username.to_uppercase()),
-            ConnectionAuthConfig::NoAuth => bail!("oracle logminer cdc requires basic auth username"),
+            ConnectionAuthConfig::NoAuth => {
+                bail!("oracle logminer cdc requires basic auth username")
+            }
         }
     }
 
@@ -183,29 +182,28 @@ impl OracleLogMinerCdcExtractor {
         &self,
         captured: &[(String, String)],
         redo_logs: &[String],
-        last_scn: u64,
+        cursor: &logminer::LogMinerCursor,
         limit: usize,
     ) -> anyhow::Result<PollOutcome> {
-        let end_scn = logminer::current_scn(&self.client).await?;
-        if end_scn <= last_scn {
-            return Ok(PollOutcome::Idle { end_scn });
+        let current_scn = logminer::current_scn(&self.client).await?;
+        if current_scn <= cursor.scn && !cursor.has_row_position() {
+            return Ok(PollOutcome::Idle {
+                next_cursor: cursor.clone(),
+            });
         }
 
-        let start_scn = last_scn + 1;
+        let end_scn = current_scn;
         let rows = logminer::fetch_logmnr_rows_in_range(
             &self.client,
             redo_logs,
-            start_scn,
+            cursor,
             end_scn,
             captured,
             limit,
         )
         .await?;
 
-        if rows.is_empty() {
-            return Ok(PollOutcome::Idle { end_scn });
-        }
-        Ok(PollOutcome::Rows { end_scn, rows })
+        Ok(rows_poll_outcome(cursor, rows))
     }
 
     async fn process_rows(&mut self, rows: Vec<logminer::LogMinerRow>) -> anyhow::Result<()> {
@@ -272,9 +270,82 @@ fn apply_ignore_cols(
 }
 
 enum PollOutcome {
-    Idle { end_scn: u64 },
+    Idle {
+        next_cursor: logminer::LogMinerCursor,
+    },
     Rows {
-        end_scn: u64,
+        next_cursor: logminer::LogMinerCursor,
         rows: Vec<logminer::LogMinerRow>,
     },
+}
+
+fn rows_poll_outcome(
+    cursor: &logminer::LogMinerCursor,
+    rows: Vec<logminer::LogMinerRow>,
+) -> PollOutcome {
+    if rows.is_empty() {
+        return PollOutcome::Idle {
+            next_cursor: cursor.without_row_position(),
+        };
+    }
+
+    let next_cursor = logminer::LogMinerCursor::from_row(rows.last().unwrap());
+    PollOutcome::Rows { next_cursor, rows }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn logminer_row(scn: u64, rs_id: &str, ssn: u64) -> logminer::LogMinerRow {
+        logminer::LogMinerRow {
+            scn,
+            rs_id: rs_id.to_string(),
+            ssn,
+            operation: "INSERT".to_string(),
+            schema: "APE_SRC".to_string(),
+            tb: "CDC_SMOKE".to_string(),
+            sql_redo: String::new(),
+            sql_undo: String::new(),
+        }
+    }
+
+    #[test]
+    fn empty_logminer_poll_keeps_scn_without_row_position() {
+        let cursor = logminer::LogMinerCursor {
+            scn: 42,
+            rs_id: "0x001".to_string(),
+            ssn: 7,
+        };
+
+        match rows_poll_outcome(&cursor, Vec::new()) {
+            PollOutcome::Idle { next_cursor } => {
+                assert_eq!(next_cursor, logminer::LogMinerCursor::new(42));
+            }
+            PollOutcome::Rows { .. } => panic!("empty poll must stay idle"),
+        }
+    }
+
+    #[test]
+    fn non_empty_logminer_poll_advances_to_last_ordered_row() {
+        let cursor = logminer::LogMinerCursor::new(42);
+
+        match rows_poll_outcome(
+            &cursor,
+            vec![logminer_row(45, "0x001", 1), logminer_row(45, "0x001", 2)],
+        ) {
+            PollOutcome::Rows { next_cursor, rows } => {
+                assert_eq!(
+                    next_cursor,
+                    logminer::LogMinerCursor {
+                        scn: 45,
+                        rs_id: "0x001".to_string(),
+                        ssn: 2
+                    }
+                );
+                assert_eq!(rows.len(), 2);
+            }
+            PollOutcome::Idle { .. } => panic!("non-empty poll must return rows"),
+        }
+    }
 }

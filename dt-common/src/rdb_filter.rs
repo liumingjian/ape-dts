@@ -86,8 +86,19 @@ impl RdbFilter {
         let escape_pairs = SqlUtil::get_escape_pairs(&self.db_type);
         let filter = Self::contain_tb(&self.ignore_tbs, schema, tb, &escape_pairs)
             || Self::contain_schema(&self.ignore_schemas, schema, &escape_pairs);
-        let keep = Self::contain_tb(&self.do_tbs, schema, tb, &escape_pairs)
-            || Self::contain_schema(&self.do_schemas, schema, &escape_pairs);
+
+        // When do_tbs has entries for this schema, only tables matching do_tbs
+        // are kept; do_schemas must NOT act as a blanket pass that overrides
+        // the more-specific do_tbs filter.
+        let do_tb_schemas: HashSet<String> = self.do_tbs.iter().map(|(d, _)| d.clone()).collect();
+        let schema_has_do_tbs = Self::contain_schema(&do_tb_schemas, schema, &escape_pairs);
+
+        let keep = if schema_has_do_tbs {
+            Self::contain_tb(&self.do_tbs, schema, tb, &escape_pairs)
+        } else {
+            Self::contain_tb(&self.do_tbs, schema, tb, &escape_pairs)
+                || Self::contain_schema(&self.do_schemas, schema, &escape_pairs)
+        };
 
         let filter = filter || !keep;
         self.cache
@@ -230,6 +241,14 @@ impl RdbFilter {
     ) -> anyhow::Result<HashSet<(String, String)>> {
         let mut results = HashSet::new();
         let tokens = Self::parse_config(config_str, db_type)?;
+        if tokens.len() % 2 != 0 {
+            anyhow::bail!(
+                "invalid db.tb filter '{}': expected pairs of db.tb (got {} token(s)); \
+                 every entry must use the form 'db.tb' (e.g. 'mydb.mytbl' or '*.*')",
+                config_str,
+                tokens.len()
+            );
+        }
         let mut i = 0;
         while i < tokens.len() {
             results.insert((tokens[i].to_string(), tokens[i + 1].to_string()));
@@ -773,6 +792,26 @@ mod tests {
         assert!(rdb_filter.filter_event("cde", "bcd", &RowType::Insert));
         assert!(!rdb_filter.filter_event("a", "bcd", &RowType::Insert));
         assert!(!rdb_filter.filter_event("abc", "bcd", &RowType::Insert));
+    }
+
+    #[test]
+    fn test_rdb_filter_do_tbs_odd_token_count_returns_err() {
+        let db_type = DbType::Mysql;
+        let config = FilterConfig {
+            do_tbs: "*".to_string(),
+            do_events: "insert".to_string(),
+            ..Default::default()
+        };
+        let result = RdbFilter::from_config(&config, &db_type);
+        assert!(
+            result.is_err(),
+            "do_tbs='*' (single token) must return Err instead of panicking",
+        );
+        let msg = format!("{}", result.err().unwrap());
+        assert!(
+            msg.contains("db.tb"),
+            "error message should explain expected format, got: {msg}"
+        );
     }
 
     #[test]

@@ -63,6 +63,25 @@ pub mod codes {
     pub const ENDPOINT_HOST_BLOCKED: &str = "ENDPOINT_HOST_BLOCKED";
     pub const UNKNOWN_RESOURCE_GROUP: &str = "UNKNOWN_RESOURCE_GROUP";
     pub const PRECHECK_BLOCKING_FAILED: &str = "PRECHECK_BLOCKING_FAILED";
+    pub const STRUCT_INIT_FAILED: &str = "STRUCT_INIT_FAILED";
+    /// The precheck task itself crashed (panic or unrecoverable internal
+    /// error). Carries `details.requestId` for log correlation.
+    pub const PRECHECK_PANIC: &str = "PRECHECK_PANIC";
+
+    /// A test_connection probe exceeded the bounded connect deadline.
+    /// Surfaces as a per-side `code` so a hung TCP connect cannot drop the
+    /// HTTP socket. Carries the timeout value in the human-readable message.
+    pub const TEST_CONNECTION_TIMEOUT: &str = "TEST_CONNECTION_TIMEOUT";
+
+    /// The test_connection task itself crashed (panic or unrecoverable
+    /// internal error). Carries `details.requestId` for log correlation —
+    /// matches `PRECHECK_PANIC`'s contract.
+    pub const TEST_CONNECTION_PANIC: &str = "TEST_CONNECTION_PANIC";
+
+    /// A side's filter config (do_dbs / do_tbs / ignore_dbs / ignore_tbs)
+    /// failed to parse. Surfaces as a per-side `code` on test_connection
+    /// so a malformed filter does NOT panic the underlying builder.
+    pub const INVALID_FILTER_CONFIG: &str = "INVALID_FILTER_CONFIG";
 
     // Resource Group
     pub const RESOURCE_GROUP_NAME_TAKEN: &str = "RESOURCE_GROUP_NAME_TAKEN";
@@ -154,7 +173,12 @@ impl actix_web::ResponseError for ApiError {
             | codes::UNKNOWN_RESOURCE_GROUP
             | codes::TASK_KIND_IMMUTABLE
             | codes::TASK_VALIDATION_FAILED
-            | codes::PRECHECK_BLOCKING_FAILED => StatusCode::UNPROCESSABLE_ENTITY,
+            | codes::PRECHECK_BLOCKING_FAILED
+            | codes::STRUCT_INIT_FAILED
+            | codes::PRECHECK_PANIC
+            | codes::TEST_CONNECTION_PANIC => StatusCode::UNPROCESSABLE_ENTITY,
+
+            codes::TEST_CONNECTION_TIMEOUT => StatusCode::GATEWAY_TIMEOUT,
 
             codes::CONFLICT
             | codes::LAST_ADMIN_PROTECTED

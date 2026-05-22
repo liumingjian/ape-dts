@@ -78,6 +78,8 @@ impl TaskRepository {
         engine: Option<&str>,
         q: Option<&str>,
         resource_group: Option<&str>,
+        sort: Option<&str>,
+        order: Option<&str>,
         page: i64,
         page_size: i64,
     ) -> Result<(Vec<Task>, i64), sqlx::Error> {
@@ -166,8 +168,21 @@ impl TaskRepository {
 
         // Data query with pagination
         let offset = (page - 1) * page_size;
+        // Whitelist sort columns to prevent SQL injection. Defaults to created_at DESC.
+        let sort_col = match sort.unwrap_or("") {
+            "name" => "name",
+            "status" => "status",
+            "kind" => "kind",
+            "updatedAt" | "updated_at" => "updated_at",
+            "createdAt" | "created_at" => "created_at",
+            _ => "created_at",
+        };
+        let sort_dir = match order.unwrap_or("") {
+            "asc" | "ASC" | "ascending" => "ASC",
+            _ => "DESC",
+        };
         let data_sql = format!(
-            "SELECT * FROM tasks {where_clause} ORDER BY created_at DESC LIMIT ?{} OFFSET ?{}",
+            "SELECT * FROM tasks {where_clause} ORDER BY {sort_col} {sort_dir} LIMIT ?{} OFFSET ?{}",
             param_idx + 1,
             param_idx + 2
         );

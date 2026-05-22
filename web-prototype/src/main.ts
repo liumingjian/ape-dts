@@ -36,6 +36,22 @@ async function bootstrap() {
   app.use(i18n);
   app.use(ElementPlus);
 
+  // Global error boundary: surface uncaught Vue / async failures so the
+  // operator can diagnose from the browser console alone.
+  app.config.errorHandler = (err, instance, info) => {
+    const componentName = (instance as { $options?: { name?: string } } | null)?.$options?.name
+      ?? '<anonymous>';
+    console.error('[vue:errorHandler]', { component: componentName, info, error: err });
+  };
+  if (typeof window !== 'undefined') {
+    window.addEventListener('unhandledrejection', (event) => {
+      console.error('[unhandledrejection]', event.reason);
+    });
+    window.addEventListener('error', (event) => {
+      console.error('[window:error]', { message: event.message, source: event.filename, error: event.error });
+    });
+  }
+
   app.mount('#app');
 
   // Cross-tab logout: when another tab clears the session, force this tab to /login

@@ -16,7 +16,7 @@ CONSOLE_BIND_ADDR=127.0.0.1:8080 CONSOLE_DB_PATH=./data/console.db \
   target/release/dt-console-server
 ```
 
-The server listens on `127.0.0.1:8080` by default. SQLite is created at `./data/console.db` on first boot (migrations applied automatically). A default admin account is seeded (`admin` / `console2026`).
+The server listens on `127.0.0.1:8080` by default. SQLite is created at `./data/console.db` on first boot (migrations applied automatically). A default admin account is seeded (`admin` / `admin123`).
 
 ## Environment variables
 
@@ -24,8 +24,7 @@ The server listens on `127.0.0.1:8080` by default. SQLite is created at `./data/
 |---|---|---|
 | `CONSOLE_BIND_ADDR` | `127.0.0.1:8080` | HTTP listen address |
 | `CONSOLE_DB_PATH` | `./data/console.db` | SQLite database file path |
-| `CONSOLE_IDLE_TIMEOUT_SECS` | `1800` | Session idle expiry (seconds) |
-| `CONSOLE_COOKIE_SECURE` | `false` | Set `Secure` flag on session cookies |
+| `CONSOLE_IDLE_TIMEOUT_SECS` | `3600` | Session idle expiry (seconds) |
 | `APE_DTS_BINARY_PATH` | `target/release/dt-main` | Path to the engine binary for fork-exec |
 
 ## Dev commands

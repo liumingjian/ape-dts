@@ -1,31 +1,20 @@
 <template>
   <div class="brand" :class="{ 'brand--compact': compact }">
-    <svg class="brand__logo" viewBox="0 0 32 32" aria-hidden="true">
-      <defs>
-        <linearGradient id="brand-grad" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#0F766E" />
-          <stop offset="100%" stop-color="#06B6D4" />
-        </linearGradient>
-      </defs>
-      <rect x="2" y="2" width="28" height="28" rx="7" fill="url(#brand-grad)" />
-      <path
-        d="M9 10 L16 7 L23 10 L23 22 L16 25 L9 22 Z"
-        fill="none"
-        stroke="#fff"
-        stroke-width="1.6"
-        stroke-linejoin="round"
-      />
-      <circle cx="16" cy="16" r="2.8" fill="#fff" />
-    </svg>
+    <img
+      class="brand__logo"
+      :src="atiLogo"
+      alt="安图特"
+      :class="{ 'brand__logo--compact': compact }"
+    />
     <div v-if="!compact" class="brand__text">
       <div class="brand__name">{{ t('brand.name') }}</div>
-      <div class="brand__tag">{{ t('brand.tagline') }}</div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n';
+import atiLogo from '../assets/ati-logo.png';
 defineProps<{ compact?: boolean }>();
 const { t } = useI18n();
 </script>
@@ -33,34 +22,39 @@ const { t } = useI18n();
 <style scoped>
 .brand {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding: 0 16px;
-  height: var(--layout-header-h);
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 16px;
+  min-height: calc(var(--layout-header-h) + 28px);
 }
 .brand__logo {
-  width: 28px;
-  height: 28px;
+  width: 132px;
+  height: auto;
+  max-height: 44px;
+  object-fit: contain;
   flex-shrink: 0;
+}
+.brand__logo--compact {
+  width: 40px;
+  max-height: 28px;
 }
 .brand__text {
   display: flex;
-  flex-direction: column;
+  justify-content: center;
   line-height: 1.15;
 }
 .brand__name {
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.06em;
   color: var(--color-ink);
-}
-.brand__tag {
-  font-size: 11px;
-  color: var(--color-ink-subtle);
-  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 .brand--compact {
-  justify-content: center;
-  padding: 0;
+  padding: 10px 0;
+  gap: 0;
+  min-height: var(--layout-header-h);
 }
 </style>

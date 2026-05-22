@@ -11,4 +11,3 @@ mod test {
         TestBase::run_check_test("pg_to_gaussdb_oracle/check/basic_test").await;
     }
 }
-

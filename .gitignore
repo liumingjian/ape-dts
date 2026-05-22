@@ -49,3 +49,4 @@ context_portal
 ## cc-connect
 .cc-connect/
 cc-connect.config.toml
+/data/

@@ -25,7 +25,16 @@ async fn main() {
     if PrecheckTaskConfig::new(&task_config).is_ok() {
         do_precheck(&task_config).await;
     } else {
-        let runner = TaskRunner::new(&task_config).unwrap();
-        runner.start_task().await.unwrap()
+        let runner = match TaskRunner::new(&task_config) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("task runner init failed: {e:#}");
+                std::process::exit(2);
+            }
+        };
+        if let Err(e) = runner.start_task().await {
+            eprintln!("task execution failed: {e:#}");
+            std::process::exit(3);
+        }
     }
 }

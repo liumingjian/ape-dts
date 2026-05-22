@@ -13,8 +13,8 @@ use crate::{
     rdb_query_builder::RdbQueryBuilder,
     rdb_router::RdbRouter,
     sinker::base_sinker::BaseSinker,
-    sinker::oracle::oracle_sinker::OracleSinker,
     sinker::mongo::mongo_cmd,
+    sinker::oracle::oracle_sinker::OracleSinker,
     Sinker,
 };
 use dt_common::meta::{
@@ -140,7 +140,9 @@ impl CheckerTbMeta {
                 .get_query_sql(row_data, false)
                 .map(Some),
             CheckerTbMeta::Mongo(_) => unreachable!("Mongo should be handled"),
-            CheckerTbMeta::Oracle(_) => OracleSinker::build_insert_sql(row_data).map(Some),
+            CheckerTbMeta::Oracle(_) => {
+                OracleSinker::build_insert_sql(row_data, false, &[]).map(Some)
+            }
         }
     }
 
@@ -189,7 +191,9 @@ impl CheckerTbMeta {
                                 .get(col)
                                 .cloned()
                                 .map(|v| (col.clone(), v))
-                                .with_context(|| format!("oracle check revise sql missing id col {}", col))
+                                .with_context(|| {
+                                    format!("oracle check revise sql missing id col {}", col)
+                                })
                         })
                         .collect::<anyhow::Result<_>>()?
                 };

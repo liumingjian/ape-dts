@@ -270,9 +270,7 @@ impl RdbUtil {
                     ColValue::Decimal(raw.to_string())
                 }
             }
-            "FLOAT" | "BINARY_FLOAT" | "BINARY_DOUBLE" => {
-                ColValue::Double(raw.parse::<f64>()?)
-            }
+            "FLOAT" | "BINARY_FLOAT" | "BINARY_DOUBLE" => ColValue::Double(raw.parse::<f64>()?),
             "DATE" => ColValue::DateTime(raw.to_string()),
             "TIMESTAMP" | "TIMESTAMP(6)" => ColValue::Timestamp(raw.to_string()),
             _ => ColValue::String(raw.to_string()),

@@ -10,4 +10,3 @@ mod test {
         TestBase::run_check_test("gaussdb_oracle_to_oracle/check/basic_test").await;
     }
 }
-

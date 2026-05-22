@@ -62,7 +62,9 @@ impl TestConfigUtil {
         if fs::metadata(&env_local_file).is_ok() {
             dotenv::from_path(&env_local_file).unwrap();
         }
-        dotenv::from_path(&env_file).unwrap();
+        if fs::metadata(&env_file).is_ok() {
+            dotenv::from_path(&env_file).unwrap();
+        }
 
         let mut update_configs = Vec::new();
         let ini = IniLoader::new(src_task_config_file).ini;

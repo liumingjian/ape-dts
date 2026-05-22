@@ -42,6 +42,11 @@ impl LicenseRepository {
             .await
     }
 
+    /// Alias for `get_current` — used by readyz readiness probe.
+    pub async fn get(pool: &SqlitePool) -> Result<Option<License>, sqlx::Error> {
+        Self::get_current(pool).await
+    }
+
     /// Update a license.
     pub async fn update(pool: &SqlitePool, license: &License) -> Result<License, sqlx::Error> {
         sqlx::query(

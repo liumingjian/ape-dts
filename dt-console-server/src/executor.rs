@@ -167,6 +167,15 @@ impl LocalExecutor {
         ini_content: &str,
         binary_override: Option<&str>,
     ) -> Result<RunHandle, String> {
+        Self::spawn_with_env(run_id, ini_content, binary_override, &[]).await
+    }
+
+    pub async fn spawn_with_env(
+        run_id: &str,
+        ini_content: &str,
+        binary_override: Option<&str>,
+        extra_env: &[(String, String)],
+    ) -> Result<RunHandle, String> {
         let base_dir = run_data_dir();
         let run_dir = PathBuf::from(&base_dir).join(run_id);
 
@@ -175,9 +184,18 @@ impl LocalExecutor {
         std::fs::create_dir_all(&logs_dir)
             .map_err(|e| format!("failed to create run directory {:?}: {e}", run_dir))?;
 
+        // The child process is spawned with cwd=run_dir, so any relative
+        // path in the INI resolves against run_dir. The log4rs config file
+        // lives at the orchestrator's cwd (typically the repo root), so a
+        // relative `log4rs_file` would not be found by the child. Rewrite it
+        // to an absolute path so log4rs initialises and the engine writes its
+        // per-run finished/position/default logs into `<run_dir>/logs/`
+        // instead of falling silently back to a shared `<repo>/logs/`.
+        let prepared_ini = absolutize_log4rs_path(ini_content);
+
         // Write INI file.
         let ini_path = run_dir.join("task_config.ini");
-        std::fs::write(&ini_path, ini_content)
+        std::fs::write(&ini_path, &prepared_ini)
             .map_err(|e| format!("failed to write INI file {:?}: {e}", ini_path))?;
 
         // Canonicalize the INI path to absolute so the child process can find it
@@ -190,14 +208,30 @@ impl LocalExecutor {
             .map(|s| s.to_string())
             .unwrap_or_else(engine_binary_path);
 
+        // If the binary is a path (contains a separator), canonicalize it to
+        // absolute before spawn. Otherwise current_dir(&run_dir) would make
+        // execve resolve relative paths against the child's cwd, not the
+        // orchestrator's. Bare command names are left for PATH lookup.
+        let engine_program: PathBuf = if engine_binary.contains(std::path::MAIN_SEPARATOR) {
+            std::fs::canonicalize(&engine_binary)
+                .map_err(|e| format!("failed to resolve engine binary '{engine_binary}': {e}"))?
+        } else {
+            PathBuf::from(&engine_binary)
+        };
+
         // Spawn the child process.
-        let child = tokio::process::Command::new(&engine_binary)
+        let mut command = tokio::process::Command::new(&engine_program);
+        command
             .arg(ini_path_abs.to_string_lossy().as_ref())
             .current_dir(&run_dir)
             .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        for (key, value) in extra_env {
+            command.env(key, value);
+        }
+        let child = command
             .spawn()
-            .map_err(|e| format!("failed to spawn engine binary '{engine_binary}': {e}"))?;
+            .map_err(|e| format!("failed to spawn engine binary {:?}: {e}", engine_program))?;
 
         let pid = child.id().unwrap_or(0);
 
@@ -406,6 +440,59 @@ impl LocalExecutor {
     }
 }
 
+/// Rewrite a relative `log4rs_file=...` value in the rendered INI to an
+/// absolute path resolved from the orchestrator's current working directory.
+///
+/// The child process is launched with `current_dir(&run_dir)`, so any
+/// relative path in the INI would otherwise be resolved against `run_dir`.
+/// Without this rewrite the engine silently skips log4rs initialisation
+/// (because `<run_dir>/log4rs.yaml` does not exist), which removes per-run
+/// log isolation and leaves the resumer reading from the shared repo-level
+/// `logs/finished.log`.
+///
+/// If the value is already absolute or cannot be canonicalised against the
+/// orchestrator cwd, it is preserved verbatim.
+fn absolutize_log4rs_path(ini: &str) -> String {
+    let base = std::env::current_dir().ok();
+    absolutize_log4rs_path_with_base(ini, base.as_deref())
+}
+
+fn absolutize_log4rs_path_with_base(ini: &str, base: Option<&Path>) -> String {
+    let mut out = String::with_capacity(ini.len());
+    let ends_with_newline = ini.ends_with('\n');
+    let mut lines = ini.lines().peekable();
+    while let Some(line) = lines.next() {
+        let trimmed = line.trim_start();
+        if let Some(rest) = trimmed.strip_prefix("log4rs_file") {
+            if let Some(eq_rest) = rest.trim_start().strip_prefix('=') {
+                let value = eq_rest.trim();
+                let path = std::path::Path::new(value);
+                if path.is_relative() {
+                    let candidate = match base {
+                        Some(b) => b.join(path),
+                        None => path.to_path_buf(),
+                    };
+                    if let Ok(abs) = std::fs::canonicalize(&candidate) {
+                        let indent_len = line.len() - trimmed.len();
+                        out.push_str(&line[..indent_len]);
+                        out.push_str("log4rs_file=");
+                        out.push_str(abs.to_string_lossy().as_ref());
+                        if lines.peek().is_some() || ends_with_newline {
+                            out.push('\n');
+                        }
+                        continue;
+                    }
+                }
+            }
+        }
+        out.push_str(line);
+        if lines.peek().is_some() || ends_with_newline {
+            out.push('\n');
+        }
+    }
+    out
+}
+
 /// Parse a key=value position string into a JSON object.
 ///
 /// The engine writes position in formats like:
@@ -595,6 +682,67 @@ mod tests {
     }
 
     #[test]
+    fn test_absolutize_log4rs_path_relative_existing() {
+        let tmp = std::env::temp_dir().join(format!("absolutize-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let log4rs = tmp.join("log4rs.yaml");
+        std::fs::write(&log4rs, "appenders: {}\n").unwrap();
+
+        let ini = "[runtime]\nlog_level=info\nlog4rs_file=./log4rs.yaml\nlog_dir=./logs\n";
+        let out = absolutize_log4rs_path_with_base(ini, Some(&tmp));
+
+        let abs = std::fs::canonicalize(&log4rs).unwrap();
+        let _ = std::fs::remove_dir_all(&tmp);
+
+        assert!(
+            out.contains(&format!("log4rs_file={}", abs.to_string_lossy())),
+            "expected absolute log4rs_file in {out}",
+        );
+        assert!(
+            out.contains("log_dir=./logs"),
+            "log_dir must remain relative: {out}"
+        );
+        assert!(out.contains("log_level=info"));
+    }
+
+    #[test]
+    fn test_absolutize_log4rs_path_absolute_unchanged() {
+        let ini = "[runtime]\nlog4rs_file=/etc/ape-dts/log4rs.yaml\nlog_dir=./logs\n";
+        let out = absolutize_log4rs_path_with_base(ini, Some(std::path::Path::new("/tmp")));
+        assert_eq!(out, ini);
+    }
+
+    #[test]
+    fn test_absolutize_log4rs_path_missing_relative_unchanged() {
+        let tmp = std::env::temp_dir().join(format!("absolutize-miss-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let ini = "[runtime]\nlog4rs_file=./log4rs.yaml\nlog_dir=./logs\n";
+        let out = absolutize_log4rs_path_with_base(ini, Some(&tmp));
+
+        let _ = std::fs::remove_dir_all(&tmp);
+        assert_eq!(out, ini, "missing relative path should be left untouched");
+    }
+
+    #[test]
+    fn test_absolutize_log4rs_path_preserves_other_keys() {
+        let tmp = std::env::temp_dir().join(format!("absolutize-keep-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::fs::write(tmp.join("log4rs.yaml"), "appenders: {}\n").unwrap();
+
+        let ini = "[extractor]\nurl=mysql://x\n[runtime]\nlog4rs_file=./log4rs.yaml\nlog_dir=./logs\n[resumer]\nlog_dir=./logs\n";
+        let out = absolutize_log4rs_path_with_base(ini, Some(&tmp));
+
+        let _ = std::fs::remove_dir_all(&tmp);
+
+        assert!(out.contains("url=mysql://x"));
+        assert!(out.contains("[resumer]"));
+        // log_dir lines untouched (they need to remain ./logs so child cwd resolves them).
+        let log_dir_lines = out.lines().filter(|l| l.starts_with("log_dir=")).count();
+        assert_eq!(log_dir_lines, 2);
+    }
+
+    #[test]
     fn test_parse_position_kv_mysql() {
         let val = parse_position_kv("binlog_file=mysql-bin.000003,binlog_pos=154");
         assert_eq!(val["binlog_file"], "mysql-bin.000003");
@@ -724,6 +872,42 @@ mod tests {
 
         assert!(handle.pid > 0);
 
+        let _ = LocalExecutor::kill_with_grace(&handle, 2).await;
+        let _ = std::fs::remove_dir_all(&handle.run_dir);
+    }
+
+    #[tokio::test]
+    async fn test_spawn_canonicalizes_relative_binary_path() {
+        use std::io::Write;
+        use std::os::unix::fs::PermissionsExt;
+
+        // Create a stub script at a path *relative to the parent cwd*.
+        // Without canonicalization, current_dir(&run_dir) on the spawn
+        // would make execve fail because the relative path no longer
+        // resolves to an existing file.
+        let stubs_dir = std::env::current_dir()
+            .unwrap()
+            .join("target")
+            .join("test-stubs");
+        std::fs::create_dir_all(&stubs_dir).unwrap();
+        let stub_name = format!("stub-{}.sh", uuid::Uuid::new_v4());
+        let stub_path = stubs_dir.join(&stub_name);
+        {
+            let mut f = std::fs::File::create(&stub_path).unwrap();
+            writeln!(f, "#!/bin/sh\nsleep 5").unwrap();
+        }
+        let mut perms = std::fs::metadata(&stub_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&stub_path, perms).unwrap();
+
+        let rel_path = format!("target/test-stubs/{stub_name}");
+
+        let run_id = format!("test-canon-{}", uuid::Uuid::new_v4());
+        let result = LocalExecutor::spawn(&run_id, "[g]\n", Some(&rel_path)).await;
+
+        let _ = std::fs::remove_file(&stub_path);
+
+        let handle = result.expect("spawn with relative binary path should succeed");
         let _ = LocalExecutor::kill_with_grace(&handle, 2).await;
         let _ = std::fs::remove_dir_all(&handle.run_dir);
     }

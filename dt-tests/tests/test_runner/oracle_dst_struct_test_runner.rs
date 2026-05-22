@@ -45,10 +45,7 @@ impl OracleDstStructTestRunner {
             // Smoke-check: ensure the migrated table is queryable on dst.
             let owner = escape_sql_literal(&dst_schema.to_uppercase());
             let table = escape_sql_literal(&dst_tb.to_uppercase());
-            let smoke_sql = format!(
-                "SELECT 1 FROM {}.{} WHERE ROWNUM <= 1",
-                owner, table
-            );
+            let smoke_sql = format!("SELECT 1 FROM {}.{} WHERE ROWNUM <= 1", owner, table);
             let _ = dst_oracle.query_lines(&smoke_sql).await?;
 
             // Expected columns from source: names + nullability.
@@ -81,8 +78,7 @@ impl OracleDstStructTestRunner {
             }
 
             let dst_nullable: Vec<bool> = dst_cols.iter().map(|(_, n)| *n).collect();
-            let expected_nullable: Vec<bool> =
-                expected_cols.iter().map(|(_, n)| *n).collect();
+            let expected_nullable: Vec<bool> = expected_cols.iter().map(|(_, n)| *n).collect();
             if dst_nullable != expected_nullable {
                 bail!(
                     "destination column nullability mismatch: {}.{} expected={:?} got={:?}",
@@ -96,7 +92,11 @@ impl OracleDstStructTestRunner {
             // PK smoke-check (basic expectation: at least one PK constraint exists).
             let pk_cnt = fetch_oracle_pk_count(dst_oracle, &dst_schema, &dst_tb).await?;
             if pk_cnt == 0 {
-                bail!("destination primary key not found: {}.{}", dst_schema, dst_tb);
+                bail!(
+                    "destination primary key not found: {}.{}",
+                    dst_schema,
+                    dst_tb
+                );
             }
         }
 
@@ -110,7 +110,8 @@ fn collect_explicit_do_tbs(filter: &RdbFilter) -> anyhow::Result<Vec<(String, St
     }
     let mut out = Vec::new();
     for (schema, tb) in filter.do_tbs.iter() {
-        if RdbFilter::is_pattern(schema, &filter.db_type) || RdbFilter::is_pattern(tb, &filter.db_type)
+        if RdbFilter::is_pattern(schema, &filter.db_type)
+            || RdbFilter::is_pattern(tb, &filter.db_type)
         {
             bail!(
                 "oracle-dst struct test does not support wildcard do_tbs: {}.{}",
@@ -205,4 +206,3 @@ async fn fetch_oracle_pk_count(
 fn escape_sql_literal(s: &str) -> String {
     s.replace('\'', "''")
 }
-

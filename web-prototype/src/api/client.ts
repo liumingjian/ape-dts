@@ -6,10 +6,22 @@ export interface ApiError {
   code?: string;
   message: string;
   details?: unknown;
+  /** Server-side correlation ID surfaced via `details.requestId` when available. */
+  requestId?: string;
+}
+
+/** Read `details.requestId` if it's a string (server correlation token). */
+function readRequestId(details: unknown): string | undefined {
+  if (details && typeof details === 'object' && 'requestId' in details) {
+    const id = (details as { requestId?: unknown }).requestId;
+    if (typeof id === 'string' && id.length > 0) return id;
+  }
+  return undefined;
 }
 
 export interface RequestOptions extends RequestInit {
   timeoutMs?: number;
+  parseAs?: 'json' | 'text';
 }
 
 /** Read the API base URL at call-time so tests can override import.meta.env. */
@@ -70,7 +82,8 @@ export async function apiFetch<T>(path: string, init: RequestOptions = {}): Prom
 
   // Parse body for all non-2xx responses (including 401) so we get the error code
   const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
+  const parseAs = init.parseAs ?? 'json';
+  const data = parseAs === 'text' ? text : text ? JSON.parse(text) : null;
 
   if (res.status === 401) {
     // If already on /login, don't redirect — let the caller surface the error
@@ -83,7 +96,9 @@ export async function apiFetch<T>(path: string, init: RequestOptions = {}): Prom
       code: data?.code,
       message: data?.message ?? 'unauthorized',
       details: data?.details,
+      requestId: readRequestId(data?.details),
     };
+    console.warn('[api]', method, path, '→', res.status, err.code, err.message, err.requestId ?? '');
     throw err;
   }
 
@@ -93,7 +108,9 @@ export async function apiFetch<T>(path: string, init: RequestOptions = {}): Prom
       code: data?.code,
       message: data?.message ?? res.statusText,
       details: data?.details,
+      requestId: readRequestId(data?.details),
     };
+    console.error('[api]', method, path, '→', res.status, err.code, err.message, err.requestId ?? '', err.details);
     throw err;
   }
   return data as T;

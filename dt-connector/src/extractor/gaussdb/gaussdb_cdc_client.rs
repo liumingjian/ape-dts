@@ -422,7 +422,7 @@ impl GaussDBCdcClient {
         let timeout = Self::connect_timeout();
         let connect_no_ssl = || async move {
             let conn_info = format!(
-                "host={} port={} dbname={} user={} password={} sslmode=disable",
+                "host={} port={} dbname={} user={} password={} sslmode=disable protocolVersion=351",
                 host, port, dbname, username, password
             );
             let (client, connection) =
@@ -456,7 +456,7 @@ impl GaussDBCdcClient {
         };
         let connect_ssl = || async move {
             let conn_info = format!(
-                "host={} port={} dbname={} user={} password={} sslmode=require",
+                "host={} port={} dbname={} user={} password={} sslmode=require protocolVersion=351",
                 host, port, dbname, username, password
             );
 
@@ -530,7 +530,7 @@ impl GaussDBCdcClient {
         let timeout = Self::connect_timeout();
         let connect_no_ssl = || async move {
             let conn_info = format!(
-                "host={} port={} dbname={} user={} password={} replication=database application_name=gaussdb-replication sslmode=disable",
+                "host={} port={} dbname={} user={} password={} replication=database application_name=gaussdb-replication sslmode=disable protocolVersion=351",
                 host, port, dbname, username, password
             );
             let (client, connection) =
@@ -564,7 +564,7 @@ impl GaussDBCdcClient {
         };
         let connect_ssl = || async move {
             let conn_info = format!(
-                "host={} port={} dbname={} user={} password={} replication=database application_name=gaussdb-replication sslmode=require",
+                "host={} port={} dbname={} user={} password={} replication=database application_name=gaussdb-replication sslmode=require protocolVersion=351",
                 host, port, dbname, username, password
             );
 

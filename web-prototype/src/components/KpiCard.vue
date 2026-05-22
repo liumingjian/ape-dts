@@ -3,8 +3,12 @@
     class="kpi"
     :class="[
       `kpi--${tone}`,
-      { 'kpi--accent': accent },
+      { 'kpi--accent': accent, 'kpi--clickable': isClickable },
     ]"
+    :role="isClickable ? 'link' : undefined"
+    :tabindex="isClickable ? 0 : undefined"
+    @keydown.enter.prevent="onKeyActivate"
+    @keydown.space.prevent="onKeyActivate"
   >
     <div class="kpi__head">
       <div class="kpi__label">
@@ -53,7 +57,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, getCurrentInstance } from 'vue';
 import IconTrendingUp from '~icons/tabler/trending-up';
 import IconTrendingDown from '~icons/tabler/trending-down';
 import IconMinus from '~icons/tabler/minus';
@@ -150,6 +154,15 @@ const deltaClass = computed(() => {
   const good = props.inverse ? !positive : positive;
   return good ? 'kpi__delta--up' : 'kpi__delta--down';
 });
+
+const instance = getCurrentInstance();
+const isClickable = computed(() => Boolean(instance?.vnode.props?.onClick));
+
+function onKeyActivate(e: Event) {
+  if (!isClickable.value) return;
+  const el = e.currentTarget as HTMLElement | null;
+  el?.click();
+}
 </script>
 
 <style scoped>
@@ -170,6 +183,13 @@ const deltaClass = computed(() => {
   box-shadow: var(--shadow-elevated);
   transform: translateY(-1px);
   border-color: var(--color-primary-200, #99F6E4);
+}
+.kpi--clickable {
+  cursor: pointer;
+}
+.kpi--clickable:focus-visible {
+  outline: 2px solid var(--color-primary-500, #14B8A6);
+  outline-offset: 2px;
 }
 .kpi--accent {
   background: linear-gradient(135deg, #ECFDF5 0%, #FFFFFF 60%);

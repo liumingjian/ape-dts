@@ -208,7 +208,7 @@ fn render_extractor(
             push_opt_usize(&mut kv, extractor, "batch_size", "batch_size");
             push_opt_string(&mut kv, extractor, "partition_cols", "partition_cols");
         }
-        "cdc" => {
+        "cdc" | "snapshot_and_cdc" => {
             // MySQL / GaussDB MySQL CDC fields
             push_opt_string(&mut kv, extractor, "binlog_filename", "binlog_filename");
             push_opt_u32(&mut kv, extractor, "binlog_position", "binlog_position");
@@ -409,9 +409,8 @@ fn render_filter(filter: &serde_json::Value, kind: &str) -> (String, Vec<(String
     let mut kv = Vec::new();
 
     // Deterministic key order
-    push_opt_string(&mut kv, filter, "do_dbs", "do_dbs");
+    push_filter_scope(&mut kv, filter);
     push_opt_string(&mut kv, filter, "ignore_dbs", "ignore_dbs");
-    push_opt_string(&mut kv, filter, "do_tbs", "do_tbs");
     push_opt_string(&mut kv, filter, "ignore_tbs", "ignore_tbs");
 
     // Snapshot tasks: engine only accepts do_events=insert for extract_type=snapshot.
@@ -436,6 +435,41 @@ fn render_filter(filter: &serde_json::Value, kind: &str) -> (String, Vec<(String
     ensure_key_present(&mut kv, "ignore_tbs");
 
     ("filter".into(), kv)
+}
+
+fn push_filter_scope(kv: &mut Vec<(String, String)>, filter: &serde_json::Value) {
+    let do_dbs = filter_value(filter, "do_dbs");
+    let do_tbs = filter_value(filter, "do_tbs");
+    let narrowed_do_dbs = if do_dbs.trim() == "*" && explicit_table_filter(&do_tbs) {
+        String::new()
+    } else {
+        do_dbs
+    };
+
+    if !narrowed_do_dbs.is_empty() {
+        kv.push(("do_dbs".into(), narrowed_do_dbs));
+    }
+    if !do_tbs.is_empty() {
+        kv.push(("do_tbs".into(), do_tbs));
+    }
+}
+
+fn filter_value(json: &serde_json::Value, key: &str) -> String {
+    match json.get(key) {
+        Some(serde_json::Value::String(s)) => s.clone(),
+        Some(serde_json::Value::Array(arr)) => arr
+            .iter()
+            .filter_map(|el| el.as_str())
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join(","),
+        _ => String::new(),
+    }
+}
+
+fn explicit_table_filter(do_tbs: &str) -> bool {
+    let trimmed = do_tbs.trim();
+    !trimmed.is_empty() && trimmed != "*.*"
 }
 
 fn render_router(router: &serde_json::Value) -> (String, Vec<(String, String)>) {
@@ -1252,6 +1286,32 @@ mod tests {
             ini.contains("do_dbs=db1,db2"),
             "string do_dbs must still render correctly"
         );
+    }
+
+    #[test]
+    fn test_filter_explicit_tables_override_wildcard_do_dbs() {
+        let mut task = make_task(
+            "snapshot",
+            "gaussdb_oracle",
+            "oracle",
+            r#"{"extractType":"snapshot","url":"postgres://src:8000/db"}"#,
+            r#"{"sinkType":"write","url":"oracle://dst:1521/XE"}"#,
+        );
+        task.filter_config =
+            r#"{"do_dbs":"*","ignore_dbs":"","do_tbs":"public.t_gaussdb_oracle_to_oracle","ignore_tbs":""}"#
+                .into();
+
+        let ini = render(&task);
+
+        assert!(
+            ini.contains("do_dbs=\n"),
+            "explicit do_tbs must not be widened by do_dbs=*, got: {ini}"
+        );
+        assert!(
+            !ini.contains("do_dbs=*\n"),
+            "wildcard do_dbs should be removed when do_tbs is explicit"
+        );
+        assert!(ini.contains("do_tbs=public.t_gaussdb_oracle_to_oracle"));
     }
 
     #[test]

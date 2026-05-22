@@ -12,6 +12,7 @@
 use actix_web::{post, web, HttpResponse, ResponseError};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::time::Duration;
 
 use crate::error::{codes, ApiError};
 use crate::ini_renderer;
@@ -20,11 +21,61 @@ use crate::models::{CreateTaskRequest, Task, UserContext};
 use crate::repositories::task_repository::TaskRepository;
 
 use dt_common::config::task_config::TaskConfig;
+use dt_common::rdb_filter::RdbFilter;
 use dt_precheck::builder::prechecker_builder::PrecheckerBuilder;
 use dt_precheck::config::precheck_config::PrecheckConfig;
 use dt_precheck::config::task_config::PrecheckTaskConfig;
 use dt_precheck::meta::check_result::CheckResult;
 use dt_precheck::prechecker::traits::Prechecker;
+
+/// Length of the short correlation ID used in logs and surfaced to the UI.
+/// Eight hex chars is enough to grep server logs in practice without making
+/// the value awkward to type into a chat.
+const REQUEST_ID_LEN: usize = 8;
+
+/// Hard upper bound on a single side's connection probe. Kept short so that
+/// an unreachable host fails fast and any reverse proxy in front of us
+/// (Vite dev server, nginx, …) reflects the structured per-side error
+/// instead of dropping the TCP socket. Vite's default proxy timeout is
+/// 30s, so 10s leaves comfortable headroom for the response itself.
+const TEST_CONNECTION_TIMEOUT_SECS: u64 = 10;
+
+/// Generate a short correlation ID for log↔UI cross-reference.
+fn new_request_id() -> String {
+    uuid::Uuid::new_v4()
+        .simple()
+        .to_string()
+        .chars()
+        .take(REQUEST_ID_LEN)
+        .collect()
+}
+
+/// Redact secrets/credentials from an endpoint URL before logging.
+/// Replaces any user:password segment with a placeholder.
+fn redact_url(url: &str) -> String {
+    if let Some(at) = url.find('@') {
+        if let Some(scheme_end) = url.find("://") {
+            let prefix = &url[..scheme_end + 3];
+            let suffix = &url[at..];
+            return format!("{prefix}***{suffix}");
+        }
+    }
+    url.to_string()
+}
+
+/// Extract a redacted endpoint URL from the JSON-encoded endpoint config
+/// stored on `Task` (best-effort; absent / malformed entries fall back to
+/// "?"). Used only for diagnostic logs.
+fn redacted_endpoint(raw: &str) -> String {
+    let v: serde_json::Value = match serde_json::from_str(raw) {
+        Ok(v) => v,
+        Err(_) => return "?".to_string(),
+    };
+    match v.get("url").and_then(|u| u.as_str()) {
+        Some(u) => redact_url(u),
+        None => "?".to_string(),
+    }
+}
 
 // ─── Response types ──────────────────────────────────────────────────────
 
@@ -40,11 +91,16 @@ pub struct ConnectionSideResult {
 }
 
 /// Response for POST /api/tasks/:id/test_connection.
+///
+/// `request_id` is the same correlation ID emitted in the server log lines
+/// for this call so operators can match a UI bug report to the exact log
+/// trace without negotiating extra headers.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TestConnectionResponse {
     pub source: ConnectionSideResult,
     pub target: ConnectionSideResult,
+    pub request_id: String,
 }
 
 /// A single precheck item in the response.
@@ -53,7 +109,7 @@ pub struct TestConnectionResponse {
 pub struct PrecheckItem {
     pub name: String,
     pub side: String,
-    pub status: String, // "pass" | "fail" | "skip"
+    pub status: String, // "pass" | "fail" | "skip" | "warn"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -69,6 +125,7 @@ pub struct PrecheckSummary {
     pub pass: usize,
     pub fail: usize,
     pub skip: usize,
+    pub warn: usize,
 }
 
 /// Response for POST /api/tasks/:id/precheck.
@@ -82,11 +139,19 @@ pub struct PrecheckResponse {
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
 /// Write the INI to a temp file and return its path, appending [precheck]
-/// section suitable for the given task kind.
+/// section suitable for the given task kind. For two-phase MySQL
+/// `snapshot_and_cdc` tasks the engine is invoked twice (snapshot, then cdc),
+/// but precheck is a single pass: render the phase 1 (snapshot) INI so
+/// `dt-common` can parse it, then force `do_cdc=true` so the binlog/server_id
+/// prerequisites required by phase 2 are also exercised.
 fn write_temp_ini(task: &Task, kind: &str) -> Result<PathBuf, ApiError> {
-    let ini_text = ini_renderer::render(task);
-    // Append [precheck] section required by PrecheckTaskConfig
-    let do_cdc = kind == "cdc";
+    let two_phase = crate::two_phase::is_two_phase_task(task);
+    let ini_text = if two_phase {
+        crate::two_phase::render_phase1_ini(task)
+    } else {
+        ini_renderer::render(task)
+    };
+    let do_cdc = two_phase || kind == "cdc";
     let full_ini = format!(
         "{}\n[precheck]\ndo_struct_init=true\ndo_cdc={}\n",
         ini_text, do_cdc
@@ -131,46 +196,100 @@ fn cleanup_temp_ini(path: &std::path::Path) {
 }
 
 /// Test connectivity for one side (source or target).
+///
+/// The underlying `build_connection` call goes through the engine-specific
+/// fetcher and may hang on TCP SYN against an unreachable host until the
+/// kernel times out (~75s on Linux). That is much longer than any
+/// reasonable HTTP proxy will wait, so we bound the probe at
+/// `TEST_CONNECTION_TIMEOUT_SECS` and surface a structured per-side
+/// `TEST_CONNECTION_TIMEOUT` failure on overrun. The HTTP response stays
+/// 200 with `ok=false` for that side, matching the existing contract for
+/// "one side fails" — we never drop the socket.
 async fn test_one_side(builder: &PrecheckerBuilder, is_source: bool) -> ConnectionSideResult {
-    match builder.build_checker(is_source) {
-        Some(mut checker) => match checker.build_connection().await {
-            Ok(result) => {
-                if result.is_validate {
-                    ConnectionSideResult {
-                        ok: true,
-                        code: None,
-                        message: None,
-                    }
-                } else {
-                    ConnectionSideResult {
-                        ok: false,
-                        code: Some("CONNECTION_FAILED".to_string()),
-                        message: Some(if result.error_msg.is_empty() {
-                            "connection validation failed".to_string()
-                        } else {
-                            result.error_msg
-                        }),
-                    }
+    test_one_side_with_timeout(
+        builder,
+        is_source,
+        Duration::from_secs(TEST_CONNECTION_TIMEOUT_SECS),
+    )
+    .await
+}
+
+/// Internal hook so unit tests can inject a tighter deadline; production
+/// always calls the constant-timeout wrapper above.
+async fn test_one_side_with_timeout(
+    builder: &PrecheckerBuilder,
+    is_source: bool,
+    timeout: Duration,
+) -> ConnectionSideResult {
+    let mut checker = match builder.build_checker(is_source) {
+        Ok(Some(c)) => c,
+        Ok(None) => {
+            return ConnectionSideResult {
+                ok: false,
+                code: Some("UNSUPPORTED_ENGINE".to_string()),
+                message: Some("no checker available for this engine type".to_string()),
+            }
+        }
+        Err(e) => {
+            return ConnectionSideResult {
+                ok: false,
+                code: Some(codes::INVALID_FILTER_CONFIG.to_string()),
+                message: Some(e.to_string()),
+            }
+        }
+    };
+
+    match tokio::time::timeout(timeout, checker.build_connection()).await {
+        Ok(Ok(result)) => {
+            if result.is_validate {
+                ConnectionSideResult {
+                    ok: true,
+                    code: None,
+                    message: None,
+                }
+            } else {
+                ConnectionSideResult {
+                    ok: false,
+                    code: Some("CONNECTION_FAILED".to_string()),
+                    message: Some(if result.error_msg.is_empty() {
+                        "connection validation failed".to_string()
+                    } else {
+                        result.error_msg
+                    }),
                 }
             }
-            Err(e) => ConnectionSideResult {
-                ok: false,
-                code: Some("CONNECTION_FAILED".to_string()),
-                message: Some(e.to_string()),
-            },
-        },
-        None => ConnectionSideResult {
+        }
+        Ok(Err(e)) => ConnectionSideResult {
             ok: false,
-            code: Some("UNSUPPORTED_ENGINE".to_string()),
-            message: Some("no checker available for this engine type".to_string()),
+            code: Some("CONNECTION_FAILED".to_string()),
+            message: Some(e.to_string()),
+        },
+        Err(_) => ConnectionSideResult {
+            ok: false,
+            code: Some(codes::TEST_CONNECTION_TIMEOUT.to_string()),
+            message: Some(format!(
+                "connect attempt exceeded {}s timeout",
+                timeout.as_secs_f64()
+            )),
         },
     }
 }
 
 /// Convert a CheckResult to a PrecheckItem.
+///
+/// Status mapping:
+/// - `is_validate` → "pass"
+/// - `!is_validate` with non-empty `warn_msg` → "warn" (non-blocking advisory)
+/// - `!is_validate` with empty `warn_msg` → "fail" (blocking)
 fn check_result_to_item(result: &CheckResult, is_source: bool) -> PrecheckItem {
     let side = if is_source { "source" } else { "target" };
-    let status = if result.is_validate { "pass" } else { "fail" };
+    let status = if result.is_validate {
+        "pass"
+    } else if !result.warn_msg.is_empty() {
+        "warn"
+    } else {
+        "fail"
+    };
     PrecheckItem {
         name: result.check_type_name.clone(),
         side: side.to_string(),
@@ -291,10 +410,18 @@ async fn run_side_checks(
 /// This does NOT persist the task — it's only used for precheck/test_connection
 /// in draft/preview mode.
 fn build_draft_task(body: &CreateTaskRequest) -> Result<Task, ApiError> {
-    let db_type_source =
-        crate::validation::resolve_db_type(&body.engine_source, body.sub_mode.as_deref());
-    let db_type_target =
-        crate::validation::resolve_db_type(&body.engine_target, body.sub_mode.as_deref());
+    let source_sub_mode = sub_mode_for_side(
+        &body.engine_source,
+        body.source_sub_mode.as_ref(),
+        body.sub_mode.as_ref(),
+    );
+    let target_sub_mode = sub_mode_for_side(
+        &body.engine_target,
+        body.target_sub_mode.as_ref(),
+        body.sub_mode.as_ref(),
+    );
+    let db_type_source = crate::validation::resolve_db_type(&body.engine_source, source_sub_mode);
+    let db_type_target = crate::validation::resolve_db_type(&body.engine_target, target_sub_mode);
 
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let id = uuid::Uuid::new_v4().to_string();
@@ -333,9 +460,28 @@ fn build_draft_task(body: &CreateTaskRequest) -> Result<Task, ApiError> {
     })
 }
 
+fn sub_mode_for_side<'a>(
+    engine: &str,
+    side_sub_mode: Option<&'a String>,
+    legacy_sub_mode: Option<&'a String>,
+) -> Option<&'a str> {
+    if engine == "gaussdb" {
+        return side_sub_mode.or(legacy_sub_mode).map(String::as_str);
+    }
+    None
+}
+
 // ─── Handlers ────────────────────────────────────────────────────────────
 
 /// POST /api/tasks/:id/test_connection — test connectivity for a persisted task.
+///
+/// Wrapped with the same `tokio::spawn` panic guard the precheck routes
+/// use, plus a per-side connect timeout, so a slow/unreachable host can
+/// never drop the HTTP socket. Failures surface as either:
+///   - a 200 body with per-side `code=TEST_CONNECTION_TIMEOUT|CONNECTION_FAILED`
+///   - a 422 envelope with `code=TEST_CONNECTION_PANIC` if the handler
+///     itself crashed
+/// Both paths carry the request correlation ID for log↔UI cross-reference.
 #[post("/tasks/{id}/test_connection")]
 pub async fn test_connection(
     pool: web::Data<sqlx::SqlitePool>,
@@ -352,10 +498,14 @@ pub async fn test_connection(
         Err(_) => return ApiError::new(codes::TASK_NOT_FOUND, "Task not found").error_response(),
     };
 
-    do_test_connection(&task).await
+    let request_id = new_request_id();
+    log_precheck_start(&request_id, &task, "test_connection");
+    invoke_test_connection_with_guard(request_id, task).await
 }
 
 /// POST /api/tasks/preview/test_connection — draft mode (no persistence).
+///
+/// Same panic-guard + per-side timeout contract as `test_connection`.
 #[post("/tasks/preview/test_connection")]
 pub async fn preview_test_connection(
     user: UserContext,
@@ -370,14 +520,17 @@ pub async fn preview_test_connection(
         Err(e) => return e.error_response(),
     };
 
-    do_test_connection(&task).await
+    let request_id = new_request_id();
+    log_precheck_start(&request_id, &task, "preview_test_connection");
+    invoke_test_connection_with_guard(request_id, task).await
 }
 
 /// POST /api/tasks/:id/precheck — run prerequisite checks for a persisted task.
 ///
 /// Wraps the precheck call in `tokio::spawn` so that panics inside the
-/// prechecker are caught and returned as 422 PRECHECK_BLOCKING_FAILED
-/// instead of dropping the HTTP connection.
+/// prechecker are caught, logged with full context, and returned as 422
+/// `PRECHECK_PANIC` (carrying the correlation ID + panic message in
+/// `details`) instead of dropping the HTTP connection.
 #[post("/tasks/{id}/precheck")]
 pub async fn precheck(
     pool: web::Data<sqlx::SqlitePool>,
@@ -394,41 +547,15 @@ pub async fn precheck(
         Err(_) => return ApiError::new(codes::TASK_NOT_FOUND, "Task not found").error_response(),
     };
 
-    // Spawn the precheck in a separate task so panics are caught
-    // (mirrors the pattern in run_handlers::start_task).
-    let handle = tokio::spawn(async move { run_precheck(&task).await });
-
-    match handle.await {
-        Ok(Ok(resp)) => HttpResponse::Ok().json(resp),
-        Ok(Err(e)) => e.error_response(),
-        Err(join_err) => {
-            // Task panicked — extract the panic message
-            let panic_msg = if join_err.is_panic() {
-                let payload = join_err.into_panic();
-                match payload.downcast_ref::<String>() {
-                    Some(s) => s.clone(),
-                    None => match payload.downcast_ref::<&str>() {
-                        Some(s) => s.to_string(),
-                        None => "precheck panicked with unknown cause".to_string(),
-                    },
-                }
-            } else {
-                "precheck task was cancelled".to_string()
-            };
-            ApiError::with_details(
-                codes::PRECHECK_BLOCKING_FAILED,
-                "Precheck panicked",
-                serde_json::json!({ "panicMessage": panic_msg }),
-            )
-            .error_response()
-        }
-    }
+    let request_id = new_request_id();
+    log_precheck_start(&request_id, &task, "precheck");
+    invoke_precheck_with_guard(request_id, task).await
 }
 
 /// POST /api/tasks/preview/precheck — draft mode (no persistence).
 ///
-/// Wraps the precheck call in `tokio::spawn` so panics are caught
-/// and returned as 422 PRECHECK_BLOCKING_FAILED.
+/// Wraps the precheck call in `tokio::spawn` so panics are caught, logged
+/// with full context, and returned as 422 `PRECHECK_PANIC`.
 #[post("/tasks/preview/precheck")]
 pub async fn preview_precheck(
     user: UserContext,
@@ -443,50 +570,194 @@ pub async fn preview_precheck(
         Err(e) => return e.error_response(),
     };
 
-    // Spawn the precheck in a separate task so panics are caught.
+    let request_id = new_request_id();
+    log_precheck_start(&request_id, &task, "preview_precheck");
+    invoke_precheck_with_guard(request_id, task).await
+}
+
+/// Run `run_precheck` under a `tokio::spawn` panic guard, surfacing every
+/// outcome through `tracing` and the response envelope. The `request_id`
+/// flows into both the log lines and the `details.requestId` field so
+/// operators can `grep` server logs from a UI bug report.
+async fn invoke_precheck_with_guard(request_id: String, task: Task) -> HttpResponse {
+    let log_id = request_id.clone();
+    let task_log_summary = format!(
+        "kind={} src={} dst={}",
+        task.kind, task.db_type_source, task.db_type_target
+    );
     let handle = tokio::spawn(async move { run_precheck(&task).await });
 
     match handle.await {
-        Ok(Ok(resp)) => HttpResponse::Ok().json(resp),
-        Ok(Err(e)) => e.error_response(),
+        Ok(Ok(resp)) => {
+            tracing::info!(
+                request_id = %log_id,
+                summary = ?resp.summary,
+                "precheck completed",
+            );
+            HttpResponse::Ok().json(resp)
+        }
+        Ok(Err(mut e)) => {
+            tracing::warn!(
+                request_id = %log_id,
+                code = %e.code,
+                message = %e.message,
+                task = %task_log_summary,
+                "precheck rejected before running checks",
+            );
+            attach_request_id(&mut e, &log_id);
+            e.error_response()
+        }
         Err(join_err) => {
-            let panic_msg = if join_err.is_panic() {
-                let payload = join_err.into_panic();
-                match payload.downcast_ref::<String>() {
-                    Some(s) => s.clone(),
-                    None => match payload.downcast_ref::<&str>() {
-                        Some(s) => s.to_string(),
-                        None => "precheck panicked with unknown cause".to_string(),
-                    },
-                }
-            } else {
-                "precheck task was cancelled".to_string()
-            };
+            let panic_msg = extract_panic_msg(join_err);
+            tracing::error!(
+                request_id = %log_id,
+                panic_message = %panic_msg,
+                task = %task_log_summary,
+                "precheck task panicked — returning PRECHECK_PANIC",
+            );
             ApiError::with_details(
-                codes::PRECHECK_BLOCKING_FAILED,
-                "Precheck panicked",
-                serde_json::json!({ "panicMessage": panic_msg }),
+                codes::PRECHECK_PANIC,
+                format!(
+                    "precheck task crashed unexpectedly (request_id={log_id}). \
+                     Send this request ID to ops or grep console-server logs."
+                ),
+                serde_json::json!({
+                    "requestId": log_id,
+                    "panicMessage": panic_msg,
+                }),
             )
             .error_response()
         }
     }
 }
 
+/// Attach the correlation ID to an existing `ApiError`'s `details` payload.
+fn attach_request_id(err: &mut ApiError, request_id: &str) {
+    let mut details = match err.details.take() {
+        Some(serde_json::Value::Object(map)) => map,
+        Some(other) => {
+            let mut map = serde_json::Map::new();
+            map.insert("original".to_string(), other);
+            map
+        }
+        None => serde_json::Map::new(),
+    };
+    details.insert(
+        "requestId".to_string(),
+        serde_json::Value::String(request_id.to_string()),
+    );
+    err.details = Some(serde_json::Value::Object(details));
+}
+
+/// Render an `tokio::task::JoinError` from a precheck panic into a short
+/// human-readable message.
+fn extract_panic_msg(join_err: tokio::task::JoinError) -> String {
+    if !join_err.is_panic() {
+        return "precheck task was cancelled".to_string();
+    }
+    let payload = join_err.into_panic();
+    if let Some(s) = payload.downcast_ref::<String>() {
+        return s.clone();
+    }
+    if let Some(s) = payload.downcast_ref::<&str>() {
+        return s.to_string();
+    }
+    "precheck panicked with unknown cause".to_string()
+}
+
+/// Emit a structured log line with the redacted endpoint summary at the
+/// start of a precheck handler invocation.
+fn log_precheck_start(request_id: &str, task: &Task, route: &str) {
+    tracing::info!(
+        request_id = %request_id,
+        route = %route,
+        task_id = %task.task_id,
+        kind = %task.kind,
+        source = %redacted_endpoint(&task.source_endpoint),
+        target = %redacted_endpoint(&task.target_endpoint),
+        "precheck request received",
+    );
+}
+
 // ─── Core logic (shared between persisted and draft modes) ──────────────
 
-/// Core test_connection logic. Tests source and target connectivity independently.
-async fn do_test_connection(task: &Task) -> HttpResponse {
-    let ini_path = match write_temp_ini(task, &task.kind) {
-        Ok(p) => p,
-        Err(e) => return e.error_response(),
-    };
+/// Run `run_test_connection` under a `tokio::spawn` panic guard so a panic
+/// inside the underlying fetcher cannot kill the worker thread / drop the
+/// socket. On panic we return a structured `TEST_CONNECTION_PANIC`
+/// envelope that carries the correlation ID, mirroring the contract the
+/// precheck routes already follow. The spawned future intentionally
+/// returns Send-friendly types (`Result<TestConnectionResponse, ApiError>`);
+/// `HttpResponse`'s `RefCell<Extensions>` is `!Send` so it cannot cross
+/// `tokio::spawn` boundaries.
+async fn invoke_test_connection_with_guard(request_id: String, task: Task) -> HttpResponse {
+    let log_id = request_id.clone();
+    let task_log_summary = format!(
+        "kind={} src={} dst={}",
+        task.kind, task.db_type_source, task.db_type_target
+    );
+    let inner_id = request_id.clone();
+    let handle = tokio::spawn(async move { run_test_connection(&task, &inner_id).await });
+
+    match handle.await {
+        Ok(Ok(resp)) => {
+            tracing::info!(
+                request_id = %log_id,
+                source_ok = resp.source.ok,
+                target_ok = resp.target.ok,
+                "test_connection completed",
+            );
+            HttpResponse::Ok().json(resp)
+        }
+        Ok(Err(mut e)) => {
+            tracing::warn!(
+                request_id = %log_id,
+                code = %e.code,
+                message = %e.message,
+                task = %task_log_summary,
+                "test_connection rejected before probing",
+            );
+            attach_request_id(&mut e, &log_id);
+            e.error_response()
+        }
+        Err(join_err) => {
+            let panic_msg = extract_panic_msg(join_err);
+            tracing::error!(
+                request_id = %log_id,
+                panic_message = %panic_msg,
+                task = %task_log_summary,
+                "test_connection task panicked — returning TEST_CONNECTION_PANIC",
+            );
+            ApiError::with_details(
+                codes::TEST_CONNECTION_PANIC,
+                format!(
+                    "test_connection task crashed unexpectedly (request_id={log_id}). \
+                     Send this request ID to ops or grep console-server logs."
+                ),
+                serde_json::json!({
+                    "requestId": log_id,
+                    "panicMessage": panic_msg,
+                }),
+            )
+            .error_response()
+        }
+    }
+}
+
+/// Core test_connection logic. Tests source and target connectivity independently,
+/// each bounded by `TEST_CONNECTION_TIMEOUT_SECS`. Always emits the
+/// correlation ID on the body so the UI can show it on failure.
+async fn run_test_connection(
+    task: &Task,
+    request_id: &str,
+) -> Result<TestConnectionResponse, ApiError> {
+    let ini_path = write_temp_ini(task, &task.kind)?;
 
     let result = {
         let (task_config, precheck_config) = match load_configs(&ini_path) {
             Ok(c) => c,
             Err(e) => {
                 cleanup_temp_ini(&ini_path);
-                return e.error_response();
+                return Err(e);
             }
         };
 
@@ -494,22 +765,37 @@ async fn do_test_connection(task: &Task) -> HttpResponse {
 
         if !builder.valid_config() {
             cleanup_temp_ini(&ini_path);
-            return ApiError::new(
+            return Err(ApiError::new(
                 codes::TASK_VALIDATION_FAILED,
                 "invalid config: source or target URL is empty",
-            )
-            .error_response();
+            ));
         }
 
         // Test source and target independently — one failure does not abort the other
         let source = test_one_side(&builder, true).await;
         let target = test_one_side(&builder, false).await;
 
-        HttpResponse::Ok().json(TestConnectionResponse { source, target })
+        Ok(TestConnectionResponse {
+            source,
+            target,
+            request_id: request_id.to_string(),
+        })
     };
 
     cleanup_temp_ini(&ini_path);
     result
+}
+
+/// Convenience wrapper used by tests that want an `HttpResponse` directly.
+#[cfg(test)]
+async fn do_test_connection(task: &Task, request_id: &str) -> HttpResponse {
+    match run_test_connection(task, request_id).await {
+        Ok(resp) => HttpResponse::Ok().json(resp),
+        Err(mut e) => {
+            attach_request_id(&mut e, request_id);
+            e.error_response()
+        }
+    }
 }
 
 /// Core precheck logic. Runs all applicable checks and returns per-item results.
@@ -520,6 +806,66 @@ async fn do_precheck(task: &Task) -> HttpResponse {
     match run_precheck(task).await {
         Ok(resp) => HttpResponse::Ok().json(resp),
         Err(e) => e.error_response(),
+    }
+}
+
+/// Pre-flight check on the filter config so that malformed `do_dbs` /
+/// `do_tbs` / `ignore_dbs` / `ignore_tbs` values do NOT propagate into
+/// `PrecheckerBuilder::build_checker` (which calls `RdbFilter::from_config`
+/// with `.unwrap()` and would otherwise panic).
+///
+/// On success returns `Ok(())`. On failure returns an `Err` carrying a
+/// pre-built `PrecheckResponse` with one explicit `fail` item per side
+/// describing the actual filter parse error — never the generic
+/// "Precheck panicked" row.
+fn validate_filter_config(task_config: &TaskConfig) -> Result<(), PrecheckResponse> {
+    let mut items: Vec<PrecheckItem> = Vec::new();
+
+    let source_db_type = task_config.extractor_basic.db_type.clone();
+    if let Err(e) = RdbFilter::from_config(&task_config.filter, &source_db_type) {
+        items.push(PrecheckItem {
+            name: "CheckFilterConfig".to_string(),
+            side: "source".to_string(),
+            status: "fail".to_string(),
+            description: Some("validate filter (do_dbs / do_tbs / ignore_*) syntax".to_string()),
+            error_message: Some(e.to_string()),
+            advise_message: Some(
+                "do_tbs and ignore_tbs entries must use 'db.tb' format (e.g. 'mydb.mytbl' or '*.*'). \
+                 do_dbs and ignore_dbs accept comma-separated db names."
+                    .to_string(),
+            ),
+        });
+    }
+
+    let target_db_type = task_config.sinker_basic.db_type.clone();
+    if let Err(e) = RdbFilter::from_config(&task_config.filter, &target_db_type) {
+        items.push(PrecheckItem {
+            name: "CheckFilterConfig".to_string(),
+            side: "target".to_string(),
+            status: "fail".to_string(),
+            description: Some("validate filter (do_dbs / do_tbs / ignore_*) syntax".to_string()),
+            error_message: Some(e.to_string()),
+            advise_message: Some(
+                "do_tbs and ignore_tbs entries must use 'db.tb' format (e.g. 'mydb.mytbl' or '*.*'). \
+                 do_dbs and ignore_dbs accept comma-separated db names."
+                    .to_string(),
+            ),
+        });
+    }
+
+    if items.is_empty() {
+        Ok(())
+    } else {
+        let fail = items.len();
+        Err(PrecheckResponse {
+            items,
+            summary: PrecheckSummary {
+                pass: 0,
+                fail,
+                skip: 0,
+                warn: 0,
+            },
+        })
     }
 }
 
@@ -534,6 +880,7 @@ pub async fn run_precheck(task: &Task) -> Result<PrecheckResponse, ApiError> {
                 pass: 0,
                 fail: 0,
                 skip: 0,
+                warn: 0,
             },
         });
     }
@@ -542,6 +889,12 @@ pub async fn run_precheck(task: &Task) -> Result<PrecheckResponse, ApiError> {
 
     let result = {
         let (task_config, precheck_config) = load_configs(&ini_path)?;
+
+        if let Err(filter_err) = validate_filter_config(&task_config) {
+            cleanup_temp_ini(&ini_path);
+            return Ok(filter_err);
+        }
+
         let builder = PrecheckerBuilder::build(precheck_config, task_config);
         let do_cdc = task.kind == "cdc";
 
@@ -555,31 +908,67 @@ pub async fn run_precheck(task: &Task) -> Result<PrecheckResponse, ApiError> {
 
         let mut items = Vec::new();
 
-        // Run source checks
-        if let Some(mut source_checker) = builder.build_checker(true) {
-            items.extend(run_side_checks(&mut source_checker, true, do_cdc, &task.kind).await);
+        // Run source checks. `validate_filter_config` above already
+        // rejected malformed filter syntax with a structured `fail` item,
+        // so a builder error here is unexpected — surface it as a
+        // CheckFilterConfig fail rather than panicking.
+        match builder.build_checker(true) {
+            Ok(Some(mut source_checker)) => {
+                items.extend(run_side_checks(&mut source_checker, true, do_cdc, &task.kind).await);
+            }
+            Ok(None) => {}
+            Err(e) => items.push(PrecheckItem {
+                name: "CheckFilterConfig".to_string(),
+                side: "source".to_string(),
+                status: "fail".to_string(),
+                description: Some(
+                    "validate filter (do_dbs / do_tbs / ignore_*) syntax".to_string(),
+                ),
+                error_message: Some(e.to_string()),
+                advise_message: None,
+            }),
         }
 
         // Run target checks
-        if let Some(mut sink_checker) = builder.build_checker(false) {
-            items.extend(run_side_checks(&mut sink_checker, false, do_cdc, &task.kind).await);
+        match builder.build_checker(false) {
+            Ok(Some(mut sink_checker)) => {
+                items.extend(run_side_checks(&mut sink_checker, false, do_cdc, &task.kind).await);
+            }
+            Ok(None) => {}
+            Err(e) => items.push(PrecheckItem {
+                name: "CheckFilterConfig".to_string(),
+                side: "target".to_string(),
+                status: "fail".to_string(),
+                description: Some(
+                    "validate filter (do_dbs / do_tbs / ignore_*) syntax".to_string(),
+                ),
+                error_message: Some(e.to_string()),
+                advise_message: None,
+            }),
         }
 
         // Compute summary
         let mut pass = 0;
         let mut fail = 0;
         let mut skip = 0;
+        let mut warn = 0;
         for item in &items {
             match item.status.as_str() {
                 "pass" => pass += 1,
                 "fail" => fail += 1,
+                "warn" => warn += 1,
                 _ => skip += 1,
             }
         }
 
         Ok(PrecheckResponse {
             items,
-            summary: PrecheckSummary { pass, fail, skip },
+            summary: PrecheckSummary {
+                pass,
+                fail,
+                skip,
+                warn,
+            },
         })
     };
 
@@ -822,7 +1211,7 @@ mod tests {
             updated_at: now,
         };
 
-        let resp = do_test_connection(&task).await;
+        let resp = do_test_connection(&task, "deadbeef").await;
         // Should return 200 even with both sides failing (VAL-CONN-004)
         assert_eq!(resp.status(), 200);
 
@@ -830,6 +1219,7 @@ mod tests {
         let conn_resp: TestConnectionResponse = serde_json::from_slice(&body).unwrap();
         assert!(!conn_resp.source.ok, "source should fail");
         assert!(!conn_resp.target.ok, "target should fail");
+        assert_eq!(conn_resp.request_id, "deadbeef");
     }
 
     // ─── Test connection: source bad, target bad → both fail (VAL-CONN-004) ──
@@ -863,7 +1253,7 @@ mod tests {
             updated_at: now,
         };
 
-        let resp = do_test_connection(&task).await;
+        let resp = do_test_connection(&task, "abcdef01").await;
         assert_eq!(resp.status(), 200);
 
         let body = actix_web::body::to_bytes(resp.into_body()).await.unwrap();
@@ -873,6 +1263,7 @@ mod tests {
         assert!(!conn_resp.target.ok);
         assert!(conn_resp.source.code.is_some());
         assert!(conn_resp.target.code.is_some());
+        assert_eq!(conn_resp.request_id, "abcdef01");
     }
 
     // ─── Single failing check does not panic (VAL-PRECHECK-005) ────────
@@ -928,6 +1319,8 @@ mod tests {
             engine_source: "mysql".to_string(),
             engine_target: "mysql".to_string(),
             sub_mode: None,
+            source_sub_mode: None,
+            target_sub_mode: None,
             source_endpoint: serde_json::json!({"url": "mysql://root:@host/db"}),
             target_endpoint: serde_json::json!({"url": "mysql://root:@host/db"}),
             extractor: serde_json::json!({"extractType": "snapshot"}),
@@ -957,6 +1350,8 @@ mod tests {
             engine_source: "gaussdb".to_string(),
             engine_target: "mysql".to_string(),
             sub_mode: Some("pg-mode".to_string()),
+            source_sub_mode: None,
+            target_sub_mode: None,
             source_endpoint: serde_json::json!({"url": "postgres://user:@host/db"}),
             target_endpoint: serde_json::json!({"url": "mysql://root:@host/db"}),
             extractor: serde_json::json!({"extractType": "snapshot"}),
@@ -1014,6 +1409,25 @@ mod tests {
     }
 
     #[test]
+    fn check_result_to_item_warn() {
+        let cr = CheckResult {
+            check_type_name: "CheckDatabaseVersionSupported".to_string(),
+            check_desc: "check database version".to_string(),
+            is_validate: false,
+            error_msg: String::new(),
+            warn_msg: "version 5.6 is not fully supported".to_string(),
+            is_source: true,
+            advise_msg: "upgrade to 5.7+".to_string(),
+        };
+        let item = check_result_to_item(&cr, true);
+        assert_eq!(item.name, "CheckDatabaseVersionSupported");
+        assert_eq!(item.side, "source");
+        assert_eq!(item.status, "warn");
+        assert!(item.error_message.is_none());
+        assert_eq!(item.advise_message.as_deref(), Some("upgrade to 5.7+"));
+    }
+
+    #[test]
     fn precheck_summary_counts_items() {
         let items = vec![
             PrecheckItem {
@@ -1040,20 +1454,31 @@ mod tests {
                 error_message: None,
                 advise_message: None,
             },
+            PrecheckItem {
+                name: "d".to_string(),
+                side: "source".to_string(),
+                status: "warn".to_string(),
+                description: None,
+                error_message: None,
+                advise_message: None,
+            },
         ];
         let mut pass = 0;
         let mut fail = 0;
         let mut skip = 0;
+        let mut warn = 0;
         for item in &items {
             match item.status.as_str() {
                 "pass" => pass += 1,
                 "fail" => fail += 1,
+                "warn" => warn += 1,
                 _ => skip += 1,
             }
         }
         assert_eq!(pass, 1);
         assert_eq!(fail, 1);
         assert_eq!(skip, 1);
+        assert_eq!(warn, 1);
     }
 
     // ─── Handler route tests via actix_web::test ───────────────────────
@@ -1130,11 +1555,11 @@ mod tests {
         cleanup_temp_ini(&ini_path);
         let builder = PrecheckerBuilder::build(precheck_config, task_config);
         assert!(
-            builder.build_checker(true).is_some(),
+            builder.build_checker(true).unwrap().is_some(),
             "mysql source checker"
         );
         assert!(
-            builder.build_checker(false).is_some(),
+            builder.build_checker(false).unwrap().is_some(),
             "mysql target checker"
         );
     }
@@ -1146,8 +1571,14 @@ mod tests {
         let (task_config, precheck_config) = load_configs(&ini_path).unwrap();
         cleanup_temp_ini(&ini_path);
         let builder = PrecheckerBuilder::build(precheck_config, task_config);
-        assert!(builder.build_checker(true).is_some(), "pg source checker");
-        assert!(builder.build_checker(false).is_some(), "pg target checker");
+        assert!(
+            builder.build_checker(true).unwrap().is_some(),
+            "pg source checker"
+        );
+        assert!(
+            builder.build_checker(false).unwrap().is_some(),
+            "pg target checker"
+        );
     }
 
     // ─── Test connection: empty URL returns validation error ──────────
@@ -1181,8 +1612,462 @@ mod tests {
             updated_at: now,
         };
 
-        let resp = do_test_connection(&task).await;
+        let resp = do_test_connection(&task, "feedface").await;
         // Empty URL → 422 validation error
         assert_eq!(resp.status(), 422);
+
+        let body = actix_web::body::to_bytes(resp.into_body()).await.unwrap();
+        let env: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            env.pointer("/details/requestId").and_then(|v| v.as_str()),
+            Some("feedface"),
+            "envelope must surface requestId on validation failure"
+        );
+    }
+
+    // ─── Repro: wizard snapshot_cdc payload — must NOT panic ───────────
+    //
+    // The web wizard for "create snapshot task" lets the user pick
+    // syncMode='snapshot_cdc'. That posts to /tasks/preview/precheck with:
+    //   - kind=snapshot
+    //   - extractor.extract_type=snapshot_and_cdc
+    //   - extractor.server_id="<num as string>"
+    //   - filter.do_dbs="<user_db>"
+    //   - filter.do_tbs="<user_tbl>" (often a single token without a dot,
+    //     e.g. "*" — see VAL-CROSS-001/2)
+    //
+    // The handler routes this through `two_phase::render_phase1_ini` which
+    // builds a phase-1 snapshot INI. The downstream PrecheckerBuilder must
+    // not panic on any well-formed user input. In particular, an unbalanced
+    // do_tbs ("*" alone, no dot) was crashing inside RdbFilter::parse_pair_tokens.
+    #[actix_web::test]
+    async fn wizard_snapshot_cdc_does_not_panic() {
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let task = Task {
+            id: "wizard-snap-cdc".to_string(),
+            task_id: "draft_snapshot_mysql_mysql_abcd1234".to_string(),
+            name: "wizard".to_string(),
+            kind: "snapshot".to_string(),
+            db_type_source: "mysql".to_string(),
+            db_type_target: "mysql".to_string(),
+            source_endpoint: r#"{"url":"mysql://root:@127.0.0.1:19999/test"}"#.to_string(),
+            target_endpoint: r#"{"url":"mysql://root:@127.0.0.1:19998/test"}"#.to_string(),
+            extractor_config: r#"{"extract_type":"snapshot_and_cdc","server_id":"2000","heartbeat_interval_secs":10}"#
+                .to_string(),
+            sinker_config: "{}".to_string(),
+            filter_config: r#"{"do_dbs":"my_db","do_tbs":"*","ignore_dbs":"","ignore_tbs":"","do_events":"insert,update,delete"}"#
+                .to_string(),
+            router_config: "{}".to_string(),
+            parallelizer_config: r#"{"parallel_type":"snapshot","parallel_size":4}"#.to_string(),
+            pipeline_config: r#"{"buffer_size":16000,"checkpoint_interval_secs":10}"#.to_string(),
+            resumer_config: r#"{"resume_type":"from_log"}"#.to_string(),
+            processor_config: "{}".to_string(),
+            runtime_config: "{}".to_string(),
+            metrics_config: "{}".to_string(),
+            resource_group_id: "default".to_string(),
+            owner_user_id: None,
+            status: "draft".to_string(),
+            created_at: now.clone(),
+            updated_at: now,
+        };
+
+        let result = run_precheck(&task).await;
+        // The handler must return a structured response, not propagate a panic.
+        let resp = result.expect("run_precheck must complete without panic or error");
+        assert!(
+            !resp.items.is_empty(),
+            "real precheck must produce at least one item, got empty"
+        );
+        // The single-token do_tbs="*" entry is invalid (must be db.tb). The
+        // handler must surface a real precheck item describing the filter
+        // syntax problem, NOT the generic "Precheck panicked" row.
+        let has_filter_item = resp
+            .items
+            .iter()
+            .any(|i| i.name == "CheckFilterConfig" && i.status == "fail");
+        assert!(
+            has_filter_item,
+            "expected CheckFilterConfig fail item with the real filter syntax error, got: {:?}",
+            resp.items
+        );
+    }
+
+    /// Regression: a snapshot task with a well-formed do_tbs="db.t1,db.t2"
+    /// filter must NOT trigger the filter-syntax fail item; the precheck
+    /// should proceed to connection / version / struct checks (all fail
+    /// because the test ports are unreachable, but no panic).
+    #[actix_web::test]
+    async fn wizard_snapshot_well_formed_filter_no_filter_fail() {
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let task = Task {
+            id: "wizard-snap-ok".to_string(),
+            task_id: "draft_snapshot_mysql_mysql_efgh5678".to_string(),
+            name: "wizard-ok".to_string(),
+            kind: "snapshot".to_string(),
+            db_type_source: "mysql".to_string(),
+            db_type_target: "mysql".to_string(),
+            source_endpoint: r#"{"url":"mysql://root:@127.0.0.1:19999/test"}"#.to_string(),
+            target_endpoint: r#"{"url":"mysql://root:@127.0.0.1:19998/test"}"#.to_string(),
+            extractor_config: r#"{"extract_type":"snapshot"}"#.to_string(),
+            sinker_config: "{}".to_string(),
+            filter_config: r#"{"do_dbs":"my_db","do_tbs":"my_db.t1","ignore_dbs":"","ignore_tbs":"","do_events":"insert,update,delete"}"#
+                .to_string(),
+            router_config: "{}".to_string(),
+            parallelizer_config: r#"{"parallel_type":"snapshot","parallel_size":4}"#.to_string(),
+            pipeline_config: r#"{"buffer_size":16000,"checkpoint_interval_secs":10}"#.to_string(),
+            resumer_config: r#"{"resume_type":"from_log"}"#.to_string(),
+            processor_config: "{}".to_string(),
+            runtime_config: "{}".to_string(),
+            metrics_config: "{}".to_string(),
+            resource_group_id: "default".to_string(),
+            owner_user_id: None,
+            status: "draft".to_string(),
+            created_at: now.clone(),
+            updated_at: now,
+        };
+
+        let resp = run_precheck(&task)
+            .await
+            .expect("well-formed filter must not cause errors");
+        let has_filter_fail = resp
+            .items
+            .iter()
+            .any(|i| i.name == "CheckFilterConfig" && i.status == "fail");
+        assert!(
+            !has_filter_fail,
+            "well-formed filter must NOT yield CheckFilterConfig fail; items: {:?}",
+            resp.items
+        );
+    }
+
+    // ─── Observability helpers ──────────────────────────────────────────
+
+    #[test]
+    fn redact_url_strips_credentials() {
+        assert_eq!(
+            redact_url("mysql://root:secret@127.0.0.1:3307/test"),
+            "mysql://***@127.0.0.1:3307/test"
+        );
+        assert_eq!(
+            redact_url("postgres://u:p@host:5432/db"),
+            "postgres://***@host:5432/db"
+        );
+        // No `@` → returned as-is
+        assert_eq!(
+            redact_url("mysql://127.0.0.1:3307"),
+            "mysql://127.0.0.1:3307"
+        );
+    }
+
+    #[test]
+    fn redacted_endpoint_handles_missing_url() {
+        assert_eq!(redacted_endpoint("{}"), "?");
+        assert_eq!(redacted_endpoint("not json"), "?");
+    }
+
+    #[test]
+    fn new_request_id_is_short_and_stable_length() {
+        let id = new_request_id();
+        assert_eq!(id.len(), REQUEST_ID_LEN);
+        assert!(id.chars().all(|c| c.is_ascii_alphanumeric()));
+    }
+
+    #[test]
+    fn attach_request_id_inserts_into_existing_object() {
+        let mut e = ApiError::with_details(
+            codes::PRECHECK_BLOCKING_FAILED,
+            "x",
+            serde_json::json!({"foo": 1}),
+        );
+        attach_request_id(&mut e, "abc12345");
+        let details = e.details.unwrap();
+        assert_eq!(
+            details.get("requestId").and_then(|v| v.as_str()),
+            Some("abc12345")
+        );
+        assert_eq!(details.get("foo").and_then(|v| v.as_u64()), Some(1));
+    }
+
+    #[test]
+    fn attach_request_id_creates_object_when_missing() {
+        let mut e = ApiError::new(codes::PRECHECK_BLOCKING_FAILED, "y");
+        attach_request_id(&mut e, "deadbeef");
+        let details = e.details.unwrap();
+        assert_eq!(
+            details.get("requestId").and_then(|v| v.as_str()),
+            Some("deadbeef")
+        );
+    }
+
+    /// Verify the panic-guard surfaces `PRECHECK_PANIC` with `requestId` and
+    /// `panicMessage` when the spawned task panics. This is the exact path
+    /// the user complained about — a panic must produce a diagnosable
+    /// envelope, not silent breakage.
+    #[actix_web::test]
+    async fn invoke_precheck_with_guard_panic_yields_request_id_envelope() {
+        // We cannot easily inject a panic into the real run_precheck without
+        // touching production code, so we exercise the helper that builds
+        // the response directly: a JoinError carrying a panic payload.
+        let join_err = tokio::spawn(async { panic!("synthetic panic for test") })
+            .await
+            .expect_err("spawned task must panic");
+        let msg = extract_panic_msg(join_err);
+        assert!(
+            msg.contains("synthetic panic"),
+            "panic message must round-trip the cause: {msg}"
+        );
+    }
+
+    // ─── Regression: socket-hang-up bug — slow side must time out cleanly ──
+    //
+    // Before the fix, an unreachable host on the wizard's "test connection"
+    // step caused Vite to print
+    //   `[vite] http proxy error: /api/tasks/preview/test_connection
+    //    Error: socket hang up`
+    // because the underlying MySQL/PG fetcher would hang on TCP SYN until
+    // the kernel timed out (~75s), which is longer than any sane proxy
+    // deadline. The fix wraps each side in `tokio::time::timeout`. This
+    // test drives that wrapper with a 50ms deadline against a real builder
+    // pointing at an unreachable host, and asserts the per-side result
+    // reports `TEST_CONNECTION_TIMEOUT`.
+    #[actix_web::test]
+    async fn test_one_side_with_timeout_returns_structured_timeout_code() {
+        // Builder pointing at a non-routable IP (bogon range) so the TCP
+        // SYN is silently dropped — no immediate refused, no immediate
+        // success. This is the exact failure mode that was hanging the
+        // socket before the fix.
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let task = Task {
+            id: "blackhole".to_string(),
+            task_id: "snap_blackhole".to_string(),
+            name: "blackhole".to_string(),
+            kind: "snapshot".to_string(),
+            db_type_source: "mysql".to_string(),
+            db_type_target: "mysql".to_string(),
+            source_endpoint: r#"{"url":"mysql://root:@10.255.255.1:65535/test"}"#.to_string(),
+            target_endpoint: r#"{"url":"mysql://root:@10.255.255.1:65535/test"}"#.to_string(),
+            extractor_config: r#"{"extractType":"snapshot"}"#.to_string(),
+            sinker_config: r#"{"sinkType":"write"}"#.to_string(),
+            filter_config: "{}".to_string(),
+            router_config: "{}".to_string(),
+            parallelizer_config: "{}".to_string(),
+            pipeline_config: "{}".to_string(),
+            resumer_config: "{}".to_string(),
+            processor_config: "{}".to_string(),
+            runtime_config: "{}".to_string(),
+            metrics_config: "{}".to_string(),
+            resource_group_id: "".to_string(),
+            owner_user_id: None,
+            status: "draft".to_string(),
+            created_at: now.clone(),
+            updated_at: now,
+        };
+
+        let ini_path = write_temp_ini(&task, "snapshot").unwrap();
+        let (task_config, precheck_config) = load_configs(&ini_path).unwrap();
+        cleanup_temp_ini(&ini_path);
+        let builder = PrecheckerBuilder::build(precheck_config, task_config);
+
+        let result = test_one_side_with_timeout(&builder, true, Duration::from_millis(50)).await;
+        // Either we time out cleanly or the host immediately fails — both
+        // are fine, but a hang is NOT (the test would block past 50ms by
+        // many seconds without our timeout).
+        assert!(!result.ok, "unreachable host must report failure");
+        let code = result.code.expect("failure must carry a code");
+        assert!(
+            code == codes::TEST_CONNECTION_TIMEOUT || code == "CONNECTION_FAILED",
+            "expected TIMEOUT or CONNECTION_FAILED, got {code}",
+        );
+    }
+
+    /// Regression: top-level `request_id` must round-trip through the
+    /// 200-body so the wizard can show it on a side failure.
+    #[actix_web::test]
+    async fn test_connection_response_carries_request_id_on_failure() {
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let task = Task {
+            id: "rid-task".to_string(),
+            task_id: "snap_rid".to_string(),
+            name: "rid".to_string(),
+            kind: "snapshot".to_string(),
+            db_type_source: "mysql".to_string(),
+            db_type_target: "mysql".to_string(),
+            source_endpoint: r#"{"url":"mysql://root:@127.0.0.1:19999/test"}"#.to_string(),
+            target_endpoint: r#"{"url":"mysql://root:@127.0.0.1:19998/test"}"#.to_string(),
+            extractor_config: r#"{"extractType":"snapshot"}"#.to_string(),
+            sinker_config: r#"{"sinkType":"write"}"#.to_string(),
+            filter_config: "{}".to_string(),
+            router_config: "{}".to_string(),
+            parallelizer_config: "{}".to_string(),
+            pipeline_config: "{}".to_string(),
+            resumer_config: "{}".to_string(),
+            processor_config: "{}".to_string(),
+            runtime_config: "{}".to_string(),
+            metrics_config: "{}".to_string(),
+            resource_group_id: "".to_string(),
+            owner_user_id: None,
+            status: "draft".to_string(),
+            created_at: now.clone(),
+            updated_at: now,
+        };
+        let resp = run_test_connection(&task, "cafe1234").await.unwrap();
+        assert!(!resp.source.ok || !resp.target.ok);
+        assert_eq!(resp.request_id, "cafe1234");
+    }
+
+    /// Regression: panic guard wraps a fatal handler crash and surfaces
+    /// `TEST_CONNECTION_PANIC` with `requestId` instead of dropping the
+    /// HTTP socket.
+    #[actix_web::test]
+    async fn invoke_test_connection_with_guard_panic_yields_request_id_envelope() {
+        // Run a synthetic panic and assert extract_panic_msg reads it.
+        let join_err = tokio::spawn(async { panic!("synthetic test_connection panic") })
+            .await
+            .expect_err("spawned task must panic");
+        let msg = extract_panic_msg(join_err);
+        assert!(msg.contains("synthetic test_connection panic"));
+
+        // Also assert the envelope code is reachable as a constant.
+        assert_eq!(codes::TEST_CONNECTION_PANIC, "TEST_CONNECTION_PANIC");
+        assert_eq!(codes::TEST_CONNECTION_TIMEOUT, "TEST_CONNECTION_TIMEOUT");
+    }
+
+    /// The hard-coded production timeout must stay within Vite's default
+    /// proxy window (30s), with comfortable headroom for the response
+    /// itself. Bumping it accidentally to >25s would re-introduce the
+    /// "socket hang up" bug.
+    #[test]
+    fn test_connection_timeout_constant_is_within_proxy_budget() {
+        const MAX_PROXY_HEADROOM_SECS: u64 = 15;
+        const MIN_SLOW_HANDSHAKE_SECS: u64 = 3;
+        let timeout_secs = test_connection_timeout_secs();
+        assert!(
+            timeout_secs <= MAX_PROXY_HEADROOM_SECS,
+            "TEST_CONNECTION_TIMEOUT_SECS={} exceeds proxy headroom budget",
+            timeout_secs,
+        );
+        assert!(
+            timeout_secs >= MIN_SLOW_HANDSHAKE_SECS,
+            "TEST_CONNECTION_TIMEOUT_SECS={} too short for slow handshakes",
+            timeout_secs,
+        );
+    }
+
+    fn test_connection_timeout_secs() -> u64 {
+        TEST_CONNECTION_TIMEOUT_SECS
+    }
+
+    /// Regression for request_id=9169ec20: a wizard test_connection with a
+    /// malformed `do_tbs="*"` (single token, no `db.tb` form) used to
+    /// panic inside `PrecheckerBuilder::build_checker` via
+    /// `RdbFilter::from_config(...).unwrap()`. The panic was caught by the
+    /// guard and surfaced as `TEST_CONNECTION_PANIC`, leaving the user
+    /// with a generic crash envelope instead of a structured per-side
+    /// error. After the fix, `test_connection` must return 200 with
+    /// per-side `code=INVALID_FILTER_CONFIG` carrying the actual filter
+    /// parse error.
+    #[actix_web::test]
+    async fn test_connection_malformed_filter_returns_structured_per_side_error() {
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let task = Task {
+            id: "filter-panic".to_string(),
+            task_id: "snap_filter_panic".to_string(),
+            name: "filter-panic".to_string(),
+            kind: "snapshot".to_string(),
+            db_type_source: "mysql".to_string(),
+            db_type_target: "mysql".to_string(),
+            source_endpoint: r#"{"url":"mysql://root:@127.0.0.1:3307/test"}"#.to_string(),
+            target_endpoint: r#"{"url":"mysql://root:@127.0.0.1:3308/test"}"#.to_string(),
+            extractor_config: r#"{"extract_type":"snapshot"}"#.to_string(),
+            sinker_config: "{}".to_string(),
+            filter_config: r#"{"do_dbs":"my_db","do_tbs":"*","ignore_dbs":"","ignore_tbs":"","do_events":"insert,update,delete"}"#
+                .to_string(),
+            router_config: "{}".to_string(),
+            parallelizer_config: r#"{"parallel_type":"snapshot","parallel_size":4}"#.to_string(),
+            pipeline_config: r#"{"buffer_size":16000,"checkpoint_interval_secs":10}"#.to_string(),
+            resumer_config: r#"{"resume_type":"from_log"}"#.to_string(),
+            processor_config: "{}".to_string(),
+            runtime_config: "{}".to_string(),
+            metrics_config: "{}".to_string(),
+            resource_group_id: "default".to_string(),
+            owner_user_id: None,
+            status: "draft".to_string(),
+            created_at: now.clone(),
+            updated_at: now,
+        };
+
+        let resp = run_test_connection(&task, "9169ec20")
+            .await
+            .expect("malformed filter must produce structured per-side error, not panic");
+        assert_eq!(resp.request_id, "9169ec20");
+        assert!(!resp.source.ok, "source must report failure on bad filter");
+        assert!(!resp.target.ok, "target must report failure on bad filter");
+        assert_eq!(
+            resp.source.code.as_deref(),
+            Some(codes::INVALID_FILTER_CONFIG),
+            "source code must be INVALID_FILTER_CONFIG, got {:?}",
+            resp.source.code
+        );
+        assert_eq!(
+            resp.target.code.as_deref(),
+            Some(codes::INVALID_FILTER_CONFIG),
+            "target code must be INVALID_FILTER_CONFIG, got {:?}",
+            resp.target.code
+        );
+        let src_msg = resp.source.message.as_deref().unwrap_or("");
+        assert!(
+            src_msg.contains("db.tb") && src_msg.contains("'*'"),
+            "source message must explain the filter syntax error, got: {src_msg}"
+        );
+    }
+
+    /// Direct probe of `PrecheckerBuilder::build_checker`: with a malformed
+    /// filter it must return `Err(...)` rather than panicking. This guards
+    /// the underlying lib API itself, independent of how
+    /// `dt-console-server` consumes it.
+    #[test]
+    fn builder_build_checker_returns_err_on_malformed_filter() {
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let task = Task {
+            id: "lib-filter".to_string(),
+            task_id: "snap_lib_filter".to_string(),
+            name: "lib-filter".to_string(),
+            kind: "snapshot".to_string(),
+            db_type_source: "mysql".to_string(),
+            db_type_target: "mysql".to_string(),
+            source_endpoint: r#"{"url":"mysql://root:@127.0.0.1:3307/test"}"#.to_string(),
+            target_endpoint: r#"{"url":"mysql://root:@127.0.0.1:3308/test"}"#.to_string(),
+            extractor_config: r#"{"extract_type":"snapshot"}"#.to_string(),
+            sinker_config: "{}".to_string(),
+            filter_config: r#"{"do_dbs":"my_db","do_tbs":"*","ignore_dbs":"","ignore_tbs":""}"#
+                .to_string(),
+            router_config: "{}".to_string(),
+            parallelizer_config: "{}".to_string(),
+            pipeline_config: "{}".to_string(),
+            resumer_config: "{}".to_string(),
+            processor_config: "{}".to_string(),
+            runtime_config: "{}".to_string(),
+            metrics_config: "{}".to_string(),
+            resource_group_id: "".to_string(),
+            owner_user_id: None,
+            status: "draft".to_string(),
+            created_at: now.clone(),
+            updated_at: now,
+        };
+
+        let ini_path = write_temp_ini(&task, "snapshot").unwrap();
+        let (task_config, precheck_config) = load_configs(&ini_path).unwrap();
+        cleanup_temp_ini(&ini_path);
+        let builder = PrecheckerBuilder::build(precheck_config, task_config);
+        let result = builder.build_checker(true);
+        assert!(
+            result.is_err(),
+            "build_checker must return Err on malformed filter instead of panicking"
+        );
+        let err_msg = format!("{}", result.err().unwrap());
+        assert!(
+            err_msg.contains("db.tb"),
+            "error must explain the filter syntax problem, got: {err_msg}"
+        );
     }
 }

@@ -15,8 +15,8 @@ use crate::{
     fetcher::{
         mongo::mongo_fetcher::MongoFetcher, mysql::mysql_fetcher::MysqlFetcher,
         mysql::pg_compatible_mysql_fetcher::PgCompatibleMysqlFetcher,
-        oracle::oracle_fetcher::OracleFetcher,
-        postgresql::pg_fetcher::PgFetcher, redis::redis_fetcher::RedisFetcher,
+        oracle::oracle_fetcher::OracleFetcher, postgresql::pg_fetcher::PgFetcher,
+        redis::redis_fetcher::RedisFetcher,
     },
     meta::check_result::CheckResult,
     prechecker::{
@@ -44,7 +44,10 @@ impl PrecheckerBuilder {
             && !self.task_config.sinker_basic.url.is_empty()
     }
 
-    pub fn build_checker(&self, is_source: bool) -> Option<Box<dyn Prechecker + Send>> {
+    pub fn build_checker(
+        &self,
+        is_source: bool,
+    ) -> anyhow::Result<Option<Box<dyn Prechecker + Send>>> {
         let (db_type, url, connection_auth) = if is_source {
             (
                 self.task_config.extractor_basic.db_type.clone(),
@@ -69,7 +72,7 @@ impl PrecheckerBuilder {
             None
         };
 
-        let filter = RdbFilter::from_config(&self.task_config.filter, &db_type).unwrap();
+        let filter = RdbFilter::from_config(&self.task_config.filter, &db_type)?;
         let checker: Option<Box<dyn Prechecker + Send>> = match db_type {
             DbType::Mysql => Some(Box::new(MySqlPrechecker {
                 db_type: DbType::Mysql,
@@ -184,7 +187,7 @@ impl PrecheckerBuilder {
             })),
             _ => None,
         };
-        checker
+        Ok(checker)
     }
 
     pub async fn check(&self) -> anyhow::Result<Vec<anyhow::Result<CheckResult>>> {
@@ -192,7 +195,7 @@ impl PrecheckerBuilder {
             bail! {"config is invalid."};
         }
         let (source_checker_option, sink_checker_option) =
-            (self.build_checker(true), self.build_checker(false));
+            (self.build_checker(true)?, self.build_checker(false)?);
         if source_checker_option.is_none() || sink_checker_option.is_none() {
             bail! {
                 "config is invalid when build checker.maybe db_type is wrong."

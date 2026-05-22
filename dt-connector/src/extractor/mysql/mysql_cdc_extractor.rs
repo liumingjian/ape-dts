@@ -79,6 +79,7 @@ impl Extractor for MysqlCdcExtractor {
             self.binlog_filename = BinlogUtil::find_last_binlog_before_timestamp(
                 self.base_extractor.time_filter.start_timestamp,
                 &self.url,
+                &self.connection_auth,
                 self.server_id,
                 &self.conn_pool,
             )

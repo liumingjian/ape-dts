@@ -11,4 +11,3 @@ mod test {
         TestBase::run_pg_struct_test("pg_to_gaussdb_oracle/struct/basic_test").await;
     }
 }
-

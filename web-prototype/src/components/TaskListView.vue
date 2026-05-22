@@ -7,7 +7,7 @@
           {{ t('common.refresh') }}
         </el-button>
         <el-tooltip
-          v-if="isAtCap"
+          v-if="can('task.create') && isAtCap"
           :content="t('taskList.overCapTip', { current: licenseInfo?.currentTasks ?? 0, max: licenseInfo?.maxTasks ?? 0 })"
           placement="top"
         >
@@ -16,7 +16,7 @@
             {{ createLabel }}
           </el-button>
         </el-tooltip>
-        <el-button v-else type="primary" @click="onCreate">
+        <el-button v-else-if="can('task.create')" type="primary" @click="onCreate">
           <template #icon><IconPlus /></template>
           {{ createLabel }}
         </el-button>
@@ -28,7 +28,7 @@
         <!-- toolbar row -->
         <div class="task-list__toolbar">
           <div class="task-list__actions">
-            <el-dropdown trigger="click" :disabled="selected.length === 0" @command="onBatch">
+            <el-dropdown v-if="canBatchAny" trigger="click" :disabled="selected.length === 0" @command="onBatch">
               <el-button :disabled="selected.length === 0">
                 {{ t('taskList.action.batch') }}
                 <span v-if="selected.length" class="task-list__selected-count">· {{ selected.length }}</span>
@@ -58,7 +58,7 @@
               <template #icon><IconFileExport /></template>
               {{ t('taskList.action.export') }}
             </el-button>
-            <el-button @click="onImport">
+            <el-button v-if="can('task.create')" @click="onImport">
               <template #icon><IconFileImport /></template>
               {{ t('taskList.action.import') }}
             </el-button>
@@ -197,6 +197,7 @@
 
         <!-- table -->
         <el-table
+          ref="tableRef"
           v-loading="loading"
           :data="list"
           row-key="id"
@@ -207,10 +208,19 @@
           @selection-change="onSelectionChange"
           @sort-change="onSortChange"
         >
-          <el-table-column type="selection" width="44" align="center" />
+          <el-table-column type="selection" width="44" align="center" class-name="task-list__sel-cell" />
           <el-table-column :label="t('taskList.col.name')" min-width="240" header-align="left">
             <template #default="{ row }">
-              <div class="task-list__name-cell">
+              <div class="task-list__name-cell" :data-testid="`task-row-${row.id}`">
+                <button
+                  type="button"
+                  class="task-list__row-select-hook"
+                  :aria-label="t('taskList.selectRow', { name: row.name })"
+                  :data-testid="`task-row-select-${row.id}`"
+                  :data-checked="selected.some((s) => s.id === row.id) ? 'true' : 'false'"
+                  tabindex="-1"
+                  @click.stop="toggleRowSelection(row)"
+                ></button>
                 <el-link type="primary" :underline="false" @click="goDetail(row)">
                   {{ row.name }}
                 </el-link>
@@ -348,7 +358,7 @@
                   {{ t('task.action.start') }}
                 </el-button>
                 <el-button
-                  v-if="can('task.stop') && row.status !== 'stopped' && row.status !== 'completed' && row.status !== 'draft' && row.status !== 'ready'"
+                  v-if="can('task.stop') && row.status !== 'stopped' && row.status !== 'completed' && row.status !== 'draft' && row.status !== 'ready' && row.status !== 'failed'"
                   link
                   type="danger"
                   @click="confirmStop(row)"
@@ -379,13 +389,13 @@
               <IconInbox class="task-list__empty-icon" />
               <p>{{ t('taskList.empty') }}</p>
               <el-tooltip
-                v-if="isAtCap"
+                v-if="can('task.create') && isAtCap"
                 :content="t('taskList.overCapTip', { current: licenseInfo?.currentTasks ?? 0, max: licenseInfo?.maxTasks ?? 0 })"
                 placement="top"
               >
                 <el-button type="primary" disabled>{{ createLabel }}</el-button>
               </el-tooltip>
-              <el-button v-else type="primary" @click="onCreate">{{ createLabel }}</el-button>
+              <el-button v-else-if="can('task.create')" type="primary" @click="onCreate">{{ createLabel }}</el-button>
             </div>
           </template>
         </el-table>
@@ -432,6 +442,10 @@ const router = useRouter();
 const route = useRoute();
 const { can } = useRbac();
 const { isVisible } = useDocumentVisibility();
+
+const canBatchAny = computed(() =>
+  can('task.start') || can('task.pause') || can('task.resume') || can('task.stop') || can('task.delete'),
+);
 
 /* ---------- license cap ---------- */
 interface LicenseInfo {
@@ -633,6 +647,12 @@ function onSelectionChange(rows: Task[]) {
   selected.value = rows;
 }
 
+const tableRef = ref<{ toggleRowSelection: (row: Task, selected?: boolean) => void } | null>(null);
+
+function toggleRowSelection(row: Task) {
+  tableRef.value?.toggleRowSelection(row);
+}
+
 function rowClassName({ row }: { row: Task }) {
   if (row.status === 'failed') return 'task-list__row--failed';
   if (row.status === 'paused') return 'task-list__row--paused';
@@ -754,7 +774,32 @@ function onExport() {
 }
 
 function onImport() {
-  ElMessage.info(t('taskList.toast.importHint'));
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'application/json,.json';
+  input.onchange = async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text);
+      const body = Array.isArray(payload) ? payload : [payload];
+      const res = await api.post<{ successes?: unknown[]; failures?: unknown[] } | unknown>('/tasks/import', body);
+      const r = res as { successes?: unknown[]; failures?: unknown[] };
+      const okCount = Array.isArray(r?.successes) ? r.successes.length : body.length;
+      const failCount = Array.isArray(r?.failures) ? r.failures.length : 0;
+      if (failCount > 0) {
+        ElMessage.warning(t('taskList.toast.importedPartial', { ok: okCount, fail: failCount }));
+      } else {
+        ElMessage.success(t('taskList.toast.imported', { n: okCount }));
+      }
+      loadList();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      ElMessage.error(`${t('taskList.toast.importFailed')}: ${msg}`);
+    }
+  };
+  input.click();
 }
 
 function onExportTemplate() {
@@ -949,6 +994,17 @@ watch(() => route.query, () => {
 .task-list__name-cell :deep(.el-link__inner) {
   font-weight: 600;
   letter-spacing: 0;
+}
+.task-list__row-select-hook {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  border: 0;
+  clip: rect(0 0 0 0);
+  background: transparent;
 }
 .task-list__id {
   font-family: var(--font-mono);

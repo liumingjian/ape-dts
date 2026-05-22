@@ -73,4 +73,3 @@ impl Prechecker for OraclePrechecker {
         self.check_table_structs_internal().await
     }
 }
-

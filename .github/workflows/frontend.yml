@@ -1,0 +1,114 @@
+name: Frontend CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web-prototype/**"
+      - ".github/workflows/frontend.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "web-prototype/**"
+      - ".github/workflows/frontend.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: web-prototype
+
+jobs:
+  lint-test-build:
+    name: Lint, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: web-prototype/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        id: lint
+        run: pnpm lint
+
+      - name: Unit tests
+        id: test
+        run: pnpm test
+
+      - name: Build
+        id: build
+        run: pnpm build
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Frontend CI Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "| Step | Result |"
+            echo "|------|--------|"
+            echo "| Lint | ${{ steps.lint.outcome }} |"
+            echo "| Unit tests | ${{ steps.test.outcome }} |"
+            echo "| Build | ${{ steps.build.outcome }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  e2e:
+    name: Playwright e2e
+    runs-on: ubuntu-latest
+    needs: lint-test-build
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: web-prototype/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        run: pnpm test:e2e
+        env:
+          CI: 'true'
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            web-prototype/playwright-report
+            web-prototype/test-results
+          retention-days: 7
+          if-no-files-found: ignore

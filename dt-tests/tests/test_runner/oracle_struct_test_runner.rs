@@ -103,8 +103,7 @@ impl OracleStructTestRunner {
             }
 
             let dst_nullable: Vec<bool> = dst_cols.iter().map(|(_, n)| *n).collect();
-            let expected_nullable: Vec<bool> =
-                expected_cols.iter().map(|(_, n)| *n).collect();
+            let expected_nullable: Vec<bool> = expected_cols.iter().map(|(_, n)| *n).collect();
             if dst_nullable != expected_nullable {
                 bail!(
                     "destination column nullability mismatch: {}.{} expected={:?} got={:?}",
@@ -126,9 +125,14 @@ fn collect_explicit_do_tbs(filter: &RdbFilter) -> anyhow::Result<Vec<(String, St
     }
     let mut out = Vec::new();
     for (schema, tb) in filter.do_tbs.iter() {
-        if RdbFilter::is_pattern(schema, &filter.db_type) || RdbFilter::is_pattern(tb, &filter.db_type)
+        if RdbFilter::is_pattern(schema, &filter.db_type)
+            || RdbFilter::is_pattern(tb, &filter.db_type)
         {
-            bail!("oracle struct test does not support wildcard do_tbs: {}.{}", schema, tb);
+            bail!(
+                "oracle struct test does not support wildcard do_tbs: {}.{}",
+                schema,
+                tb
+            );
         }
         out.push((schema.clone(), tb.clone()));
     }
@@ -170,4 +174,3 @@ async fn fetch_oracle_columns(
 fn escape_sql_literal(s: &str) -> String {
     s.replace('\'', "''")
 }
-

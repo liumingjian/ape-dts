@@ -5,6 +5,8 @@
 
 use std::net::IpAddr;
 
+const ALLOW_PRIVATE_ENDPOINTS_ENV: &str = "CONSOLE_ALLOW_PRIVATE_ENDPOINTS";
+
 /// A single validation failure.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ValidationError {
@@ -45,8 +47,8 @@ pub const ENGINE_SCHEMES: &[(&str, &[&str])] = &[
     ("mongo", &["mongodb"]),
     ("redis", &["redis"]),
     ("gaussdb_pg", &["postgres", "postgresql"]),
-    ("gaussdb_mysql", &["mysql"]),
-    ("gaussdb_oracle", &["oracle"]),
+    ("gaussdb_mysql", &["postgres", "postgresql"]),
+    ("gaussdb_oracle", &["postgres", "postgresql"]),
 ];
 
 /// Path fields that must be sandboxed.
@@ -59,6 +61,27 @@ pub const SANDBOXED_PATH_FIELDS: &[&str] = &[
 
 /// Base directory for the per-Run sandbox.
 pub const RUN_SANDBOX_BASE: &str = "runs";
+
+fn validate_gaussdb_side_sub_mode(
+    field: &str,
+    db_type: &str,
+    mode: Option<&str>,
+) -> Option<ValidationError> {
+    if db_type != "gaussdb" {
+        return None;
+    }
+    match mode {
+        None => Some(ValidationError {
+            field: field.into(),
+            error: "GAUSSDB_SUB_MODE_REQUIRED".into(),
+        }),
+        Some(mode) if !VALID_GAUSSDB_SUB_MODES.contains(&mode) => Some(ValidationError {
+            field: field.into(),
+            error: format!("UNKNOWN_GAUSSDB_SUB_MODE '{mode}'"),
+        }),
+        _ => None,
+    }
+}
 
 /// Validate a full task creation/update payload.
 ///
@@ -74,7 +97,8 @@ pub fn validate_task(
     extractor_config: &serde_json::Value,
     sinker_config: &serde_json::Value,
     filter_config: &serde_json::Value,
-    sub_mode: Option<&str>,
+    source_sub_mode: Option<&str>,
+    target_sub_mode: Option<&str>,
     is_create: bool,
 ) -> Vec<ValidationError> {
     let mut errors = Vec::new();
@@ -91,21 +115,32 @@ pub fn validate_task(
     // Only enforce on POST (is_create=true). On PATCH, the db_type is already
     // resolved (e.g. "gaussdb_pg") so sub_mode is not required; if provided it
     // is still validated.
-    if is_create && (is_gaussdb(db_type_source) || is_gaussdb(db_type_target)) {
-        match sub_mode {
-            None => {
-                errors.push(ValidationError {
-                    field: "sub_mode".into(),
-                    error: "GAUSSDB_SUB_MODE_REQUIRED".into(),
-                });
+    if is_create {
+        if let Some(error) =
+            validate_gaussdb_side_sub_mode("source_sub_mode", db_type_source, source_sub_mode)
+        {
+            errors.push(error);
+        }
+        if let Some(error) =
+            validate_gaussdb_side_sub_mode("target_sub_mode", db_type_target, target_sub_mode)
+        {
+            errors.push(error);
+        }
+    }
+
+    if !is_create {
+        for (field, mode) in [
+            ("source_sub_mode", source_sub_mode),
+            ("target_sub_mode", target_sub_mode),
+        ] {
+            if let Some(mode) = mode {
+                if !VALID_GAUSSDB_SUB_MODES.contains(&mode) {
+                    errors.push(ValidationError {
+                        field: field.into(),
+                        error: format!("UNKNOWN_GAUSSDB_SUB_MODE '{mode}'"),
+                    });
+                }
             }
-            Some(mode) if !VALID_GAUSSDB_SUB_MODES.contains(&mode) => {
-                errors.push(ValidationError {
-                    field: "sub_mode".into(),
-                    error: format!("UNKNOWN_GAUSSDB_SUB_MODE '{mode}'"),
-                });
-            }
-            _ => {}
         }
     }
 
@@ -163,6 +198,49 @@ pub fn validate_task(
                     error: "SYNC_MODE_INVALID_FOR_CATEGORY".into(),
                 });
             }
+            // snapshot+cdc is managed as a two-phase run for supported engines.
+            if extract_type_is(extractor_config, "snapshot_and_cdc") {
+                if !matches!(
+                    db_type_source,
+                    "mysql" | "pg" | "gaussdb_pg" | "gaussdb_mysql" | "gaussdb_oracle" | "oracle"
+                ) {
+                    errors.push(ValidationError {
+                        field: "extractor.extract_type".into(),
+                        error: "SNAPSHOT_AND_CDC_UNSUPPORTED_SOURCE".into(),
+                    });
+                }
+                // The CDC phase requires engine-specific start parameters.
+                if (db_type_source == "mysql" || db_type_source == "gaussdb_mysql")
+                    && !has_valid_server_id(extractor_config)
+                {
+                    errors.push(ValidationError {
+                        field: "extractor.server_id".into(),
+                        error: "required".into(),
+                    });
+                }
+                if (db_type_source == "pg"
+                    || db_type_source == "gaussdb_pg"
+                    || db_type_source == "gaussdb_oracle")
+                    && extractor_config
+                        .get("slot_name")
+                        .is_none_or(|v| v.as_str().is_none_or(|s| s.is_empty()))
+                {
+                    errors.push(ValidationError {
+                        field: "extractor.slot_name".into(),
+                        error: "required".into(),
+                    });
+                }
+                if db_type_source == "oracle"
+                    && extractor_config
+                        .get("cdc_mode")
+                        .is_none_or(|v| v.as_str().is_none_or(|s| s.is_empty()))
+                {
+                    errors.push(ValidationError {
+                        field: "extractor.cdc_mode".into(),
+                        error: "required".into(),
+                    });
+                }
+            }
         }
         "cdc" => {
             if source_url.is_empty() {
@@ -186,9 +264,7 @@ pub fn validate_task(
             }
             // CDC mysql requires server_id
             if (db_type_source == "mysql" || db_type_source == "gaussdb_mysql")
-                && extractor_config
-                    .get("server_id")
-                    .is_none_or(|v| v.as_str().is_none_or(|s| s.is_empty()))
+                && !has_valid_server_id(extractor_config)
             {
                 errors.push(ValidationError {
                     field: "extractor.server_id".into(),
@@ -378,6 +454,10 @@ fn parse_url_parts(url: &str) -> Option<(String, Option<String>)> {
 ///
 /// Returns `None` if the host is acceptable, or a `ValidationError` if blocked.
 pub fn check_ssrf_host(host: &str, field: &str) -> Option<ValidationError> {
+    if allow_private_endpoint_hosts() {
+        return None;
+    }
+
     // Fast path for string "localhost"
     if host == "localhost" {
         return Some(ValidationError {
@@ -527,14 +607,46 @@ pub fn resolve_db_type(engine: &str, sub_mode: Option<&str>) -> String {
             Some("oracle-mode") => "gaussdb_oracle".to_string(),
             _ => engine.to_string(),
         }
+    } else if engine == "postgres" || engine == "postgresql" {
+        "pg".to_string()
     } else {
         engine.to_string()
     }
 }
 
+fn allow_private_endpoint_hosts() -> bool {
+    std::env::var(ALLOW_PRIVATE_ENDPOINTS_ENV)
+        .is_ok_and(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+}
+
 /// Check if the extractor_config indicates the given extract_type.
 fn extract_type_is(config: &serde_json::Value, expected: &str) -> bool {
     config.get("extract_type").and_then(|v| v.as_str()) == Some(expected)
+}
+
+/// Returns true if the extractor config has a usable MySQL `server_id` —
+/// either as a positive integer, or a non-empty numeric string. Empty values
+/// or non-numeric strings are rejected so the CDC extractor doesn't die later.
+fn has_valid_server_id(config: &serde_json::Value) -> bool {
+    match config.get("server_id") {
+        None => false,
+        Some(v) => {
+            if let Some(n) = v.as_u64() {
+                return n > 0;
+            }
+            if let Some(n) = v.as_i64() {
+                return n > 0;
+            }
+            if let Some(s) = v.as_str() {
+                let trimmed = s.trim();
+                if trimmed.is_empty() {
+                    return false;
+                }
+                return trimmed.parse::<u64>().map(|n| n > 0).unwrap_or(false);
+            }
+            false
+        }
+    }
 }
 
 /// Is this db_type the unresolved "gaussdb" type (needs sub_mode to resolve)?
@@ -622,6 +734,7 @@ mod tests {
             &serde_json::json!({}),
             &serde_json::json!({}),
             None,
+            None,
             true,
         );
         assert!(errors
@@ -641,6 +754,7 @@ mod tests {
             &serde_json::json!({}),
             &serde_json::json!({}),
             Some("foo"),
+            None,
             true,
         );
         assert!(errors
@@ -660,6 +774,7 @@ mod tests {
             &serde_json::json!({}),
             &serde_json::json!({}),
             Some("pg-mode"),
+            None,
             true,
         );
         assert!(!errors.iter().any(|e| e.error.contains("gaussdb")));
@@ -671,12 +786,13 @@ mod tests {
             "cdc",
             "gaussdb_mysql",
             "mysql",
-            "mysql://host/db",
+            "postgres://host/db",
             "mysql://host/db",
             &serde_json::json!({"server_id": "1"}),
             &serde_json::json!({}),
             &serde_json::json!({}),
             Some("mysql-mode"),
+            None,
             true,
         );
         assert!(!errors.iter().any(|e| e.error.contains("gaussdb")));
@@ -688,12 +804,13 @@ mod tests {
             "snapshot",
             "gaussdb_oracle",
             "oracle",
-            "oracle://host/db",
+            "postgres://host/db",
             "oracle://host/db",
             &serde_json::json!({}),
             &serde_json::json!({}),
             &serde_json::json!({}),
             Some("oracle-mode"),
+            None,
             true,
         );
         assert!(!errors.iter().any(|e| e.error.contains("gaussdb")));
@@ -714,7 +831,8 @@ mod tests {
             &serde_json::json!({}),
             &serde_json::json!({}),
             &serde_json::json!({}),
-            None,  // no sub_mode
+            None,  // no source_sub_mode
+            None,  // no target_sub_mode
             false, // is_create = false (PATCH)
         );
         assert!(!errors
@@ -728,11 +846,12 @@ mod tests {
             "cdc",
             "gaussdb_mysql",
             "mysql",
-            "mysql://host/db",
+            "postgres://host/db",
             "mysql://host/db",
             &serde_json::json!({"server_id": "1"}),
             &serde_json::json!({}),
             &serde_json::json!({}),
+            None,
             None,
             false,
         );
@@ -747,11 +866,12 @@ mod tests {
             "snapshot",
             "gaussdb_oracle",
             "oracle",
+            "postgres://host/db",
             "oracle://host/db",
-            "oracle://host/db",
             &serde_json::json!({}),
             &serde_json::json!({}),
             &serde_json::json!({}),
+            None,
             None,
             false,
         );
@@ -786,6 +906,7 @@ mod tests {
             &serde_json::json!({}),
             &serde_json::json!({}),
             None,
+            None,
             true,
         );
         assert!(errors
@@ -806,6 +927,7 @@ mod tests {
             &serde_json::json!({"extract_type": "snapshot"}),
             &serde_json::json!({}),
             &serde_json::json!({}),
+            None,
             None,
             true,
         );
@@ -828,6 +950,7 @@ mod tests {
             &serde_json::json!({}),
             &serde_json::json!({"do_dbs": ["db1"]}),
             None,
+            None,
             true,
         );
         assert!(errors
@@ -849,6 +972,7 @@ mod tests {
             &serde_json::json!({}),
             &serde_json::json!({}),
             None,
+            None,
             true,
         );
         assert!(errors
@@ -868,11 +992,153 @@ mod tests {
             &serde_json::json!({}),
             &serde_json::json!({}),
             None,
+            None,
             true,
         );
         assert!(errors
             .iter()
             .any(|e| e.field == "extractor.server_id" && e.error == "required"));
+    }
+
+    #[test]
+    fn cdc_mysql_server_id_as_number_accepted() {
+        let errors = validate_task(
+            "cdc",
+            "mysql",
+            "mysql",
+            "mysql://host/db",
+            "mysql://host/db",
+            &serde_json::json!({"server_id": 2000}),
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+            None,
+            None,
+            true,
+        );
+        assert!(!errors.iter().any(|e| e.field == "extractor.server_id"));
+    }
+
+    #[test]
+    fn cdc_mysql_server_id_as_string_accepted() {
+        let errors = validate_task(
+            "cdc",
+            "mysql",
+            "mysql",
+            "mysql://host/db",
+            "mysql://host/db",
+            &serde_json::json!({"server_id": "2000"}),
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+            None,
+            None,
+            true,
+        );
+        assert!(!errors.iter().any(|e| e.field == "extractor.server_id"));
+    }
+
+    #[test]
+    fn cdc_mysql_server_id_zero_rejected() {
+        let errors = validate_task(
+            "cdc",
+            "mysql",
+            "mysql",
+            "mysql://host/db",
+            "mysql://host/db",
+            &serde_json::json!({"server_id": 0}),
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+            None,
+            None,
+            true,
+        );
+        assert!(errors
+            .iter()
+            .any(|e| e.field == "extractor.server_id" && e.error == "required"));
+    }
+
+    #[test]
+    fn snapshot_and_cdc_oracle_logminer_accepted() {
+        let errors = validate_task(
+            "snapshot",
+            "oracle",
+            "oracle",
+            "oracle://host/XE",
+            "oracle://host/XE",
+            &serde_json::json!({"extract_type": "snapshot_and_cdc", "cdc_mode": "logminer"}),
+            &serde_json::json!({}),
+            &serde_json::json!({"do_tbs": "APE_SRC.CDC_SMOKE"}),
+            None,
+            None,
+            true,
+        );
+        assert!(!errors
+            .iter()
+            .any(|e| { e.field == "extractor.extract_type" || e.field == "extractor.cdc_mode" }));
+    }
+
+    #[test]
+    fn snapshot_and_cdc_oracle_missing_cdc_mode_rejected() {
+        let errors = validate_task(
+            "snapshot",
+            "oracle",
+            "oracle",
+            "oracle://host/XE",
+            "oracle://host/XE",
+            &serde_json::json!({"extract_type": "snapshot_and_cdc"}),
+            &serde_json::json!({}),
+            &serde_json::json!({"do_tbs": "APE_SRC.CDC_SMOKE"}),
+            None,
+            None,
+            true,
+        );
+        assert!(errors
+            .iter()
+            .any(|e| e.field == "extractor.cdc_mode" && e.error == "required"));
+    }
+
+    #[test]
+    fn snapshot_and_cdc_gaussdb_pg_requires_slot_name() {
+        let errors = validate_task(
+            "snapshot",
+            "gaussdb_pg",
+            "pg",
+            "postgres://host/db",
+            "postgres://host/db",
+            &serde_json::json!({"extract_type": "snapshot_and_cdc"}),
+            &serde_json::json!({}),
+            &serde_json::json!({"do_tbs": "public.t1"}),
+            None,
+            None,
+            true,
+        );
+        assert!(errors
+            .iter()
+            .any(|e| e.field == "extractor.slot_name" && e.error == "required"));
+    }
+
+    #[test]
+    fn snapshot_and_cdc_gaussdb_oracle_accepts_slot_name() {
+        let errors = validate_task(
+            "snapshot",
+            "gaussdb_oracle",
+            "oracle",
+            "postgres://host/db",
+            "oracle://host/XE",
+            &serde_json::json!({
+                "extract_type": "snapshot_and_cdc",
+                "slot_name": "ape_test_gdbo"
+            }),
+            &serde_json::json!({}),
+            &serde_json::json!({"do_tbs": "public.t1"}),
+            None,
+            None,
+            true,
+        );
+        assert!(!errors.iter().any(|e| {
+            e.field == "extractor.extract_type"
+                || e.field == "extractor.slot_name"
+                || e.field == "extractor.cdc_mode"
+        }));
     }
 
     #[test]
@@ -886,6 +1152,7 @@ mod tests {
             &serde_json::json!({}),
             &serde_json::json!({}),
             &serde_json::json!({}),
+            None,
             None,
             true,
         );
@@ -906,6 +1173,7 @@ mod tests {
             &serde_json::json!({}),
             &serde_json::json!({}),
             None,
+            None,
             true,
         );
         assert!(errors
@@ -925,6 +1193,7 @@ mod tests {
             &serde_json::json!({}),
             &serde_json::json!({}),
             None,
+            None,
             true,
         );
         assert!(errors
@@ -943,6 +1212,7 @@ mod tests {
             &serde_json::json!({}),
             &serde_json::json!({}),
             &serde_json::json!({"do_dbs": [], "do_tbs": []}),
+            None,
             None,
             true,
         );
@@ -1080,6 +1350,12 @@ mod tests {
     #[test]
     fn resolve_non_gaussdb_passthrough() {
         assert_eq!(resolve_db_type("mysql", None), "mysql");
+    }
+
+    #[test]
+    fn resolve_postgres_aliases_to_pg() {
+        assert_eq!(resolve_db_type("postgres", None), "pg");
+        assert_eq!(resolve_db_type("postgresql", None), "pg");
     }
 
     #[test]

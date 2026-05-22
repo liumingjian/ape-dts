@@ -50,7 +50,8 @@ impl OraclePrechecker {
         }
 
         self.validate_do_tbs_in_current_user_schema()?;
-        self.validate_trigger_cdc_privileges(&mut check_error).await?;
+        self.validate_trigger_cdc_privileges(&mut check_error)
+            .await?;
 
         Ok(CheckResult::build_with_err(
             CheckItem::CheckIfDatabaseSupportCdc,
@@ -105,4 +106,3 @@ impl OraclePrechecker {
         Ok(())
     }
 }
-

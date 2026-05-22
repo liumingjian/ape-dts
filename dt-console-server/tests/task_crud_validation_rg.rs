@@ -744,6 +744,35 @@ async fn gaussdb_oracle_mode_201() {
 }
 
 #[actix_web::test]
+async fn gaussdb_target_sub_mode_201() {
+    let pool = setup().await;
+    let app = test::init_service(build_test_app(pool.clone())).await;
+    let cookies = do_login!(app, "admin", "admin123");
+
+    let body = serde_json::json!({
+        "kind": "snapshot",
+        "engineSource": "oracle",
+        "engineTarget": "gaussdb",
+        "targetSubMode": "oracle-mode",
+        "sourceEndpoint": {"url": "oracle://203.0.113.1:1521/db"},
+        "targetEndpoint": {"url": "postgres://203.0.113.2:8000/db_ora_mode?sslmode=require&protocolVersion=351"},
+        "extractor": {"extract_type": "snapshot_and_cdc", "cdc_mode": "logminer"},
+    });
+
+    let req = add_auth(
+        test::TestRequest::post().uri("/api/tasks").set_json(body),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::CREATED);
+
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(body["dbTypeSource"], "oracle");
+    assert_eq!(body["dbTypeTarget"], "gaussdb_oracle");
+}
+
+#[actix_web::test]
 async fn patch_gaussdb_task_without_sub_mode_200() {
     // PATCH on an existing GaussDB task should NOT require sub_mode.
     // The bug was that is_gaussdb() matched resolved types like "gaussdb_pg",

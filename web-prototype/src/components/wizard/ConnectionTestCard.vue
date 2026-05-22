@@ -37,7 +37,13 @@
         </span>
         <span v-else-if="result.status === 'fail'" class="conn-card__status conn-card__status--fail" data-testid="conn-status-fail">
           <IconCircleX />
-          {{ t('wizard.test.failure', { msg: result.message ?? '' }) }}
+          <span>
+            <span v-if="result.code" class="conn-card__code" :data-testid="`${testid}-fail-code`">{{ result.code }}</span>
+            {{ t('wizard.test.failure', { msg: result.message ?? '' }) }}
+            <span v-if="result.requestId" class="conn-card__rid" :data-testid="`${testid}-fail-request-id`">
+              · request_id <code>{{ result.requestId }}</code>
+            </span>
+          </span>
         </span>
         <span v-else-if="result.status === 'running'" class="conn-card__status conn-card__status--running">
           <IconLoader2 class="conn-card__spin" />
@@ -55,7 +61,13 @@ defineProps<{
   title: string;
   testid: string;
   endpoint: { host: string; port: number; username: string; password: string };
-  result: { status: 'idle' | 'running' | 'ok' | 'fail'; latency?: number; message?: string };
+  result: {
+    status: 'idle' | 'running' | 'ok' | 'fail';
+    latency?: number;
+    message?: string;
+    code?: string;
+    requestId?: string;
+  };
 }>();
 const emit = defineEmits<{ (e: 'test'): void }>();
 const { t } = useI18n();
@@ -115,6 +127,27 @@ const { t } = useI18n();
 .conn-card__status--ok { color: var(--color-success); }
 .conn-card__status--fail { color: var(--color-danger); }
 .conn-card__status--running { color: var(--color-info); }
+.conn-card__code {
+  display: inline-block;
+  padding: 1px 6px;
+  margin-right: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-danger);
+  background: var(--color-danger-soft, rgba(255, 0, 0, 0.08));
+  border-radius: var(--radius-sm);
+}
+.conn-card__rid {
+  font-size: 11px;
+  color: var(--color-ink-faint);
+  margin-left: 6px;
+}
+.conn-card__rid code {
+  font-family: var(--font-mono);
+  background: var(--color-surface-2);
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+}
 .conn-card__spin { animation: spin 1s linear infinite; }
 @keyframes spin {
   from { transform: rotate(0); }

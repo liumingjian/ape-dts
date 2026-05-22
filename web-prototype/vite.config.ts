@@ -7,6 +7,8 @@ import IconsResolver from 'unplugin-icons/resolver';
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers';
 import { fileURLToPath, URL } from 'node:url';
 
+const apiProxyTarget = process.env.VITE_API_PROXY_TARGET ?? 'http://127.0.0.1:8080';
+
 export default defineConfig({
   plugins: [
     vue(),
@@ -22,7 +24,7 @@ export default defineConfig({
     Components({
       resolvers: [
         ElementPlusResolver({ importStyle: 'sass' }),
-        IconsResolver({ enabledCollections: ['tabler'] }),
+        IconsResolver({ prefix: 'Icon', enabledCollections: ['tabler'] }),
       ],
       dts: 'components.d.ts',
       dirs: ['src/components', 'src/layouts'],
@@ -48,8 +50,15 @@ export default defineConfig({
     open: false,
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: apiProxyTarget,
         changeOrigin: true,
+        // Backend bounds slow probes (e.g. test_connection) at 10s and the
+        // panic-guarded handler always replies with a structured envelope.
+        // 30s on both sides leaves comfortable headroom for the response
+        // itself and prevents the proxy from dropping the socket — which
+        // would surface as "[vite] http proxy error: socket hang up".
+        timeout: 30_000,
+        proxyTimeout: 30_000,
       },
     },
   },

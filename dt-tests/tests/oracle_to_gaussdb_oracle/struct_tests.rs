@@ -10,4 +10,3 @@ mod test {
         TestBase::run_oracle_struct_test("oracle_to_gaussdb_oracle/struct/basic_test").await;
     }
 }
-

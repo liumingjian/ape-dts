@@ -557,44 +557,60 @@ pub fn escape_xss(input: &str) -> String {
     out
 }
 
+/// Wait for the cancel signal to change. If no cancel receiver, never resolves.
+async fn wait_cancel_change(cancel_rx: &mut Option<tokio::sync::watch::Receiver<bool>>) {
+    if let Some(rx) = cancel_rx {
+        let _ = rx.changed().await;
+    } else {
+        std::future::pending::<()>().await;
+    }
+}
+
 /// Produce SSE events from the alert broadcast channel.
 ///
-/// If a cancellation receiver is provided, the producer checks it on each
-/// iteration and stops when cancellation is signalled (e.g. on logout).
+/// If a cancellation receiver is provided, the producer listens for
+/// cancellation via `tokio::select!` so the SSE stream closes promptly
+/// when the session is invalidated (logout, expiry, disable).
 async fn produce_alert_sse_events(
     mut bcast_rx: tokio::sync::broadcast::Receiver<AlertSseEvent>,
     event_tx: tokio::sync::mpsc::Sender<SseEvent>,
-    cancel_rx: Option<tokio::sync::watch::Receiver<bool>>,
+    mut cancel_rx: Option<tokio::sync::watch::Receiver<bool>>,
 ) {
     let mut event_id: u64 = 0;
 
     loop {
-        // Check if the session was invalidated (logout, expiry, disable).
-        if let Some(ref rx) = cancel_rx {
-            if *rx.borrow() {
-                break;
-            }
+        // Check if the session was already invalidated before entering select.
+        if cancel_rx.as_ref().is_some_and(|rx| *rx.borrow()) {
+            break;
         }
 
-        match bcast_rx.recv().await {
-            Ok(alert_event) => {
-                event_id += 1;
-                let event_type = match &alert_event {
-                    AlertSseEvent::Firing { .. } => "firing",
-                    AlertSseEvent::Recovery { .. } => "recovery",
-                    AlertSseEvent::Cleared { .. } => "cleared",
-                };
-                let data = serde_json::to_string(&alert_event).unwrap_or_default();
-                let sse_event =
-                    SseEvent::Data(Data::new(data).id(event_id.to_string()).event(event_type));
-                if event_tx.send(sse_event).await.is_err() {
-                    break; // Client disconnected
+        tokio::select! {
+            result = bcast_rx.recv() => {
+                match result {
+                    Ok(alert_event) => {
+                        event_id += 1;
+                        let event_type = match &alert_event {
+                            AlertSseEvent::Firing { .. } => "firing",
+                            AlertSseEvent::Recovery { .. } => "recovery",
+                            AlertSseEvent::Cleared { .. } => "cleared",
+                        };
+                        let data = serde_json::to_string(&alert_event).unwrap_or_default();
+                        let sse_event =
+                            SseEvent::Data(Data::new(data).id(event_id.to_string()).event(event_type));
+                        if event_tx.send(sse_event).await.is_err() {
+                            break; // Client disconnected
+                        }
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                        // Missed events — continue
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                        break;
+                    }
                 }
             }
-            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
-                // Missed events — continue
-            }
-            Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+            _ = wait_cancel_change(&mut cancel_rx) => {
+                // Session invalidated — close the SSE stream.
                 break;
             }
         }

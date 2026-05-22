@@ -32,4 +32,3 @@ impl OraclePrechecker {
         Ok(out)
     }
 }
-

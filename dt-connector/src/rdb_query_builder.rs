@@ -168,7 +168,7 @@ impl RdbQueryBuilder<'_> {
             let before = row_data.require_before()?;
             for col in self.rdb_tb_meta.id_cols.iter() {
                 cols.push(col.clone());
-                let col_value = before.get(col);
+                let col_value = Self::get_col_value(before, col)?;
                 if col_value.is_none() || matches!(col_value, Some(ColValue::None)) {
                     bail! {
                         "where col: {} is NULL, which should not happen in batch delete, sql: {}",
@@ -215,7 +215,7 @@ impl RdbQueryBuilder<'_> {
             let after = row_data.require_after()?;
             for col_name in self.rdb_tb_meta.cols.iter() {
                 cols.push(col_name.clone());
-                binds.push(after.get(col_name));
+                binds.push(Self::get_col_value(after, col_name)?);
             }
         }
 
@@ -239,11 +239,12 @@ impl RdbQueryBuilder<'_> {
                 if self.rdb_tb_meta.id_cols.contains(col) {
                     continue;
                 }
-                let sql_value = self.get_sql_value(index, col, &after.get(col), placeholder)?;
+                let col_value = Self::get_col_value(after, col)?;
+                let sql_value = self.get_sql_value(index, col, &col_value, placeholder)?;
                 let set_pair = format!(r#""{}"={}"#, col, sql_value);
                 set_pairs.push(set_pair);
                 query_info.cols.push(col.clone());
-                query_info.binds.push(after.get(col));
+                query_info.binds.push(col_value);
                 index += 1;
             }
 
@@ -261,10 +262,32 @@ impl RdbQueryBuilder<'_> {
                 conflict_clause
             );
             return Ok(query_info);
-        } else {
+        } else if self.db_type != DbType::GaussDBOracle {
             query_info.sql = format!("REPLACE{}", query_info.sql.trim_start_matches("INSERT"));
         }
         Ok(query_info)
+    }
+
+    pub fn get_replace_delete_query<'a>(
+        &self,
+        row_data: &'a RowData,
+    ) -> anyhow::Result<RdbQueryInfo<'a>> {
+        let after = row_data.require_after()?;
+        let (where_sql, not_null_cols) = self.get_where_info(1, after, true)?;
+        let sql = format!(
+            "DELETE FROM {}.{} WHERE {}",
+            self.escape(&self.rdb_tb_meta.schema),
+            self.escape(&self.rdb_tb_meta.tb),
+            where_sql
+        );
+
+        let mut cols = Vec::with_capacity(not_null_cols.len());
+        let mut binds = Vec::with_capacity(not_null_cols.len());
+        for col_name in not_null_cols.iter() {
+            cols.push(col_name.clone());
+            binds.push(Self::get_col_value(after, col_name)?);
+        }
+        Ok(RdbQueryInfo { sql, cols, binds })
     }
 
     fn get_insert_query<'a>(
@@ -277,7 +300,7 @@ impl RdbQueryBuilder<'_> {
         let after = row_data.require_after()?;
         for col_name in self.rdb_tb_meta.cols.iter() {
             cols.push(col_name.clone());
-            binds.push(after.get(col_name));
+            binds.push(Self::get_col_value(after, col_name)?);
         }
 
         let mut col_values = Vec::with_capacity(self.rdb_tb_meta.cols.len());
@@ -319,7 +342,7 @@ impl RdbQueryBuilder<'_> {
         let mut binds = Vec::with_capacity(self.rdb_tb_meta.id_cols.len());
         for col_name in not_null_cols.iter() {
             cols.push(col_name.clone());
-            binds.push(before.get(col_name));
+            binds.push(Self::get_col_value(before, col_name)?);
         }
         Ok(RdbQueryInfo { sql, cols, binds })
     }
@@ -333,11 +356,11 @@ impl RdbQueryBuilder<'_> {
         let after = row_data.require_after()?;
 
         let mut index = 1;
-        let mut set_cols: Vec<String> = after.keys().cloned().collect();
-        set_cols.sort();
+        let set_cols = self.matched_target_cols(after)?;
         let mut set_pairs = Vec::with_capacity(self.rdb_tb_meta.cols.len());
         for col in set_cols.iter() {
-            let sql_value = self.get_sql_value(index, col, &after.get(col), placeholder)?;
+            let col_value = Self::get_col_value(after, col)?;
+            let sql_value = self.get_sql_value(index, col, &col_value, placeholder)?;
             set_pairs.push(format!("{}={}", self.escape(col), sql_value));
             index += 1;
         }
@@ -364,13 +387,26 @@ impl RdbQueryBuilder<'_> {
         let mut cols = set_cols.clone();
         let mut binds = Vec::new();
         for col_name in set_cols.iter() {
-            binds.push(after.get(col_name));
+            binds.push(Self::get_col_value(after, col_name)?);
         }
         for col_name in not_null_cols.iter() {
             cols.push(col_name.clone());
-            binds.push(before.get(col_name));
+            binds.push(Self::get_col_value(before, col_name)?);
         }
         Ok(RdbQueryInfo { sql, cols, binds })
+    }
+
+    fn matched_target_cols(
+        &self,
+        values: &HashMap<String, ColValue>,
+    ) -> anyhow::Result<Vec<String>> {
+        let mut cols = Vec::new();
+        for col in self.rdb_tb_meta.cols.iter() {
+            if Self::get_col_value(values, col)?.is_some() {
+                cols.push(col.clone());
+            }
+        }
+        Ok(cols)
     }
 
     pub fn get_select_query<'a>(&self, row_data: &'a RowData) -> anyhow::Result<RdbQueryInfo<'a>> {
@@ -404,7 +440,7 @@ impl RdbQueryBuilder<'_> {
         let mut binds = Vec::with_capacity(not_null_cols.len());
         for col_name in not_null_cols.iter() {
             cols.push(col_name.clone());
-            binds.push(after.get(col_name));
+            binds.push(Self::get_col_value(after, col_name)?);
         }
         Ok(RdbQueryInfo { sql, cols, binds })
     }
@@ -454,7 +490,7 @@ impl RdbQueryBuilder<'_> {
             let after = row_data.require_after()?;
             for col in self.rdb_tb_meta.id_cols.iter() {
                 cols.push(col.clone());
-                let col_value = after.get(col);
+                let col_value = Self::get_col_value(after, col)?;
                 if col_value.is_none() || matches!(col_value, Some(ColValue::None)) {
                     bail! {
                         "schema: {}, tb: {}, where col: {} is NULL, which should not happen in batch select",
@@ -509,13 +545,12 @@ impl RdbQueryBuilder<'_> {
             }
 
             let escaped_col = self.escape(col);
-            let col_value = col_value_map.get(col);
+            let col_value = Self::get_col_value(col_value_map, col)?;
             if let Some(value) = col_value {
                 if *value == ColValue::None {
                     where_sql = format!("{} {} IS NULL", where_sql, escaped_col);
                 } else {
-                    let sql_value =
-                        self.get_sql_value(index, col, &col_value_map.get(col), placeholder)?;
+                    let sql_value = self.get_sql_value(index, col, &col_value, placeholder)?;
                     where_sql = format!("{} {} = {}", where_sql, escaped_col, sql_value);
                     not_null_cols.push(col.clone());
                 }
@@ -544,7 +579,8 @@ impl RdbQueryBuilder<'_> {
                 let sql_value = if placeholder {
                     self.get_placeholder(placeholder_index, col)?
                 } else {
-                    self.get_sql_value(placeholder_index, col, &after.get(col), false)?
+                    let col_value = Self::get_col_value(after, col)?;
+                    self.get_sql_value(placeholder_index, col, &col_value, false)?
                 };
                 placeholders.push(sql_value);
                 placeholder_index += 1;
@@ -557,6 +593,33 @@ impl RdbQueryBuilder<'_> {
             self.escape_cols(&self.rdb_tb_meta.id_cols).join(","),
             all_placeholders.join(",")
         ))
+    }
+
+    fn get_col_value<'a>(
+        col_values: &'a HashMap<String, ColValue>,
+        col: &str,
+    ) -> anyhow::Result<Option<&'a ColValue>> {
+        if let Some(value) = col_values.get(col) {
+            return Ok(Some(value));
+        }
+
+        let mut matches = col_values
+            .iter()
+            .filter(|(key, _)| key.eq_ignore_ascii_case(col));
+        let Some((matched_col, value)) = matches.next() else {
+            return Ok(None);
+        };
+
+        if let Some((ambiguous_col, _)) = matches.next() {
+            bail!(
+                "ambiguous case-insensitive column match for target col: {}, matched cols: {}, {}",
+                col,
+                matched_col,
+                ambiguous_col
+            );
+        }
+
+        Ok(Some(value))
     }
 
     fn get_sql_value(
@@ -689,5 +752,162 @@ impl RdbQueryBuilder<'_> {
 
     fn escape_cols(&self, cols: &Vec<String>) -> Vec<String> {
         SqlUtil::escape_cols(cols, &self.db_type)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use dt_common::meta::{
+        col_value::ColValue,
+        pg::{pg_col_type::PgColType, pg_tb_meta::PgTbMeta, pg_value_type::PgValueType},
+        rdb_tb_meta::RdbTbMeta,
+        row_data::RowData,
+        row_type::RowType,
+    };
+
+    use super::RdbQueryBuilder;
+
+    #[test]
+    fn batch_insert_matches_column_names_case_insensitively() {
+        let tb_meta = pg_tb_meta("public", "t_oracle_to_gaussdb_oracle");
+        let row_data = oracle_row_data();
+        let rows = [row_data];
+        let query_builder = RdbQueryBuilder::new_for_pg_compatible(
+            &tb_meta,
+            None,
+            dt_common::config::config_enums::DbType::GaussDBOracle,
+        );
+
+        let (query_info, _) = query_builder
+            .get_batch_insert_query(&rows, 0, 1, false)
+            .unwrap();
+
+        assert_eq!(
+            query_info.sql,
+            r#"INSERT INTO "public"."t_oracle_to_gaussdb_oracle"("id","tracer","payload") VALUES($1::int4,$2::text,$3::text)"#
+        );
+        assert_eq!(query_info.binds[0], Some(&ColValue::LongLong(3)));
+        assert_eq!(
+            query_info.binds[1],
+            Some(&ColValue::String("cdc_insert".to_string()))
+        );
+        assert_eq!(
+            query_info.binds[2],
+            Some(&ColValue::String("after_insert".to_string()))
+        );
+    }
+
+    #[test]
+    fn case_insensitive_match_rejects_ambiguous_source_columns() {
+        let mut col_values = HashMap::new();
+        col_values.insert("ID".to_string(), ColValue::LongLong(3));
+        col_values.insert("Id".to_string(), ColValue::LongLong(4));
+
+        let err = RdbQueryBuilder::get_col_value(&col_values, "id").unwrap_err();
+
+        assert!(format!("{err:#}").contains("ambiguous case-insensitive column match"));
+    }
+
+    #[test]
+    fn gaussdb_oracle_replace_does_not_use_on_conflict() {
+        let tb_meta = pg_tb_meta("public", "t_oracle_to_gaussdb_oracle");
+        let row_data = oracle_row_data();
+        let query_builder = RdbQueryBuilder::new_for_pg_compatible(
+            &tb_meta,
+            None,
+            dt_common::config::config_enums::DbType::GaussDBOracle,
+        );
+
+        let query_info = query_builder.get_query_info(&row_data, true).unwrap();
+
+        assert!(!query_info.sql.contains("ON CONFLICT"));
+        assert_eq!(
+            query_info.sql,
+            r#"INSERT INTO "public"."t_oracle_to_gaussdb_oracle"("id","tracer","payload") VALUES($1::int4,$2::text,$3::text)"#
+        );
+    }
+
+    #[test]
+    fn gaussdb_oracle_replace_delete_uses_case_insensitive_key_value() {
+        let tb_meta = pg_tb_meta("public", "t_oracle_to_gaussdb_oracle");
+        let row_data = oracle_row_data();
+        let query_builder = RdbQueryBuilder::new_for_pg_compatible(
+            &tb_meta,
+            None,
+            dt_common::config::config_enums::DbType::GaussDBOracle,
+        );
+
+        let query_info = query_builder.get_replace_delete_query(&row_data).unwrap();
+
+        assert_eq!(
+            query_info.sql,
+            r#"DELETE FROM "public"."t_oracle_to_gaussdb_oracle" WHERE "id" = $1::int4"#
+        );
+        assert_eq!(query_info.binds[0], Some(&ColValue::LongLong(3)));
+    }
+
+    fn oracle_row_data() -> RowData {
+        let mut after = HashMap::new();
+        after.insert("ID".to_string(), ColValue::LongLong(3));
+        after.insert(
+            "TRACER".to_string(),
+            ColValue::String("cdc_insert".to_string()),
+        );
+        after.insert(
+            "PAYLOAD".to_string(),
+            ColValue::String("after_insert".to_string()),
+        );
+        RowData::new(
+            "public".to_string(),
+            "t_oracle_to_gaussdb_oracle".to_string(),
+            RowType::Insert,
+            None,
+            Some(after),
+        )
+    }
+
+    fn pg_tb_meta(schema: &str, tb: &str) -> PgTbMeta {
+        let cols = vec![
+            "id".to_string(),
+            "tracer".to_string(),
+            "payload".to_string(),
+        ];
+        PgTbMeta {
+            basic: RdbTbMeta {
+                schema: schema.to_string(),
+                tb: tb.to_string(),
+                cols: cols.clone(),
+                id_cols: vec!["id".to_string()],
+                ..Default::default()
+            },
+            oid: 1,
+            col_type_map: cols
+                .into_iter()
+                .map(|col| {
+                    let col_type = if col == "id" {
+                        pg_col_type("int4", PgValueType::Int32)
+                    } else {
+                        pg_col_type("text", PgValueType::String)
+                    };
+                    (col, col_type)
+                })
+                .collect(),
+        }
+    }
+
+    fn pg_col_type(alias: &str, value_type: PgValueType) -> PgColType {
+        PgColType {
+            value_type,
+            name: alias.to_string(),
+            alias: alias.to_string(),
+            oid: 0,
+            parent_oid: 0,
+            element_oid: 0,
+            category: String::new(),
+            enum_values: None,
+            schema_name: "pg_catalog".to_string(),
+        }
     }
 }
