@@ -23,12 +23,15 @@ bash scripts/e2e/gaussdb_oracle_console_self_check.sh teardown
 bash scripts/e2e/gaussdb_oracle_console_self_check.sh precheck
 ```
 
-期望：终端最后显示 `precheck passed`。如果失败，把终端输出贴回来即可。
+期望：终端最后显示 `precheck passed`。如果 GaussDB Oracle mode 实验环境不可用，终端会打印 `WARN` 提示；这表示外部实验环境当前不达标，但本地初始化仍可继续。如果 Docker、Oracle、本地依赖或端口失败，把终端输出贴回来即可。
 
 关键前置条件：
 
 - `dt-tests/tests/.env.local` 必须配置 `gaussdb_pg_candidate_hosts`，例如 `10.250.0.157:8000,10.250.0.223:8000`。
+- `precheck` 会检查 Docker daemon，启动本地 Oracle Docker 容器，验证 Oracle `APE_DTS` 用户连通性、Oracle LogMiner CDC 前置条件，并探测 GaussDB Oracle mode 实验环境。
+- GaussDB Oracle mode 检查不是只看端口连通；脚本会在候选节点上创建/写入/查询/删除临时探测表。全部候选节点都不可写时，`precheck` 会打印 `WARN` 和候选端点错误，用来提示实验环境当前不满足 CDC 自检条件。
 - `init` 会把这个变量传给 Console 和 `dt-main` 子进程，让 GaussDBOracle CDC 自动选择可写主库。不要只依赖页面里填写的单个 GaussDB IP；该 IP 可能是只读节点，快照能读但增量无法消费。
+- `init` 只操作本地环境：停止上一轮 self-check 进程、启动本地 Oracle XE Docker 容器、验证 Oracle CDC 前置条件、启动 Console 和 Web UI。GaussDB Oracle mode 是外部实验环境，`init` 不会创建、重启或阻塞等待它。
 - 下文 Step 1 的连接信息按当前自检环境填写；如果 `dt-tests/tests/.env.local` 中的 `gaussdb_oracle_*` 或 `oracle_*` 值变化，手动填写值也要同步变化。
 
 ## 3. Init
@@ -42,6 +45,7 @@ bash scripts/e2e/gaussdb_oracle_console_self_check.sh init
 - Console 后端：`http://127.0.0.1:18082`
 - Web UI：`http://localhost:5176`
 
+脚本会先确保本地 Oracle XE 容器已经启动并完成初始化，再验证 Oracle CDC 前置条件；这些本地检查通过后才会启动 Console 和 Web UI。`init` 不会操作外部 GaussDB Oracle mode 实验环境。
 脚本会以 `VITE_USE_MOCK=false` 启动 Web UI，确保 `/api/*` 走真实 Console 后端。
 脚本还会显示 `self-check license activated in isolated Console DB`，表示本轮自检不会卡在 `/license` 页面。
 
@@ -70,18 +74,27 @@ bash scripts/e2e/gaussdb_oracle_console_self_check.sh test normal
 
 期望：终端显示 `PASS: normal scenario prepared`。
 
-## 5. 手动创建 GaussDBOracle -> Oracle 任务
+## 5. 手动创建两条同步任务
+
+必须先创建并启动以下两条任务，再执行批量 CDC mock 数据写入和 SQL 校验：
+
+- `GaussDBOracle -> Oracle`
+- `Oracle -> GaussDBOracle`
+
+如果只创建其中一条任务，另一个方向的目标端必然不会变化，这不是同步结果失败。
+
+### 5.1 手动创建 GaussDBOracle -> Oracle 任务
 
 打开：`http://localhost:5176/tasks/snapshot`
 
-### Step 1 字段填写
+#### Step 1 字段填写
 
 源数据库信息：
 
 | 页面字段 | 填写值 |
 | --- | --- |
 | 实例引擎类型 | `GaussDB` |
-| GaussDB 子模式 | `oracle-mode (gaussdboracle)` |
+| GaussDB 子模式 | 页面选择 `Oracle mode`；API/配置值为 `oracle-mode`，后端任务类型为 `gaussdb_oracle` |
 | IP 地址 / 域名 | `10.250.0.157,10.250.0.223` |
 | 端口 | `8000` |
 | PDB 名称 | 关闭 |
@@ -136,11 +149,11 @@ bash scripts/e2e/gaussdb_oracle_console_self_check.sh test normal
 - 监控 tab 有图表区域。
 - 运行历史 tab 至少有 1 条 run 记录。
 
-## 6. 手动创建 Oracle -> GaussDBOracle 任务
+### 5.2 手动创建 Oracle -> GaussDBOracle 任务
 
 回到：`http://localhost:5176/tasks/snapshot`
 
-### Step 1 字段填写
+#### Step 1 字段填写
 
 源数据库信息：
 
@@ -159,7 +172,7 @@ bash scripts/e2e/gaussdb_oracle_console_self_check.sh test normal
 | 页面字段 | 填写值 |
 | --- | --- |
 | 实例引擎类型 | `GaussDB` |
-| GaussDB 子模式 | `oracle-mode (gaussdboracle)` |
+| GaussDB 子模式 | 页面选择 `Oracle mode`；API/配置值为 `oracle-mode`，后端任务类型为 `gaussdb_oracle` |
 | IP 地址 / 域名 | `10.250.0.157,10.250.0.223` |
 | 端口 | `8000` |
 | PDB 名称 | 关闭 |
@@ -201,70 +214,31 @@ bash scripts/e2e/gaussdb_oracle_console_self_check.sh test normal
 - 监控 tab 有图表区域。
 - 运行历史 tab 至少有 1 条 run 记录。
 
-## 7. Apply CDC Changes
+## 6. Apply Bulk CDC Mock Data
 
-注意：必须同时存在并启动以下两条任务后再执行 mutate/verify：
+两条任务都已经进入增量阶段后，执行批量 mock 脚本。脚本会分别在两个方向的源端写入相同规模的 CDC 变更：
 
-- `GaussDBOracle -> Oracle`
-- `Oracle -> GaussDBOracle`
+- 更新初始行：`id=1` -> `tracer=bulk_update, payload=bulk_after_update`
+- 插入保留行：默认 `id=1000..3999`，共 `3000` 行，按 `200` 行一组提交
+- 插入后删除探针行：默认 `id=900000..900199`，共 `200` 行，最终不应存在
 
-如果只创建第一条任务，反向验证会必然出现 `oracle_to_gaussdb_oracle target=[]`，这是反向任务缺失，不是反向同步结果失败。
-
-两条任务都已经进入增量阶段后，分别在两个源端手动执行下面 SQL。命令里的 tracer/payload 可以自行修改；验证时以你实际写入的值为准。
-
-### GaussDBOracle -> Oracle：在 GaussDBOracle 源端写入变更
-
-`GAUSSDB_RW_HOST` 填当前可写节点。若该节点超时或只读，改成候选节点里的另一个 IP 后重试。
+`GAUSSDB_RW_HOST` 必须填当前可写节点，使用第 2 步 `precheck` 或自动回归输出里的 `GaussDBOracle writable candidate verified` / `selected GaussDB RW URL for E2E` 结果。不要直接照抄示例 IP；GaussDB Oracle mode 是实验环境，主备可能切换，写到只读节点会导致批量验证无效。默认批量行数是几千条级别；如需调整，用 `BULK_ROW_COUNT` 覆盖。脚本默认 `BULK_COMMIT_EVERY=200`，用于避免单个超大事务在 CDC 重连后从事务起点重放，导致目标端已写入部分行但 checkpoint 长时间停在事务开始 LSN。
+脚本默认从 `dt-tests/tests/.env.local` 读取 GaussDBOracle 和 Oracle 的测试密码；也可以用 `GAUSSDB_PASSWORD` / `ORACLE_PASSWORD` 环境变量覆盖。
 
 ```bash
-export GAUSSDB_RW_HOST=10.250.0.157
-export PGPASSWORD='Gauss_246'
+export GAUSSDB_RW_HOST=<precheck 输出的当前可写 GaussDB 节点 IP>
+export BULK_ROW_COUNT=3000
+export BULK_COMMIT_EVERY=200
 
-psql "postgres://root@${GAUSSDB_RW_HOST}:8000/db_ora_mode?sslmode=require&protocolVersion=351" \
-  -v ON_ERROR_STOP=1 <<'SQL'
-DELETE FROM public.t_gaussdb_oracle_to_oracle WHERE id >= 2;
-INSERT INTO public.t_gaussdb_oracle_to_oracle (id, tracer, payload)
-  VALUES (2, 'cdc_insert_delete', 'to_delete');
-UPDATE public.t_gaussdb_oracle_to_oracle
-  SET tracer='cdc_update', payload='after_update'
-  WHERE id=1;
-DELETE FROM public.t_gaussdb_oracle_to_oracle WHERE id=2;
-INSERT INTO public.t_gaussdb_oracle_to_oracle (id, tracer, payload)
-  VALUES (3, 'cdc_insert', 'after_insert');
-SQL
+bash scripts/e2e/gaussdb_oracle_bulk_cdc_mock.sh apply
 ```
 
-### Oracle -> GaussDBOracle：在 Oracle 源端写入变更
+脚本执行成功后会输出期望结果：
 
-Oracle 容器里的 `sqlplus` 不一定在默认 `PATH`，所以命令显式设置 `ORACLE_HOME`。
-
-```bash
-docker exec -i oracle-xe-local bash -lc '
-export ORACLE_HOME=/u01/app/oracle/product/11.2.0/xe
-export PATH=$ORACLE_HOME/bin:$PATH
-export LD_LIBRARY_PATH=$ORACLE_HOME/lib
-sqlplus -s APE_DTS/ape_dts@//127.0.0.1:15211/XE
-' <<'SQL'
-WHENEVER SQLERROR EXIT SQL.SQLCODE
-DELETE FROM APE_DTS.T_ORACLE_TO_GAUSSDB_ORACLE WHERE ID >= 2;
-INSERT INTO APE_DTS.T_ORACLE_TO_GAUSSDB_ORACLE (ID, TRACER, PAYLOAD)
-  VALUES (2, 'cdc_insert_delete', 'to_delete');
-UPDATE APE_DTS.T_ORACLE_TO_GAUSSDB_ORACLE
-  SET TRACER='cdc_update', PAYLOAD='after_update'
-  WHERE ID=1;
-DELETE FROM APE_DTS.T_ORACLE_TO_GAUSSDB_ORACLE WHERE ID=2;
-INSERT INTO APE_DTS.T_ORACLE_TO_GAUSSDB_ORACLE (ID, TRACER, PAYLOAD)
-  VALUES (3, 'cdc_insert', 'after_insert');
-COMMIT;
-EXIT
-SQL
-```
-
-这组变更覆盖三类 CDC：
-
-- 更新初始行：`id=1` -> `tracer=cdc_update, payload=after_update`
-- 插入临时行：`id=2`，随后删除
-- 插入最终新增行：`id=3, tracer=cdc_insert, payload=after_insert`
+- 每张表最终行数：`3001`
+- 保留批量行范围：`1000..3999`
+- 已删除探针范围：`900000..900199`
+- 源端事务分组大小：`200` 行
 
 可见检查：
 
@@ -273,96 +247,105 @@ SQL
 - 监控图表或运行指标有变化。
 - 任务没有因为增量变更进入失败状态。
 
-## 8. Verify Normal
+## 7. Verify Bulk Result
 
-等待几秒让增量同步收敛，然后用 SQL 分别查询两个方向的源端和目标端。最终结论以这些查询结果为准；脚本验证只作为辅助。
+先用脚本等待增量同步收敛。脚本会同时检查两个方向的源端和目标端：总数、范围、删除探针、抽样行，以及源/目标状态一致。
+
+```bash
+export GAUSSDB_RW_HOST=<precheck 输出的当前可写 GaussDB 节点 IP>
+export BULK_ROW_COUNT=3000
+
+bash scripts/e2e/gaussdb_oracle_bulk_cdc_verify.sh
+```
+
+如果脚本超时，会打印最后一次看到的四端状态。此时再用下面 SQL 在 DBeaver 里分别切换到对应数据库连接排查。
+
+默认期望：
+
+- `expected_total = 3001`
+- `bulk_start_id = 1000`
+- `bulk_end_id = 3999`
+- `delete_start_id = 900000`
+- `delete_end_id = 900199`
 
 ### 查询 GaussDBOracle -> Oracle 方向
 
 源端 GaussDBOracle：
 
-```bash
-export GAUSSDB_RW_HOST=10.250.0.157
-export PGPASSWORD='Gauss_246'
-
-psql "postgres://root@${GAUSSDB_RW_HOST}:8000/db_ora_mode?sslmode=require&protocolVersion=351" \
-  -c "SELECT id, tracer, payload FROM public.t_gaussdb_oracle_to_oracle ORDER BY id;"
+```sql
+SELECT COUNT(*) AS total_rows FROM public.t_gaussdb_oracle_to_oracle;
+SELECT MIN(id) AS min_id, MAX(id) AS max_id FROM public.t_gaussdb_oracle_to_oracle;
+SELECT COUNT(*) AS deleted_probe_rows
+FROM public.t_gaussdb_oracle_to_oracle
+WHERE id BETWEEN 900000 AND 900199;
+SELECT id, tracer, payload
+FROM public.t_gaussdb_oracle_to_oracle
+WHERE id IN (1, 1000, 1001, 2500, 3999)
+ORDER BY id;
 ```
 
 目标端 Oracle：
 
-```bash
-docker exec -i oracle-xe-local bash -lc '
-export ORACLE_HOME=/u01/app/oracle/product/11.2.0/xe
-export PATH=$ORACLE_HOME/bin:$PATH
-export LD_LIBRARY_PATH=$ORACLE_HOME/lib
-sqlplus -s APE_DTS/ape_dts@//127.0.0.1:15211/XE
-' <<'SQL'
-SET PAGESIZE 100 LINESIZE 200 FEEDBACK OFF VERIFY OFF
-COLUMN TRACER FORMAT A24
-COLUMN PAYLOAD FORMAT A32
+```sql
+SELECT COUNT(*) AS TOTAL_ROWS
+FROM APE_DTS.T_GAUSSDB_ORACLE_TO_ORACLE;
+SELECT MIN(ID) AS MIN_ID, MAX(ID) AS MAX_ID
+FROM APE_DTS.T_GAUSSDB_ORACLE_TO_ORACLE;
+SELECT COUNT(*) AS DELETED_PROBE_ROWS
+FROM APE_DTS.T_GAUSSDB_ORACLE_TO_ORACLE
+WHERE ID BETWEEN 900000 AND 900199;
 SELECT ID, TRACER, PAYLOAD
 FROM APE_DTS.T_GAUSSDB_ORACLE_TO_ORACLE
+WHERE ID IN (1, 1000, 1001, 2500, 3999)
 ORDER BY ID;
-EXIT
-SQL
 ```
 
 ### 查询 Oracle -> GaussDBOracle 方向
 
 源端 Oracle：
 
-```bash
-docker exec -i oracle-xe-local bash -lc '
-export ORACLE_HOME=/u01/app/oracle/product/11.2.0/xe
-export PATH=$ORACLE_HOME/bin:$PATH
-export LD_LIBRARY_PATH=$ORACLE_HOME/lib
-sqlplus -s APE_DTS/ape_dts@//127.0.0.1:15211/XE
-' <<'SQL'
-SET PAGESIZE 100 LINESIZE 200 FEEDBACK OFF VERIFY OFF
-COLUMN TRACER FORMAT A24
-COLUMN PAYLOAD FORMAT A32
+```sql
+SELECT COUNT(*) AS TOTAL_ROWS
+FROM APE_DTS.T_ORACLE_TO_GAUSSDB_ORACLE;
+SELECT MIN(ID) AS MIN_ID, MAX(ID) AS MAX_ID
+FROM APE_DTS.T_ORACLE_TO_GAUSSDB_ORACLE;
+SELECT COUNT(*) AS DELETED_PROBE_ROWS
+FROM APE_DTS.T_ORACLE_TO_GAUSSDB_ORACLE
+WHERE ID BETWEEN 900000 AND 900199;
 SELECT ID, TRACER, PAYLOAD
 FROM APE_DTS.T_ORACLE_TO_GAUSSDB_ORACLE
+WHERE ID IN (1, 1000, 1001, 2500, 3999)
 ORDER BY ID;
-EXIT
-SQL
 ```
 
 目标端 GaussDBOracle：
 
-```bash
-export GAUSSDB_RW_HOST=10.250.0.157
-export PGPASSWORD='Gauss_246'
-
-psql "postgres://root@${GAUSSDB_RW_HOST}:8000/db_ora_mode?sslmode=require&protocolVersion=351" \
-  -c "SELECT id, tracer, payload FROM public.t_oracle_to_gaussdb_oracle ORDER BY id;"
-```
-
-可选自动验证：
-
-```bash
-bash scripts/e2e/gaussdb_oracle_console_self_check.sh verify normal
-```
-
-可选验证通过时会输出：
-
-```text
-PASS: gaussdb_oracle_to_oracle source rows match target rows
-PASS: oracle_to_gaussdb_oracle source rows match target rows
-PASS: GaussDBOracle <-> Oracle snapshot+cdc data is consistent.
+```sql
+SELECT COUNT(*) AS total_rows FROM public.t_oracle_to_gaussdb_oracle;
+SELECT MIN(id) AS min_id, MAX(id) AS max_id FROM public.t_oracle_to_gaussdb_oracle;
+SELECT COUNT(*) AS deleted_probe_rows
+FROM public.t_oracle_to_gaussdb_oracle
+WHERE id BETWEEN 900000 AND 900199;
+SELECT id, tracer, payload
+FROM public.t_oracle_to_gaussdb_oracle
+WHERE id IN (1, 1000, 1001, 2500, 3999)
+ORDER BY id;
 ```
 
 最终一致性标准：
 
 - 两个方向都必须通过。
-- 源端与目标端最终行集必须一致。
-- 最终行集必须是：
-  - `1 | cdc_update | after_update`
-  - `3 | cdc_insert | after_insert`
-- `id=2` 不应存在，证明 delete 增量也生效。
+- 源端与目标端 `COUNT(*)` 都必须是 `3001`。
+- `MIN(id)` 必须是 `1`，`MAX(id)` 必须是 `3999`。
+- `deleted_probe_rows` 必须是 `0`，证明 delete 增量生效。
+- 抽样行必须一致：
+  - `1 | bulk_update | bulk_after_update`
+  - `1000 | bulk_insert_000001 | payload_000001`
+  - `1001 | bulk_insert_000002 | payload_000002`
+  - `2500 | bulk_insert_001501 | payload_001501`
+  - `3999 | bulk_insert_003000 | payload_003000`
 
-## 9. 手动停止任务
+## 8. 手动停止任务
 
 在两个任务详情页手动点击停止或终止。
 
@@ -373,7 +356,7 @@ PASS: GaussDBOracle <-> Oracle snapshot+cdc data is consistent.
 - 运行历史保留 run 记录。
 - 失败时详情页能展示失败信息和日志。
 
-## 10. Destroy
+## 9. Destroy
 
 ```bash
 bash scripts/e2e/gaussdb_oracle_console_self_check.sh destroy
@@ -386,5 +369,7 @@ bash scripts/e2e/gaussdb_oracle_console_self_check.sh destroy
 - 脚本使用独立端口：Console `18082`，Web UI `5176`。
 - 脚本使用独立本地状态目录：`.local/self-check/gaussdb-oracle-console`。
 - 脚本只清理 self-check 状态目录下的运行进程，不清理仓库里已有的其他 Console、Vite 或 `dt-main` 进程。
-- Oracle sqlplus 默认使用 Docker 容器 `oracle-xe-local`。
+- Oracle sqlplus 默认使用 Docker 容器 `oracle-xe-local`；`init` 会通过 `dt-tests/docker-compose.oracle_xe.yml` 启动它，`precheck` 会验证它已运行且 CDC 前置条件可用。
+- GaussDB Oracle mode 默认使用 `dt-tests/tests/.env.local` 里的外部候选节点；只有 `precheck` 会做真实写探测并给出 `WARN`，`init` 不会操作这个外部实验环境。
 - 全自动回归仍可用：`bash scripts/e2e/gaussdb_oracle_console_self_check.sh e2e normal`，但它不是手动自检主路径。
+- `bash scripts/e2e/gaussdb_oracle_console_self_check.sh verify normal` 仍保留小样本自动验证语义，不适用于第 6 步批量 mock 数据。

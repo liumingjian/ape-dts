@@ -34,6 +34,9 @@ use dt_common::{
 
 const SECS_FROM_1970_TO_2000: i64 = 946_684_800;
 const GAUSSDB_STANDBY_STATUS_UPDATE_LEN: usize = 65;
+const KEEPALIVE_SEND_TIMEOUT_SECS: u64 = 5;
+const MIN_KEEPALIVE_INTERVAL_SECS: u64 = 1;
+const WAL_SENDER_TIMEOUT_KEEPALIVE_DIVISOR: u64 = 2;
 
 #[derive(Clone, Copy, Debug)]
 enum GaussDBClockUnit {
@@ -103,6 +106,7 @@ impl GaussDBCdcExtractor {
         let mut last_receive_lsn: Option<PgLsn> = None;
         let mut reconnect_attempt: u64 = 0;
         let mut reconnect_backoff = Duration::from_millis(500);
+        let mut allow_slot_recreate = self.recreate_slot_if_exists;
 
         loop {
             if self.base_extractor.shut_down.load(Ordering::Acquire) {
@@ -114,7 +118,7 @@ impl GaussDBCdcExtractor {
                 connection_auth: self.connection_auth.clone(),
                 slot_name: self.slot_name.clone(),
                 start_lsn: self.start_lsn.clone(),
-                recreate_slot_if_exists: self.recreate_slot_if_exists,
+                recreate_slot_if_exists: allow_slot_recreate,
                 last_success_endpoint: self.last_success_endpoint.clone(),
             };
 
@@ -137,6 +141,7 @@ impl GaussDBCdcExtractor {
                 };
 
             self.last_success_endpoint = Some(selected_endpoint);
+            allow_slot_recreate = false;
             reconnect_attempt = 0;
             reconnect_backoff = Duration::from_millis(500);
 
@@ -149,22 +154,31 @@ impl GaussDBCdcExtractor {
                 .map(|v| std::cmp::max(v, start_lsn))
                 .unwrap_or(start_lsn);
 
-            let mut keepalive_interval_secs = self.keepalive_interval_secs;
-            if keepalive_interval_secs > 0 {
-                if let Some(timeout) = wal_sender_timeout {
-                    let timeout_secs = timeout.as_secs();
-                    if timeout_secs > 0 {
-                        let recommended = std::cmp::max(1, timeout_secs / 2);
-                        if keepalive_interval_secs > recommended {
-                            log_info!(
-                                "gaussdb wal_sender_timeout={}s is smaller than keepalive_interval_secs={}, adjusting keepalive_interval_secs to {}s",
-                                timeout_secs,
-                                keepalive_interval_secs,
-                                recommended
-                            );
-                            keepalive_interval_secs = recommended;
-                        }
+            let keepalive_interval_secs = Self::effective_keepalive_interval_secs(
+                self.keepalive_interval_secs,
+                wal_sender_timeout,
+            );
+            if let Some(timeout) = wal_sender_timeout {
+                if self.keepalive_interval_secs > 0 {
+                    if keepalive_interval_secs < self.keepalive_interval_secs {
+                        log_info!(
+                            "gaussdb wal_sender_timeout={}s is smaller than keepalive_interval_secs={}, adjusting keepalive_interval_secs to {}s",
+                            timeout.as_secs(),
+                            self.keepalive_interval_secs,
+                            keepalive_interval_secs
+                        );
+                    } else {
+                        log_info!(
+                            "gaussdb wal_sender_timeout={}s, keepalive_interval_secs={}s",
+                            timeout.as_secs(),
+                            keepalive_interval_secs
+                        );
                     }
+                } else {
+                    log_info!(
+                        "gaussdb wal_sender_timeout={}s, periodic keepalive disabled",
+                        timeout.as_secs(),
+                    );
                 }
             }
 
@@ -242,8 +256,6 @@ impl GaussDBCdcExtractor {
                                 &mut stream,
                                 start_lsn,
                                 last_receive_lsn_session,
-                                // Align with flink-cdc gaussdb connector behavior: periodic keepalive
-                                // uses forceUpdateStatus() semantics.
                                 true,
                                 server_clock_unit,
                             ).await {
@@ -439,13 +451,47 @@ impl GaussDBCdcExtractor {
             clock,
             force_reply,
         )?;
-        stream.send(msg).await.with_context(|| {
+        tokio::time::timeout(
+            Duration::from_secs(KEEPALIVE_SEND_TIMEOUT_SECS),
+            stream.send(msg),
+        )
+        .await
+        .with_context(|| {
+            format!(
+                "keepalive status update to gaussdb timed out after {}s, receive_lsn: {}, flush_lsn: {}",
+                KEEPALIVE_SEND_TIMEOUT_SECS, receive_lsn, flush_lsn
+            )
+        })?
+        .with_context(|| {
             format!(
                 "keepalive status update to gaussdb failed, receive_lsn: {}, flush_lsn: {}",
                 receive_lsn, flush_lsn
             )
         })?;
         Ok(())
+    }
+
+    fn effective_keepalive_interval_secs(
+        configured_secs: u64,
+        wal_sender_timeout: Option<Duration>,
+    ) -> u64 {
+        let Some(timeout) = wal_sender_timeout else {
+            return configured_secs;
+        };
+        if configured_secs == 0 {
+            return 0;
+        }
+
+        let timeout_secs = timeout.as_secs();
+        if timeout_secs == 0 {
+            return configured_secs;
+        }
+
+        let recommended = std::cmp::max(
+            MIN_KEEPALIVE_INTERVAL_SECS,
+            timeout_secs / WAL_SENDER_TIMEOUT_KEEPALIVE_DIVISOR,
+        );
+        std::cmp::min(configured_secs, recommended)
     }
 
     async fn current_flush_lsn(&self, start_lsn: PgLsn) -> PgLsn {
@@ -833,5 +879,41 @@ mod tests {
             }
             other => panic!("unexpected message: {:?}", std::mem::discriminant(&other)),
         }
+    }
+
+    #[test]
+    fn gaussdb_keepalive_interval_respects_wal_sender_timeout() {
+        assert_eq!(
+            GaussDBCdcExtractor::effective_keepalive_interval_secs(
+                10,
+                Some(Duration::from_secs(6)),
+            ),
+            3
+        );
+        assert_eq!(
+            GaussDBCdcExtractor::effective_keepalive_interval_secs(
+                2,
+                Some(Duration::from_secs(6)),
+            ),
+            2
+        );
+        assert_eq!(
+            GaussDBCdcExtractor::effective_keepalive_interval_secs(
+                10,
+                Some(Duration::from_millis(500)),
+            ),
+            10
+        );
+        assert_eq!(
+            GaussDBCdcExtractor::effective_keepalive_interval_secs(
+                0,
+                Some(Duration::from_secs(6)),
+            ),
+            0
+        );
+        assert_eq!(
+            GaussDBCdcExtractor::effective_keepalive_interval_secs(10, None),
+            10
+        );
     }
 }
