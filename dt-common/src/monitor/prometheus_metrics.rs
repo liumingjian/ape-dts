@@ -195,6 +195,11 @@ impl PrometheusMetrics {
                         "the count of DDL operations",
                         TaskMetricsType::SinkerDdlCount,
                     );
+                    register_handler(
+                        "lag",
+                        "the lag of CDC task in second",
+                        TaskMetricsType::Lag,
+                    );
                 }
                 TaskType::Struct | TaskType::Check => {}
             }
@@ -256,4 +261,102 @@ async fn not_found_handler() -> Result<impl Responder> {
     Ok(HttpResponse::NotFound()
         .content_type("application/json")
         .body(r#"{"error":"Not Found","message":"The requested endpoint does not exist"}"#))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_config() -> MetricsConfig {
+        MetricsConfig {
+            http_host: "127.0.0.1".to_string(),
+            http_port: 9199,
+            workers: 1,
+            metrics_labels: std::collections::HashMap::new(),
+        }
+    }
+
+    fn gather_text(pm: &PrometheusMetrics) -> String {
+        let mut buffer = String::new();
+        let encoder = TextEncoder::new();
+        encoder.encode_utf8(&pm.registry.gather(), &mut buffer).unwrap();
+        buffer
+    }
+
+    #[test]
+    fn cdc_registers_lag_gauge_with_second_in_help() {
+        let pm = PrometheusMetrics::new(Some(TaskType::Cdc), make_config());
+        pm.initialization();
+        let text = gather_text(&pm);
+        assert!(
+            text.contains("# TYPE lag gauge"),
+            "Expected '# TYPE lag gauge' line, got:\n{}",
+            text
+        );
+        assert!(
+            text.lines()
+                .any(|l| l.starts_with("# HELP lag") && (l.contains("second") || l.contains("秒"))),
+            "Expected '# HELP lag' to mention 'second' or '秒', got:\n{}",
+            text
+        );
+        assert!(
+            text.lines().any(|l| l.starts_with("lag ")),
+            "Expected 'lag <value>' line, got:\n{}",
+            text
+        );
+    }
+
+    #[test]
+    fn cdc_retains_timestamp_and_sinker_ddl_count() {
+        let pm = PrometheusMetrics::new(Some(TaskType::Cdc), make_config());
+        pm.initialization();
+        let text = gather_text(&pm);
+        assert!(text.contains("# TYPE timestamp gauge"), "Expected timestamp gauge");
+        assert!(
+            text.contains("# TYPE sinker_ddl_count gauge"),
+            "Expected sinker_ddl_count gauge"
+        );
+    }
+
+    #[test]
+    fn snapshot_does_not_register_lag() {
+        let pm = PrometheusMetrics::new(Some(TaskType::Snapshot), make_config());
+        pm.initialization();
+        let text = gather_text(&pm);
+        assert!(
+            !text.contains("# TYPE lag gauge"),
+            "Snapshot must not have '# TYPE lag gauge' line"
+        );
+        assert!(
+            !text.lines().any(|l| l.starts_with("lag ")),
+            "Snapshot must not have 'lag <value>' line"
+        );
+    }
+
+    #[test]
+    fn snapshot_retains_progress_and_extractor_plan_records() {
+        let pm = PrometheusMetrics::new(Some(TaskType::Snapshot), make_config());
+        pm.initialization();
+        let text = gather_text(&pm);
+        assert!(text.contains("# TYPE progress gauge"), "Expected progress gauge");
+        assert!(
+            text.contains("# TYPE extractor_plan_records gauge"),
+            "Expected extractor_plan_records gauge"
+        );
+    }
+
+    #[test]
+    fn no_delay_gauge_for_cdc_or_snapshot() {
+        for task_type in [TaskType::Cdc, TaskType::Snapshot] {
+            let label = format!("{:?}", task_type);
+            let pm = PrometheusMetrics::new(Some(task_type), make_config());
+            pm.initialization();
+            let text = gather_text(&pm);
+            assert!(
+                !text.lines().any(|l| l.starts_with("delay ") || l.starts_with("# TYPE delay ")),
+                "Must not have delay gauge for {}",
+                label
+            );
+        }
+    }
 }
