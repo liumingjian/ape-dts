@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString, IntoStaticStr};
 
 #[derive(
@@ -14,11 +14,11 @@ use strum::{Display, EnumString, IntoStaticStr};
     Copy,
     Debug,
     Serialize,
+    Deserialize,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum TaskMetricsType {
-    // TODO
-    Delay,
+    Lag,
     Timestamp,
     Progress,
     TotalProgressCount,
@@ -63,4 +63,21 @@ pub enum TaskMetricsType {
     SinkerSinkedBytes,
 
     SinkerDdlCount,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lag_serializes_to_lag_string() {
+        let json = serde_json::to_string(&TaskMetricsType::Lag).unwrap();
+        assert_eq!(json, "\"lag\"");
+    }
+
+    #[test]
+    fn lag_deserializes_from_lag_string() {
+        let v: TaskMetricsType = serde_json::from_str("\"lag\"").unwrap();
+        assert_eq!(v, TaskMetricsType::Lag);
+    }
 }
