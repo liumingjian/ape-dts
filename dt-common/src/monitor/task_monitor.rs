@@ -137,6 +137,14 @@ impl TaskMonitor {
     }
 
     async fn calc(&self) -> Option<BTreeMap<TaskMetricsType, u64>> {
+        let now_unix_secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        self.calc_inner(now_unix_secs).await
+    }
+
+    async fn calc_inner(&self, now_unix_secs: u64) -> Option<BTreeMap<TaskMetricsType, u64>> {
         self.task_type.as_ref()?;
 
         let mut metrics: BTreeMap<TaskMetricsType, u64> = BTreeMap::new();
@@ -382,6 +390,17 @@ impl TaskMonitor {
             );
         }
 
+        // CDC-only Lag computation: max(0, now_unix_secs - source_timestamp_secs)
+        // Only emitted when task_type == Cdc AND a Pipeline Timestamp counter has been recorded.
+        if matches!(self.task_type, Some(TaskType::Cdc)) {
+            if let Some(&timestamp_secs) = metrics.get(&TaskMetricsType::Timestamp) {
+                metrics.insert(
+                    TaskMetricsType::Lag,
+                    now_unix_secs.saturating_sub(timestamp_secs),
+                );
+            }
+        }
+
         Some(metrics)
     }
 
@@ -476,6 +495,133 @@ mod tests {
             metrics.get(&TaskMetricsType::Progress).copied(),
             Some(40),
             "CDC must use table-count formula, not row-based formula"
+        );
+    }
+
+    // VAL-ENGINE-010: Cdc with Timestamp = now - 42 emits Lag in {42, 43}
+    // Uses calc_inner with injected now_unix_secs for determinism.
+    #[tokio::test]
+    #[cfg(not(feature = "metrics"))]
+    async fn cdc_lag_basic_42_seconds() {
+        let m = cdc_monitor();
+        let now: u64 = 1_700_000_000; // fixed epoch second
+        m.add_no_window_metrics(TaskMetricsType::Timestamp, now - 42);
+        let metrics = m.calc_inner(now).await.unwrap();
+        let lag = metrics
+            .get(&TaskMetricsType::Lag)
+            .copied()
+            .expect("Lag must be present for CDC with Timestamp");
+        assert_eq!(lag, 42, "expected lag == 42, got {lag}");
+    }
+
+    // VAL-ENGINE-011: Cdc with Timestamp = now + 100 (future/clock skew) emits Lag = 0
+    #[tokio::test]
+    #[cfg(not(feature = "metrics"))]
+    async fn cdc_lag_future_clock_clamps_to_zero() {
+        let m = cdc_monitor();
+        let now: u64 = 1_700_000_000;
+        m.add_no_window_metrics(TaskMetricsType::Timestamp, now + 100);
+        let metrics = m.calc_inner(now).await.unwrap();
+        assert_eq!(
+            metrics.get(&TaskMetricsType::Lag).copied(),
+            Some(0),
+            "Lag must be 0 when timestamp is in the future"
+        );
+    }
+
+    // VAL-ENGINE-021: Cdc with Timestamp = now exactly emits Lag = 0 exactly
+    #[tokio::test]
+    #[cfg(not(feature = "metrics"))]
+    async fn cdc_lag_boundary_now_equals_timestamp() {
+        let m = cdc_monitor();
+        let now: u64 = 1_700_000_000;
+        m.add_no_window_metrics(TaskMetricsType::Timestamp, now);
+        let metrics = m.calc_inner(now).await.unwrap();
+        assert_eq!(
+            metrics.get(&TaskMetricsType::Lag).copied(),
+            Some(0),
+            "Lag must be exactly 0 when timestamp == now"
+        );
+    }
+
+    // VAL-ENGINE-012: Cdc with no Timestamp recorded emits NO Lag entry
+    #[tokio::test]
+    #[cfg(not(feature = "metrics"))]
+    async fn cdc_lag_absent_before_first_timestamp() {
+        let m = cdc_monitor();
+        let metrics = m.calc_inner(1_700_000_000).await.unwrap();
+        assert!(
+            metrics.get(&TaskMetricsType::Lag).is_none(),
+            "Lag must be absent when no Timestamp has been recorded"
+        );
+    }
+
+    // VAL-ENGINE-013: Snapshot task never emits Lag even when Timestamp is present
+    #[tokio::test]
+    #[cfg(not(feature = "metrics"))]
+    async fn snapshot_never_emits_lag_even_with_timestamp() {
+        let m = snapshot_monitor();
+        let now: u64 = 1_700_000_000;
+        m.add_no_window_metrics(TaskMetricsType::Timestamp, now - 42);
+        let metrics = m.calc_inner(now).await.unwrap();
+        assert!(
+            metrics.get(&TaskMetricsType::Lag).is_none(),
+            "Snapshot tasks must never emit Lag"
+        );
+    }
+
+    // VAL-ENGINE-014 (Struct): Struct task never emits Lag
+    #[tokio::test]
+    #[cfg(not(feature = "metrics"))]
+    async fn struct_task_never_emits_lag() {
+        let m = TaskMonitor::new(Some(TaskType::Struct));
+        let now: u64 = 1_700_000_000;
+        m.add_no_window_metrics(TaskMetricsType::Timestamp, now - 42);
+        let metrics = m.calc_inner(now).await.unwrap();
+        assert!(
+            metrics.get(&TaskMetricsType::Lag).is_none(),
+            "Struct tasks must never emit Lag"
+        );
+    }
+
+    // VAL-ENGINE-014 (Check): Check task never emits Lag
+    #[tokio::test]
+    #[cfg(not(feature = "metrics"))]
+    async fn check_task_never_emits_lag() {
+        let m = TaskMonitor::new(Some(TaskType::Check));
+        let now: u64 = 1_700_000_000;
+        m.add_no_window_metrics(TaskMetricsType::Timestamp, now - 42);
+        let metrics = m.calc_inner(now).await.unwrap();
+        assert!(
+            metrics.get(&TaskMetricsType::Lag).is_none(),
+            "Check tasks must never emit Lag"
+        );
+    }
+
+    // VAL-ENGINE-022 (additional): Cdc with ExtractorPlanRecords > 0 AND Timestamp present:
+    // still uses table-count Progress (not row-based), and Lag is correctly emitted.
+    #[tokio::test]
+    #[cfg(not(feature = "metrics"))]
+    async fn cdc_does_not_emit_snapshot_row_progress_and_emits_lag() {
+        let m = cdc_monitor();
+        let now: u64 = 1_700_000_000;
+        m.add_no_window_metrics(TaskMetricsType::ExtractorPlanRecords, 1000);
+        m.add_no_window_metrics(TaskMetricsType::SinkerSinkedRecords, 500);
+        m.add_no_window_metrics(TaskMetricsType::TotalProgressCount, 10);
+        m.add_no_window_metrics(TaskMetricsType::FinishedProgressCount, 4);
+        m.add_no_window_metrics(TaskMetricsType::Timestamp, now - 10);
+        let metrics = m.calc_inner(now).await.unwrap();
+        // CDC must use table-count formula (40), NOT row-based formula (50)
+        assert_eq!(
+            metrics.get(&TaskMetricsType::Progress).copied(),
+            Some(40),
+            "CDC must use table-count formula, not row-based formula"
+        );
+        // Lag must be computed correctly
+        assert_eq!(
+            metrics.get(&TaskMetricsType::Lag).copied(),
+            Some(10),
+            "CDC must emit Lag = now - timestamp = 10"
         );
     }
 }
