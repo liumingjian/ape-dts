@@ -354,7 +354,28 @@ impl TaskMonitor {
             #[cfg(feature = "metrics")]
             self.prometheus_metrics.set_metrics(&metrics);
         }
-        if total_progress_count > 0 {
+        if matches!(self.task_type, Some(TaskType::Snapshot)) {
+            let extractor_plan_records = metrics
+                .get(&TaskMetricsType::ExtractorPlanRecords)
+                .copied()
+                .unwrap_or(0);
+            let sinker_sinked_records = metrics
+                .get(&TaskMetricsType::SinkerSinkedRecords)
+                .copied()
+                .unwrap_or(0);
+            if extractor_plan_records > 0 {
+                metrics.insert(
+                    TaskMetricsType::Progress,
+                    cmp::min(sinker_sinked_records * 100 / extractor_plan_records, 100),
+                );
+            } else if total_progress_count > 0 {
+                metrics.insert(
+                    TaskMetricsType::Progress,
+                    cmp::min(finished_progress_count * 100 / total_progress_count, 100),
+                );
+            }
+            // else: both zero — omit Progress entirely
+        } else if total_progress_count > 0 {
             metrics.insert(
                 TaskMetricsType::Progress,
                 cmp::min(finished_progress_count * 100 / total_progress_count, 100),
@@ -369,6 +390,93 @@ impl TaskMonitor {
             .remove(&TaskMetricsType::PipelineQueueSize);
         self.no_window_metrics_map
             .remove(&TaskMetricsType::PipelineQueueBytes);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::config_enums::TaskType;
+
+    #[cfg(not(feature = "metrics"))]
+    fn snapshot_monitor() -> TaskMonitor {
+        TaskMonitor::new(Some(TaskType::Snapshot))
+    }
+
+    #[cfg(not(feature = "metrics"))]
+    fn cdc_monitor() -> TaskMonitor {
+        TaskMonitor::new(Some(TaskType::Cdc))
+    }
+
+    // VAL-ENGINE-006: row-based formula with ExtractorPlanRecords=1000, SinkerSinkedRecords=250
+    #[tokio::test]
+    #[cfg(not(feature = "metrics"))]
+    async fn snapshot_row_based_progress_25_percent() {
+        let m = snapshot_monitor();
+        m.add_no_window_metrics(TaskMetricsType::ExtractorPlanRecords, 1000);
+        m.add_no_window_metrics(TaskMetricsType::SinkerSinkedRecords, 250);
+        let metrics = m.calc().await.unwrap();
+        assert_eq!(metrics.get(&TaskMetricsType::Progress).copied(), Some(25));
+    }
+
+    // VAL-ENGINE-007: row-based formula clamped at 100 when sinked exceeds plan
+    #[tokio::test]
+    #[cfg(not(feature = "metrics"))]
+    async fn snapshot_row_based_progress_clamped_at_100() {
+        let m = snapshot_monitor();
+        m.add_no_window_metrics(TaskMetricsType::ExtractorPlanRecords, 100);
+        m.add_no_window_metrics(TaskMetricsType::SinkerSinkedRecords, 250);
+        let metrics = m.calc().await.unwrap();
+        assert_eq!(metrics.get(&TaskMetricsType::Progress).copied(), Some(100));
+    }
+
+    // VAL-ENGINE-024: Progress=0 (not absent) when SinkerSinkedRecords=0 and ExtractorPlanRecords>0
+    #[tokio::test]
+    #[cfg(not(feature = "metrics"))]
+    async fn snapshot_row_based_progress_zero_when_none_sinked() {
+        let m = snapshot_monitor();
+        m.add_no_window_metrics(TaskMetricsType::ExtractorPlanRecords, 1000);
+        m.add_no_window_metrics(TaskMetricsType::SinkerSinkedRecords, 0);
+        let metrics = m.calc().await.unwrap();
+        assert_eq!(metrics.get(&TaskMetricsType::Progress).copied(), Some(0));
+    }
+
+    // VAL-ENGINE-008: fallback to table-count when ExtractorPlanRecords=0
+    #[tokio::test]
+    #[cfg(not(feature = "metrics"))]
+    async fn snapshot_progress_fallback_table_count() {
+        let m = snapshot_monitor();
+        m.add_no_window_metrics(TaskMetricsType::TotalProgressCount, 10);
+        m.add_no_window_metrics(TaskMetricsType::FinishedProgressCount, 3);
+        let metrics = m.calc().await.unwrap();
+        assert_eq!(metrics.get(&TaskMetricsType::Progress).copied(), Some(30));
+    }
+
+    // VAL-ENGINE-009: Progress absent when both ExtractorPlanRecords=0 and TotalProgressCount=0
+    #[tokio::test]
+    #[cfg(not(feature = "metrics"))]
+    async fn snapshot_progress_omitted_when_both_zero() {
+        let m = snapshot_monitor();
+        let metrics = m.calc().await.unwrap();
+        assert!(metrics.get(&TaskMetricsType::Progress).is_none());
+    }
+
+    // VAL-ENGINE-022: CDC must not emit row-based Progress even when counters are set
+    #[tokio::test]
+    #[cfg(not(feature = "metrics"))]
+    async fn cdc_does_not_emit_snapshot_row_progress() {
+        let m = cdc_monitor();
+        m.add_no_window_metrics(TaskMetricsType::ExtractorPlanRecords, 1000);
+        m.add_no_window_metrics(TaskMetricsType::SinkerSinkedRecords, 500);
+        m.add_no_window_metrics(TaskMetricsType::TotalProgressCount, 10);
+        m.add_no_window_metrics(TaskMetricsType::FinishedProgressCount, 4);
+        let metrics = m.calc().await.unwrap();
+        // CDC must use table-count formula (40), NOT row-based formula (50)
+        assert_eq!(
+            metrics.get(&TaskMetricsType::Progress).copied(),
+            Some(40),
+            "CDC must use table-count formula, not row-based formula"
+        );
     }
 }
 
