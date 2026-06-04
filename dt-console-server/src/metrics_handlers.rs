@@ -200,6 +200,7 @@ mod tests {
             stopped_at: None,
             exit_code: None,
             stop_method: None,
+            metrics_port: None,
             created_at: now.clone(),
             updated_at: now,
         };

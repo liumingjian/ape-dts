@@ -10,8 +10,8 @@ impl RunRepository {
     pub async fn create(pool: &SqlitePool, run: &Run) -> Result<Run, sqlx::Error> {
         sqlx::query(
             "INSERT INTO runs (id, task_id, status, pid, ini_path, log_dir, started_at,
-             stopped_at, exit_code, stop_method, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             stopped_at, exit_code, stop_method, metrics_port, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&run.id)
         .bind(&run.task_id)
@@ -23,6 +23,7 @@ impl RunRepository {
         .bind(&run.stopped_at)
         .bind(run.exit_code)
         .bind(&run.stop_method)
+        .bind(run.metrics_port)
         .bind(&run.created_at)
         .bind(&run.updated_at)
         .execute(pool)
@@ -86,7 +87,7 @@ impl RunRepository {
         sqlx::query(
             "UPDATE runs SET status = ?, pid = ?, ini_path = ?, log_dir = ?,
              started_at = ?, stopped_at = ?, exit_code = ?, stop_method = ?,
-             updated_at = ?
+             metrics_port = ?, updated_at = ?
              WHERE id = ?",
         )
         .bind(&run.status)
@@ -97,6 +98,7 @@ impl RunRepository {
         .bind(&run.stopped_at)
         .bind(run.exit_code)
         .bind(&run.stop_method)
+        .bind(run.metrics_port)
         .bind(&run.updated_at)
         .bind(&run.id)
         .execute(pool)
@@ -109,6 +111,13 @@ impl RunRepository {
     pub async fn has_active_run(pool: &SqlitePool, task_id: &str) -> Result<bool, sqlx::Error> {
         let active = Self::find_active_by_task(pool, task_id).await?;
         Ok(active.is_some())
+    }
+
+    /// List all runs across all tasks, most recent first.
+    pub async fn list_all(pool: &SqlitePool) -> Result<Vec<Run>, sqlx::Error> {
+        sqlx::query_as("SELECT * FROM runs ORDER BY created_at DESC")
+            .fetch_all(pool)
+            .await
     }
 
     /// List runs by a set of statuses (used for orchestrator restart reconciliation).

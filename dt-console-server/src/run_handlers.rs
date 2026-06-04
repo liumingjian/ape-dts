@@ -4,6 +4,7 @@
 //! - POST   /api/tasks/:id/stop    — stop a running Run (202)
 //! - POST   /api/tasks/:id/pause   — pause a running CDC Run (202)
 //! - POST   /api/tasks/:id/resume  — resume a paused Run (202)
+//! - GET    /api/runs              — list all Runs (200)
 //! - GET    /api/runs/:id          — get Run details with position
 
 use actix_web::{get, post, web, HttpResponse, ResponseError};
@@ -21,6 +22,7 @@ use crate::models::{
     is_legal_transition, run_status, ControlLog, Run, RunResponse, StartRunResponse, Task,
     UserContext,
 };
+use crate::port_pool::PortPool;
 use crate::precheck_handlers::PrecheckItem;
 use crate::repositories::control_log_repository::ControlLogRepository;
 use crate::repositories::operate_log_repository::OperateLogRepository;
@@ -408,6 +410,7 @@ fn run_to_response(run: &Run) -> RunResponse {
         exit_code: run.exit_code,
         stop_method: run.stop_method.clone(),
         position,
+        metrics_port: run.metrics_port,
         created_at: run.created_at.clone(),
         updated_at: run.updated_at.clone(),
     }
@@ -416,7 +419,7 @@ fn run_to_response(run: &Run) -> RunResponse {
 /// POST /api/tasks/:id/start — start a new Run for a Task.
 ///
 /// Returns 202 with `{run_id}` on success.
-/// Returns 409 if a Run is already active for the Task.
+/// Returns 409 if a Run is already active for the Task or the port pool is exhausted.
 /// Returns 422 if the license is expired or at cap.
 /// Honours Idempotency-Key: replayed key returns cached 202 result.
 #[post("/tasks/{id}/start")]
@@ -426,6 +429,7 @@ pub async fn start_task(
     path: web::Path<String>,
     active_runs: web::Data<ActiveRuns>,
     scraper_state: web::Data<ScraperState>,
+    port_pool: web::Data<PortPool>,
     idempotency_cache: web::Data<IdempotencyCache>,
     req: actix_web::HttpRequest,
 ) -> HttpResponse {
@@ -458,7 +462,7 @@ pub async fn start_task(
     }
 
     // Load the Task.
-    let task = match TaskRepository::find_by_id(&pool, &task_id).await {
+    let mut task = match TaskRepository::find_by_id(&pool, &task_id).await {
         Ok(t) => t,
         Err(_) => {
             return ApiError::with_details(
@@ -638,12 +642,45 @@ pub async fn start_task(
         stopped_at: None,
         exit_code: None,
         stop_method: None,
+        metrics_port: None,
         created_at: now.clone(),
         updated_at: now,
     };
 
     // Write control log intent.
     let _ = write_control_intent(&pool, &task_id, &run_id, "start", &user.username).await;
+
+    // Allocate a metrics port from the pool BEFORE rendering INI, so the port
+    // is injected into the [metrics] section and the engine binds exactly that port.
+    let metrics_port = match port_pool.acquire().await {
+        Some(p) => p,
+        None => {
+            // Port pool exhausted — clean up and return a clear error.
+            {
+                let mut active = active_runs.lock().await;
+                active.remove(&task_id);
+            }
+            return ApiError::new(
+                codes::PORT_POOL_EXHAUSTED,
+                "All metrics ports in [9100, 9199] are currently in use; \
+                 wait for a running Run to terminate before starting a new one",
+            )
+            .error_response();
+        }
+    };
+
+    // Inject the allocated port into the task's metrics_config JSON, preserving
+    // any other user-supplied keys (e.g., custom labels).
+    {
+        let mut mc: serde_json::Value =
+            serde_json::from_str(&task.metrics_config).unwrap_or_default();
+        if let Some(obj) = mc.as_object_mut() {
+            obj.insert("http_port".to_string(), serde_json::json!(metrics_port));
+        } else {
+            mc = serde_json::json!({ "http_port": metrics_port });
+        }
+        task.metrics_config = mc.to_string();
+    }
 
     // Render INI from the Task. For managed `snapshot_and_cdc` tasks the
     // engine runs in two phases (snapshot → cdc); pre-stage the phase 2 INI
@@ -654,6 +691,7 @@ pub async fn start_task(
         let phase2_start = match crate::two_phase::capture_phase2_start(&task).await {
             Ok(start) => start,
             Err(e) => {
+                port_pool.release(metrics_port).await;
                 {
                     let mut active = active_runs.lock().await;
                     active.remove(&task_id);
@@ -668,6 +706,7 @@ pub async fn start_task(
         match crate::two_phase::prepare_run_dir(&task, &run_dir_path, phase2_start) {
             Ok(prep) => prep.phase1_ini,
             Err(e) => {
+                port_pool.release(metrics_port).await;
                 {
                     let mut active = active_runs.lock().await;
                     active.remove(&task_id);
@@ -695,7 +734,9 @@ pub async fn start_task(
     {
         Ok(h) => h,
         Err(e) => {
-            // Spawn failed — mark the Run as failed, clean up Starting slot.
+            // Spawn failed — release the port, mark the Run as failed, clean up Starting slot.
+            port_pool.release(metrics_port).await;
+
             run.status = run_status::FAILED.to_string();
             run.exit_code = Some(-1);
             run.stopped_at =
@@ -736,15 +777,17 @@ pub async fn start_task(
         }
     };
 
-    // Update the Run with PID and running status.
+    // Update the Run with PID, running status, and the allocated metrics port.
     run.pid = Some(handle.pid as i64);
     run.status = run_status::RUNNING.to_string();
+    run.metrics_port = Some(metrics_port as i64);
     run.updated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
     let _saved = match RunRepository::create(&pool, &run).await {
         Ok(r) => r,
         Err(e) => {
-            // Failed to persist — kill the child process, clean up slot.
+            // Failed to persist — release port, kill the child process, clean up slot.
+            port_pool.release(metrics_port).await;
             let _ = executor::LocalExecutor::kill_with_grace(&handle, 3).await;
             {
                 let mut active = active_runs.lock().await;
@@ -765,9 +808,10 @@ pub async fn start_task(
         active.insert(task_id.clone(), RunSlot::Active(handle));
     }
 
-    // Register the Run as a scrape target for the MetricsScraper.
+    // Register the Run as a scrape target for the MetricsScraper, using the
+    // allocated port so the scraper hits the correct engine endpoint.
     {
-        let target = metrics_scraper::scrape_target_from_run(&task_id, &run_id);
+        let target = metrics_scraper::scrape_target_from_run(&task_id, &run_id, metrics_port);
         scraper_state.add_target(target).await;
     }
 
@@ -788,10 +832,11 @@ pub async fn start_task(
     // Spawn a background task to monitor the child process.
     let bg_pool = pool.get_ref().clone();
     let bg_active_runs = active_runs.get_ref().clone();
+    let bg_port_pool = port_pool.get_ref().clone();
     let bg_task_id = task_id.clone();
     let bg_run_id = run_id.clone();
     tokio::spawn(async move {
-        supervise_run(bg_pool, bg_active_runs, bg_task_id, bg_run_id).await;
+        supervise_run(bg_pool, bg_active_runs, bg_task_id, bg_run_id, bg_port_pool).await;
     });
 
     // Cache the result if an Idempotency-Key was provided.
@@ -1200,6 +1245,31 @@ pub async fn resume_task(
     HttpResponse::Accepted().json(serde_json::json!({ "run_id": run_id }))
 }
 
+/// GET /api/runs — list all Runs across all Tasks, most recent first.
+///
+/// Returns a flat array of RunResponse objects (no pagination on the dashboard
+/// list; callers can filter by status client-side).
+#[get("/runs")]
+pub async fn list_runs(
+    pool: web::Data<sqlx::SqlitePool>,
+    user: UserContext,
+) -> HttpResponse {
+    if let Err(e) = rbac::require_action(&user, RbacAction::TaskRead) {
+        return e.error_response();
+    }
+
+    match RunRepository::list_all(&pool).await {
+        Ok(runs) => {
+            let items: Vec<RunResponse> = runs.iter().map(run_to_response).collect();
+            HttpResponse::Ok().json(items)
+        }
+        Err(e) => {
+            ApiError::new(codes::INTERNAL_ERROR, format!("run list failed: {e}"))
+                .error_response()
+        }
+    }
+}
+
 /// GET /api/runs/:id — get Run details including position.
 #[get("/runs/{id}")]
 pub async fn get_run(
@@ -1240,12 +1310,14 @@ async fn find_operator_for_run(pool: &sqlx::SqlitePool, run_id: &str) -> String 
 }
 
 /// Supervise a running Run: poll the child process and update the DB
-/// when it exits.
+/// when it exits. Releases the Run's metrics port back to the pool when
+/// the Run reaches a terminal state.
 pub async fn supervise_run(
     pool: sqlx::SqlitePool,
     active_runs: ActiveRuns,
     task_id: String,
     run_id: String,
+    port_pool: PortPool,
 ) {
     // Poll the child process status every 2 seconds.
     loop {
@@ -1329,6 +1401,11 @@ pub async fn supervise_run(
                             tracing::warn!("supervisor: failed to update run {}: {e}", run_id);
                         }
 
+                        // Release the metrics port back to the pool so subsequent Runs can use it.
+                        if let Some(port) = run.metrics_port.and_then(|p| u16::try_from(p).ok()) {
+                            port_pool.release(port).await;
+                        }
+
                         // Write control log result for natural exit.
                         // Use the operator from the original start intent, or a system sentinel.
                         let start_operator = find_operator_for_run(&pool, &run_id).await;
@@ -1374,10 +1451,22 @@ pub async fn supervise_run(
                         orphaned.stop_method = Some("orphaned".to_string());
                         orphaned.stopped_at = Some(now.clone());
                         orphaned.updated_at = now;
+                        // Release the port before updating so the pool is consistent.
+                        if let Some(port) =
+                            orphaned.metrics_port.and_then(|p| u16::try_from(p).ok())
+                        {
+                            port_pool.release(port).await;
+                        }
                         if let Err(e) = RunRepository::update(&pool, &orphaned).await {
                             tracing::warn!("supervisor: failed to orphan run {}: {e}", run_id);
                         }
                         let _ = update_task_status(&pool, &task_id, "failed").await;
+                    } else {
+                        // Run already in a terminal state (stopped/failed via API).
+                        // Release the port if it was still held in the pool.
+                        if let Some(port) = run.metrics_port.and_then(|p| u16::try_from(p).ok()) {
+                            port_pool.release(port).await;
+                        }
                     }
                 }
                 break;
@@ -1843,8 +1932,8 @@ mod tests {
             );
         }
 
-        // Register scraper target.
-        let target = crate::metrics_scraper::scrape_target_from_run(&task_id, &run_id);
+        // Register scraper target (use a placeholder port for the test).
+        let target = crate::metrics_scraper::scrape_target_from_run(&task_id, &run_id, 9100);
         scraper_state.add_target(target).await;
 
         // Verify: ActiveRuns has the task.

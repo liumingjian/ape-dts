@@ -8,6 +8,7 @@ use dt_console_server::idempotency::IdempotencyCache;
 use dt_console_server::log_sse_handlers;
 use dt_console_server::metrics_scraper;
 use dt_console_server::models::{ResourceGroup, Run};
+use dt_console_server::port_pool::PortPool;
 use dt_console_server::rate_limit::{RateLimitConfig, RateLimiter};
 use dt_console_server::repositories::resource_group_repository::ResourceGroupRepository;
 use dt_console_server::repositories::run_repository::RunRepository;
@@ -75,13 +76,17 @@ async fn main() -> std::io::Result<()> {
     // Create the scraper state for metrics scraping.
     let scraper_state = metrics_scraper::ScraperState::new();
 
+    // Create the per-Run metrics port pool.
+    let port_pool = PortPool::new();
+
     // Create the SSE state for log streaming.
     let log_sse_state = log_sse_handlers::LogSseState::default();
 
     // Reconcile live Runs from a previous orchestrator session.
-    // Must run AFTER active_runs and scraper_state are created so that
-    // re-attached Runs can be registered for supervision and scraping.
-    reconcile_live_runs(&pool, &active_runs, &scraper_state).await;
+    // Must run AFTER active_runs, scraper_state, and port_pool are created so
+    // that re-attached Runs can be registered for supervision and scraping, and
+    // their allocated ports are reclaimed into the pool.
+    reconcile_live_runs(&pool, &active_runs, &scraper_state, &port_pool).await;
 
     // Create the alert SSE state for alert streaming.
     let alert_sse_state = alert_handlers::AlertSseState::new();
@@ -133,6 +138,7 @@ async fn main() -> std::io::Result<()> {
         let rate_limiter_clone = rate_limiter.clone();
         let active_runs_clone = active_runs.clone();
         let scraper_state_clone = scraper_state.clone();
+        let port_pool_clone = port_pool.clone();
         let log_sse_state_clone = log_sse_state.clone();
         let alert_sse_state_clone = alert_sse_state.clone();
         let dispatcher_state_clone = dispatcher_state.clone();
@@ -144,6 +150,7 @@ async fn main() -> std::io::Result<()> {
             idle_timeout_secs,
             active_runs_clone,
             scraper_state_clone,
+            port_pool_clone,
             log_sse_state_clone,
             alert_sse_state_clone,
             dispatcher_state_clone,
@@ -170,6 +177,8 @@ async fn main() -> std::io::Result<()> {
 ///   - Insert into the `ActiveRuns` registry
 ///   - Spawn a `supervise_run` background task
 ///   - Register as a scrape target for the MetricsScraper
+///   - Reclaim the run's `metrics_port` in the PortPool (so a new start
+///     cannot double-allocate the same port)
 /// - If the PID is dead or missing, mark the Run as failed with
 ///   stop_method="orphaned" and exit_status populated.
 ///
@@ -179,6 +188,7 @@ async fn reconcile_live_runs(
     pool: &sqlx::SqlitePool,
     active_runs: &run_handlers::ActiveRuns,
     scraper_state: &metrics_scraper::ScraperState,
+    port_pool: &PortPool,
 ) {
     let active_statuses = ["pending", "running", "paused", "stopping"];
 
@@ -198,6 +208,18 @@ async fn reconcile_live_runs(
         "reconciling {} active runs from previous session",
         runs.len()
     );
+
+    // Seed the port pool with all ports held by active runs so that a new
+    // start_task cannot re-use a port still claimed by a surviving process.
+    let in_use_ports: Vec<u16> = runs
+        .iter()
+        .filter_map(|r| r.metrics_port.and_then(|p| u16::try_from(p).ok()))
+        .collect();
+    let seeded_count = in_use_ports.len();
+    port_pool.seed(in_use_ports).await;
+    if seeded_count > 0 {
+        tracing::info!("port pool: seeded {seeded_count} in-use ports from DB");
+    }
 
     for run in runs {
         let pid_alive = match run.pid {
@@ -259,19 +281,32 @@ async fn reconcile_live_runs(
                 );
             }
 
-            // Register as a scrape target.
-            {
-                let target = metrics_scraper::scrape_target_from_run(&task_id, &run.id);
+            // Register as a scrape target using the run's allocated metrics port.
+            if let Some(port) = run.metrics_port.and_then(|p| u16::try_from(p).ok()) {
+                let target = metrics_scraper::scrape_target_from_run(&task_id, &run.id, port);
                 scraper_state.add_target(target).await;
+            } else {
+                tracing::warn!(
+                    run_id = %run.id,
+                    "live run has no metrics_port — skipping scrape target registration"
+                );
             }
 
             // Spawn a background supervise_run task.
             let bg_pool = pool.clone();
             let bg_active_runs = active_runs.clone();
+            let bg_port_pool = port_pool.clone();
             let bg_task_id = task_id.clone();
             let bg_run_id = run.id.clone();
             tokio::spawn(async move {
-                run_handlers::supervise_run(bg_pool, bg_active_runs, bg_task_id, bg_run_id).await;
+                run_handlers::supervise_run(
+                    bg_pool,
+                    bg_active_runs,
+                    bg_task_id,
+                    bg_run_id,
+                    bg_port_pool,
+                )
+                .await;
             });
         } else {
             tracing::info!(run_id = %run.id, "marking orphaned run as failed");
@@ -285,6 +320,12 @@ async fn reconcile_live_runs(
             }
             updated.updated_at =
                 chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+            // Release any port held by this orphaned run back to the pool.
+            if let Some(port) = updated.metrics_port.and_then(|p| u16::try_from(p).ok()) {
+                port_pool.release(port).await;
+            }
+            updated.metrics_port = None;
 
             if let Err(e) = RunRepository::update(pool, &updated).await {
                 tracing::warn!(run_id = %updated.id, "failed to mark orphaned run: {e}");

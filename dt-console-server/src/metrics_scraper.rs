@@ -1,5 +1,8 @@
-//! MetricsScraper — polls each running Run's /metrics:9090 every 10s,
+//! MetricsScraper — polls each running Run's /metrics endpoint every 10s,
 //! parses Prometheus text via prometheus-parse, writes to MetricPointRepository.
+//!
+//! The scrape port is dynamically allocated per-Run (see `PortPool`); targets
+//! are registered by `start_task` after successful engine spawn.
 //!
 //! Scrape failure → metrics_unavailable alert fired in the alerts table;
 //! recovery → alert marked recovered.
@@ -15,9 +18,6 @@ use tokio::sync::Mutex;
 
 /// Default scrape interval in seconds.
 const DEFAULT_SCRAPE_INTERVAL_SECS: u64 = 10;
-
-/// Default metrics port on the engine subprocess.
-const DEFAULT_METRICS_PORT: u16 = 9090;
 
 /// Number of consecutive scrape failures before emitting metrics_unavailable.
 const FAILURE_THRESHOLD: u32 = 3;
@@ -408,16 +408,16 @@ pub fn spawn_scraper(pool: sqlx::SqlitePool, state: ScraperState, interval_secs:
     });
 }
 
-/// Create a ScrapeTarget from Run information.
+/// Create a ScrapeTarget for a Run using its dynamically-allocated metrics port.
 ///
-/// Uses the metrics_config from the Task to determine host/port.
-/// If metrics is not configured, defaults to 127.0.0.1:9090.
-pub fn scrape_target_from_run(task_id: &str, run_id: &str) -> ScrapeTarget {
+/// The `port` argument must be the value persisted on `runs.metrics_port` for
+/// this Run; it is allocated from [9100, 9199] by `start_task` before spawning.
+pub fn scrape_target_from_run(task_id: &str, run_id: &str, port: u16) -> ScrapeTarget {
     ScrapeTarget {
         task_id: task_id.to_string(),
         run_id: run_id.to_string(),
         host: "127.0.0.1".to_string(),
-        port: DEFAULT_METRICS_PORT,
+        port,
     }
 }
 

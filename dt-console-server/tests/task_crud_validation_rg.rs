@@ -77,6 +77,9 @@ fn build_test_app(
         .app_data(web::Data::new(RateLimiter::new(RateLimitConfig::default())))
         .app_data(web::Data::new(IDLE_TIMEOUT_SECS))
         .app_data(web::Data::new(metrics_scraper::ScraperState::new()))
+        .app_data(web::Data::new(
+            dt_console_server::port_pool::PortPool::new(),
+        ))
         .app_data(web::Data::new(log_sse_handlers::LogSseState::default()))
         .app_data(web::Data::new(
             dt_console_server::alert_handlers::AlertSseState::new(),
@@ -557,6 +560,7 @@ async fn delete_task_active_run_409() {
         stopped_at: None,
         exit_code: None,
         stop_method: None,
+        metrics_port: None,
         created_at: now.clone(),
         updated_at: now,
     };
@@ -1636,6 +1640,7 @@ async fn task_delete_cascades_fk_set_null() {
         stopped_at: Some(now.clone()),
         exit_code: Some(0),
         stop_method: Some("graceful".to_string()),
+        metrics_port: None,
         created_at: now.clone(),
         updated_at: now,
     };
@@ -1743,6 +1748,7 @@ async fn task_delete_blocked_by_active_run_unchanged() {
         stopped_at: None,
         exit_code: None,
         stop_method: None,
+        metrics_port: None,
         created_at: now.clone(),
         updated_at: now,
     };
