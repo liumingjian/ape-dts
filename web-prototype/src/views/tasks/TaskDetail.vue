@@ -236,10 +236,7 @@
               </el-button>
             </el-button-group>
           </div>
-          <div v-if="monitorLoading" class="detail__monitor-loading">
-            <el-skeleton :rows="3" animated />
-          </div>
-          <div v-else-if="monitorSeries.length === 0" class="detail__monitor-empty">
+          <div v-if="monitorSeries.length === 0" class="detail__monitor-empty">
             <el-empty :description="t('common.empty')" />
           </div>
           <div v-else class="detail__monitor-charts">
@@ -549,27 +546,19 @@ watch(() => route.query.edit, (v) => {
   editorVisible.value = v === '1';
 });
 
-/* ---------- KPI charts (detail overview) ---------- */
-async function loadDetailMetrics() {
-  try {
-    const now = Date.now();
-    const from = now - 3600_000; // last 1h
-    const metrics = ['extractor_rps_avg', 'sinker_record_count_avg_by_sec', 'pipeline_buffer_size_avg'];
-    const results: MetricQueryResponse[] = [];
-    for (const m of metrics) {
-      try {
-        const res = await api.get<MetricQueryResponse>(`/runs/${currentRunId.value}/metrics?metric=${m}&from=${from}&to=${now}&step=60`);
-        results.push(res);
-      } catch { /* ignore individual metric errors */ }
-    }
-    detailMetricSeries.value = results;
-  } catch { /* ignore */ }
-}
-
-const detailMetricSeries = ref<MetricQueryResponse[]>([]);
+/* ---------- KPI metrics ---------- */
 const currentRunId = ref('');
 const latestRun = ref<Run | null>(null);
 const rawLatestMetrics = ref<Record<string, number>>({});
+const metricsHistory = ref<Record<string, { ts: number; value: number }[]>>({});
+const MAX_HISTORY_POINTS = 720; // ~1 h at 5 s interval
+
+const DETAIL_METRIC_NAMES = ['extractor_rps_avg', 'sinker_record_count_avg_by_sec', 'pipeline_buffer_size_avg'];
+const detailMetricSeries = computed<MetricQueryResponse[]>(() =>
+  DETAIL_METRIC_NAMES
+    .filter(m => (metricsHistory.value[m]?.length ?? 0) > 0)
+    .map(m => ({ metric: m, data: metricsHistory.value[m] ?? [] })),
+);
 
 /* ---------- KPI computed helpers ---------- */
 const progressValue = computed(() => {
@@ -586,6 +575,16 @@ async function loadLatestMetrics() {
   try {
     const res = await api.get<Record<string, number>>(`/runs/${currentRunId.value}/metrics/latest`);
     rawLatestMetrics.value = res && typeof res === 'object' ? res : {};
+    // Accumulate time-series from latest values for chart rendering
+    const now = Date.now();
+    for (const [metric, value] of Object.entries(rawLatestMetrics.value)) {
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        const arr = metricsHistory.value[metric] ?? [];
+        arr.push({ ts: now, value });
+        if (arr.length > MAX_HISTORY_POINTS) arr.shift();
+        metricsHistory.value[metric] = arr;
+      }
+    }
   } catch {
     rawLatestMetrics.value = {};
   }
@@ -733,39 +732,27 @@ const monitorRanges = [
   { value: '6h' as const, label: '6h' },
   { value: '24h' as const, label: '24h' },
 ];
-const monitorSeries = ref<MetricQueryResponse[]>([]);
-const monitorLoading = ref(false);
 
-const MONITOR_METRICS = [
+const MONITOR_METRIC_NAMES = [
   'extractor_rps_avg',
   'sinker_record_count_avg_by_sec',
   'pipeline_buffer_size_avg',
   'sinker_rt_per_query_avg',
 ];
 
-async function loadMonitorMetrics() {
-  if (!currentRunId.value) return;
-  monitorLoading.value = true;
-  try {
-    const now = Date.now();
-    const rangeMs = monitorRange.value === '1h' ? 3600_000 : monitorRange.value === '6h' ? 6 * 3600_000 : 24 * 3600_000;
-    const from = now - rangeMs;
-    const step = monitorRange.value === '1h' ? 60 : monitorRange.value === '6h' ? 300 : 600;
-    const results: MetricQueryResponse[] = [];
-    for (const m of MONITOR_METRICS) {
-      try {
-        const res = await api.get<MetricQueryResponse>(`/runs/${currentRunId.value}/metrics?metric=${m}&from=${from}&to=${now}&step=${step}`);
-        if (res.data.length > 0) results.push(res);
-      } catch { /* ignore individual metric errors */ }
-    }
-    monitorSeries.value = results;
-  } catch { /* ignore */ }
-  finally { monitorLoading.value = false; }
-}
+const monitorSeries = computed<MetricQueryResponse[]>(() => {
+  const rangeMs = monitorRange.value === '1h' ? 3600_000 : monitorRange.value === '6h' ? 6 * 3600_000 : 24 * 3600_000;
+  const cutoff = Date.now() - rangeMs;
+  return MONITOR_METRIC_NAMES
+    .filter(m => (metricsHistory.value[m]?.length ?? 0) > 0)
+    .map(m => ({
+      metric: m,
+      data: (metricsHistory.value[m] ?? []).filter(p => p.ts >= cutoff),
+    }));
+});
 
 function setMonitorRange(r: '1h' | '6h' | '24h') {
   monitorRange.value = r;
-  loadMonitorMetrics();
 }
 
 function monitorChartOption(ms: MetricQueryResponse) {
@@ -871,7 +858,6 @@ onMounted(async () => {
   if (latestRun.value?.status === 'failed') {
     await loadArchivedLogIntoPane(latestRun.value);
   }
-  loadDetailMetrics();
   loadLatestMetrics();
   loadAlerts();
   loadHistory();
@@ -883,9 +869,7 @@ onMounted(async () => {
     if (isVisible.value) {
       loadTask();
       loadCurrentRunId();
-      loadDetailMetrics();
       loadLatestMetrics();
-      if (activeTab.value === 'monitor') loadMonitorMetrics();
       if (activeTab.value === 'alerts') loadAlerts();
     }
   }, POLL_INTERVAL_MS);
@@ -1063,7 +1047,6 @@ function onBack() {
   gap: 12px;
 }
 @media (max-width: 800px) { .detail__monitor-charts { grid-template-columns: 1fr; } }
-.detail__monitor-loading,
 .detail__monitor-empty {
   padding: 40px 0;
 }

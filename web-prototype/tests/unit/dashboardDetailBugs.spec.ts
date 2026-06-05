@@ -25,18 +25,18 @@ describe('TaskDetail SSE state source', () => {
 });
 
 describe('TaskDetail KPI charts polling', () => {
-  it('loadDetailMetrics is called in the polling interval (not just onMounted)', () => {
+  it('chart data is refreshed in the polling interval via /metrics/latest (not just onMounted)', () => {
     const source = readFileSync(resolve(ROOT, 'views/tasks/TaskDetail.vue'), 'utf-8');
-    // After fix: loadDetailMetrics should be called inside the setInterval callback
-    expect(source).toMatch(/loadDetailMetrics/);
-    // Check that it's called within the polling interval (setInterval block)
-    // not just at onMounted
+    // After batched-metrics refactor: loadLatestMetrics is the single fetcher
+    // that updates rawLatestMetrics + metricsHistory (which feeds detailMetricSeries).
+    // It must be called inside the setInterval callback, not only at onMounted.
+    expect(source).toMatch(/loadLatestMetrics/);
     const lines = source.split('\n');
     let inPollInterval = false;
     let foundInPoll = false;
     for (const line of lines) {
       if (line.includes('setInterval')) inPollInterval = true;
-      if (inPollInterval && line.includes('loadDetailMetrics')) foundInPoll = true;
+      if (inPollInterval && line.includes('loadLatestMetrics')) foundInPoll = true;
       if (inPollInterval && line.includes('POLL_INTERVAL')) inPollInterval = false;
     }
     expect(foundInPoll).toBe(true);
