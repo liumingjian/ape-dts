@@ -75,6 +75,9 @@ function buildMetricsSnapshot(status: TaskStatus) {
       bufferSize: intBetween(0, 80),
       errorCount: 0,
       processedRecords: intBetween(100_000, 100_000_000),
+      pipelineQueueSize: 0,
+      finishedProgressCount: 0,
+      totalProgressCount: 0,
     };
   }
   if (status === 'failed') {
@@ -84,12 +87,18 @@ function buildMetricsSnapshot(status: TaskStatus) {
       bufferSize: intBetween(200, 2000),
       errorCount: intBetween(10, 400),
       processedRecords: intBetween(100, 10_000_000),
+      pipelineQueueSize: 0,
+      finishedProgressCount: 0,
+      totalProgressCount: 0,
     };
   }
   return {
     rpsLatest: 0, bpsLatest: 0, sinkerRpsLatest: 0,
     latencyMs: 0, lag: 0, queryRtUs: 0, bufferSize: 0, errorCount: 0,
     processedRecords: intBetween(0, 1_000_000),
+    pipelineQueueSize: 0,
+    finishedProgressCount: 0,
+    totalProgressCount: 0,
   };
 }
 

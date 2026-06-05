@@ -84,6 +84,7 @@ export const taskHandlers = [
       metrics: {
         rpsLatest: 0, bpsLatest: 0, sinkerRpsLatest: 0, latencyMs: 0, lag: 0,
         queryRtUs: 0, bufferSize: 0, errorCount: 0, processedRecords: 0,
+        pipelineQueueSize: 0, finishedProgressCount: 0, totalProgressCount: 0,
       },
       lastHeartbeatAt: now,
     };

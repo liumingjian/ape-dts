@@ -68,8 +68,30 @@
         <div class="detail__kpi-row">
           <KpiCard :label="t('taskDetail.kpi.status')" :value="0" :badge="t(`task.status.${task.status}`)" :icon-comp="IconActivity" />
           <KpiCard :label="t('taskDetail.kpi.rps')" :value="task.metrics.rpsLatest" unit="rows/s" :icon-comp="IconBolt" />
-          <KpiCard :label="t('taskDetail.kpi.latency')" :value="task.metrics.latencyMs" unit="ms" inverse :icon-comp="IconClock" :tone="task.metrics.latencyMs > 3000 ? 'warning' : 'default'" />
-          <KpiCard :label="t('taskDetail.kpi.progress')" :value="Math.round(task.progressPercent)" unit="%" :icon-comp="IconChartBar" />
+
+          <!-- Snapshot mode: progress bar + 已完成/总表 -->
+          <template v-if="task.syncMode !== 'cdc'">
+            <div class="detail__kpi-progress-card kpi">
+              <div class="kpi__head">
+                <div class="kpi__label">
+                  <IconChartBar class="kpi__icon" />
+                  <span>{{ t('taskDetail.kpi.progress') }}</span>
+                </div>
+              </div>
+              <div class="kpi__value">
+                <el-progress :percentage="progressValue" :stroke-width="10" :show-text="true" />
+              </div>
+              <div class="detail__progress-counts">
+                已完成/总表 ({{ task.metrics.finishedProgressCount }}/{{ task.metrics.totalProgressCount }})
+              </div>
+            </div>
+          </template>
+
+          <!-- CDC mode: Lag + 积压数 -->
+          <template v-if="task.syncMode === 'cdc'">
+            <KpiCard label="Lag" :value="lagHasValue ? (rawLatestMetrics.lag ?? task.metrics.lag) : 0" unit="秒" :icon-comp="IconClock" :sentinel-text="lagHasValue ? undefined : '—'" />
+            <KpiCard label="积压数" :value="rawLatestMetrics.pipeline_queue_size ?? task.metrics.pipelineQueueSize" :icon-comp="IconChartBar" />
+          </template>
         </div>
       </section>
 
@@ -547,6 +569,27 @@ async function loadDetailMetrics() {
 const detailMetricSeries = ref<MetricQueryResponse[]>([]);
 const currentRunId = ref('');
 const latestRun = ref<Run | null>(null);
+const rawLatestMetrics = ref<Record<string, number>>({});
+
+/* ---------- KPI computed helpers ---------- */
+const progressValue = computed(() => {
+  const p = rawLatestMetrics.value.progress ?? task.value?.progressPercent ?? 0;
+  return Math.round(Math.max(0, Math.min(100, Number.isFinite(p) ? p : 0)));
+});
+
+const lagHasValue = computed(() => {
+  return 'lag' in rawLatestMetrics.value;
+});
+
+async function loadLatestMetrics() {
+  if (!currentRunId.value) return;
+  try {
+    const res = await api.get<Record<string, number>>(`/runs/${currentRunId.value}/metrics/latest`);
+    rawLatestMetrics.value = res && typeof res === 'object' ? res : {};
+  } catch {
+    rawLatestMetrics.value = {};
+  }
+}
 
 function baseLine(name: string, xs: string[], sData: { name: string; data: number[]; color: string }[]) {
   return {
@@ -829,6 +872,7 @@ onMounted(async () => {
     await loadArchivedLogIntoPane(latestRun.value);
   }
   loadDetailMetrics();
+  loadLatestMetrics();
   loadAlerts();
   loadHistory();
 
@@ -840,6 +884,7 @@ onMounted(async () => {
       loadTask();
       loadCurrentRunId();
       loadDetailMetrics();
+      loadLatestMetrics();
       if (activeTab.value === 'monitor') loadMonitorMetrics();
       if (activeTab.value === 'alerts') loadAlerts();
     }
@@ -1061,5 +1106,18 @@ function onBack() {
 }
 .detail__loading {
   padding: 40px 24px;
+}
+.detail__kpi-progress-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.detail__kpi-progress-card .kpi__value {
+  padding-top: 4px;
+}
+.detail__progress-counts {
+  font-size: 12px;
+  color: var(--color-ink-subtle);
+  font-family: var(--font-mono);
 }
 </style>

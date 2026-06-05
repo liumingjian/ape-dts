@@ -128,4 +128,26 @@ describe('mapApiTask', () => {
     const t2 = mapApiTask({ ...BASE, metrics: {} });
     expect(t2.metrics.lag).toBe(0);
   });
+
+  it('pipelineQueueSize passes through verbatim', () => {
+    const t = mapApiTask({ ...BASE, metrics: { pipeline_queue_size: 12 } });
+    expect(t.metrics.pipelineQueueSize).toBe(12);
+  });
+
+  it('pipelineQueueSize defaults to 0 when missing', () => {
+    const t = mapApiTask({ ...BASE, metrics: null });
+    expect(t.metrics.pipelineQueueSize).toBe(0);
+  });
+
+  it('finishedProgressCount and totalProgressCount pass through', () => {
+    const t = mapApiTask({ ...BASE, metrics: { finished_progress_count: 3, total_progress_count: 8 } });
+    expect(t.metrics.finishedProgressCount).toBe(3);
+    expect(t.metrics.totalProgressCount).toBe(8);
+  });
+
+  it('finishedProgressCount and totalProgressCount default to 0', () => {
+    const t = mapApiTask({ ...BASE, metrics: null });
+    expect(t.metrics.finishedProgressCount).toBe(0);
+    expect(t.metrics.totalProgressCount).toBe(0);
+  });
 });

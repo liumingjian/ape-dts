@@ -19,7 +19,7 @@
     </div>
     <div class="kpi__value tabular-nums">
       <span class="kpi__number">{{ displayValue }}</span>
-      <span v-if="unit" class="kpi__unit">{{ unit }}</span>
+      <span v-if="unit && !sentinelText" class="kpi__unit">{{ unit }}</span>
     </div>
     <div class="kpi__foot">
       <div v-if="delta !== undefined" class="kpi__delta" :class="deltaClass">
@@ -74,6 +74,7 @@ const props = withDefaults(defineProps<{
   spark?: number[];
   badge?: string;
   accent?: boolean;
+  sentinelText?: string;
 }>(), {
   tone: 'default',
   compareLabel: '',
@@ -132,6 +133,7 @@ const sparkAreaPath = computed(() => {
 });
 
 const displayValue = computed(() => {
+  if (props.sentinelText) return props.sentinelText;
   const v = props.value;
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(2)}M`;
   if (v >= 10_000) return `${(v / 1_000).toFixed(1)}K`;

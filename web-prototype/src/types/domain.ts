@@ -134,6 +134,9 @@ export interface TaskMetricsSnapshot {
   bufferSize: number; // pipeline_buffer_size_avg
   errorCount: number;
   processedRecords: number; // pipeline_sinked_count_latest
+  pipelineQueueSize: number; // pipeline_queue_size
+  finishedProgressCount: number; // finished_progress_count
+  totalProgressCount: number; // total_progress_count
 }
 
 export interface Task {
@@ -583,6 +586,9 @@ export interface ApiTask {
     sinker_rt_per_query_avg?: number;
     pipeline_buffer_size_avg?: number;
     pipeline_sinked_count_latest?: number;
+    pipeline_queue_size?: number;
+    finished_progress_count?: number;
+    total_progress_count?: number;
     error_count?: number;
   } | null;
   resourceGroupId: string;
@@ -827,6 +833,9 @@ export function mapApiTask(raw: ApiTask): Task {
       bufferSize: m?.pipeline_buffer_size_avg ?? 0,
       errorCount: m?.error_count ?? 0,
       processedRecords: m?.pipeline_sinked_count_latest ?? 0,
+      pipelineQueueSize: m?.pipeline_queue_size ?? 0,
+      finishedProgressCount: m?.finished_progress_count ?? 0,
+      totalProgressCount: m?.total_progress_count ?? 0,
     },
     lastHeartbeatAt: raw.updatedAt,
   };
