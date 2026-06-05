@@ -104,6 +104,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(precheck_handlers::precheck)
             // Metrics query
             .service(metrics_handlers::get_metrics)
+            .service(metrics_handlers::get_metrics_latest)
             // Log SSE stream + log file read
             .service(log_sse_handlers::log_stream)
             .service(log_sse_handlers::get_log_file)
