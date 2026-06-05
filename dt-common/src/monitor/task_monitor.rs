@@ -414,7 +414,9 @@ impl TaskMonitor {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(not(feature = "metrics"))]
     use super::*;
+    #[cfg(not(feature = "metrics"))]
     use crate::config::config_enums::TaskType;
 
     #[cfg(not(feature = "metrics"))]
