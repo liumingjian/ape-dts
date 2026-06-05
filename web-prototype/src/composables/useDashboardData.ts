@@ -208,14 +208,14 @@ export function useDashboardData() {
         }
       } catch { /* ignore individual metric errors */ }
 
-      // Fetch replication_lag (latency)
+      // Fetch lag (latency)
       try {
         const res = await api.get<MetricQueryResponse>(
-          `/runs/${runId}/metrics?metric=replication_lag&from=${from}&to=${now}&step=${step}`,
+          `/runs/${runId}/metrics?metric=lag&from=${from}&to=${now}&step=${step}`,
         );
         if (res.data.length > 0) {
           const points: MetricPoint[] = res.data.map((p) => ({ t: p.ts, v: p.value }));
-          newLat.push({ taskId: t.id, metric: 'replication_lag', points });
+          newLat.push({ taskId: t.id, metric: 'lag', points });
           const latest = points[points.length - 1]?.v ?? 0;
           latSum += latest;
           latN += 1;

@@ -82,7 +82,7 @@ export const taskHandlers = [
       startedAt: undefined,
       completedAt: undefined,
       metrics: {
-        rpsLatest: 0, bpsLatest: 0, sinkerRpsLatest: 0, latencyMs: 0,
+        rpsLatest: 0, bpsLatest: 0, sinkerRpsLatest: 0, latencyMs: 0, lag: 0,
         queryRtUs: 0, bufferSize: 0, errorCount: 0, processedRecords: 0,
       },
       lastHeartbeatAt: now,

@@ -70,6 +70,7 @@ function buildMetricsSnapshot(status: TaskStatus) {
       bpsLatest: rps * intBetween(80, 420),
       sinkerRpsLatest: Math.round(rps * floatBetween(0.9, 1.0, 3)),
       latencyMs: intBetween(80, 3200),
+      lag: 0,
       queryRtUs: intBetween(800, 6000),
       bufferSize: intBetween(0, 80),
       errorCount: 0,
@@ -79,7 +80,7 @@ function buildMetricsSnapshot(status: TaskStatus) {
   if (status === 'failed') {
     return {
       rpsLatest: 0, bpsLatest: 0, sinkerRpsLatest: 0,
-      latencyMs: intBetween(10_000, 60_000), queryRtUs: 0,
+      latencyMs: intBetween(10_000, 60_000), lag: 0, queryRtUs: 0,
       bufferSize: intBetween(200, 2000),
       errorCount: intBetween(10, 400),
       processedRecords: intBetween(100, 10_000_000),
@@ -87,7 +88,7 @@ function buildMetricsSnapshot(status: TaskStatus) {
   }
   return {
     rpsLatest: 0, bpsLatest: 0, sinkerRpsLatest: 0,
-    latencyMs: 0, queryRtUs: 0, bufferSize: 0, errorCount: 0,
+    latencyMs: 0, lag: 0, queryRtUs: 0, bufferSize: 0, errorCount: 0,
     processedRecords: intBetween(0, 1_000_000),
   };
 }

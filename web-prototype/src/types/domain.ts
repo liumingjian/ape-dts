@@ -129,6 +129,7 @@ export interface TaskMetricsSnapshot {
   bpsLatest: number; // extractor_pushed_bps_avg
   sinkerRpsLatest: number; // sinker_record_count_avg_by_sec
   latencyMs: number; // replication lag
+  lag: number; // CDC lag (seconds)
   queryRtUs: number; // sinker_rt_per_query_avg (μs)
   bufferSize: number; // pipeline_buffer_size_avg
   errorCount: number;
@@ -453,6 +454,13 @@ export interface TaskFixture {
   metrics?: { httpHost: string; httpPort: number };
 }
 
+/* ----- Table load state (per-table progress from /runs/:id/objects) ----- */
+export type TableLoadState = {
+  schema: string;
+  table: string;
+  state: "pending" | "loading" | "completed";
+};
+
 /* ----- Run (execution) type ----- */
 export type RunStatus =
   | "pending"
@@ -570,7 +578,8 @@ export interface ApiTask {
     extractor_pushed_rps_avg?: number;
     extractor_pushed_bps_avg?: number;
     sinker_record_count_avg_by_sec?: number;
-    replication_lag?: number;
+    progress?: number;
+    lag?: number;
     sinker_rt_per_query_avg?: number;
     pipeline_buffer_size_avg?: number;
     pipeline_sinked_count_latest?: number;
@@ -605,32 +614,12 @@ function parseEndpointUrl(url: string): {
   }
 }
 
+function normalizeEngineType(value: string | null | undefined): EngineType {
+  if (value === "gaussdb_oracle") return "gaussdb";
+  return (value || "mysql") as EngineType;
+}
+
 /** Map a backend ApiTask to the frontend Task type used by the SPA. */
-
-/** Count the number of table references in a filter's do_tbs field. */
-function countFilterTables(filter: Record<string, unknown> | null): number {
-  if (!filter) return 0;
-  const doTbs = filter.do_tbs ?? filter.doTbs;
-  if (typeof doTbs === "string" && doTbs.length > 0) {
-    return doTbs.split(",").filter((s: string) => s.trim().length > 0).length;
-  }
-  if (Array.isArray(doTbs)) return doTbs.length;
-  return 0;
-}
-
-/** Compute progress as percentage (0–100) from sinked count and filter tables. */
-function computeProgress(
-  sinkedCount: number,
-  filter: Record<string, unknown> | null,
-): number {
-  const tables = countFilterTables(filter);
-  if (tables === 0 || sinkedCount === 0) return 0;
-  // Assume ~1000 rows per table as a rough baseline for percentage.
-  // Without a total-row-count metric from the backend, this is the best estimate.
-  const estimatedTotal = tables * 1000;
-  const pct = (sinkedCount / estimatedTotal) * 100;
-  return Math.min(Math.round(pct), 100);
-}
 
 /** Resolve ResumeType from the resumer field, defaulting to 'from_log'. */
 function resolveResumeType(
@@ -782,7 +771,7 @@ export function mapApiTask(raw: ApiTask): Task {
     category: (raw.kind || "snapshot") as TaskCategory,
     status: (raw.status || "draft") as TaskStatus,
     source: {
-      engine: (raw.dbTypeSource || "mysql") as EngineType,
+      engine: normalizeEngineType(raw.dbTypeSource),
       host: src.host,
       port: src.port,
       username: src.username,
@@ -790,7 +779,7 @@ export function mapApiTask(raw: ApiTask): Task {
       database: src.database,
     },
     target: {
-      engine: (raw.dbTypeTarget || "mysql") as EngineType,
+      engine: normalizeEngineType(raw.dbTypeTarget),
       host: tgt.host,
       port: tgt.port,
       username: tgt.username,
@@ -804,10 +793,7 @@ export function mapApiTask(raw: ApiTask): Task {
     taskType: "standalone",
     resourceGroup: raw.resourceGroupId ?? "",
     instanceIp: src.host,
-    progressPercent: computeProgress(
-      m?.pipeline_sinked_count_latest ?? 0,
-      raw.filter,
-    ),
+    progressPercent: m?.progress ?? 0,
     syncObjects: { totalTables: 0, selectedTables: 0 },
     config: {
       parallelizer: resolveParallelizer(raw.parallelizer),
@@ -835,7 +821,8 @@ export function mapApiTask(raw: ApiTask): Task {
       rpsLatest: m?.extractor_pushed_rps_avg ?? 0,
       bpsLatest: m?.extractor_pushed_bps_avg ?? 0,
       sinkerRpsLatest: m?.sinker_record_count_avg_by_sec ?? 0,
-      latencyMs: m?.replication_lag ?? 0,
+      latencyMs: 0,
+      lag: m?.lag ?? 0,
       queryRtUs: m?.sinker_rt_per_query_avg ?? 0,
       bufferSize: m?.pipeline_buffer_size_avg ?? 0,
       errorCount: m?.error_count ?? 0,
