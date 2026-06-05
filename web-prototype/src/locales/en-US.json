@@ -214,7 +214,10 @@
         "name": "Object",
         "type": "Type",
         "rows": "Estimated rows",
-        "status": "Status"
+        "status": "Status",
+        "schema": "Schema",
+        "table": "Table",
+        "state": "State"
       }
     },
     "log": {

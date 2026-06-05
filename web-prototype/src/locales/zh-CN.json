@@ -277,7 +277,10 @@
         "name": "对象名称",
         "type": "类型",
         "rows": "预估行数",
-        "status": "状态"
+        "status": "状态",
+        "schema": "Schema",
+        "table": "Table",
+        "state": "状态"
       }
     },
     "log": {

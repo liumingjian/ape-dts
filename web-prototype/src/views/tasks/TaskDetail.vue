@@ -133,23 +133,13 @@
 
         <!-- Objects -->
         <el-tab-pane :label="t('taskDetail.tab.objects')" name="objects">
-          <el-table :data="objectRows" class="detail__objects">
-            <el-table-column :label="t('taskDetail.objects.col.name')" min-width="240">
+          <el-empty v-if="objects.length === 0" :description="t('common.empty')" />
+          <el-table v-else :data="objects" class="detail__objects">
+            <el-table-column :label="t('taskDetail.objects.col.schema')" min-width="180" prop="schema" />
+            <el-table-column :label="t('taskDetail.objects.col.table')" min-width="240" prop="table" />
+            <el-table-column :label="t('taskDetail.objects.col.state')" width="140">
               <template #default="{ row }">
-                <span class="detail__mono">{{ row.name }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column :label="t('taskDetail.objects.col.type')" width="120" prop="type" />
-            <el-table-column :label="t('taskDetail.objects.col.rows')" width="140" align="right">
-              <template #default="{ row }">
-                <span class="tabular-nums">{{ row.rows.toLocaleString() }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column :label="t('taskDetail.objects.col.status')" width="140">
-              <template #default="{ row }">
-                <el-tag :type="row.status === '同步中' ? 'success' : row.status === '已完成' ? 'info' : 'warning'" size="small">
-                  {{ row.status }}
-                </el-tag>
+                <el-tag :type="stateTagType(row.state)" size="small">{{ row.state }}</el-tag>
               </template>
             </el-table-column>
           </el-table>
@@ -388,7 +378,7 @@ import { api } from '@/api/client';
 import { useRbac } from '@/composables/useRbac';
 import { useDocumentVisibility } from '@/composables/useDocumentVisibility';
 import { useLogStream, type LogLine, type LogStreamHandle } from '@/composables/useLogStream';
-import type { Task, Alert, ApiAlert, MetricQueryResponse, Run, RunPosition, ApiTask } from '@/types/domain';
+import type { Task, Alert, ApiAlert, MetricQueryResponse, Run, RunPosition, ApiTask, TableLoadState } from '@/types/domain';
 import { mapApiTask, mapApiAlert } from '@/types/domain';
 import KpiCard from '@/components/KpiCard.vue';
 import ChartCard from '@/components/ChartCard.vue';
@@ -546,6 +536,10 @@ watch(() => route.query.edit, (v) => {
   editorVisible.value = v === '1';
 });
 
+watch(activeTab, (tab) => {
+  if (tab === 'objects') loadObjects();
+});
+
 /* ---------- KPI metrics ---------- */
 const currentRunId = ref('');
 const latestRun = ref<Run | null>(null);
@@ -630,20 +624,28 @@ const bufferOption = computed(() => {
   return baseLine('pipeline_buffer_size_avg', xs, [{ name: 'pipeline_buffer_size_avg', data: ms.data.map((p) => p.value), color: BRAND_PALETTE[4] }]);
 });
 
-/* ---------- objects sample ---------- */
-const objectRows = computed(() => {
-  if (!task.value) return [];
-  const n = task.value.syncObjects.selectedTables;
-  const tables = ['orders', 'users', 'payments', 'products', 'shipments', 'inventory', 'logs'];
-  return Array.from({ length: Math.min(n, 8) }, (_, i) => ({
-    name: `${task.value!.source.database ?? 'app_db'}.${tables[i % tables.length]}`,
-    type: '表',
-    rows: Math.round(100_000 * Math.random() * (i + 1)),
-    status: task.value!.status === 'stopped' || task.value!.status === 'completed' ? '已完成'
-      : task.value!.status === 'running' ? '同步中'
-      : task.value!.status === 'failed' ? '失败' : '等待中',
-  }));
-});
+/* ---------- objects (per-table state from /runs/:id/objects) ---------- */
+const objects = ref<TableLoadState[]>([]);
+const objectsLoading = ref(false);
+
+function stateTagType(state: TableLoadState['state']): 'info' | 'warning' | 'success' {
+  if (state === 'pending') return 'info';
+  if (state === 'loading') return 'warning';
+  return 'success'; // completed
+}
+
+async function loadObjects() {
+  if (!currentRunId.value) return;
+  objectsLoading.value = true;
+  try {
+    const res = await api.get<TableLoadState[]>(`/runs/${currentRunId.value}/objects`);
+    objects.value = Array.isArray(res) ? res : [];
+  } catch {
+    objects.value = [];
+  } finally {
+    objectsLoading.value = false;
+  }
+}
 
 /* ---------- Logs tab (SSE) ---------- */
 const logFile = ref('default');
@@ -864,6 +866,8 @@ onMounted(async () => {
 
   // open SSE if on logs tab
   if (activeTab.value === 'logs' && currentRunId.value) reopenLogStream();
+  // load objects if on objects tab
+  if (activeTab.value === 'objects') loadObjects();
 
   pollId = setInterval(() => {
     if (isVisible.value) {
