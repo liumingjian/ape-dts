@@ -18,6 +18,7 @@ pub mod log_sse_handlers;
 pub mod log_tailer;
 pub mod metrics_handlers;
 pub mod metrics_scraper;
+pub mod objects_handlers;
 pub mod middleware;
 pub mod models;
 pub mod operate_log_handlers;
@@ -105,6 +106,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             // Metrics query
             .service(metrics_handlers::get_metrics)
             .service(metrics_handlers::get_metrics_latest)
+            // Per-table objects state
+            .service(objects_handlers::get_objects)
             // Log SSE stream + log file read
             .service(log_sse_handlers::log_stream)
             .service(log_sse_handlers::get_log_file)
