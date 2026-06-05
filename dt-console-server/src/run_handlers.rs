@@ -835,8 +835,9 @@ pub async fn start_task(
     let bg_port_pool = port_pool.get_ref().clone();
     let bg_task_id = task_id.clone();
     let bg_run_id = run_id.clone();
+    let bg_metrics_port = Some(metrics_port);
     tokio::spawn(async move {
-        supervise_run(bg_pool, bg_active_runs, bg_task_id, bg_run_id, bg_port_pool).await;
+        supervise_run(bg_pool, bg_active_runs, bg_task_id, bg_run_id, bg_port_pool, bg_metrics_port).await;
     });
 
     // Cache the result if an Idempotency-Key was provided.
@@ -1323,16 +1324,35 @@ async fn find_operator_for_run(pool: &sqlx::SqlitePool, run_id: &str) -> String 
 /// Supervise a running Run: poll the child process and update the DB
 /// when it exits. Releases the Run's metrics port back to the pool when
 /// the Run reaches a terminal state.
+///
+/// The `metrics_port` is used for a pre-reap scrape: on each poll cycle
+/// the supervisor scrapes the engine's `/metrics` endpoint BEFORE checking
+/// whether the child has exited. This ensures the final metric emission
+/// (e.g., progress=100) is captured while the engine's HTTP server is
+/// still alive. If the scrape happens after the child exit, the server
+/// is already gone and the scrape returns 502/connection-refused.
 pub async fn supervise_run(
     pool: sqlx::SqlitePool,
     active_runs: ActiveRuns,
     task_id: String,
     run_id: String,
     port_pool: PortPool,
+    metrics_port: Option<u16>,
 ) {
     // Poll the child process status every 2 seconds.
     loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+
+        // Pre-reap scrape: capture the engine's last metric emission
+        // BEFORE checking whether the child has exited. Once the child
+        // exits, the engine's metrics HTTP server is gone and any
+        // scrape attempt will fail (502 / connection refused).
+        if let Some(port) = metrics_port {
+            metrics_scraper::scrape_single_run(
+                &pool, &task_id, &run_id, "127.0.0.1", port,
+            )
+            .await;
+        }
 
         let slot = {
             let active = active_runs.lock().await;
@@ -1383,22 +1403,13 @@ pub async fn supervise_run(
                         }
 
                         // Child exited — update the Run record.
+                        // Note: the final scrape was already done at the top of
+                        // this loop iteration (before the status check), so the
+                        // engine's last metric emission has already been captured.
                         let mut run = match RunRepository::find_by_id(&pool, &run_id).await {
                             Ok(r) => r,
                             Err(_) => break,
                         };
-
-                        // Final scrape: capture the engine's last metric emission
-                        // (e.g., progress=100) before the process is fully gone.
-                        // Best-effort — the engine may have already shut down its
-                        // HTTP endpoint, in which case the scrape silently fails.
-                        if let Some(port) = run.metrics_port.and_then(|p| u16::try_from(p).ok()) {
-                            let task_id_ref = run.task_id.as_deref().unwrap_or(&task_id);
-                            metrics_scraper::scrape_single_run(
-                                &pool, task_id_ref, &run_id, "127.0.0.1", port,
-                            )
-                            .await;
-                        }
 
                         let now =
                             chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);

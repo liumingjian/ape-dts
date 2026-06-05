@@ -469,3 +469,140 @@ async fn scrape_single_run_does_not_block_other_runs() {
     assert_eq!(prog_a, Some(50.0), "run-a progress should be 50");
     assert_eq!(prog_b, Some(75.0), "run-b progress should be 75");
 }
+
+/// Start a persistent HTTP server on a random port that serves the given
+/// Prometheus body on every GET /metrics request. Runs until the task is
+/// dropped (test cleanup). Returns the bound port and a `JoinHandle` for
+/// optional abort.
+async fn start_persistent_prometheus_stub(
+    body: &str,
+) -> (u16, tokio::task::JoinHandle<()>) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let body = body.to_string();
+
+    let handle = tokio::spawn(async move {
+        // Serve metrics indefinitely (up to 100 connections for safety).
+        for _ in 0..100 {
+            if let Ok((mut stream, _)) = listener.accept().await {
+                use tokio::io::AsyncReadExt;
+                use tokio::io::AsyncWriteExt;
+                let mut buf = [0u8; 4096];
+                let _ = stream.read(&mut buf).await;
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n{body}"
+                );
+                let _ = stream.write_all(resp.as_bytes()).await;
+                let _ = stream.shutdown().await;
+            }
+        }
+    });
+
+    (port, handle)
+}
+
+/// VAL-E2E-004 (timing fix): When a naturally-terminating run exits,
+/// `supervise_run` performs a pre-reap scrape BEFORE checking the child
+/// status, ensuring the engine's final metric emission (e.g. progress=100)
+/// is captured while the HTTP server is still alive.
+///
+/// Before this fix, the scrape happened AFTER `status()` detected the exit,
+/// by which point the engine's HTTP server was gone (502 / connection refused).
+#[tokio::test]
+async fn supervise_run_pre_reap_scrape_captures_final_progress() {
+    let pool = db::create_pool(":memory:").await.unwrap();
+    db::run_migrations(&pool).await.unwrap();
+
+    // Seed resource group first (FK requirement for tasks table).
+    seed_resource_group(&pool).await;
+
+    // Start a persistent Prometheus stub that serves progress=100.
+    let prom_body = "# HELP progress Snapshot progress\n\
+                     # TYPE progress gauge\n\
+                     progress 100\n";
+    let (port, _stub_handle) = start_persistent_prometheus_stub(prom_body).await;
+
+    // Seed a task and a running Run with the stub's port.
+    let task_id = format!("task-pre-reap-{}", uuid::Uuid::new_v4().to_string()[..8].to_string());
+    let run_id = format!("run-pre-reap-{}", uuid::Uuid::new_v4().to_string()[..8].to_string());
+    seed_task(&pool, &task_id).await;
+    seed_run_with_port(&pool, &run_id, &task_id, port as i64).await;
+
+    // Spawn a short-lived child process (sleep 1) to simulate a
+    // naturally-terminating engine. The persistent stub on `port`
+    // simulates the engine's metrics server while alive.
+    let handle = dt_console_server::executor::LocalExecutor::spawn(
+        &run_id,
+        "[global]\ntask_id=test\n",
+        Some("sleep"),
+    )
+    .await
+    .expect("spawn should succeed");
+
+    let pid = handle.pid as i64;
+
+    // Update the Run with the live PID.
+    let mut run = RunRepository::find_by_id(&pool, &run_id).await.unwrap();
+    run.pid = Some(pid);
+    run.status = "running".to_string();
+    RunRepository::update(&pool, &run).await.unwrap();
+
+    // Insert into ActiveRuns so supervise_run can find the handle.
+    let active_runs = run_handlers::new_active_runs();
+    {
+        let mut active = active_runs.lock().await;
+        active.insert(
+            task_id.clone(),
+            dt_console_server::executor::RunSlot::Active(handle.clone()),
+        );
+    }
+
+    // Create a port pool (the test port is already "in use" by the stub,
+    // but PortPool doesn't check live sockets; it only tracks its own
+    // allocations — so we seed it to prevent double-allocation).
+    let port_pool = dt_console_server::port_pool::PortPool::new();
+    port_pool.seed(vec![port]).await;
+
+    // Run supervise_run with the stub's port as metrics_port.
+    // This will:
+    //   1. Sleep 2s
+    //   2. Pre-reap scrape (captures progress=100 from the stub)
+    //   3. Check status — child still running (sleep 1 not done yet)
+    //   4. Sleep 2s
+    //   5. Pre-reap scrape (captures progress=100 again)
+    //   6. Check status — child has exited
+    //   7. Update Run to stopped, release port, break
+    run_handlers::supervise_run(
+        pool.clone(),
+        active_runs.clone(),
+        task_id.clone(),
+        run_id.clone(),
+        port_pool,
+        Some(port),
+    )
+    .await;
+
+    // Verify: the Run has been updated to a terminal state.
+    let completed_run = RunRepository::find_by_id(&pool, &run_id).await.unwrap();
+    assert!(
+        completed_run.status == "stopped" || completed_run.status == "failed",
+        "run should be terminal, got status={}",
+        completed_run.status
+    );
+
+    // Verify: metric_points has progress >= 99.5.
+    let points = MetricPointRepository::list_by_run(&pool, &run_id).await.unwrap();
+    let progress_point = points.iter().find(|p| p.metric_name == "progress");
+    assert!(
+        progress_point.is_some(),
+        "progress metric should be present after pre-reap scrape, got {points:?}"
+    );
+    assert!(
+        progress_point.unwrap().value >= 99.5,
+        "progress should be >= 99.5 after pre-reap scrape, got {}",
+        progress_point.unwrap().value
+    );
+
+    // Clean up the run directory.
+    let _ = std::fs::remove_dir_all(&handle.run_dir);
+}
