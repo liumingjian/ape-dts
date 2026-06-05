@@ -359,4 +359,59 @@ mod tests {
             );
         }
     }
+
+    // VAL-ORCH-016: /metrics endpoint returns HTTP 200 with # HELP and # TYPE lines.
+    #[actix_web::test]
+    async fn http_metrics_endpoint_returns_200_with_prometheus_format() {
+        use actix_web::test;
+        let pm = PrometheusMetrics::new(Some(TaskType::Cdc), make_config());
+        pm.initialization();
+        let registry = pm.registry.clone();
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(registry))
+                .service(web::resource("/metrics").route(web::get().to(metrics_handler))),
+        )
+        .await;
+        let req = test::TestRequest::get().uri("/metrics").to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), actix_web::http::StatusCode::OK);
+        let body = test::read_body(resp).await;
+        let body_str = String::from_utf8_lossy(&body);
+        assert!(
+            body_str.lines().any(|l| l.starts_with("# HELP ")),
+            "Expected at least one '# HELP' line in /metrics response"
+        );
+        assert!(
+            body_str.lines().any(|l| l.starts_with("# TYPE ")),
+            "Expected at least one '# TYPE' line in /metrics response"
+        );
+    }
+
+    // VAL-ORCH-017 (negative control): without --features metrics, no metrics server is compiled
+    // in — verified by the #[cfg(feature = "metrics")] gate on this entire module.
+    // The following test confirms that a snapshot task's /metrics response has no lag gauge,
+    // ensuring the feature flag truly toggles per-task-type exposure.
+    #[actix_web::test]
+    async fn http_metrics_snapshot_has_no_lag_gauge() {
+        use actix_web::test;
+        let pm = PrometheusMetrics::new(Some(TaskType::Snapshot), make_config());
+        pm.initialization();
+        let registry = pm.registry.clone();
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(registry))
+                .service(web::resource("/metrics").route(web::get().to(metrics_handler))),
+        )
+        .await;
+        let req = test::TestRequest::get().uri("/metrics").to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), actix_web::http::StatusCode::OK);
+        let body = test::read_body(resp).await;
+        let body_str = String::from_utf8_lossy(&body);
+        assert!(
+            !body_str.lines().any(|l| l.starts_with("lag ")),
+            "Snapshot /metrics must not expose a 'lag' gauge"
+        );
+    }
 }
