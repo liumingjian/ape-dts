@@ -136,7 +136,7 @@ impl TaskMonitor {
             .or_insert(value);
     }
 
-    async fn calc(&self) -> Option<BTreeMap<TaskMetricsType, u64>> {
+    pub async fn calc(&self) -> Option<BTreeMap<TaskMetricsType, u64>> {
         let now_unix_secs = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()

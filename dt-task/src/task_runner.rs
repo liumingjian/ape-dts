@@ -613,6 +613,17 @@ impl TaskRunner {
         r2??;
         r3?;
 
+        // Post-drain flush: the pipeline may have processed additional rows
+        // after f3 (monitor flush) exited on shut_down.  Recalculate so that
+        // the final Prometheus scrape sees up-to-date sinker counts and
+        // progress close to 100% for snapshot tasks.
+        {
+            let _ = self.task_monitor.calc().await;
+            // Brief pause so the Console scraper can observe the updated
+            // Prometheus gauges before the process exits.
+            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        }
+
         // finished log
         let (schema, tb) = match &extractor_config {
             ExtractorConfig::MysqlSnapshot { db, tb, .. }
