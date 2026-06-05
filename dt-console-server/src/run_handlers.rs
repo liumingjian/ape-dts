@@ -955,6 +955,17 @@ pub async fn stop_task(
         .error_response();
     }
 
+    // Final scrape: capture the engine's last metric emission before killing
+    // the child process. The engine is still alive at this point, so the
+    // scrape is likely to succeed and capture the final progress value.
+    if let Some(port) = run.metrics_port.and_then(|p| u16::try_from(p).ok()) {
+        let task_id_for_scrape = run.task_id.as_deref().unwrap_or(&task_id);
+        metrics_scraper::scrape_single_run(
+            &pool, task_id_for_scrape, &run_id, "127.0.0.1", port,
+        )
+        .await;
+    }
+
     // Kill the child process.
     let kill_result = {
         let mut active = active_runs.lock().await;
@@ -1376,6 +1387,18 @@ pub async fn supervise_run(
                             Ok(r) => r,
                             Err(_) => break,
                         };
+
+                        // Final scrape: capture the engine's last metric emission
+                        // (e.g., progress=100) before the process is fully gone.
+                        // Best-effort — the engine may have already shut down its
+                        // HTTP endpoint, in which case the scrape silently fails.
+                        if let Some(port) = run.metrics_port.and_then(|p| u16::try_from(p).ok()) {
+                            let task_id_ref = run.task_id.as_deref().unwrap_or(&task_id);
+                            metrics_scraper::scrape_single_run(
+                                &pool, task_id_ref, &run_id, "127.0.0.1", port,
+                            )
+                            .await;
+                        }
 
                         let now =
                             chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);

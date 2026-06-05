@@ -421,6 +421,67 @@ pub fn scrape_target_from_run(task_id: &str, run_id: &str, port: u16) -> ScrapeT
     }
 }
 
+/// Perform one immediate scrape for a single Run and write the results to the DB.
+///
+/// Called synchronously when a Run transitions to a terminal status (completed,
+/// failed, stopped) to capture the engine's final metric emission (e.g.,
+/// progress=100) before the metrics port is released or the engine process
+/// is fully gone.
+///
+/// Best-effort: if the scrape fails (engine already exited, connection refused),
+/// logs the miss and returns without error. Never panics or propagates failures.
+pub async fn scrape_single_run(
+    pool: &sqlx::SqlitePool,
+    task_id: &str,
+    run_id: &str,
+    host: &str,
+    port: u16,
+) {
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    match scrape_endpoint(host, port).await {
+        Ok(body) => {
+            let samples = parse_prometheus_text(&body);
+            let points: Vec<MetricPoint> = samples
+                .iter()
+                .map(|s| MetricPoint {
+                    id: 0,
+                    task_id: task_id.to_string(),
+                    run_id: run_id.to_string(),
+                    metric_name: s.metric_name.clone(),
+                    ts: now.clone(),
+                    value: s.value,
+                })
+                .collect();
+
+            if !points.is_empty() {
+                if let Err(e) = MetricPointRepository::create_batch(pool, &points).await {
+                    tracing::warn!(
+                        "final-scrape: metric point batch insert failed for run {}: {e}",
+                        run_id
+                    );
+                }
+            }
+
+            tracing::info!(
+                event = "final_scrape_success",
+                run_id = %run_id,
+                sample_count = samples.len(),
+                "final scrape captured {} samples",
+                samples.len()
+            );
+        }
+        Err(e) => {
+            // Best-effort: engine may already be gone. Log and continue.
+            tracing::info!(
+                event = "final_scrape_missed",
+                run_id = %run_id,
+                reason = %e,
+                "final scrape missed (engine likely gone): {e}"
+            );
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
