@@ -17,7 +17,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 /// Default scrape interval in seconds.
-const DEFAULT_SCRAPE_INTERVAL_SECS: u64 = 10;
+const DEFAULT_SCRAPE_INTERVAL_SECS: u64 = 5;
 
 /// Number of consecutive scrape failures before emitting metrics_unavailable.
 const FAILURE_THRESHOLD: u32 = 3;
@@ -468,7 +468,7 @@ mod tests {
                 task_id: "t1".into(),
                 run_id: "r1".into(),
                 host: "127.0.0.1".into(),
-                port: 9090,
+                port: 9100,
             })
             .await;
         let targets = state.get_targets().await;
@@ -491,7 +491,7 @@ mod tests {
                 task_id: "t2".into(),
                 run_id: "r2".into(),
                 host: "127.0.0.1".into(),
-                port: 9090,
+                port: 9100,
             })
             .await;
 

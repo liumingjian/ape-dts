@@ -20,7 +20,7 @@ use tracing_subscriber::EnvFilter;
 const DEFAULT_BIND_ADDR: &str = "127.0.0.1:8080";
 const DEFAULT_DB_PATH: &str = "./data/console.db";
 const DEFAULT_IDLE_TIMEOUT_SECS: i64 = 3600;
-const DEFAULT_SCRAPE_INTERVAL_SECS: u64 = 10;
+const DEFAULT_SCRAPE_INTERVAL_SECS: u64 = 5;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
