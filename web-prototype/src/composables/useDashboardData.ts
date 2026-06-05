@@ -208,19 +208,21 @@ export function useDashboardData() {
         }
       } catch { /* ignore individual metric errors */ }
 
-      // Fetch lag (latency)
-      try {
-        const res = await api.get<MetricQueryResponse>(
-          `/runs/${runId}/metrics?metric=lag&from=${from}&to=${now}&step=${step}`,
-        );
-        if (res.data.length > 0) {
-          const points: MetricPoint[] = res.data.map((p) => ({ t: p.ts, v: p.value }));
-          newLat.push({ taskId: t.id, metric: 'lag', points });
-          const latest = points[points.length - 1]?.v ?? 0;
-          latSum += latest;
-          latN += 1;
-        }
-      } catch { /* ignore individual metric errors */ }
+      // Fetch lag — only for CDC tasks (snapshot tasks never emit lag)
+      if (t.kind === 'cdc') {
+        try {
+          const res = await api.get<MetricQueryResponse>(
+            `/runs/${runId}/metrics?metric=lag&from=${from}&to=${now}&step=${step}`,
+          );
+          if (res.data.length > 0) {
+            const points: MetricPoint[] = res.data.map((p) => ({ t: p.ts, v: p.value }));
+            newLat.push({ taskId: t.id, metric: 'lag', points });
+            const latest = points[points.length - 1]?.v ?? 0;
+            latSum += latest;
+            latN += 1;
+          }
+        } catch { /* ignore individual metric errors */ }
+      }
     }
 
     rpsSeries.value = newRps;

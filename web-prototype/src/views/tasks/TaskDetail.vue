@@ -735,17 +735,23 @@ const monitorRanges = [
   { value: '24h' as const, label: '24h' },
 ];
 
-const MONITOR_METRIC_NAMES = [
-  'extractor_rps_avg',
-  'sinker_record_count_avg_by_sec',
-  'pipeline_buffer_size_avg',
-  'sinker_rt_per_query_avg',
-];
+const MONITOR_METRIC_NAMES = computed(() => {
+  const base = [
+    'extractor_rps_avg',
+    'sinker_record_count_avg_by_sec',
+    'pipeline_buffer_size_avg',
+    'sinker_rt_per_query_avg',
+  ];
+  if (task.value?.syncMode === 'cdc') {
+    base.push('lag');
+  }
+  return base;
+});
 
 const monitorSeries = computed<MetricQueryResponse[]>(() => {
   const rangeMs = monitorRange.value === '1h' ? 3600_000 : monitorRange.value === '6h' ? 6 * 3600_000 : 24 * 3600_000;
   const cutoff = Date.now() - rangeMs;
-  return MONITOR_METRIC_NAMES
+  return MONITOR_METRIC_NAMES.value
     .filter(m => (metricsHistory.value[m]?.length ?? 0) > 0)
     .map(m => ({
       metric: m,
