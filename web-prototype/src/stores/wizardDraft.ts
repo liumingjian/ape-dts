@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { EngineType, GaussdbSubMode, SyncMode, ParallelType, ResumeType, TaskCategory } from '@/types/domain';
+import type { EngineType, GaussdbSubMode, SyncMode, ParallelType, ResumeType, TaskViewKind } from '@/types/domain';
 
 /* ---------- shape of the persisted draft ---------- */
 
@@ -81,9 +81,9 @@ export interface WizardDraftForm {
   currentStep: number;
 }
 
-export type WizardDraftKey = `console.wizard.${TaskCategory}`;
+export type WizardDraftKey = `console.wizard.${TaskViewKind}`;
 
-function draftKey(category: TaskCategory): WizardDraftKey {
+function draftKey(category: TaskViewKind): WizardDraftKey {
   return `console.wizard.${category}`;
 }
 
@@ -92,7 +92,7 @@ export const useWizardDraftStore = defineStore('wizardDraft', () => {
   const drafts = ref<Record<string, WizardDraftForm | null>>({});
   const originalHash = ref<Record<string, string | null>>({});
 
-  function load(category: TaskCategory): WizardDraftForm | null {
+  function load(category: TaskViewKind): WizardDraftForm | null {
     const key = draftKey(category);
     if (drafts.value[key]) return drafts.value[key];
     try {
@@ -110,20 +110,20 @@ export const useWizardDraftStore = defineStore('wizardDraft', () => {
     }
   }
 
-  function save(category: TaskCategory, form: WizardDraftForm): void {
+  function save(category: TaskViewKind, form: WizardDraftForm): void {
     const key = draftKey(category);
     drafts.value[key] = form;
     localStorage.setItem(key, JSON.stringify(form));
   }
 
-  function discard(category: TaskCategory): void {
+  function discard(category: TaskViewKind): void {
     const key = draftKey(category);
     drafts.value[key] = null;
     originalHash.value[key] = null;
     localStorage.removeItem(key);
   }
 
-  function isDirty(category: TaskCategory): boolean {
+  function isDirty(category: TaskViewKind): boolean {
     const key = draftKey(category);
     const current = drafts.value[key];
     if (!current && !originalHash.value[key]) return false;
@@ -132,7 +132,7 @@ export const useWizardDraftStore = defineStore('wizardDraft', () => {
   }
 
   /** Snapshot the current draft as the "original" for dirty tracking. */
-  function snapshotOriginal(category: TaskCategory): void {
+  function snapshotOriginal(category: TaskViewKind): void {
     const key = draftKey(category);
     const current = drafts.value[key];
     originalHash.value[key] = current ? JSON.stringify(current) : null;

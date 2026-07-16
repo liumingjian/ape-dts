@@ -6,6 +6,7 @@ import {
   type DashboardSummary,
   type MetricSeries,
   type MetricPoint,
+  type SyncMode,
   type TaskCategory,
   type TaskStatus,
   type AlertLevel,
@@ -102,6 +103,10 @@ const CATEGORY_MAP: Record<string, TaskCategory> = {
 
 function normalizeCategory(k: string): TaskCategory {
   return CATEGORY_MAP[k] ?? 'snapshot';
+}
+
+function syncModeForTask(t: TaskRow): SyncMode {
+  return normalizeCategory(t.kind) === 'cdc' ? 'cdc' : 'snapshot';
 }
 
 function engineFromUrl(url?: string): string {
@@ -246,6 +251,7 @@ export function useDashboardData() {
   const summary = computed<DashboardSummary>(() => {
     const allTasks = tasks.value;
     const allAlerts = alerts.value;
+    const taskById = new Map(allTasks.map((t) => [t.id, t]));
 
     // KPIs
     const runningTasks = allTasks.filter((t) => normalizeStatus(t.status) === 'running');
@@ -315,18 +321,24 @@ export function useDashboardData() {
         title: t.name || t.id,
         taskId: t.id,
         taskCategory: normalizeCategory(t.kind),
+        taskSyncMode: syncModeForTask(t),
         occurredAt: t.updatedAt,
       })),
-      ...allAlerts.slice(0, 5).map((a) => ({
-        id: `alert-${a.id}`,
-        type: 'alert.triggered' as const,
-        category: 'alert' as const,
-        tone: 'danger' as const,
-        title: `Alert ${a.severity}`,
-        taskId: a.taskId ?? '',
-        alertLevel: a.severity as AlertLevel,
-        occurredAt: a.firedAt,
-      })),
+      ...allAlerts.slice(0, 5).map((a) => {
+        const task = a.taskId ? taskById.get(a.taskId) : undefined;
+        return {
+          id: `alert-${a.id}`,
+          type: 'alert.triggered' as const,
+          category: 'alert' as const,
+          tone: 'danger' as const,
+          title: `Alert ${a.severity}`,
+          taskId: a.taskId ?? '',
+          taskCategory: task ? normalizeCategory(task.kind) : undefined,
+          taskSyncMode: task ? syncModeForTask(task) : undefined,
+          alertLevel: a.severity as AlertLevel,
+          occurredAt: a.firedAt,
+        };
+      }),
     ].sort(
       (a, b) =>
         new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),

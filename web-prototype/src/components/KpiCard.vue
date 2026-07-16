@@ -172,7 +172,7 @@ function onKeyActivate(e: Event) {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  padding: 18px 20px 14px;
+  padding: 16px 18px 14px;
   box-shadow: var(--shadow-card);
   display: flex;
   flex-direction: column;
@@ -194,8 +194,8 @@ function onKeyActivate(e: Event) {
   outline-offset: 2px;
 }
 .kpi--accent {
-  background: linear-gradient(135deg, #ECFDF5 0%, #FFFFFF 60%);
-  border-color: #99F6E4;
+  background: linear-gradient(135deg, var(--color-primary-50) 0%, var(--color-surface) 62%);
+  border-color: var(--color-primary-200);
 }
 .kpi--warning::before,
 .kpi--danger::before,
@@ -281,5 +281,19 @@ function onKeyActivate(e: Event) {
   width: 120px;
   height: 36px;
   flex-shrink: 0;
+}
+
+@media (max-width: 767px) {
+  .kpi {
+    min-width: 0;
+  }
+
+  .kpi__number {
+    font-size: 26px;
+  }
+
+  .kpi__spark {
+    width: 96px;
+  }
 }
 </style>

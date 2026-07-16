@@ -1,57 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createRouter, createMemoryHistory, type Router, type RouteRecordRaw } from 'vue-router';
-import { defineComponent, h } from 'vue';
-
-const Stub = defineComponent({
-  name: 'Stub',
-  render: () => h('div'),
-});
-
-// Mirror the production router's task-section route table. Kept in lockstep
-// with src/router/index.ts. The unified `/tasks/sync` view absorbs both
-// snapshot and cdc; legacy /tasks/snapshot|cdc redirect into it preserving
-// the mode filter via query.
-const routes: RouteRecordRaw[] = [
-  {
-    path: '/',
-    component: Stub,
-    children: [
-      { path: 'tasks/sync', name: 'SyncTasks', component: Stub },
-      { path: 'tasks/check', name: 'CheckTasks', component: Stub },
-      { path: 'tasks/struct', name: 'StructTasks', component: Stub },
-      { path: 'tasks/snapshot', redirect: (to) => ({ path: '/tasks/sync', query: { ...to.query, mode: 'snapshot' } }) },
-      { path: 'tasks/cdc', redirect: (to) => ({ path: '/tasks/sync', query: { ...to.query, mode: 'cdc' } }) },
-      { path: 'tasks/replay', redirect: { path: '/tasks/sync' } },
-      { path: 'tasks/verify', redirect: { path: '/tasks/check' } },
-      {
-        path: 'tasks/create/:type(snapshot|cdc|check|struct)',
-        name: 'CreateTask',
-        component: Stub,
-      },
-      {
-        path: 'tasks/create/:legacy(sync|replay|verify)',
-        redirect: (to) => {
-          const legacy = String(to.params.legacy);
-          const next = legacy === 'verify' ? 'check' : 'snapshot';
-          return { path: `/tasks/create/${next}`, query: to.query };
-        },
-      },
-      {
-        path: 'tasks/:category(snapshot|cdc|check|struct)/:id',
-        name: 'TaskDetail',
-        component: Stub,
-      },
-      {
-        path: 'tasks/:legacy(sync|replay|verify)/:id',
-        redirect: (to) => {
-          const legacy = String(to.params.legacy);
-          const next = legacy === 'verify' ? 'check' : 'snapshot';
-          return { path: `/tasks/${next}/${to.params.id}`, query: to.query, hash: to.hash };
-        },
-      },
-    ],
-  },
-];
+import { createMemoryHistory, createRouter, type Router } from 'vue-router';
+import { routes } from '@/router/index';
 
 let router: Router;
 
@@ -59,65 +8,95 @@ beforeEach(() => {
   router = createRouter({ history: createMemoryHistory('/'), routes });
 });
 
-describe('Router taxonomy redirects', () => {
-  it('redirects legacy /tasks/snapshot → /tasks/sync?mode=snapshot', async () => {
+describe('Router task taxonomy redirects', () => {
+  it('redirects legacy /tasks/snapshot to /tasks/migration?mode=snapshot', async () => {
     await router.push('/tasks/snapshot');
-    expect(router.currentRoute.value.path).toBe('/tasks/sync');
+    expect(router.currentRoute.value.path).toBe('/tasks/migration');
     expect(router.currentRoute.value.query.mode).toBe('snapshot');
   });
 
-  it('redirects legacy /tasks/cdc → /tasks/sync?mode=cdc', async () => {
+  it('redirects legacy /tasks/cdc to /tasks/migration?mode=cdc', async () => {
     await router.push('/tasks/cdc');
-    expect(router.currentRoute.value.path).toBe('/tasks/sync');
+    expect(router.currentRoute.value.path).toBe('/tasks/migration');
     expect(router.currentRoute.value.query.mode).toBe('cdc');
   });
 
-  it('preserves additional query params when redirecting snapshot/cdc → sync', async () => {
-    await router.push('/tasks/snapshot?status=running&engine=mysql');
-    expect(router.currentRoute.value.path).toBe('/tasks/sync');
+  it('preserves query and hash when redirecting legacy list paths', async () => {
+    await router.push('/tasks/snapshot?status=running&engine=mysql#top');
+    expect(router.currentRoute.value.path).toBe('/tasks/migration');
     expect(router.currentRoute.value.query.mode).toBe('snapshot');
     expect(router.currentRoute.value.query.status).toBe('running');
     expect(router.currentRoute.value.query.engine).toBe('mysql');
+    expect(router.currentRoute.value.hash).toBe('#top');
   });
 
-  it('redirects /tasks/replay → /tasks/sync', async () => {
+  it('redirects /tasks/sync to the migration module', async () => {
+    await router.push('/tasks/sync?mode=snapshot_cdc');
+    expect(router.currentRoute.value.path).toBe('/tasks/migration');
+    expect(router.currentRoute.value.query.mode).toBe('snapshot_cdc');
+  });
+
+  it('preserves an explicit valid mode on /tasks/sync redirects', async () => {
+    await router.push('/tasks/sync?mode=cdc');
+    expect(router.currentRoute.value.path).toBe('/tasks/migration');
+    expect(router.currentRoute.value.query.mode).toBe('cdc');
+  });
+
+  it('redirects /tasks/replay and /tasks/verify to supported modules', async () => {
     await router.push('/tasks/replay');
-    expect(router.currentRoute.value.path).toBe('/tasks/sync');
-  });
+    expect(router.currentRoute.value.path).toBe('/tasks/migration');
 
-  it('redirects /tasks/verify → /tasks/check', async () => {
     await router.push('/tasks/verify');
     expect(router.currentRoute.value.path).toBe('/tasks/check');
   });
 
-  it('redirects legacy detail path /tasks/sync/:id → /tasks/snapshot/:id', async () => {
-    await router.push('/tasks/sync/abc-123?tab=alerts');
-    expect(router.currentRoute.value.path).toBe('/tasks/snapshot/abc-123');
+  it('redirects legacy detail paths to migration detail while preserving query and hash', async () => {
+    await router.push('/tasks/cdc/abc-123?tab=alerts#tail');
+    expect(router.currentRoute.value.path).toBe('/tasks/migration/abc-123');
+    expect(router.currentRoute.value.query.mode).toBe('cdc');
     expect(router.currentRoute.value.query.tab).toBe('alerts');
+    expect(router.currentRoute.value.hash).toBe('#tail');
   });
 
-  it('redirects legacy detail path /tasks/verify/:id → /tasks/check/:id', async () => {
-    await router.push('/tasks/verify/abc-123');
-    expect(router.currentRoute.value.path).toBe('/tasks/check/abc-123');
+  it('preserves an explicit valid mode on legacy sync detail redirects', async () => {
+    await router.push('/tasks/sync/abc-123?mode=cdc&tab=alerts#tail');
+    expect(router.currentRoute.value.path).toBe('/tasks/migration/abc-123');
+    expect(router.currentRoute.value.query.mode).toBe('cdc');
+    expect(router.currentRoute.value.query.tab).toBe('alerts');
+    expect(router.currentRoute.value.hash).toBe('#tail');
   });
 
-  it('redirects legacy create path /tasks/create/sync → /tasks/create/snapshot', async () => {
+  it('redirects legacy create paths to migration create with mode defaults', async () => {
+    await router.push('/tasks/create/snapshot');
+    expect(router.currentRoute.value.path).toBe('/tasks/create/migration');
+    expect(router.currentRoute.value.query.mode).toBe('snapshot');
+
+    await router.push('/tasks/create/cdc');
+    expect(router.currentRoute.value.path).toBe('/tasks/create/migration');
+    expect(router.currentRoute.value.query.mode).toBe('cdc');
+
     await router.push('/tasks/create/sync');
-    expect(router.currentRoute.value.path).toBe('/tasks/create/snapshot');
+    expect(router.currentRoute.value.path).toBe('/tasks/create/migration');
+    expect(router.currentRoute.value.query.mode).toBe('snapshot_cdc');
   });
 
-  it('redirects legacy create path /tasks/create/verify → /tasks/create/check', async () => {
-    await router.push('/tasks/create/verify');
-    expect(router.currentRoute.value.path).toBe('/tasks/create/check');
+  it('preserves an explicit valid mode on legacy sync create redirects', async () => {
+    await router.push('/tasks/create/sync?mode=cdc&template=fast#top');
+    expect(router.currentRoute.value.path).toBe('/tasks/create/migration');
+    expect(router.currentRoute.value.query.mode).toBe('cdc');
+    expect(router.currentRoute.value.query.template).toBe('fast');
+    expect(router.currentRoute.value.hash).toBe('#top');
   });
 
-  it('resolves canonical path /tasks/sync directly', async () => {
-    await router.push('/tasks/sync');
-    expect(router.currentRoute.value.path).toBe('/tasks/sync');
-    expect(router.currentRoute.value.name).toBe('SyncTasks');
-  });
+  it('resolves canonical migration, check, and struct paths directly', async () => {
+    await router.push('/tasks/migration');
+    expect(router.currentRoute.value.path).toBe('/tasks/migration');
+    expect(router.currentRoute.value.name).toBe('MigrationTasks');
 
-  it('resolves canonical path /tasks/struct directly', async () => {
+    await router.push('/tasks/check');
+    expect(router.currentRoute.value.path).toBe('/tasks/check');
+    expect(router.currentRoute.value.name).toBe('CheckTasks');
+
     await router.push('/tasks/struct');
     expect(router.currentRoute.value.path).toBe('/tasks/struct');
     expect(router.currentRoute.value.name).toBe('StructTasks');

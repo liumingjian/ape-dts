@@ -167,6 +167,24 @@
               :value="s"
             />
           </el-select>
+          <div
+            v-if="showModeCol"
+            class="task-list__mode-filter"
+            role="group"
+            :aria-label="t('taskList.filter.mode')"
+          >
+            <span class="task-list__mode-filter-label">{{ t('taskList.filter.mode') }}</span>
+            <el-radio-group
+              v-model="filter.mode"
+              class="task-list__mode-segment"
+              @change="applyFilter"
+            >
+              <el-radio-button value="">{{ t('taskList.filter.allModes') }}</el-radio-button>
+              <el-radio-button value="snapshot">{{ t('taskList.mode.snapshot') }}</el-radio-button>
+              <el-radio-button value="snapshot_cdc">{{ t('taskList.mode.snapshot_cdc') }}</el-radio-button>
+              <el-radio-button value="cdc">{{ t('taskList.mode.cdc') }}</el-radio-button>
+            </el-radio-group>
+          </div>
           <el-input
             v-model="filter.q"
             :placeholder="t('taskList.filter.search')"
@@ -429,12 +447,13 @@ import { api } from '@/api/client';
 import { useRbac } from '@/composables/useRbac';
 import { useDocumentVisibility } from '@/composables/useDocumentVisibility';
 import type {
-  Task, TaskCategory, TaskStatus, EngineType, Paginated, ApiTask,
+  Task, TaskStatus, EngineType, Paginated, ApiTask, TaskViewKind, SyncMode,
 } from '@/types/domain';
 import { mapApiTask } from '@/types/domain';
 import { ENGINE_LABELS } from '@/types/domain';
+import { categoryForView, createPathForView, detailPathForView, isMigrationMode } from '@/utils/migrationMode';
 
-type ViewKind = TaskCategory;
+type ViewKind = TaskViewKind;
 
 const props = defineProps<{ viewKind: ViewKind }>();
 const { t } = useI18n();
@@ -468,8 +487,8 @@ async function loadLicense() {
   }
 }
 
-const showModeCol = computed(() => false);
-const apiCategory = computed(() => props.viewKind);
+const showModeCol = computed(() => props.viewKind === 'migration');
+const apiCategory = computed(() => categoryForView(props.viewKind));
 
 const title = computed(() => t(`nav.tasks.${props.viewKind}`));
 const subtitle = computed(() => t(`taskList.subtitle.${props.viewKind}`));
@@ -490,6 +509,7 @@ const filter = reactive({
   resourceGroup: '',
   engine: '' as EngineType | '',
   status: '' as TaskStatus | '',
+  mode: '' as SyncMode | '',
   q: '',
 });
 
@@ -566,6 +586,9 @@ const activeChips = computed(() => {
   if (filter.status) {
     chips.push({ key: 'status', label: t('taskList.filter.status'), value: t(`task.status.${filter.status}`) });
   }
+  if (filter.mode) {
+    chips.push({ key: 'mode', label: t('taskList.filter.mode'), value: t(`taskList.mode.${filter.mode}`) });
+  }
   if (filter.engine) {
     const eng = ENGINE_LABELS[filter.engine as EngineType];
     chips.push({ key: 'engine', label: t('taskList.filter.engine'), value: eng ?? filter.engine });
@@ -578,6 +601,7 @@ const activeChips = computed(() => {
 
 function removeChip(key: string) {
   if (key === 'status') filter.status = '';
+  else if (key === 'mode') filter.mode = '';
   else if (key === 'engine') filter.engine = '';
   else if (key === 'q') filter.q = '';
   applyFilter();
@@ -585,6 +609,7 @@ function removeChip(key: string) {
 
 function clearAllChips() {
   filter.status = '';
+  filter.mode = '';
   filter.engine = '';
   filter.q = '';
   applyFilter();
@@ -594,6 +619,7 @@ function clearAllChips() {
 function syncFiltersToUrl() {
   const query: Record<string, string> = {};
   if (filter.status) query.status = filter.status;
+  if (showModeCol.value && filter.mode) query.mode = filter.mode;
   if (filter.engine) query.engine = filter.engine;
   if (filter.q) query.q = filter.q;
   router.replace({ query });
@@ -601,6 +627,7 @@ function syncFiltersToUrl() {
 
 function readFiltersFromUrl() {
   if (route.query.status) filter.status = route.query.status as TaskStatus;
+  if (showModeCol.value) filter.mode = isMigrationMode(route.query.mode) ? route.query.mode : '';
   if (route.query.engine) filter.engine = route.query.engine as EngineType;
   if (route.query.q) filter.q = String(route.query.q);
 }
@@ -616,6 +643,7 @@ async function loadList() {
     if (filter.resourceGroup) params.set('resourceGroup', filter.resourceGroup);
     if (filter.engine) params.set('engine', filter.engine);
     if (filter.status) params.set('status', filter.status);
+    if (showModeCol.value && filter.mode) params.set('mode', filter.mode);
     if (filter.q) params.set('q', filter.q);
     if (sortKey.value) {
       params.set('sort', sortKey.value);
@@ -675,7 +703,7 @@ function formatDate(iso: string | undefined): string {
 }
 
 function goDetail(row: Task) {
-  router.push({ path: `/tasks/${row.category}/${row.id}` });
+  return router.push({ path: detailPathForView(props.viewKind, row.id) });
 }
 
 async function doAction(row: Task, action: string) {
@@ -718,7 +746,7 @@ function confirmDelete(row: Task) {
 
 function onRowMore(row: Task, cmd: string) {
   if (cmd === 'edit') {
-    router.push({ path: `/tasks/${row.category}/${row.id}`, query: { tab: 'config', edit: '1' } });
+    router.push({ path: detailPathForView(props.viewKind, row.id), query: { tab: 'config', edit: '1' } });
   } else if (cmd === 'delete') {
     confirmDelete(row);
   }
@@ -828,8 +856,10 @@ function onDownloadTemplate() {
 }
 
 function onCreate() {
-  router.push({ path: `/tasks/create/${props.viewKind}` });
+  return router.push({ path: createPathForView(props.viewKind) });
 }
+
+defineExpose({ goDetail, onCreate });
 
 /* ---------- sorting ---------- */
 function onSortChange({ prop, order }: { prop: string; order: string | null }) {
@@ -925,6 +955,24 @@ watch(() => route.query, () => {
 .task-list__filter--grow {
   flex: 1;
   min-width: 240px;
+}
+.task-list__mode-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.task-list__mode-filter-label {
+  color: var(--color-ink-muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.task-list__mode-segment {
+  flex-wrap: nowrap;
+}
+.task-list__mode-segment :deep(.el-radio-button__inner) {
+  min-width: 72px;
+  padding: 7px 12px;
 }
 .task-list__engine-option {
   display: inline-flex;
@@ -1145,5 +1193,84 @@ watch(() => route.query, () => {
   padding-top: 8px;
   color: var(--color-ink-subtle);
   font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .task-list__panel {
+    padding: 16px 12px 12px;
+    gap: 12px;
+  }
+
+  .task-list__toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .task-list__actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .task-list__actions :deep(.el-dropdown),
+  .task-list__actions :deep(.el-button) {
+    width: 100%;
+    min-width: 0;
+    margin-left: 0;
+  }
+
+  .task-list__view-controls {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .task-list__filters {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .task-list__mode-filter {
+    align-items: flex-start;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .task-list__mode-segment {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .task-list__mode-segment :deep(.el-radio-button__inner) {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .task-list__filter--sm,
+  .task-list__filter--grow {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .task-list__table :deep(.el-table-fixed-column--right),
+  .task-list__table :deep(.el-table__cell.is-right) {
+    position: static !important;
+    right: auto !important;
+  }
+
+  .task-list__row-actions {
+    gap: 6px;
+  }
+
+  .task-list__row-actions :deep(.el-button) {
+    font-size: 12px;
+  }
+
+  .task-list__footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
 }
 </style>

@@ -372,14 +372,16 @@
 import { computed, onMounted, onUnmounted, reactive, ref, shallowRef, unref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
+import type { RouteLocationRaw } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import dayjs from 'dayjs';
 import { api } from '@/api/client';
 import { useRbac } from '@/composables/useRbac';
 import { useDocumentVisibility } from '@/composables/useDocumentVisibility';
 import { useLogStream, type LogLine, type LogStreamHandle } from '@/composables/useLogStream';
-import type { Task, Alert, ApiAlert, MetricQueryResponse, Run, RunPosition, ApiTask, TableLoadState } from '@/types/domain';
+import type { Task, Alert, ApiAlert, MetricQueryResponse, Run, RunPosition, ApiTask, TableLoadState, TaskCategory } from '@/types/domain';
 import { mapApiTask, mapApiAlert } from '@/types/domain';
+import { listPathForTaskKind } from '@/utils/migrationMode';
 import KpiCard from '@/components/KpiCard.vue';
 import ChartCard from '@/components/ChartCard.vue';
 import LevelBadge from '@/components/LevelBadge.vue';
@@ -401,7 +403,10 @@ const VALID_TABS = ['config', 'objects', 'logs', 'monitor', 'alerts', 'history']
 type TabName = (typeof VALID_TABS)[number];
 
 const taskId = computed(() => String(route.params.id));
-const taskCategory = computed(() => String(route.params.category ?? 'snapshot'));
+const taskCategory = computed<TaskCategory>(() => {
+  const category = String(route.params.category ?? 'snapshot');
+  return category === 'cdc' || category === 'check' || category === 'struct' ? category : 'snapshot';
+});
 
 const task = ref<Task | null>(null);
 const activeTab = ref<TabName>((route.query.tab as TabName) || 'config');
@@ -450,12 +455,9 @@ async function loadTask() {
   }
 }
 
-function backToListPath(): string {
+function backToListPath(): RouteLocationRaw {
   const cat = taskCategory.value;
-  if (cat === 'check') return '/tasks/check';
-  if (cat === 'struct') return '/tasks/struct';
-  if (cat === 'cdc') return '/tasks/cdc';
-  return '/tasks/snapshot';
+  return listPathForTaskKind(cat, task.value?.syncMode);
 }
 
 /* ---------- lifecycle actions ---------- */

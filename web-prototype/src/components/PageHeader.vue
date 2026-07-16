@@ -21,6 +21,10 @@ defineProps<{ title: string; subtitle?: string }>();
   justify-content: space-between;
   gap: 24px;
   padding: 20px 24px 16px;
+  min-width: 0;
+}
+.page-header__text {
+  min-width: 0;
 }
 .page-header__title {
   font-size: var(--text-2xl);
@@ -40,5 +44,24 @@ defineProps<{ title: string; subtitle?: string }>();
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+@media (max-width: 767px) {
+  .page-header {
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-4) var(--space-3);
+  }
+
+  .page-header__title {
+    font-size: var(--text-xl);
+  }
+
+  .page-header__actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
 }
 </style>
