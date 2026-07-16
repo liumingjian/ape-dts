@@ -37,9 +37,9 @@
   - cdc: `pg_to_gaussdb_oracle::cdc_tests::test::cdc_basic_test`
   - cdc: `gaussdb_oracle_to_pg::cdc_tests::test::cdc_basic_test`
 - 证据：
-  - `.codex-tasks/20260415-gaussdb-oracle-next/PROGRESS.md`
-  - `.codex-tasks/20260415-gaussdb-oracle-bootstrap/PROGRESS.md`（本机 docker 替身）
-  - `.codex-tasks/20260415-pg-gaussdboracle-bidir-sync-epic/`（PG ↔ GaussDBOracle sync basic）
+  - 历史本地任务/证据（未纳入仓库）
+  - 历史本地任务/证据（未纳入仓库）（本机 docker 替身）
+  - 历史本地任务/证据（未纳入仓库）（PG ↔ GaussDBOracle sync basic）
 
 ## 2.1 额外交付：Oracle ↔ GaussDBOracle（bootstrap）
 
@@ -57,12 +57,12 @@
   - cdc: `gaussdb_oracle_to_oracle::cdc_tests::test::cdc_basic_test`
   - script: `bash scripts/e2e/oracle_gaussdboracle_bootstrap.sh`
 - 证据：
-  - `.codex-tasks/20260415-oracle-gaussdboracle-bidir-epic/PROGRESS.md`
-  - `.codex-tasks/20260416-gaussdboracle-to-oracle-cdc-epic/PROGRESS.md`
-  - `.codex-tasks/20260416-oracle-gaussdboracle-logminer-cdc-epic/PROGRESS.md`
-  - `.codex-tasks/20260416-oracle-gaussdboracle-check-basic/PROGRESS.md`
-  - `.codex-tasks/20260416-oracle-gaussdboracle-struct-basic/PROGRESS.md`
-  - `.codex-tasks/20260416-oracle-gaussdboracle-e2e-script/PROGRESS.md`
+  - 历史本地任务/证据（未纳入仓库）
+  - 历史本地任务/证据（未纳入仓库）
+  - 历史本地任务/证据（未纳入仓库）
+  - 历史本地任务/证据（未纳入仓库）
+  - 历史本地任务/证据（未纳入仓库）
+  - 历史本地任务/证据（未纳入仓库）
 
 ## 3. 下一步建议（按优先级）
 

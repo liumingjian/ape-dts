@@ -250,7 +250,7 @@
 ## 8. 最近一次执行记录
 
 - 2026-04-02：已执行 **Batch A**（9 条主路径）并全部 PASS。
-  - 证据：`.codex-tasks/20260402-gaussdbpg-quality-coverage/tasks/20260402-05-quality-gate-evidence/raw/batch-a/summary.tsv`
+  - 证据：历史本地任务/证据（未纳入仓库）
 - 2026-04-03：已执行 **Batch B + Resilience Gate**（混合结果）。
   - Batch B：`6/6 PASS`
   - Resilience：
@@ -261,8 +261,8 @@
     - 真实 e2e 脚本已经证明 failover 期间 CDC 可重连到新主并继续同步，且脚本收尾能把主库恢复回 `node 2 / 10.250.0.30`。
     - 当前红点集中在 `dt-tests` 的 failover restore 校验：真实切主成功，但测试内 restore 回原主阶段仍会因 `cm_ctl busy / convergence timeout` 失败。
   - 证据：
-    - `.codex-tasks/20260403-gaussdb-gate-batchb-resilience/PROGRESS.md`
-    - `.codex-tasks/20260403-gaussdb-gate-batchb-resilience/raw/batch-b/summary.tsv`
-    - `.codex-tasks/20260403-gaussdb-gate-batchb-resilience/raw/resilience/summary.tsv`
+    - 历史本地任务/证据（未纳入仓库）
+    - 历史本地任务/证据（未纳入仓库）
+    - 历史本地任务/证据（未纳入仓库）
 - 2026-04-13：已在真实 HA 环境执行 `MySQL -> GaussDBMySQL` 的目标端 failover 自愈回归并 PASS。
-  - 证据：`.codex-tasks/20260413-gaussdb-target-selfheal/PROGRESS.md`
+  - 证据：历史本地任务/证据（未纳入仓库）

@@ -1,8 +1,8 @@
 # GaussDB PRD 驱动迭代计划
 
-> **日期**：2026-04-02  
-> **需求真相源**：`docs/agent-summary/gaussdb-prd.md`  
-> **执行真表（Epic）**：`.codex-tasks/20260331-gaussdb-prd-align/SUBTASKS.csv`
+> **日期**：2026-04-02
+> **需求真相源**：`docs/roadmap/gaussdb/prd.md`
+> **历史执行背景**：此前的本地 Epic 任务表与证据未纳入仓库；本文保留其结论用于溯源
 
 本文件从 2026-03-31 起演进为“PRD 驱动的迭代计划”。2026-03 的 MVP 收敛计划已完成，保留在文末附录用于溯源。
 
@@ -17,12 +17,7 @@ MVP（`DbType::GaussDBPg`）已在真实环境闭环验证：
 - CDC P0 稳定性增强：candidate-first + sticky + HA 端口 `sql_port+1` + replication NoTLS-first + fail-fast 诊断 ✅
 - CDC P1 resilience：resume / failover / negatives / e2e ✅
 
-证据入口（示例）：
-
-- `.codex-tasks/20260316-gaussdb-mvp/SUBTASKS.csv`
-- `.codex-tasks/20260329-gaussdb-prd-e2e/PROGRESS.md`
-- `.codex-tasks/20260331-gaussdb-p0-stability/PROGRESS.md`
-- `.codex-tasks/20260331-gaussdb-cdc-resilience/PROGRESS.md`
+历史执行证据来自未纳入仓库的本地任务记录；以下状态以本文保留的日期、测试名和结果为准。
 
 ## 2. 下一阶段（三 Epic 并行）
 
@@ -59,20 +54,18 @@ MVP（`DbType::GaussDBPg`）已在真实环境闭环验证：
   - child 3：`cdc resilience + negatives`
   - child 4：`docs/runbook/tracker` 收口
   - 当前进度（2026-04-13）：child 1/2/3/4 已完成；并已补齐 **目标端 failover 自愈** 的集成测试：
-    - `mysql_to_gaussdb_mysql::cdc_tests::test::cdc_failover_test` 已在真实 HA 环境 PASS（证据见 `.codex-tasks/20260413-gaussdb-target-selfheal/PROGRESS.md`）
+    - `mysql_to_gaussdb_mysql::cdc_tests::test::cdc_failover_test` 已在真实 HA 环境 PASS（证据见 历史本地任务/证据（未纳入仓库））
 - 推荐通过 `dt-tests/tests/.env.local` 提供：
   - `gaussdb_mysql_sinker_without_auth_url`
   - `gaussdb_mysql_sinker_username`
   - `gaussdb_mysql_sinker_password`
   - 这些变量名仍是测试框架里的历史角色命名，但其值在真实环境中可以是 `postgres://.../<mysql-compatible-db>` 形式
 
-执行真表：
-
-- `.codex-tasks/20260410-gaussdb-mysql-cdc-expansion/SUBTASKS.csv`
+历史执行背景：本 Epic 的本地任务表未纳入仓库。
 
 ### 2.2 Active Epic B：`GaussDBPg Quality Coverage`
 
-目标：继续围绕 `DbType::GaussDBPg` 收口 PRD 中尚未形成执行真表的质量项。
+目标：继续围绕 `DbType::GaussDBPg` 收口 PRD 中尚未完成验证闭环的质量项。
 
 本轮优先级锁定：
 
@@ -83,9 +76,7 @@ MVP（`DbType::GaussDBPg`）已在真实环境闭环验证：
 - CDC 类型矩阵 + fail-fast 证据
 - 性能 / 可观测 / check 边界深化
 
-执行真表：
-
-- `.codex-tasks/20260402-gaussdbpg-quality-coverage/SUBTASKS.csv`
+历史执行背景：本 Epic 的本地任务表未纳入仓库。
 
 ### 2.3 Active Epic C：`GaussDB -> MySQL Bootstrap`
 
@@ -110,15 +101,13 @@ MVP（`DbType::GaussDBPg`）已在真实环境闭环验证：
 - router：`db_map=public:<dst_mysql_db>`（按用例分别落到 `gaussdb_to_mysql_{snapshot,check,cdc}_dst`）
 - 目标端：本机 MySQL 8 sink（通过 `dt-tests/tests/.env.local` 的 `mysql_sinker_*` 契约提供）
 
-执行真表：
-
-- `.codex-tasks/20260413-gaussdb-to-mysql-bootstrap/SUBTASKS.csv`
+历史执行背景：本 Epic 的本地任务表未纳入仓库。
 
 补充 spec（不进入 Epic C 真表）：
 
-- `GaussDBPg -> MySQL precheck basic`：`.codex-tasks/20260415-gaussdb-to-mysql-precheck/`
-- `GaussDBPg -> MySQL struct basic`：`.codex-tasks/20260415-gaussdb-to-mysql-struct-basic/`
-- `GaussDBPg -> MySQL struct advanced`：`.codex-tasks/20260415-gaussdb-to-mysql-struct-advance/`
+- `GaussDBPg -> MySQL precheck basic`：历史本地任务/证据（未纳入仓库）
+- `GaussDBPg -> MySQL struct basic`：历史本地任务/证据（未纳入仓库）
+- `GaussDBPg -> MySQL struct advanced`：历史本地任务/证据（未纳入仓库）
 
 当前进度（2026-04-15）：
 
@@ -136,11 +125,11 @@ MVP（`DbType::GaussDBPg`）已在真实环境闭环验证：
 - `SHA256`
   - 继续单独阻塞管理，不进入本轮 active Epic
   - 依赖 `apecloud/rust-postgres` 与专用联调环境
-  - 参考：`docs/agent-summary/gaussdb-sha256-roadmap.md`
+  - 参考：`docs/roadmap/gaussdb/sha256-roadmap.md`
 - `GaussDBOracle`
   - 本轮只保留 roadmap / blocked 条目
   - 不与 `GaussDBMySQL` 首波骨架混做
-  - 参考：`docs/agent-summary/gaussdb-oracle-roadmap.md`
+  - 参考：`docs/roadmap/gaussdb/oracle-roadmap.md`
 
 ---
 
@@ -187,9 +176,9 @@ MVP（`DbType::GaussDBPg`）已在真实环境闭环验证：
 
 采用 `taskmaster` 的 `Epic Task` 形态。实施开始时创建：
 
-- `.codex-tasks/<gaussdb-mvp>/EPIC.md`
-- `.codex-tasks/<gaussdb-mvp>/SUBTASKS.csv`
-- `.codex-tasks/<gaussdb-mvp>/PROGRESS.md`
+- 历史本地任务/证据（未纳入仓库）
+- 历史本地任务/证据（未纳入仓库）
+- 历史本地任务/证据（未纳入仓库）
 
 子任务按依赖顺序拆成 5 个：
 
@@ -360,7 +349,7 @@ MVP（`DbType::GaussDBPg`）已在真实环境闭环验证：
 
 实施内容：
 
-- 在 `docs/agent-summary/` 和相关模板文档中补充：
+- 在 `docs/roadmap/gaussdb/` 和相关模板文档中补充：
   - GaussDB 配置样例
   - 测试环境变量说明
   - 手工联调步骤
