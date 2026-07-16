@@ -12,18 +12,21 @@ async fn main() -> anyhow::Result<()> {
 
     let prefix =
         env::var("GAUSSDB_ADMIN_PREFIX").unwrap_or_else(|_| "gaussdb_pg_extractor".to_string());
-    let url = env::var(format!("{prefix}_without_auth_url"))?;
+    let url = env::var("GAUSSDB_ADMIN_URL")
+        .or_else(|_| env::var(format!("{prefix}_without_auth_url")))?;
     let auth = ConnectionAuthConfig::Basic {
         username: env::var(format!("{prefix}_username"))?,
         password: Some(env::var(format!("{prefix}_password"))?),
     };
-    let sql = env::var("GAUSSDB_ADMIN_SQL").context("missing GAUSSDB_ADMIN_SQL")?;
+    let sql = admin_sql()?;
     let statements = split_sql(&sql);
     if statements.is_empty() {
         bail!("GAUSSDB_ADMIN_SQL did not contain executable SQL");
     }
+    let verbose = env::var("GAUSSDB_ADMIN_VERBOSE").as_deref() == Ok("1");
 
     let pool = TaskUtil::create_pg_conn_pool(&url, &auth, 1, false, false).await?;
+    let mut executed_count = 0usize;
     for statement in statements {
         if statement
             .trim_start()
@@ -33,11 +36,24 @@ async fn main() -> anyhow::Result<()> {
             print_query(&pool, &statement).await?;
         } else {
             sqlx::query(&statement).execute(&pool).await?;
-            println!("OK {statement}");
+            executed_count += 1;
+            if verbose {
+                println!("OK {statement}");
+            }
         }
+    }
+    if executed_count > 0 {
+        println!("OK executed_statements={executed_count}");
     }
     pool.close().await;
     Ok(())
+}
+
+fn admin_sql() -> anyhow::Result<String> {
+    if let Ok(path) = env::var("GAUSSDB_ADMIN_SQL_FILE") {
+        return fs::read_to_string(path).context("failed to read GAUSSDB_ADMIN_SQL_FILE");
+    }
+    env::var("GAUSSDB_ADMIN_SQL").context("missing GAUSSDB_ADMIN_SQL")
 }
 
 async fn print_query(pool: &sqlx::Pool<sqlx::Postgres>, sql: &str) -> anyhow::Result<()> {

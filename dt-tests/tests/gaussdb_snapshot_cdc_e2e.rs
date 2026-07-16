@@ -1,8 +1,12 @@
 #[cfg(test)]
+mod test_config_util;
+
+#[cfg(test)]
 mod test {
     use std::{
         env, fs,
         path::{Path, PathBuf},
+        sync::atomic::{AtomicU64, Ordering},
         time::Duration,
     };
 
@@ -24,14 +28,15 @@ mod test {
     use crate::test_config_util::TestConfigUtil;
 
     const DEFAULT_WEB_URL: &str = "http://127.0.0.1:5174";
-    const RAW_DIR: &str = ".codex-tasks/20260516-gaussdb-bidirectional-snapshot-cdc/raw";
-    const RUNS_DIR: &str = ".codex-tasks/20260516-gaussdb-bidirectional-snapshot-cdc/runs";
+    const RAW_DIR: &str = ".local/e2e/gaussdb-bidirectional-snapshot-cdc/raw";
+    const RUNS_DIR: &str = ".local/e2e/gaussdb-bidirectional-snapshot-cdc/runs";
     const LICENSE_SECRET: &str = "ape-dts-console-license-secret-2025";
     const GAUSSDB_RW_PROBE_ATTEMPTS: usize = 2;
     const GAUSSDB_RW_PROBE_DELAY: Duration = Duration::from_secs(1);
     const GAUSSDB_CONNECT_ATTEMPT_TIMEOUT: Duration = Duration::from_secs(6);
     const GAUSSDB_WRITE_PROBE_TIMEOUT: Duration = Duration::from_secs(5);
     const GAUSSDB_SQL_ATTEMPT_TIMEOUT: Duration = Duration::from_secs(20);
+    static GAUSSDB_PROBE_SEQ: AtomicU64 = AtomicU64::new(1);
 
     #[tokio::test]
     async fn gaussdb_bidirectional_snapshot_cdc_via_console_and_playwright() {
@@ -87,6 +92,11 @@ mod test {
 
         let auth = BrowserAuth::login().await?;
         auth.activate_license().await?;
+        if matches!(scope, MatrixScope::GaussDbOracle) {
+            let cases = gaussdb_oracle_self_check_cases().await?;
+            return run_cases(&auth, cases).await;
+        }
+
         let pg_src = PgDb::new(
             "pg_src",
             env_url("pg_extractor_without_auth_url")?,
@@ -148,9 +158,12 @@ mod test {
         let cases = match scope {
             MatrixScope::Full => full_matrix_cases(&dbs),
             MatrixScope::GaussDbPgMysql => gaussdb_pg_mysql_cases(&dbs),
-            MatrixScope::GaussDbOracle => gaussdb_oracle_cases(&dbs),
+            MatrixScope::GaussDbOracle => unreachable!("GaussDBOracle scope is handled above"),
         };
+        run_cases(&auth, cases).await
+    }
 
+    async fn run_cases(auth: &BrowserAuth, cases: Vec<Case<'_>>) -> anyhow::Result<()> {
         let mut summaries = Vec::new();
         for case in cases {
             let case_name = case.name;
@@ -373,25 +386,6 @@ mod test {
         ]
     }
 
-    fn gaussdb_oracle_cases<'a>(dbs: &MatrixDbs<'a>) -> Vec<Case<'a>> {
-        vec![
-            Case::new(
-                "gaussdb_oracle_to_oracle",
-                DbKind::GaussOracle,
-                DbKind::Oracle,
-                dbs.gd_ora,
-                dbs.oracle,
-            ),
-            Case::new(
-                "oracle_to_gaussdb_oracle",
-                DbKind::Oracle,
-                DbKind::GaussOracle,
-                dbs.oracle,
-                dbs.gd_ora,
-            ),
-        ]
-    }
-
     async fn run_case(auth: &BrowserAuth, case: Case<'_>) -> anyhow::Result<Value> {
         case.source.reset(case.name).await?;
         case.target.reset(case.name).await?;
@@ -487,12 +481,20 @@ mod test {
     }
 
     async fn wait_target(case: &Case<'_>) -> anyhow::Result<Vec<RowOut>> {
+        let mut last_error = None;
         for poll in 1..=120 {
-            let rows = case
-                .target
-                .rows(case.name)
-                .await
-                .with_context(|| format!("{} poll {poll} target rows failed", case.name))?;
+            let rows = match case.target.rows(case.name).await {
+                Ok(rows) => rows,
+                Err(e) => {
+                    last_error = Some(format!("{:#}", e));
+                    fs::write(
+                        raw_dir().join(format!("{}-poll-{poll}-error.txt", case.name)),
+                        last_error.as_deref().unwrap_or_default(),
+                    )?;
+                    sleep(Duration::from_secs(2)).await;
+                    continue;
+                }
+            };
             if rows == expected_rows() {
                 return Ok(rows);
             }
@@ -501,6 +503,13 @@ mod test {
                 serde_json::to_string_pretty(&rows)?,
             )?;
             sleep(Duration::from_secs(2)).await;
+        }
+        if let Some(e) = last_error {
+            bail!(
+                "target rows did not converge for {}; last target query error: {}",
+                case.name,
+                e
+            );
         }
         bail!("target rows did not converge for {}", case.name);
     }
@@ -1650,21 +1659,28 @@ mod test {
     }
 
     async fn probe_write(pool: &Pool<Postgres>) -> anyhow::Result<()> {
-        let probe_tbl = format!("ape_dts_rw_probe_{}", server_id("gaussdb_e2e"));
-        sqlx::query("BEGIN").execute(pool).await?;
+        let probe_tbl = gaussdb_probe_table();
+        let drop_sql = format!("DROP TABLE IF EXISTS public.{probe_tbl}");
         let create_sql = format!("CREATE TABLE public.{probe_tbl} (id int4)");
         let insert_sql = format!("INSERT INTO public.{probe_tbl} (id) VALUES (1)");
+        sqlx::query(&drop_sql).execute(pool).await?;
         let create_res = sqlx::query(&create_sql).execute(pool).await;
         let insert_res = if create_res.is_ok() {
             Some(sqlx::query(&insert_sql).execute(pool).await)
         } else {
             None
         };
-        let rollback_res = sqlx::query("ROLLBACK").execute(pool).await;
+        let drop_res = sqlx::query(&drop_sql).execute(pool).await;
         create_res?;
         insert_res.context("insert probe missing")??;
-        rollback_res?;
+        drop_res?;
         Ok(())
+    }
+
+    fn gaussdb_probe_table() -> String {
+        let pid = std::process::id();
+        let seq = GAUSSDB_PROBE_SEQ.fetch_add(1, Ordering::Relaxed);
+        format!("ape_dts_rw_probe_{pid}_{seq}")
     }
 
     async fn connect_pg_wire_client(

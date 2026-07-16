@@ -15,6 +15,15 @@ CONSOLE_DB_PATH="$STATE_DIR/console.db"
 RUN_DATA_DIR="$STATE_DIR/runs"
 ENGINE_PATH="${APE_DTS_BINARY_PATH:-$ROOT/target/debug/dt-main}"
 ORACLE_CONTAINER="${ORACLE_SQLPLUS_DOCKER_CONTAINER:-oracle-xe-local}"
+ORACLE_COMPOSE_FILE="${ORACLE_COMPOSE_FILE:-$ROOT/dt-tests/docker-compose.oracle_xe.yml}"
+ORACLE_HOST="${ORACLE_HOST:-127.0.0.1}"
+ORACLE_PORT="${ORACLE_PORT:-15211}"
+ORACLE_SERVICE="${ORACLE_SERVICE:-XE}"
+ORACLE_USER="${ORACLE_USER:-APE_DTS}"
+ORACLE_CONTAINER_HOST="${ORACLE_CONTAINER_HOST:-127.0.0.1}"
+ORACLE_CONTAINER_PORT="${ORACLE_CONTAINER_PORT:-1521}"
+GAUSSDB_ORACLE_ADMIN_PREFIX="${GAUSSDB_ORACLE_ADMIN_PREFIX:-gaussdb_oracle_sinker}"
+GAUSSDB_ORACLE_DB="${GAUSSDB_ORACLE_DB:-db_ora_mode}"
 ENV_LOCAL="$ROOT/dt-tests/tests/.env.local"
 TEST_NAME="gaussdb_snapshot_cdc_e2e::test::gaussdb_oracle_snapshot_cdc_via_console_and_playwright"
 PREPARE_TEST_NAME="gaussdb_snapshot_cdc_e2e::test::gaussdb_oracle_self_check_prepare_normal"
@@ -28,6 +37,10 @@ log() {
 die() {
   printf 'ERROR: %s\n' "$*" >&2
   exit 1
+}
+
+warn() {
+  printf 'WARN: %s\n' "$*" >&2
 }
 
 require_cmd() {
@@ -50,6 +63,52 @@ gaussdb_candidate_hosts() {
     return
   fi
   env_file_value gaussdb_pg_candidate_hosts
+}
+
+secret_value() {
+  local env_name="$1"
+  local file_key="$2"
+  local value="${!env_name:-}"
+  [[ -n "$value" ]] && {
+    printf '%s' "$value"
+    return
+  }
+  env_file_value "$file_key"
+}
+
+gaussdb_oracle_base_url() {
+  local url
+  url="$(env_file_value "${GAUSSDB_ORACLE_ADMIN_PREFIX}_without_auth_url")"
+  [[ -n "$url" ]] || return 1
+  printf '%s' "$url"
+}
+
+gaussdb_candidate_urls() {
+  local candidates="$1"
+  local base_url base_query default_port raw host port
+  base_url="$(gaussdb_oracle_base_url)" || return 1
+  base_query=""
+  if [[ "$base_url" == *\?* ]]; then
+    base_query="?${base_url#*\?}"
+  fi
+  default_port="$(printf '%s' "$base_url" | sed -E 's#^[^/]+//([^/@]+@)?([^/:?]+)(:([0-9]+))?.*#\4#')"
+  [[ -n "$default_port" ]] || default_port=8000
+  while IFS= read -r raw; do
+    raw="$(printf '%s' "$raw" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+    [[ -n "$raw" ]] || continue
+    if [[ "$raw" == *:* ]]; then
+      host="${raw%:*}"
+      port="${raw##*:}"
+    else
+      host="$raw"
+      port="$default_port"
+    fi
+    printf 'postgres://%s:%s/%s%s\n' "$host" "$port" "$GAUSSDB_ORACLE_DB" "$base_query"
+  done < <(printf '%s\n' "$candidates" | tr ',' '\n')
+}
+
+oracle_password() {
+  secret_value ORACLE_PASSWORD oracle_sinker_password
 }
 
 start_detached() {
@@ -192,6 +251,140 @@ wait_http() {
   die "$name did not become ready: $url"
 }
 
+docker_compose() {
+  docker compose -f "$ORACLE_COMPOSE_FILE" "$@"
+}
+
+ensure_docker_daemon() {
+  docker info >/dev/null 2>&1 || die "Docker daemon is not reachable"
+}
+
+ensure_oracle_started() {
+  [[ -f "$ORACLE_COMPOSE_FILE" ]] || die "missing Oracle compose file: $ORACLE_COMPOSE_FILE"
+  log "starting Oracle test container with $ORACLE_COMPOSE_FILE"
+  docker_compose up -d oracle-xe oracle-xe-init
+}
+
+wait_oracle_container_running() {
+  docker inspect "$ORACLE_CONTAINER" >/dev/null 2>&1 ||
+    die "missing Oracle sqlplus container: $ORACLE_CONTAINER; run init or docker compose up"
+
+  for _ in $(seq 1 90); do
+    if docker inspect -f '{{.State.Running}}' "$ORACLE_CONTAINER" 2>/dev/null | grep -qx true; then
+      return 0
+    fi
+    sleep 1
+  done
+  die "Oracle sqlplus container is not running: $ORACLE_CONTAINER"
+}
+
+wait_oracle_sql_ready() {
+  local password
+  password="$(oracle_password)"
+  [[ -n "$password" ]] || die "missing ORACLE_PASSWORD or oracle_sinker_password in $ENV_LOCAL"
+
+  for _ in $(seq 1 90); do
+    if docker exec -i "$ORACLE_CONTAINER" bash -lc "
+export ORACLE_HOME=/u01/app/oracle/product/11.2.0/xe
+export PATH=\$ORACLE_HOME/bin:\$PATH
+export LD_LIBRARY_PATH=\$ORACLE_HOME/lib
+sqlplus -s '$ORACLE_USER/$password@//$ORACLE_CONTAINER_HOST:$ORACLE_CONTAINER_PORT/$ORACLE_SERVICE'
+" <<'SQL' >/dev/null 2>&1
+WHENEVER SQLERROR EXIT SQL.SQLCODE
+SELECT COUNT(*) FROM user_tables;
+EXIT
+SQL
+    then
+      log "Oracle test user is ready: $ORACLE_USER@$ORACLE_HOST:$ORACLE_PORT/$ORACLE_SERVICE"
+      return 0
+    fi
+    sleep 2
+  done
+  die "Oracle test user is not ready: $ORACLE_USER@$ORACLE_HOST:$ORACLE_PORT/$ORACLE_SERVICE"
+}
+
+verify_oracle_cdc_prereqs() {
+  local password output
+  password="$(oracle_password)"
+  output="$(
+    docker exec -i "$ORACLE_CONTAINER" bash -lc "
+export ORACLE_HOME=/u01/app/oracle/product/11.2.0/xe
+export PATH=\$ORACLE_HOME/bin:\$PATH
+export LD_LIBRARY_PATH=\$ORACLE_HOME/lib
+sqlplus -s '$ORACLE_USER/$password@//$ORACLE_CONTAINER_HOST:$ORACLE_CONTAINER_PORT/$ORACLE_SERVICE'
+" <<'SQL'
+WHENEVER SQLERROR EXIT SQL.SQLCODE
+SET PAGESIZE 0
+SET FEEDBACK OFF
+SET VERIFY OFF
+SET HEADING OFF
+SET ECHO OFF
+SET TRIMSPOOL ON
+SET TRIMOUT ON
+SELECT supplemental_log_data_min || '|' || supplemental_log_data_pk FROM v$database;
+SELECT COUNT(*) FROM v$logfile;
+EXIT
+SQL
+  )" || die "Oracle CDC prerequisite probe failed"
+  printf '%s\n' "$output" | grep -Eq 'YES\|YES' ||
+    die "Oracle supplemental logging is not enabled for minimal and primary key columns"
+  log "Oracle CDC prerequisites verified"
+}
+
+check_gaussdb_oracle_rw() {
+  local candidates url output probe_table
+  local urls=()
+  candidates="$(gaussdb_candidate_hosts)"
+  if [[ -z "$candidates" ]]; then
+    warn "missing gaussdb_pg_candidate_hosts; set it or add it to $ENV_LOCAL before running GaussDBOracle CDC checks"
+    return 1
+  fi
+
+  while IFS= read -r url; do
+    urls+=("$url")
+  done < <(gaussdb_candidate_urls "$candidates")
+  if [[ "${#urls[@]}" -eq 0 ]]; then
+    warn "missing ${GAUSSDB_ORACLE_ADMIN_PREFIX}_without_auth_url in $ENV_LOCAL; cannot probe GaussDBOracle candidates"
+    return 1
+  fi
+
+  probe_table="public.ape_dts_self_check_probe_$(date +%Y%m%d%H%M%S)_$$"
+  for url in "${urls[@]}"; do
+    log "probing GaussDBOracle candidate: $url"
+    output="$(
+        GAUSSDB_ADMIN_PREFIX="$GAUSSDB_ORACLE_ADMIN_PREFIX" \
+        GAUSSDB_ADMIN_URL="$url" \
+        GAUSSDB_ADMIN_SQL="DROP TABLE IF EXISTS $probe_table; CREATE TABLE $probe_table (id INTEGER PRIMARY KEY); INSERT INTO $probe_table (id) VALUES (1); SELECT CAST(COUNT(*) AS INTEGER) AS count FROM $probe_table; DROP TABLE $probe_table;" \
+        cargo run -p dt-tests --bin gaussdb_admin --quiet 2>&1
+    )" && {
+      if ! printf '%s\n' "$output" | grep -q 'count=1'; then
+        warn "GaussDBOracle write probe returned unexpected output for $url: $output"
+        return 1
+      fi
+      log "GaussDBOracle writable candidate verified: $url"
+      return 0
+    }
+    log "GaussDBOracle candidate failed: $url"
+    printf '%s\n' "$output" | tail -n 5 >&2
+  done
+  warn "no writable GaussDBOracle candidate found in gaussdb_pg_candidate_hosts=$candidates"
+  return 1
+}
+
+verify_local_database_environment() {
+  ensure_docker_daemon
+  wait_oracle_container_running
+  wait_oracle_sql_ready
+  verify_oracle_cdc_prereqs
+}
+
+precheck_gaussdb_experiment_environment() {
+  if check_gaussdb_oracle_rw; then
+    return 0
+  fi
+  warn "GaussDBOracle is an external experiment environment; init will still start only local Docker/Console/Web services"
+}
+
 seed_self_check_license() {
   [[ -f "$CONSOLE_DB_PATH" ]] || die "missing Console DB: $CONSOLE_DB_PATH"
   local times now expire_at
@@ -250,18 +443,13 @@ precheck() {
   [[ -f dt-tests/tests/.env.local ]] || die "missing dt-tests/tests/.env.local"
   [[ -d web-prototype/node_modules ]] || die "missing web-prototype/node_modules; run npm install in web-prototype"
 
+  ensure_docker_daemon
+  ensure_oracle_started
   log "building debug dt-main for current workspace"
   cargo build -p dt-main
   [[ -x "$ENGINE_PATH" ]] || die "dt-main is still not executable: $ENGINE_PATH"
-  [[ -n "$(gaussdb_candidate_hosts)" ]] ||
-    die "missing gaussdb_pg_candidate_hosts; set it or add it to $ENV_LOCAL"
-
-  docker inspect "$ORACLE_CONTAINER" >/dev/null 2>&1 ||
-    die "missing Oracle sqlplus container: $ORACLE_CONTAINER"
-
-  if ! docker inspect -f '{{.State.Running}}' "$ORACLE_CONTAINER" 2>/dev/null | grep -qx true; then
-    die "Oracle sqlplus container is not running: $ORACLE_CONTAINER"
-  fi
+  verify_local_database_environment
+  precheck_gaussdb_experiment_environment
 
   require_free_port "$CONSOLE_PORT"
   require_free_port "$WEB_PORT"
@@ -271,7 +459,23 @@ precheck() {
 init() {
   cd "$ROOT"
   teardown
-  precheck
+  require_cmd cargo
+  require_cmd curl
+  require_cmd docker
+  require_cmd lsof
+  require_cmd npm
+  require_cmd python3
+  require_cmd sqlite3
+  [[ -f dt-tests/tests/.env.local ]] || die "missing dt-tests/tests/.env.local"
+  [[ -d web-prototype/node_modules ]] || die "missing web-prototype/node_modules; run npm install in web-prototype"
+  ensure_docker_daemon
+  ensure_oracle_started
+  log "building debug dt-main for current workspace"
+  cargo build -p dt-main
+  [[ -x "$ENGINE_PATH" ]] || die "dt-main is still not executable: $ENGINE_PATH"
+  verify_local_database_environment
+  require_free_port "$CONSOLE_PORT"
+  require_free_port "$WEB_PORT"
   mkdir -p "$PID_DIR" "$LOG_DIR" "$RUN_DATA_DIR"
   rm -f "$CONSOLE_DB_PATH"
   local candidate_hosts
@@ -359,7 +563,7 @@ Usage: bash scripts/e2e/gaussdb_oracle_console_self_check.sh <phase>
 
 Phases:
   teardown   stop self-check Console/Web processes
-  precheck   verify local tools, config, Oracle container, and free ports
+  precheck   verify local tools, config, Docker, Oracle, GaussDBOracle, and free ports
   init       start isolated Console and Web UI
   license    activate a self-check license in the isolated Console DB
   test normal
