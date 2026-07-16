@@ -36,12 +36,7 @@ export default defineConfig({
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
   ],
   webServer: REAL_BACKEND
-    ? {
-        // Real-backend mode: connect to an already-running dev server.
-        // The test runner will NOT start its own server.
-        url: baseURL,
-        reuseExistingServer: true,
-      }
+    ? undefined
     : {
         // Default MSW mode: start a preview server with mock service worker.
         command: `pnpm exec vite --host 127.0.0.1 --port ${PORT} --strictPort`,
