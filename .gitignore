@@ -45,7 +45,8 @@ Session.vim
 context_portal
 .factory/sdd-cache/
 .factory/.simplify-ignore-cache/
-
+.codex-tasks
+.codex
 ## cc-connect
 .cc-connect/
 cc-connect.config.toml

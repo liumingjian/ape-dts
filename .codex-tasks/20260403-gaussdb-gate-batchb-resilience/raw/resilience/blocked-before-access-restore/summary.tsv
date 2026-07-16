@@ -1,4 +1,0 @@
-RUN	dt_tests_failover	cargo test -p dt-tests --test integration_test -- gaussdb_to_pg::cdc_tests::test::cdc_failover_test --nocapture
-FAIL	dt_tests_failover	.codex-tasks/20260403-gaussdb-gate-batchb-resilience/raw/resilience/dt_tests_failover.log
-RUN	e2e_basic	GAUSSDB_CM_REQUIRE_HEALTHY=1 SKIP_DOCKER_PG=1 bash scripts/e2e/gaussdb_to_pg_cdc.sh
-FAIL	e2e_basic	.codex-tasks/20260403-gaussdb-gate-batchb-resilience/raw/resilience/e2e_basic.log

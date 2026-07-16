@@ -1,6 +1,0 @@
-DROP TABLE
-CREATE TABLE
-INSERT 0 1
-tiny_col|5545|int1|tinyint|0
-tinyint|7
-DROP TABLE
