@@ -1,6 +1,6 @@
 # ape-dts Console — Frontend Context
 
-Domain language for the management plane (web console + orchestrator service) that fronts the ape-dts Rust sync engine. Upstream sources of truth: `docs/agent-summary/architecture.md` (engine architecture), `docs/en/config.md` (canonical INI schema), `dt-common::config::*` (Rust types). This file resolves the terms used by humans (UI labels, API field names, conversations); when a UI term differs from the engine term, the resolution lives here.
+Domain language for the management plane (web console + orchestrator service) that fronts the ape-dts Rust sync engine. Upstream sources of truth: `docs/roadmap/gaussdb/architecture.md` (engine architecture), `docs/en/config.md` (canonical INI schema), `dt-common::config::*` (Rust types). This file resolves the terms used by humans (UI labels, API field names, conversations); when a UI term differs from the engine term, the resolution lives here.
 
 ## Language
 
@@ -88,8 +88,20 @@ User-supplied Lua script that mutates `before` / `after` row maps per record. IN
 ### Runtime observability
 
 **Metric** (指标):
-A Prometheus gauge emitted by ape-dts when built with the `metrics` cargo feature. Names: `extractor_rps_*`, `extractor_bps_*`, `pipeline_buffer_size_*`, `sinker_rps_*`, `sinker_bps_*`, `sinker_rt_per_query_*`, `progress`, `timestamp`. The console scrapes `:9090/metrics` from each running task.
+A Prometheus gauge emitted by ape-dts and scraped by the orchestrator. Names: `extractor_rps_*`, `extractor_bps_*`, `extractor_plan_records`, `pipeline_queue_size`, `pipeline_queue_bytes`, `sinker_rps_*`, `sinker_bps_*`, `sinker_rt_*`, `sinker_sinked_records`, `progress`, `lag`, `timestamp`. The engine always emits **Metric**s; each **Run** binds its own metrics port (assigned by the **Orchestrator**), so concurrent **Run**s never collide.
 _Avoid_: stat, counter (those are the engine's internal monitor counters, not what the console exposes).
+
+**Progress** (进度):
+The completion ratio of a **Snapshot Migration**, expressed 0–100%. Defined as written rows vs estimated total source rows (`sinker_sinked_records / extractor_plan_records`), mirroring AWS DMS `FullLoadProgressPercent` — the source total is an *estimate* (engine `estimate_record_count`), never a live `COUNT(*)`. Complemented by per-object **Table Load State**. **Progress** is meaningless for **CDC** (a continuous stream); use **Lag** there instead.
+_Avoid_: percent done (for CDC), completion (CDC has none).
+
+**Lag** (延迟):
+For a **CDC** run, the replication delay in seconds = `now − source-event timestamp of the last captured change` (engine `timestamp` position counter). Mirrors AWS DMS `CDCLatencySource` / Debezium `MilliSecondsBehindSource`. The primary health indicator for **CDC** (replaces a progress bar). Read together with the queue backlog (`pipeline_queue_size`, the count of changes buffered but not yet sinked, akin to DMS `CDCIncomingChanges`). **Heartbeat** keeps **Lag** truthful on idle sources.
+_Avoid_: delay (engine's stale TODO name), latency (reserve for per-query RT).
+
+**Table Load State** (单表状态):
+Per-object status of a **Snapshot Migration**: `pending` (待载) → `loading` (加载中) → `completed` (已完成), derived from the engine's `RdbSnapshotFinished` position markers and the finished/total table counts. Surfaced in the task's Objects view; replaces the prototype's random sample rows.
+_Avoid_: table progress percent (we track state, not per-table %).
 
 **Log Stream** (任务日志):
 Per-**Run** rolling files written to `logs/`: `default.log`, `commit.log`, `position.log`, `monitor.log`, `finished.log`, `statistic.log`, `task.log`, `http.log`, plus `miss/diff/sql/extra/summary.log` for Check tasks. The orchestrator tails and ships these to the console.
