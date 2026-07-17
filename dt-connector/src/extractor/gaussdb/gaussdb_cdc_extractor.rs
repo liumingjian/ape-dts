@@ -891,10 +891,7 @@ mod tests {
             3
         );
         assert_eq!(
-            GaussDBCdcExtractor::effective_keepalive_interval_secs(
-                2,
-                Some(Duration::from_secs(6)),
-            ),
+            GaussDBCdcExtractor::effective_keepalive_interval_secs(2, Some(Duration::from_secs(6)),),
             2
         );
         assert_eq!(
@@ -905,10 +902,7 @@ mod tests {
             10
         );
         assert_eq!(
-            GaussDBCdcExtractor::effective_keepalive_interval_secs(
-                0,
-                Some(Duration::from_secs(6)),
-            ),
+            GaussDBCdcExtractor::effective_keepalive_interval_secs(0, Some(Duration::from_secs(6)),),
             0
         );
         assert_eq!(
