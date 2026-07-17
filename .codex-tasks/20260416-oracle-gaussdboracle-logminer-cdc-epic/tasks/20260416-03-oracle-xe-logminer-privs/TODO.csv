@@ -1,4 +1,0 @@
-id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
-1,更新 oracle-xe-init 初始化脚本（grant + supplemental logging）,DONE,init 脚本幂等且可执行,docker compose -f dt-tests/docker-compose.oracle_xe.yml up -d,2026-04-16 13:49:15 +0800,0,PASS
-2,验证容器内 APE_DTS 可执行 logminer 前置 SQL（scn/logfile/logmnr_contents + dbms_logmnr）,DONE,sqlplus 验证通过,docker exec -i oracle-xe-local bash -lc 'export ORACLE_HOME=/u01/app/oracle/product/11.2.0/xe; export PATH=$ORACLE_HOME/bin:$PATH; export LD_LIBRARY_PATH=$ORACLE_HOME/lib; echo \"select current_scn from v\\$database;\" | sqlplus -s APE_DTS/ape_dts@//127.0.0.1:1521/XE',2026-04-16 13:49:15 +0800,0,PASS
-3,验证 compose up gate,DONE,compose up 成功,docker compose -f dt-tests/docker-compose.oracle_xe.yml up -d,2026-04-16 13:49:15 +0800,0,PASS

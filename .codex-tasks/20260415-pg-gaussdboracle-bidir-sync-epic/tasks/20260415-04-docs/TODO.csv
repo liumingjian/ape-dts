@@ -1,5 +1,0 @@
-id,task,status,completed_at,notes
-1,更新 gaussdb-progress-tracker 能力矩阵（补齐 PG↔GaussDBOracle CDC + 证据入口）,DONE,2026-04-15 18:32:40 +0800,已将 PG↔GaussDBOracle 行升级为 CDC basic PASS 并补证据入口
-2,更新 gaussdb-e2e-test-plan 统一矩阵（加入 pg_to_gaussdb_oracle / gaussdb_oracle_to_pg CDC basic）,DONE,2026-04-15 18:32:55 +0800,Quick Gate 与统一矩阵已补齐两条 CDC basic 命令
-3,更新 gaussdb-oracle-roadmap（状态升级到 CDC basic PASS + 新增回归入口）,DONE,2026-04-15 18:33:10 +0800,状态从 non-CDC basic PASS 升级为 CDC basic PASS
-4,文档收口验证（rg 命中入口与 SUBTASKS 对齐）,DONE,2026-04-15 18:33:24 +0800,`rg -n "gaussdb_oracle_to_pg|pg_to_gaussdb_oracle::cdc_tests" docs/agent-summary/*.md` PASS

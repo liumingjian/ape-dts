@@ -45,7 +45,20 @@ Session.vim
 context_portal
 .factory/sdd-cache/
 .factory/.simplify-ignore-cache/
+.factory/skills
+.codex-tasks/
+.codex
+.github/prompts/**/__pycache__/
+.omo/**/runtime/
+.omo/**/run-data/
 
+## Local generated artifacts
+dt-console-server/data/
+dt-tests/.playwright-cli/
+web-prototype/.playwright-cli/
+web-prototype/.vite/
+web-prototype/output/
+vendor/sqlx/sqlx-bench/test.db
 ## cc-connect
 .cc-connect/
 cc-connect.config.toml

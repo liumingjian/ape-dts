@@ -1,4 +1,0 @@
-id,task,status,completed_at,notes
-1,新增 oracle_gaussdboracle_bootstrap 一键脚本,DONE,2026-04-16 14:47:19 +0800,scripts/e2e/oracle_gaussdboracle_bootstrap.sh
-2,docs：e2e-plan + tracker 更新入口并可检索,DONE,2026-04-16 14:47:19 +0800,docs updated: progress-tracker|e2e-plan
-3,验证脚本可运行（quick suite）,DONE,2026-04-16 14:47:19 +0800,PASS: bash scripts/e2e/oracle_gaussdboracle_bootstrap.sh

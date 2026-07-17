@@ -1,6 +1,17 @@
 # English | [中文](README_ZH.md)
 
 # Run tests
+
+## Manual MySQL to PostgreSQL red-line
+
+For major engine changes, run the isolated Docker red-line with the real `dt-main` binary:
+
+```bash
+bash scripts/e2e/mysql_to_postgresql_redline.sh
+```
+
+It validates Snapshot, CDC readiness, INSERT, UPDATE, DELETE, and final full-table equality. Console and structure migration are intentionally excluded. See [the red-line specification](../docs/testing/mysql-to-postgresql-redline.md) for boundaries, deadlines, artifacts, and `KEEP_ENV=1` debugging.
+
 ```rust
 #[tokio::test]
 #[serial]
