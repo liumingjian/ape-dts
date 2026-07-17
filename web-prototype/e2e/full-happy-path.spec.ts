@@ -21,6 +21,11 @@
 
 import { test, expect, type Page, type BrowserContext } from '@playwright/test';
 
+test.skip(
+  !process.env.E2E_REAL_BACKEND,
+  'requires E2E_REAL_BACKEND=1 with dt-console-server and the Docker database stack',
+);
+
 const ADMIN = { username: 'admin', password: 'admin123' };
 const API = 'http://127.0.0.1:8080/api';
 
