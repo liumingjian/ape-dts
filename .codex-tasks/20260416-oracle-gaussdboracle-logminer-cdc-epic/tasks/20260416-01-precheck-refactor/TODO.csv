@@ -1,4 +1,0 @@
-id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
-1,拆分 oracle_prechecker.rs（helpers/privilege checks/struct checks 分文件）,DONE,相关文件单独 <= 300 行,cargo test -p dt-precheck --no-run,2026-04-16 13:18:52 +0800,0,
-2,更新 mod.rs 与 builder 引用路径,DONE,编译通过,cargo test -p dt-precheck --no-run,2026-04-16 13:18:52 +0800,0,
-3,验证编译,DONE,`cargo test -p dt-precheck --no-run` PASS,cargo test -p dt-precheck --no-run,2026-04-16 13:18:52 +0800,0,PASS

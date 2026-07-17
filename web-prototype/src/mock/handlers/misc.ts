@@ -7,6 +7,11 @@ import { db } from '../db';
 import type { GlobalParam, User, ResourceGroup } from '@/types/domain';
 import { id, isoMinus } from '../fake';
 
+async function listResourceGroups() {
+  await pause();
+  return ok({ items: db.resourceGroups, total: db.resourceGroups.length, page: 1, size: 50 });
+}
+
 export const miscHandlers = [
   /* ---- Licenses ---- */
   http.get('/api/licenses', async () => {
@@ -24,10 +29,8 @@ export const miscHandlers = [
   }),
 
   /* ---- Resource groups ---- */
-  http.get('/api/resource-groups', async () => {
-    await pause();
-    return ok({ items: db.resourceGroups, total: db.resourceGroups.length, page: 1, size: 50 });
-  }),
+  http.get('/api/resource_groups', listResourceGroups),
+  http.get('/api/resource-groups', listResourceGroups),
 
   http.post('/api/resource-groups', async ({ request }) => {
     await pause();

@@ -99,6 +99,10 @@ pub mod codes {
     // Schema / migration
     pub const SCHEMA_MISMATCH: &str = "SCHEMA_MISMATCH";
 
+    /// All 100 per-Run metrics ports in [9100, 9199] are currently allocated.
+    /// No new Run can be started until an existing one reaches a terminal state.
+    pub const PORT_POOL_EXHAUSTED: &str = "PORT_POOL_EXHAUSTED";
+
     // Internal
     pub const INTERNAL_ERROR: &str = "INTERNAL_ERROR";
 }
@@ -189,7 +193,8 @@ impl actix_web::ResponseError for ApiError {
             | codes::ILLEGAL_TRANSITION
             | codes::RESOURCE_GROUP_NAME_TAKEN
             | codes::DEFAULT_RESOURCE_GROUP_PROTECTED
-            | codes::RESOURCE_GROUP_HAS_TASKS => StatusCode::CONFLICT,
+            | codes::RESOURCE_GROUP_HAS_TASKS
+            | codes::PORT_POOL_EXHAUSTED => StatusCode::CONFLICT,
 
             codes::LICENSE_EXPIRED => StatusCode::UNPROCESSABLE_ENTITY,
 

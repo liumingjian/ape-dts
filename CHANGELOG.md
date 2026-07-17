@@ -7,9 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Unify Snapshot, CDC, and Snapshot+CDC under the Console migration task experience.
+
+### Added
+
+- Add an opt-in real-backend Console MySQL-to-PostgreSQL Snapshot E2E test.
+- Add per-Run migration metrics, object state, phase-aware Console KPIs, and final metric capture.
+- Add the real MySQL-to-PostgreSQL Snapshot+CDC migration red-line.
+- Archive the dated Chinese project research snapshot under docs/research.
+- Document the migration task-detail observability remediation model and acceptance criteria.
+
 ### Fixed
 
 - Preserve Oracle LogMiner row cursor ordering across empty polls and improve GaussDBOracle CDC keepalive behavior.
+- Make the Console brand tagline non-empty in both supported locales.
+
+### Removed
+
+- Stop tracking local Codex task artifacts and consolidate maintained GaussDB roadmap documents.
 
 ## ape-dts Console initial release
 

@@ -1024,6 +1024,7 @@ mod tests {
             3600,
             active_runs,
             scraper_state,
+            crate::port_pool::PortPool::new(),
             log_sse_state,
             alert_sse_state,
             dispatcher_state,

@@ -19,7 +19,7 @@
         </el-tooltip>
       </el-badge>
       <el-tooltip :content="t('topbar.help')" placement="bottom">
-        <button class="topbar__icon-btn topbar__item">
+        <button class="topbar__icon-btn topbar__item topbar__help-btn">
           <IconHelp />
         </button>
       </el-tooltip>
@@ -81,10 +81,11 @@ const route = useRoute();
 const router = useRouter();
 const appStore = useAppStore();
 const auth = useAuthStore();
+const isMockMode = import.meta.env.VITE_USE_MOCK === 'true';
 
 // Global SSE alert stream — badge counter + toast
 const alertCount = ref(0);
-const alertStream = auth.isAuthenticated
+const alertStream = auth.isAuthenticated && !isMockMode
   ? useAlertStream({
       url: '/api/alerts/stream',
       onAlert: (e) => {
@@ -152,16 +153,28 @@ async function onUserCommand(cmd: string) {
   justify-content: space-between;
   height: var(--layout-header-h);
   padding: 0 20px;
+  min-width: 0;
 }
 .topbar__left {
   display: flex;
   align-items: center;
+  min-width: 0;
+  overflow: hidden;
+}
+.topbar__crumb {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.topbar__crumb :deep(.el-breadcrumb) {
+  display: flex;
   min-width: 0;
 }
 .topbar__crumb :deep(.el-breadcrumb__item),
 .topbar__crumb :deep(.el-breadcrumb__inner) {
   font-size: var(--text-base);
   color: var(--color-ink-muted);
+  white-space: nowrap;
 }
 .topbar__crumb :deep(.el-breadcrumb__item:last-child .el-breadcrumb__inner) {
   color: var(--color-ink);
@@ -171,6 +184,8 @@ async function onUserCommand(cmd: string) {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+  flex-shrink: 0;
 }
 .topbar__item { display: inline-flex; align-items: center; }
 .topbar__icon-btn {
@@ -203,6 +218,7 @@ async function onUserCommand(cmd: string) {
   gap: 6px;
   color: var(--color-ink-muted);
   font-size: var(--text-sm);
+  white-space: nowrap;
   transition: all var(--dur) var(--ease-soft);
 }
 .topbar__lang-btn:hover { background: var(--color-surface-2); }
@@ -215,6 +231,7 @@ async function onUserCommand(cmd: string) {
   padding: 6px 10px;
   border-radius: var(--radius);
   cursor: pointer;
+  max-width: 260px;
   transition: background var(--dur) var(--ease-soft);
 }
 .topbar__user:hover { background: var(--color-surface-2); }
@@ -233,6 +250,9 @@ async function onUserCommand(cmd: string) {
 .topbar__user-name {
   font-size: var(--text-sm);
   color: var(--color-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .topbar__role-tag {
   margin-left: 4px;
@@ -242,5 +262,38 @@ async function onUserCommand(cmd: string) {
   height: 16px;
   margin-right: 8px;
   vertical-align: -3px;
+}
+
+@media (max-width: 767px) {
+  .topbar {
+    padding: 0 var(--space-4);
+    gap: var(--space-3);
+  }
+
+  .topbar__left {
+    flex: 1;
+  }
+
+  .topbar__right {
+    gap: var(--space-1);
+  }
+
+  .topbar__help-btn,
+  .topbar__role-tag,
+  .topbar__user-name,
+  .topbar__lang-btn span {
+    display: none;
+  }
+
+  .topbar__lang-btn {
+    width: 36px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .topbar__user {
+    padding: 4px;
+    gap: 4px;
+  }
 }
 </style>

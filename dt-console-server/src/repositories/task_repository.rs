@@ -74,6 +74,7 @@ impl TaskRepository {
     pub async fn list_filtered(
         pool: &SqlitePool,
         category: Option<&str>,
+        mode: Option<&str>,
         status: Option<&str>,
         engine: Option<&str>,
         q: Option<&str>,
@@ -88,12 +89,33 @@ impl TaskRepository {
 
         // Category filter
         let category_param = if let Some(v) = category {
-            param_idx += 1;
-            conditions.push(format!("kind = ?{param_idx}"));
-            Some(v.to_string())
+            if v == "migration" {
+                conditions.push("(kind = 'snapshot' OR kind = 'cdc')".to_string());
+                None
+            } else {
+                param_idx += 1;
+                conditions.push(format!("kind = ?{param_idx}"));
+                Some(v.to_string())
+            }
         } else {
             None
         };
+
+        let mode_condition = match mode {
+            Some("snapshot") => {
+                Some("(kind = 'snapshot' AND (json_extract(extractor_config, '$.extract_type') IS NULL OR json_extract(extractor_config, '$.extract_type') = 'snapshot'))")
+            }
+            Some("snapshot_cdc") => {
+                Some("(kind = 'snapshot' AND json_extract(extractor_config, '$.extract_type') = 'snapshot_and_cdc')")
+            }
+            Some("cdc") => {
+                Some("(kind = 'cdc' AND (json_extract(extractor_config, '$.extract_type') IS NULL OR json_extract(extractor_config, '$.extract_type') = 'cdc'))")
+            }
+            _ => None,
+        };
+        if let Some(condition) = mode_condition {
+            conditions.push(condition.to_string());
+        }
 
         // Status filter
         let status_param = if let Some(v) = status {

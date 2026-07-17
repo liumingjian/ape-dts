@@ -328,6 +328,7 @@ function confirmDelete(row: MetricRule) {
 }
 
 function formatNumber(v: number) {
+  if (!Number.isFinite(v)) return '—';
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
   if (v >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
   return String(v);
@@ -360,4 +361,22 @@ onMounted(loadList);
 .metric-rules__empty { display: flex; flex-direction: column; gap: 12px; align-items: center; padding: 36px 0; color: var(--color-ink-subtle); }
 .metric-rules__empty-icon { width: 38px; height: 38px; color: var(--color-ink-faint); }
 .metric-rules__footer { display: flex; justify-content: space-between; align-items: center; padding-top: 8px; color: var(--color-ink-subtle); font-size: 12px; }
+
+@media (max-width: 767px) {
+  .metric-rules__panel {
+    padding: var(--space-4);
+  }
+
+  .metric-rules__filter,
+  .metric-rules__filter--grow {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .metric-rules__footer {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+}
 </style>

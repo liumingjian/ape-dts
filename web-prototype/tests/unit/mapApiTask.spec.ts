@@ -21,9 +21,10 @@ const BASE: ApiTask = {
   runtime: null,
   metrics: {
     extractor_pushed_rps_avg: 120,
-    replication_lag: 50,
+    lag: 50,
     pipeline_buffer_size_avg: 1024,
     pipeline_sinked_count_latest: 5000,
+    progress: 73,
   },
   resourceGroupId: 'rg-1',
   ownerUserId: 'u-1',
@@ -59,10 +60,20 @@ describe('mapApiTask', () => {
     expect(t.target.port).toBe(5434);
   });
 
+  it('normalizes gaussdb_oracle API db type to GaussDB UI engine', () => {
+    const t = mapApiTask({
+      ...BASE,
+      dbTypeSource: 'gaussdb_oracle',
+      dbTypeTarget: 'gaussdb_oracle',
+    });
+    expect(t.source.engine).toBe('gaussdb');
+    expect(t.target.engine).toBe('gaussdb');
+  });
+
   it('maps metrics when present', () => {
     const t = mapApiTask(BASE);
     expect(t.metrics.rpsLatest).toBe(120);
-    expect(t.metrics.latencyMs).toBe(50);
+    expect(t.metrics.lag).toBe(50);
     expect(t.metrics.bufferSize).toBe(1024);
     expect(t.metrics.processedRecords).toBe(5000);
   });
@@ -70,7 +81,7 @@ describe('mapApiTask', () => {
   it('defaults metrics to 0 when null', () => {
     const t = mapApiTask({ ...BASE, metrics: null });
     expect(t.metrics.rpsLatest).toBe(0);
-    expect(t.metrics.latencyMs).toBe(0);
+    expect(t.metrics.lag).toBe(0);
   });
 
   it('handles empty/invalid endpoint URLs gracefully', () => {
@@ -90,5 +101,53 @@ describe('mapApiTask', () => {
     expect(t.name).toBe('test-snapshot');
     expect(t.createdAt).toBe('2026-05-07T06:00:00.000Z');
     expect(t.updatedAt).toBe('2026-05-07T06:01:00.000Z');
+  });
+
+  it('progress passes through verbatim', () => {
+    const t = mapApiTask(BASE);
+    expect(t.progressPercent).toBe(73);
+  });
+
+  it('progress defaults to 0 when missing', () => {
+    const t = mapApiTask({ ...BASE, metrics: null });
+    expect(t.progressPercent).toBe(0);
+    const t2 = mapApiTask({ ...BASE, metrics: { progress: 0 } });
+    expect(t2.progressPercent).toBe(0);
+  });
+
+  it('lag passes through verbatim including float 3.5', () => {
+    const t = mapApiTask({ ...BASE, metrics: { lag: 12 } });
+    expect(t.metrics.lag).toBe(12);
+    const t2 = mapApiTask({ ...BASE, metrics: { lag: 3.5 } });
+    expect(t2.metrics.lag).toBe(3.5);
+  });
+
+  it('lag defaults to 0 when missing', () => {
+    const t = mapApiTask({ ...BASE, metrics: null });
+    expect(t.metrics.lag).toBe(0);
+    const t2 = mapApiTask({ ...BASE, metrics: {} });
+    expect(t2.metrics.lag).toBe(0);
+  });
+
+  it('pipelineQueueSize passes through verbatim', () => {
+    const t = mapApiTask({ ...BASE, metrics: { pipeline_queue_size: 12 } });
+    expect(t.metrics.pipelineQueueSize).toBe(12);
+  });
+
+  it('pipelineQueueSize defaults to 0 when missing', () => {
+    const t = mapApiTask({ ...BASE, metrics: null });
+    expect(t.metrics.pipelineQueueSize).toBe(0);
+  });
+
+  it('finishedProgressCount and totalProgressCount pass through', () => {
+    const t = mapApiTask({ ...BASE, metrics: { finished_progress_count: 3, total_progress_count: 8 } });
+    expect(t.metrics.finishedProgressCount).toBe(3);
+    expect(t.metrics.totalProgressCount).toBe(8);
+  });
+
+  it('finishedProgressCount and totalProgressCount default to 0', () => {
+    const t = mapApiTask({ ...BASE, metrics: null });
+    expect(t.metrics.finishedProgressCount).toBe(0);
+    expect(t.metrics.totalProgressCount).toBe(0);
   });
 });

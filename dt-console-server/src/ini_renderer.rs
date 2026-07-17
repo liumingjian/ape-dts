@@ -7,8 +7,9 @@
 //! - Deterministic: same input always produces the same output (no HashMap iteration).
 //! - Optional sections (`[processor]`, `[data_marker]`, `[metacenter]`) are omitted
 //!   when the corresponding JSON config is empty/null.
-//! - `[metrics]` section is emitted only when the `metrics` feature is enabled AND
-//!   `metrics_config` is non-empty in the Task.
+//! - `[metrics]` section is **always** emitted. Defaults: `http_host=0.0.0.0`,
+//!   `workers=2`; `http_port` is read from `metrics_config` when present, otherwise
+//!   defaults to 9100.
 //! - Sections are emitted in a stable order matching the engine's INI convention:
 //!   `[global]`, `[extractor]`, `[sinker]`, `[filter]`, `[router]`,
 //!   `[parallelizer]`, `[pipeline]`, `[resumer]`, `[runtime]`,
@@ -20,8 +21,9 @@ use crate::models::Task;
 ///
 /// The output is deterministic: for the same Task input, the same byte string
 /// is always produced. Optional sections are omitted when their JSON config
-/// is empty/null. The `[metrics]` section is gated on the `metrics` Cargo
-/// feature and non-empty `metrics_config`.
+/// is empty/null. The `[metrics]` section is always emitted with
+/// defaults `http_host=0.0.0.0` and `workers=2`; `http_port` is taken from
+/// `metrics_config` when present, otherwise defaults to 9100.
 pub fn render(task: &Task) -> String {
     let mut sections: Vec<(String, Vec<(String, String)>)> = Vec::new();
 
@@ -95,15 +97,9 @@ pub fn render(task: &Task) -> String {
     // [metacenter]
     // Not present in current Task model columns — omitted unless extended.
 
-    // [metrics] — gated on feature flag AND non-empty config
-    #[cfg(feature = "metrics")]
-    {
-        let metrics: serde_json::Value =
-            serde_json::from_str(&task.metrics_config).unwrap_or_default();
-        if has_non_empty_fields(&metrics) {
-            sections.push(render_metrics(&metrics));
-        }
-    }
+    // [metrics] — always rendered
+    let metrics: serde_json::Value = serde_json::from_str(&task.metrics_config).unwrap_or_default();
+    sections.push(render_metrics(&metrics));
 
     // ── Assemble INI text ─────────────────────────────────────────────────
     let mut out = String::new();
@@ -642,22 +638,21 @@ fn render_processor(processor: &serde_json::Value) -> (String, Vec<(String, Stri
     ("processor".into(), kv)
 }
 
-#[cfg(feature = "metrics")]
 fn render_metrics(metrics: &serde_json::Value) -> (String, Vec<(String, String)>) {
     let mut kv = Vec::new();
 
+    let http_port = metrics
+        .get("http_port")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(9100);
     let http_host = metrics
         .get("http_host")
         .and_then(|v| v.as_str())
         .unwrap_or("0.0.0.0");
-    let http_port = metrics
-        .get("http_port")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(9090);
     let workers = metrics.get("workers").and_then(|v| v.as_u64()).unwrap_or(2);
 
-    kv.push(("http_host".into(), http_host.into()));
     kv.push(("http_port".into(), http_port.to_string()));
+    kv.push(("http_host".into(), http_host.into()));
     kv.push(("workers".into(), workers.to_string()));
 
     // Labels: k1=v1,k2=v2

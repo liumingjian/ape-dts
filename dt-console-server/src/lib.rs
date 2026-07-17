@@ -20,7 +20,9 @@ pub mod metrics_handlers;
 pub mod metrics_scraper;
 pub mod middleware;
 pub mod models;
+pub mod objects_handlers;
 pub mod operate_log_handlers;
+pub mod port_pool;
 pub mod precheck_handlers;
 pub mod rate_limit;
 pub mod repositories;
@@ -44,6 +46,7 @@ use actix_web::App;
 use log_sse_handlers::LogSseState;
 use metrics_scraper::ScraperState;
 use middleware::csrf::Csrf;
+use port_pool::PortPool;
 use rate_limit::RateLimiter;
 use run_handlers::ActiveRuns;
 
@@ -89,6 +92,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(run_handlers::stop_task)
             .service(run_handlers::pause_task)
             .service(run_handlers::resume_task)
+            .service(run_handlers::list_runs)
             .service(run_handlers::get_run)
             // Control logs
             .service(control_log_handlers::list_control_logs)
@@ -101,6 +105,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(precheck_handlers::precheck)
             // Metrics query
             .service(metrics_handlers::get_metrics)
+            .service(metrics_handlers::get_metrics_latest)
+            // Per-table objects state
+            .service(objects_handlers::get_objects)
             // Log SSE stream + log file read
             .service(log_sse_handlers::log_stream)
             .service(log_sse_handlers::get_log_file)
@@ -159,6 +166,7 @@ pub fn build_app(
     idle_timeout_secs: i64,
     active_runs: ActiveRuns,
     scraper_state: ScraperState,
+    port_pool: PortPool,
     log_sse_state: LogSseState,
     alert_sse_state: AlertSseState,
     dispatcher_state: DispatcherState,
@@ -195,6 +203,7 @@ pub fn build_app(
         .app_data(web::Data::new(idle_timeout_secs))
         .app_data(web::Data::new(active_runs))
         .app_data(web::Data::new(scraper_state))
+        .app_data(web::Data::new(port_pool))
         .app_data(web::Data::new(log_sse_state))
         .app_data(web::Data::new(alert_sse_state))
         .app_data(web::Data::new(dispatcher_state))

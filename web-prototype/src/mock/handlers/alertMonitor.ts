@@ -5,8 +5,26 @@
 import { http } from 'msw';
 import { pause, ok, notFound, parsePage, paginate, q } from './_shared';
 import { db } from '../db';
-import type { MetricRule, SysEvent, AlarmChannel, AlarmTemplate } from '@/types/domain';
+import type { MetricRule, SysEvent, AlarmChannel, AlarmTemplate, ApiAlertRule } from '@/types/domain';
 import { id, isoMinus } from '../fake';
+
+function toApiAlertRule(rule: MetricRule): ApiAlertRule {
+  return {
+    id: rule.id,
+    name: rule.name,
+    metricName: rule.metric,
+    operator: rule.operator,
+    threshold: rule.threshold,
+    recoveryThreshold: rule.recoveryThreshold,
+    severity: rule.level,
+    dwellSecs: rule.periodMin * 60,
+    channelIds: [],
+    enabled: rule.status === 'enabled',
+    resourceGroupId: undefined,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
 
 export const alertMonitorHandlers = [
   /* ---- Metric rules (指标告警) ---- */
@@ -194,10 +212,16 @@ export const alertMonitorHandlers = [
     const url = new URL(request.url);
     const kind = q(url, 'kind');
     const key = q(url, 'q')?.toLowerCase();
-    const items = kind === 'event'
-      ? [...db.events].filter((r) => key ? r.name.toLowerCase().includes(key) : true)
-      : [...db.metricRules].filter((r) => key ? r.name.toLowerCase().includes(key) : true);
-    return ok({ items });
+    const status = q(url, 'status');
+    const { page, size } = parsePage(url);
+    if (kind === 'event') {
+      const items = [...db.events].filter((r) => key ? r.name.toLowerCase().includes(key) : true);
+      return ok(paginate(items, page, size));
+    }
+    let items = [...db.metricRules].filter((r) => key ? r.name.toLowerCase().includes(key) : true);
+    if (status) items = items.filter((r) => r.status === status);
+    const pageData = paginate(items, page, size);
+    return ok({ ...pageData, items: pageData.items.map(toApiAlertRule) });
   }),
   http.post('/api/alert_rules', async ({ request }) => {
     await pause();
@@ -209,20 +233,25 @@ export const alertMonitorHandlers = [
       recoveryThreshold: body.recoveryThreshold ?? 80, description: body.description ?? '',
     };
     db.metricRules.push(rule);
-    return ok(rule);
+    return ok(toApiAlertRule(rule));
   }),
   http.get('/api/alert_rules/:id', async ({ params }) => {
     await pause();
     const rule = db.metricRules.find((r) => r.id === String(params.id));
-    return rule ? ok(rule) : notFound();
+    return rule ? ok(toApiAlertRule(rule)) : notFound();
   }),
   http.patch('/api/alert_rules/:id', async ({ params, request }) => {
     await pause();
-    const patch = (await request.json().catch(() => ({}))) as Partial<MetricRule>;
+    const patch = (await request.json().catch(() => ({}))) as Partial<MetricRule> & { enabled?: boolean };
     const idx = db.metricRules.findIndex((r) => r.id === String(params.id));
     if (idx < 0) return notFound();
-    Object.assign(db.metricRules[idx], patch);
-    return ok(db.metricRules[idx]);
+    const { enabled, ...metricPatch } = patch;
+    const nextPatch: Partial<MetricRule> = { ...metricPatch };
+    if (typeof enabled === 'boolean') {
+      nextPatch.status = enabled ? 'enabled' : 'disabled';
+    }
+    Object.assign(db.metricRules[idx], nextPatch);
+    return ok(toApiAlertRule(db.metricRules[idx]));
   }),
   http.delete('/api/alert_rules/:id', async ({ params }) => {
     await pause();

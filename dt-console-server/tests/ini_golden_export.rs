@@ -381,41 +381,30 @@ fn resumer_from_log_present() {
 
 // ── Metrics section tests ───────────────────────────────────────────────────
 
-#[cfg(feature = "metrics")]
 #[test]
 fn metrics_section_present_when_configured() {
     let mut task = make_golden_task("snapshot", "mysql", "mysql");
-    task.metrics_config = r#"{"http_host":"0.0.0.0","http_port":9090,"workers":2}"#.into();
+    task.metrics_config = r#"{"http_host":"0.0.0.0","http_port":9150,"workers":2}"#.into();
     let ini = ini_renderer::render(&task);
     assert!(
         ini.contains("[metrics]"),
-        "[metrics] must be present when feature enabled and config non-empty"
+        "[metrics] must always be present"
     );
     assert!(ini.contains("http_host=0.0.0.0"));
-    assert!(ini.contains("http_port=9090"));
+    assert!(ini.contains("http_port=9150"));
 }
 
-#[cfg(feature = "metrics")]
 #[test]
-fn metrics_section_omitted_when_empty() {
+fn metrics_section_always_present_even_when_config_empty() {
+    // [metrics] is always rendered regardless of metrics_config content
     let task = make_golden_task("snapshot", "mysql", "mysql");
     let ini = ini_renderer::render(&task);
     assert!(
-        !ini.contains("[metrics]"),
-        "[metrics] must be omitted when config is empty"
+        ini.contains("[metrics]"),
+        "[metrics] must always be present even with empty metrics_config"
     );
-}
-
-#[cfg(not(feature = "metrics"))]
-#[test]
-fn metrics_section_never_emitted_without_feature() {
-    let mut task = make_golden_task("snapshot", "mysql", "mysql");
-    task.metrics_config = r#"{"http_host":"0.0.0.0","http_port":9090}"#.into();
-    let ini = ini_renderer::render(&task);
-    assert!(
-        !ini.contains("[metrics]"),
-        "[metrics] must never be emitted without the metrics feature"
-    );
+    assert!(ini.contains("http_host=0.0.0.0"));
+    assert!(ini.contains("workers=2"));
 }
 
 // ── Task ID stability tests ─────────────────────────────────────────────────

@@ -1,8 +1,0 @@
-# e2e failover evidence snippet
-# source: raw/20260401_e2e_failover.stdout.log
-
-66:[2026-04-01 22:44:14] cm switchover done
-68:[2026-04-01 22:44:17] failover complete: new primary is 10.250.0.30:8000
-69:[2026-04-01 22:44:17] waiting for streaming started on new primary: gaussdb cdc replication streaming started: 10.250.0.30:8001
-75:[2026-04-01 22:44:23] assert ok: 2|e
-77:[2026-04-01 22:44:23] e2e succeeded

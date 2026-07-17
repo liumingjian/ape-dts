@@ -160,6 +160,10 @@ pub struct Run {
     pub stopped_at: Option<String>,
     pub exit_code: Option<i64>,
     pub stop_method: Option<String>,
+    /// Dynamically-allocated Prometheus metrics port in [9100, 9199].
+    /// NULL for legacy rows or runs that failed before port allocation.
+    #[sqlx(default)]
+    pub metrics_port: Option<i64>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -180,6 +184,8 @@ pub struct RunResponse {
     pub exit_code: Option<i64>,
     pub stop_method: Option<String>,
     pub position: Option<serde_json::Value>,
+    /// Dynamically-allocated Prometheus metrics port in [9100, 9199].
+    pub metrics_port: Option<i64>,
     pub created_at: String,
     pub updated_at: String,
 }

@@ -1,8 +1,8 @@
 {
   "brand": {
-    "name": "数据库同步管理平台",
-    "tagline": "",
-    "full": "数据库同步管理平台"
+    "name": "ape-dts Console",
+    "tagline": "Data sync operations console",
+    "full": "ape-dts Console"
   },
   "common": {
     "confirm": "Confirm",
@@ -50,6 +50,7 @@
     "dashboard": "Dashboard",
     "tasks": {
       "_label": "Tasks",
+      "migration": "Migration",
       "snapshot": "Snapshot Migration",
       "cdc": "CDC",
       "check": "Check",
@@ -84,6 +85,8 @@
     }
   },
   "topbar": {
+    "openMenu": "Open navigation",
+    "closeMenu": "Close navigation",
     "help": "Help",
     "notifications": "Notifications",
     "profile": "Profile",
@@ -183,6 +186,7 @@
     "type": {
       "snapshot": "Snapshot Migration",
       "cdc": "CDC",
+      "migration": "Migration task",
       "check": "Check",
       "struct": "Struct Migration",
       "sync": "Sync task"
@@ -214,7 +218,10 @@
         "name": "Object",
         "type": "Type",
         "rows": "Estimated rows",
-        "status": "Status"
+        "status": "Status",
+        "schema": "Schema",
+        "table": "Table",
+        "state": "State"
       }
     },
     "log": {
@@ -1001,6 +1008,7 @@
     "subtitle": {
       "snapshot": "One-shot bulk copy from source to target with resumable checkpoints",
       "cdc": "Continuous incremental sync via binlog/WAL/SCN with millisecond latency",
+      "migration": "Snapshot, CDC, and hot cutover modes in one operational workspace",
       "check": "Compare data between source and target with sampling or full scan",
       "struct": "Schema-only migration: DDL, indexes, constraints, views",
       "sync": "Snapshot / CDC / Snapshot+CDC unified — filter by mode in the list"
@@ -1025,7 +1033,8 @@
       "engine": "All engines",
       "status": "All statuses",
       "search": "Search name / ID / instance IP",
-      "mode": "All modes",
+      "mode": "Mode",
+      "allModes": "All modes",
       "clearAll": "Clear all"
     },
     "col": {

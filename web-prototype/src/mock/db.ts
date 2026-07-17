@@ -62,6 +62,27 @@ function buildEndpoint(engine: EngineType) {
   };
 }
 
+function buildMaskedUrl(endpoint: ReturnType<typeof buildEndpoint>): string {
+  const schemeMap: Record<EngineType, string> = {
+    mysql: 'mysql', postgres: 'postgres', gaussdb: 'postgres', oracle: 'oracle',
+    mongo: 'mongodb', redis: 'redis', kafka: 'kafka', tidb: 'mysql',
+    starrocks: 'mysql', clickhouse: 'clickhouse', doris: 'mysql', foxlake: 'postgres',
+  };
+  const scheme = schemeMap[endpoint.engine];
+  const raw = `${scheme}://${endpoint.username}:${endpoint.password}@${endpoint.host}:${endpoint.port}${endpoint.database ? `/${endpoint.database}` : ''}`;
+  return maskConnectionStringPw(raw);
+}
+
+function setTaskRoute(task: Task, sourceEngine: EngineType, targetEngine: EngineType, name: string): void {
+  const source = buildEndpoint(sourceEngine);
+  const target = buildEndpoint(targetEngine);
+  task.source = source;
+  task.target = target;
+  task.sourceUrl = buildMaskedUrl(source);
+  task.targetUrl = buildMaskedUrl(target);
+  task.name = name;
+}
+
 function buildMetricsSnapshot(status: TaskStatus) {
   if (status === 'running') {
     const rps = intBetween(50, 2500);
@@ -70,25 +91,35 @@ function buildMetricsSnapshot(status: TaskStatus) {
       bpsLatest: rps * intBetween(80, 420),
       sinkerRpsLatest: Math.round(rps * floatBetween(0.9, 1.0, 3)),
       latencyMs: intBetween(80, 3200),
+      lag: 0,
       queryRtUs: intBetween(800, 6000),
       bufferSize: intBetween(0, 80),
       errorCount: 0,
       processedRecords: intBetween(100_000, 100_000_000),
+      pipelineQueueSize: 0,
+      finishedProgressCount: 0,
+      totalProgressCount: 0,
     };
   }
   if (status === 'failed') {
     return {
       rpsLatest: 0, bpsLatest: 0, sinkerRpsLatest: 0,
-      latencyMs: intBetween(10_000, 60_000), queryRtUs: 0,
+      latencyMs: intBetween(10_000, 60_000), lag: 0, queryRtUs: 0,
       bufferSize: intBetween(200, 2000),
       errorCount: intBetween(10, 400),
       processedRecords: intBetween(100, 10_000_000),
+      pipelineQueueSize: 0,
+      finishedProgressCount: 0,
+      totalProgressCount: 0,
     };
   }
   return {
     rpsLatest: 0, bpsLatest: 0, sinkerRpsLatest: 0,
-    latencyMs: 0, queryRtUs: 0, bufferSize: 0, errorCount: 0,
+    latencyMs: 0, lag: 0, queryRtUs: 0, bufferSize: 0, errorCount: 0,
     processedRecords: intBetween(0, 1_000_000),
+    pipelineQueueSize: 0,
+    finishedProgressCount: 0,
+    totalProgressCount: 0,
   };
 }
 
@@ -112,16 +143,6 @@ function makeTask(idx: number, category: TaskCategory, forcedStatus?: TaskStatus
   const syncMode: SyncMode =
     category === 'cdc' ? 'cdc' : category === 'snapshot' ? pick(SYNC_MODES) : 'snapshot';
   const startedMin = createdMin - intBetween(0, 60);
-  // Build connection URLs for display (passwords masked)
-  const schemeMap: Record<string, string> = {
-    mysql: 'mysql', postgres: 'postgres', gaussdb: 'postgres', oracle: 'oracle',
-    mongo: 'mongodb', redis: 'redis', kafka: 'kafka', tidb: 'mysql',
-    starrocks: 'mysql', clickhouse: 'clickhouse', doris: 'mysql', foxlake: 'postgres',
-  };
-  const srcScheme = schemeMap[source.engine] ?? 'mysql';
-  const tgtScheme = schemeMap[target.engine] ?? 'mysql';
-  const srcRaw = `${srcScheme}://${source.username}:${source.password}@${source.host}:${source.port}${source.database ? `/${source.database}` : ''}`;
-  const tgtRaw = `${tgtScheme}://${target.username}:${target.password}@${target.host}:${target.port}${target.database ? `/${target.database}` : ''}`;
   return {
     id: id(category),
     name: buildTaskName(source.engine, target.engine, idx),
@@ -138,8 +159,8 @@ function makeTask(idx: number, category: TaskCategory, forcedStatus?: TaskStatus
     status,
     source,
     target,
-    sourceUrl: maskConnectionStringPw(srcRaw),
-    targetUrl: maskConnectionStringPw(tgtRaw),
+    sourceUrl: buildMaskedUrl(source),
+    targetUrl: buildMaskedUrl(target),
     syncMode,
     extractType: defaultExtractType(category, syncMode),
     taskType: Math.random() > 0.3 ? 'standalone' : 'primary_backup',
@@ -345,10 +366,16 @@ function seed(): Db {
     snapshotTasks[1].status = 'paused'; snapshotTasks[1].metrics = buildMetricsSnapshot('paused');
     snapshotTasks[2].status = 'failed'; snapshotTasks[2].metrics = buildMetricsSnapshot('failed');
     snapshotTasks[3].status = 'completed'; snapshotTasks[3].metrics = buildMetricsSnapshot('completed');
+    setTaskRoute(snapshotTasks[0], 'mysql', 'gaussdb', 'orders_mysql_to_gaussdb_prd');
+    setTaskRoute(snapshotTasks[1], 'oracle', 'gaussdb', 'billing_oracle_to_gaussdb_uat');
+    setTaskRoute(snapshotTasks[2], 'postgres', 'clickhouse', 'events_postgres_to_clickhouse_prd');
+    setTaskRoute(snapshotTasks[3], 'mongo', 'postgres', 'profiles_mongo_to_postgres_archive');
   }
   if (cdcTasks.length >= 2) {
     cdcTasks[0].status = 'running'; cdcTasks[0].metrics = buildMetricsSnapshot('running');
     cdcTasks[1].status = 'paused'; cdcTasks[1].metrics = buildMetricsSnapshot('paused');
+    setTaskRoute(cdcTasks[0], 'mysql', 'kafka', 'orders_mysql_to_kafka_cdc_prd');
+    setTaskRoute(cdcTasks[1], 'gaussdb', 'postgres', 'ledger_gaussdb_to_postgres_cdc');
   }
 
   const allTasks = [...snapshotTasks, ...cdcTasks, ...checkTasks, ...structTasks];

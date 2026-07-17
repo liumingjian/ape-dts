@@ -68,8 +68,30 @@
         <div class="detail__kpi-row">
           <KpiCard :label="t('taskDetail.kpi.status')" :value="0" :badge="t(`task.status.${task.status}`)" :icon-comp="IconActivity" />
           <KpiCard :label="t('taskDetail.kpi.rps')" :value="task.metrics.rpsLatest" unit="rows/s" :icon-comp="IconBolt" />
-          <KpiCard :label="t('taskDetail.kpi.latency')" :value="task.metrics.latencyMs" unit="ms" inverse :icon-comp="IconClock" :tone="task.metrics.latencyMs > 3000 ? 'warning' : 'default'" />
-          <KpiCard :label="t('taskDetail.kpi.progress')" :value="Math.round(task.progressPercent)" unit="%" :icon-comp="IconChartBar" />
+
+          <!-- Snapshot mode: progress bar + 已完成/总表 -->
+          <template v-if="task.syncMode !== 'cdc'">
+            <div class="detail__kpi-progress-card kpi">
+              <div class="kpi__head">
+                <div class="kpi__label">
+                  <IconChartBar class="kpi__icon" />
+                  <span>{{ t('taskDetail.kpi.progress') }}</span>
+                </div>
+              </div>
+              <div class="kpi__value">
+                <el-progress :percentage="progressValue" :stroke-width="10" :show-text="true" />
+              </div>
+              <div class="detail__progress-counts">
+                已完成/总表 ({{ task.metrics.finishedProgressCount }}/{{ task.metrics.totalProgressCount }})
+              </div>
+            </div>
+          </template>
+
+          <!-- CDC mode: Lag + 积压数 -->
+          <template v-if="task.syncMode === 'cdc'">
+            <KpiCard label="Lag" :value="lagHasValue ? (rawLatestMetrics.lag ?? task.metrics.lag) : 0" unit="秒" :icon-comp="IconClock" :sentinel-text="lagHasValue ? undefined : '—'" />
+            <KpiCard label="积压数" :value="rawLatestMetrics.pipeline_queue_size ?? task.metrics.pipelineQueueSize" :icon-comp="IconChartBar" />
+          </template>
         </div>
       </section>
 
@@ -111,23 +133,13 @@
 
         <!-- Objects -->
         <el-tab-pane :label="t('taskDetail.tab.objects')" name="objects">
-          <el-table :data="objectRows" class="detail__objects">
-            <el-table-column :label="t('taskDetail.objects.col.name')" min-width="240">
+          <el-empty v-if="objects.length === 0" :description="t('common.empty')" />
+          <el-table v-else :data="objects" class="detail__objects">
+            <el-table-column :label="t('taskDetail.objects.col.schema')" min-width="180" prop="schema" />
+            <el-table-column :label="t('taskDetail.objects.col.table')" min-width="240" prop="table" />
+            <el-table-column :label="t('taskDetail.objects.col.state')" width="140">
               <template #default="{ row }">
-                <span class="detail__mono">{{ row.name }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column :label="t('taskDetail.objects.col.type')" width="120" prop="type" />
-            <el-table-column :label="t('taskDetail.objects.col.rows')" width="140" align="right">
-              <template #default="{ row }">
-                <span class="tabular-nums">{{ row.rows.toLocaleString() }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column :label="t('taskDetail.objects.col.status')" width="140">
-              <template #default="{ row }">
-                <el-tag :type="row.status === '同步中' ? 'success' : row.status === '已完成' ? 'info' : 'warning'" size="small">
-                  {{ row.status }}
-                </el-tag>
+                <el-tag :type="stateTagType(row.state)" size="small">{{ row.state }}</el-tag>
               </template>
             </el-table-column>
           </el-table>
@@ -214,10 +226,7 @@
               </el-button>
             </el-button-group>
           </div>
-          <div v-if="monitorLoading" class="detail__monitor-loading">
-            <el-skeleton :rows="3" animated />
-          </div>
-          <div v-else-if="monitorSeries.length === 0" class="detail__monitor-empty">
+          <div v-if="monitorSeries.length === 0" class="detail__monitor-empty">
             <el-empty :description="t('common.empty')" />
           </div>
           <div v-else class="detail__monitor-charts">
@@ -363,14 +372,16 @@
 import { computed, onMounted, onUnmounted, reactive, ref, shallowRef, unref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
+import type { RouteLocationRaw } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import dayjs from 'dayjs';
 import { api } from '@/api/client';
 import { useRbac } from '@/composables/useRbac';
 import { useDocumentVisibility } from '@/composables/useDocumentVisibility';
 import { useLogStream, type LogLine, type LogStreamHandle } from '@/composables/useLogStream';
-import type { Task, Alert, ApiAlert, MetricQueryResponse, Run, RunPosition, ApiTask } from '@/types/domain';
+import type { Task, Alert, ApiAlert, MetricQueryResponse, Run, RunPosition, ApiTask, TableLoadState, TaskCategory } from '@/types/domain';
 import { mapApiTask, mapApiAlert } from '@/types/domain';
+import { listPathForTaskKind } from '@/utils/migrationMode';
 import KpiCard from '@/components/KpiCard.vue';
 import ChartCard from '@/components/ChartCard.vue';
 import LevelBadge from '@/components/LevelBadge.vue';
@@ -392,7 +403,10 @@ const VALID_TABS = ['config', 'objects', 'logs', 'monitor', 'alerts', 'history']
 type TabName = (typeof VALID_TABS)[number];
 
 const taskId = computed(() => String(route.params.id));
-const taskCategory = computed(() => String(route.params.category ?? 'snapshot'));
+const taskCategory = computed<TaskCategory>(() => {
+  const category = String(route.params.category ?? 'snapshot');
+  return category === 'cdc' || category === 'check' || category === 'struct' ? category : 'snapshot';
+});
 
 const task = ref<Task | null>(null);
 const activeTab = ref<TabName>((route.query.tab as TabName) || 'config');
@@ -441,12 +455,9 @@ async function loadTask() {
   }
 }
 
-function backToListPath(): string {
+function backToListPath(): RouteLocationRaw {
   const cat = taskCategory.value;
-  if (cat === 'check') return '/tasks/check';
-  if (cat === 'struct') return '/tasks/struct';
-  if (cat === 'cdc') return '/tasks/cdc';
-  return '/tasks/snapshot';
+  return listPathForTaskKind(cat, task.value?.syncMode);
 }
 
 /* ---------- lifecycle actions ---------- */
@@ -527,26 +538,53 @@ watch(() => route.query.edit, (v) => {
   editorVisible.value = v === '1';
 });
 
-/* ---------- KPI charts (detail overview) ---------- */
-async function loadDetailMetrics() {
-  try {
-    const now = Date.now();
-    const from = now - 3600_000; // last 1h
-    const metrics = ['extractor_rps_avg', 'sinker_record_count_avg_by_sec', 'pipeline_buffer_size_avg'];
-    const results: MetricQueryResponse[] = [];
-    for (const m of metrics) {
-      try {
-        const res = await api.get<MetricQueryResponse>(`/runs/${currentRunId.value}/metrics?metric=${m}&from=${from}&to=${now}&step=60`);
-        results.push(res);
-      } catch { /* ignore individual metric errors */ }
-    }
-    detailMetricSeries.value = results;
-  } catch { /* ignore */ }
-}
+watch(activeTab, (tab) => {
+  if (tab === 'objects') loadObjects();
+});
 
-const detailMetricSeries = ref<MetricQueryResponse[]>([]);
+/* ---------- KPI metrics ---------- */
 const currentRunId = ref('');
 const latestRun = ref<Run | null>(null);
+const rawLatestMetrics = ref<Record<string, number>>({});
+const metricsHistory = ref<Record<string, { ts: number; value: number }[]>>({});
+const MAX_HISTORY_POINTS = 720; // ~1 h at 5 s interval
+
+const DETAIL_METRIC_NAMES = ['extractor_rps_avg', 'sinker_record_count_avg_by_sec', 'pipeline_buffer_size_avg'];
+const detailMetricSeries = computed<MetricQueryResponse[]>(() =>
+  DETAIL_METRIC_NAMES
+    .filter(m => (metricsHistory.value[m]?.length ?? 0) > 0)
+    .map(m => ({ metric: m, data: metricsHistory.value[m] ?? [] })),
+);
+
+/* ---------- KPI computed helpers ---------- */
+const progressValue = computed(() => {
+  const p = rawLatestMetrics.value.progress ?? task.value?.progressPercent ?? 0;
+  return Math.round(Math.max(0, Math.min(100, Number.isFinite(p) ? p : 0)));
+});
+
+const lagHasValue = computed(() => {
+  return 'lag' in rawLatestMetrics.value;
+});
+
+async function loadLatestMetrics() {
+  if (!currentRunId.value) return;
+  try {
+    const res = await api.get<Record<string, number>>(`/runs/${currentRunId.value}/metrics/latest`);
+    rawLatestMetrics.value = res && typeof res === 'object' ? res : {};
+    // Accumulate time-series from latest values for chart rendering
+    const now = Date.now();
+    for (const [metric, value] of Object.entries(rawLatestMetrics.value)) {
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        const arr = metricsHistory.value[metric] ?? [];
+        arr.push({ ts: now, value });
+        if (arr.length > MAX_HISTORY_POINTS) arr.shift();
+        metricsHistory.value[metric] = arr;
+      }
+    }
+  } catch {
+    rawLatestMetrics.value = {};
+  }
+}
 
 function baseLine(name: string, xs: string[], sData: { name: string; data: number[]; color: string }[]) {
   return {
@@ -588,20 +626,28 @@ const bufferOption = computed(() => {
   return baseLine('pipeline_buffer_size_avg', xs, [{ name: 'pipeline_buffer_size_avg', data: ms.data.map((p) => p.value), color: BRAND_PALETTE[4] }]);
 });
 
-/* ---------- objects sample ---------- */
-const objectRows = computed(() => {
-  if (!task.value) return [];
-  const n = task.value.syncObjects.selectedTables;
-  const tables = ['orders', 'users', 'payments', 'products', 'shipments', 'inventory', 'logs'];
-  return Array.from({ length: Math.min(n, 8) }, (_, i) => ({
-    name: `${task.value!.source.database ?? 'app_db'}.${tables[i % tables.length]}`,
-    type: '表',
-    rows: Math.round(100_000 * Math.random() * (i + 1)),
-    status: task.value!.status === 'stopped' || task.value!.status === 'completed' ? '已完成'
-      : task.value!.status === 'running' ? '同步中'
-      : task.value!.status === 'failed' ? '失败' : '等待中',
-  }));
-});
+/* ---------- objects (per-table state from /runs/:id/objects) ---------- */
+const objects = ref<TableLoadState[]>([]);
+const objectsLoading = ref(false);
+
+function stateTagType(state: TableLoadState['state']): 'info' | 'warning' | 'success' {
+  if (state === 'pending') return 'info';
+  if (state === 'loading') return 'warning';
+  return 'success'; // completed
+}
+
+async function loadObjects() {
+  if (!currentRunId.value) return;
+  objectsLoading.value = true;
+  try {
+    const res = await api.get<TableLoadState[]>(`/runs/${currentRunId.value}/objects`);
+    objects.value = Array.isArray(res) ? res : [];
+  } catch {
+    objects.value = [];
+  } finally {
+    objectsLoading.value = false;
+  }
+}
 
 /* ---------- Logs tab (SSE) ---------- */
 const logFile = ref('default');
@@ -690,39 +736,33 @@ const monitorRanges = [
   { value: '6h' as const, label: '6h' },
   { value: '24h' as const, label: '24h' },
 ];
-const monitorSeries = ref<MetricQueryResponse[]>([]);
-const monitorLoading = ref(false);
 
-const MONITOR_METRICS = [
-  'extractor_rps_avg',
-  'sinker_record_count_avg_by_sec',
-  'pipeline_buffer_size_avg',
-  'sinker_rt_per_query_avg',
-];
+const MONITOR_METRIC_NAMES = computed(() => {
+  const base = [
+    'extractor_rps_avg',
+    'sinker_record_count_avg_by_sec',
+    'pipeline_buffer_size_avg',
+    'sinker_rt_per_query_avg',
+  ];
+  if (task.value?.syncMode === 'cdc') {
+    base.push('lag');
+  }
+  return base;
+});
 
-async function loadMonitorMetrics() {
-  if (!currentRunId.value) return;
-  monitorLoading.value = true;
-  try {
-    const now = Date.now();
-    const rangeMs = monitorRange.value === '1h' ? 3600_000 : monitorRange.value === '6h' ? 6 * 3600_000 : 24 * 3600_000;
-    const from = now - rangeMs;
-    const step = monitorRange.value === '1h' ? 60 : monitorRange.value === '6h' ? 300 : 600;
-    const results: MetricQueryResponse[] = [];
-    for (const m of MONITOR_METRICS) {
-      try {
-        const res = await api.get<MetricQueryResponse>(`/runs/${currentRunId.value}/metrics?metric=${m}&from=${from}&to=${now}&step=${step}`);
-        if (res.data.length > 0) results.push(res);
-      } catch { /* ignore individual metric errors */ }
-    }
-    monitorSeries.value = results;
-  } catch { /* ignore */ }
-  finally { monitorLoading.value = false; }
-}
+const monitorSeries = computed<MetricQueryResponse[]>(() => {
+  const rangeMs = monitorRange.value === '1h' ? 3600_000 : monitorRange.value === '6h' ? 6 * 3600_000 : 24 * 3600_000;
+  const cutoff = Date.now() - rangeMs;
+  return MONITOR_METRIC_NAMES.value
+    .filter(m => (metricsHistory.value[m]?.length ?? 0) > 0)
+    .map(m => ({
+      metric: m,
+      data: (metricsHistory.value[m] ?? []).filter(p => p.ts >= cutoff),
+    }));
+});
 
 function setMonitorRange(r: '1h' | '6h' | '24h') {
   monitorRange.value = r;
-  loadMonitorMetrics();
 }
 
 function monitorChartOption(ms: MetricQueryResponse) {
@@ -828,19 +868,20 @@ onMounted(async () => {
   if (latestRun.value?.status === 'failed') {
     await loadArchivedLogIntoPane(latestRun.value);
   }
-  loadDetailMetrics();
+  loadLatestMetrics();
   loadAlerts();
   loadHistory();
 
   // open SSE if on logs tab
   if (activeTab.value === 'logs' && currentRunId.value) reopenLogStream();
+  // load objects if on objects tab
+  if (activeTab.value === 'objects') loadObjects();
 
   pollId = setInterval(() => {
     if (isVisible.value) {
       loadTask();
       loadCurrentRunId();
-      loadDetailMetrics();
-      if (activeTab.value === 'monitor') loadMonitorMetrics();
+      loadLatestMetrics();
       if (activeTab.value === 'alerts') loadAlerts();
     }
   }, POLL_INTERVAL_MS);
@@ -1018,7 +1059,6 @@ function onBack() {
   gap: 12px;
 }
 @media (max-width: 800px) { .detail__monitor-charts { grid-template-columns: 1fr; } }
-.detail__monitor-loading,
 .detail__monitor-empty {
   padding: 40px 0;
 }
@@ -1061,5 +1101,18 @@ function onBack() {
 }
 .detail__loading {
   padding: 40px 24px;
+}
+.detail__kpi-progress-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.detail__kpi-progress-card .kpi__value {
+  padding-top: 4px;
+}
+.detail__progress-counts {
+  font-size: 12px;
+  color: var(--color-ink-subtle);
+  font-family: var(--font-mono);
 }
 </style>

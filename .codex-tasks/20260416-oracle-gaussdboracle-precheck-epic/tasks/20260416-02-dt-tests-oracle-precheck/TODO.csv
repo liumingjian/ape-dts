@@ -1,5 +1,0 @@
-id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
-1,PrecheckTestRunner 增加 DbType::Oracle prepare/clean,DONE,precheck runner 支持 Oracle,cargo test -p dt-tests --test integration_test --no-run,2026-04-16 12:46:25 +0800,0,
-2,新增 oracle_to_gaussdb_oracle precheck testcase + 测试入口,DONE,用例目录存在且编译通过,cargo test -p dt-tests --test integration_test -- oracle_to_gaussdb_oracle::precheck_tests::test::struct_supported_basic_test --nocapture,2026-04-16 12:46:25 +0800,0,
-3,新增 gaussdb_oracle_to_oracle precheck testcase + 测试入口,DONE,用例目录存在且编译通过,cargo test -p dt-tests --test integration_test -- gaussdb_oracle_to_oracle::precheck_tests::test::struct_supported_basic_test --nocapture,2026-04-16 12:46:25 +0800,0,
-4,跑两条用例验证,DONE,两条测试 PASS,cargo test -p dt-tests --test integration_test -- oracle_to_gaussdb_oracle::precheck_tests::test::struct_supported_basic_test gaussdb_oracle_to_oracle::precheck_tests::test::struct_supported_basic_test --nocapture,2026-04-16 12:46:25 +0800,0,PASS

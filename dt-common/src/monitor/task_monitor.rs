@@ -136,7 +136,15 @@ impl TaskMonitor {
             .or_insert(value);
     }
 
-    async fn calc(&self) -> Option<BTreeMap<TaskMetricsType, u64>> {
+    pub async fn calc(&self) -> Option<BTreeMap<TaskMetricsType, u64>> {
+        let now_unix_secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        self.calc_inner(now_unix_secs).await
+    }
+
+    async fn calc_inner(&self, now_unix_secs: u64) -> Option<BTreeMap<TaskMetricsType, u64>> {
         self.task_type.as_ref()?;
 
         let mut metrics: BTreeMap<TaskMetricsType, u64> = BTreeMap::new();
@@ -354,11 +362,43 @@ impl TaskMonitor {
             #[cfg(feature = "metrics")]
             self.prometheus_metrics.set_metrics(&metrics);
         }
-        if total_progress_count > 0 {
+        if matches!(self.task_type, Some(TaskType::Snapshot)) {
+            let extractor_plan_records = metrics
+                .get(&TaskMetricsType::ExtractorPlanRecords)
+                .copied()
+                .unwrap_or(0);
+            let sinker_sinked_records = metrics
+                .get(&TaskMetricsType::SinkerSinkedRecords)
+                .copied()
+                .unwrap_or(0);
+            if extractor_plan_records > 0 {
+                metrics.insert(
+                    TaskMetricsType::Progress,
+                    cmp::min(sinker_sinked_records * 100 / extractor_plan_records, 100),
+                );
+            } else if total_progress_count > 0 {
+                metrics.insert(
+                    TaskMetricsType::Progress,
+                    cmp::min(finished_progress_count * 100 / total_progress_count, 100),
+                );
+            }
+            // else: both zero — omit Progress entirely
+        } else if total_progress_count > 0 {
             metrics.insert(
                 TaskMetricsType::Progress,
                 cmp::min(finished_progress_count * 100 / total_progress_count, 100),
             );
+        }
+
+        // CDC-only Lag computation: max(0, now_unix_secs - source_timestamp_secs)
+        // Only emitted when task_type == Cdc AND a Pipeline Timestamp counter has been recorded.
+        if matches!(self.task_type, Some(TaskType::Cdc)) {
+            if let Some(&timestamp_secs) = metrics.get(&TaskMetricsType::Timestamp) {
+                metrics.insert(
+                    TaskMetricsType::Lag,
+                    now_unix_secs.saturating_sub(timestamp_secs),
+                );
+            }
         }
 
         Some(metrics)
@@ -461,5 +501,221 @@ fn calc_nowindow_metrics(
             .entry(metrics_type)
             .and_modify(|v| *v = (*v).max(value))
             .or_insert(value);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(not(feature = "metrics"))]
+    use super::*;
+    #[cfg(not(feature = "metrics"))]
+    use crate::config::config_enums::TaskType;
+
+    #[cfg(not(feature = "metrics"))]
+    fn snapshot_monitor() -> TaskMonitor {
+        TaskMonitor::new(Some(TaskType::Snapshot))
+    }
+
+    #[cfg(not(feature = "metrics"))]
+    fn cdc_monitor() -> TaskMonitor {
+        TaskMonitor::new(Some(TaskType::Cdc))
+    }
+
+    // VAL-ENGINE-006: row-based formula with ExtractorPlanRecords=1000, SinkerSinkedRecords=250
+    #[tokio::test]
+    #[cfg(not(feature = "metrics"))]
+    async fn snapshot_row_based_progress_25_percent() {
+        let m = snapshot_monitor();
+        m.add_no_window_metrics(TaskMetricsType::ExtractorPlanRecords, 1000);
+        m.add_no_window_metrics(TaskMetricsType::SinkerSinkedRecords, 250);
+        let metrics = m.calc().await.unwrap();
+        assert_eq!(metrics.get(&TaskMetricsType::Progress).copied(), Some(25));
+    }
+
+    // VAL-ENGINE-007: row-based formula clamped at 100 when sinked exceeds plan
+    #[tokio::test]
+    #[cfg(not(feature = "metrics"))]
+    async fn snapshot_row_based_progress_clamped_at_100() {
+        let m = snapshot_monitor();
+        m.add_no_window_metrics(TaskMetricsType::ExtractorPlanRecords, 100);
+        m.add_no_window_metrics(TaskMetricsType::SinkerSinkedRecords, 250);
+        let metrics = m.calc().await.unwrap();
+        assert_eq!(metrics.get(&TaskMetricsType::Progress).copied(), Some(100));
+    }
+
+    // VAL-ENGINE-024: Progress=0 (not absent) when SinkerSinkedRecords=0 and ExtractorPlanRecords>0
+    #[tokio::test]
+    #[cfg(not(feature = "metrics"))]
+    async fn snapshot_row_based_progress_zero_when_none_sinked() {
+        let m = snapshot_monitor();
+        m.add_no_window_metrics(TaskMetricsType::ExtractorPlanRecords, 1000);
+        m.add_no_window_metrics(TaskMetricsType::SinkerSinkedRecords, 0);
+        let metrics = m.calc().await.unwrap();
+        assert_eq!(metrics.get(&TaskMetricsType::Progress).copied(), Some(0));
+    }
+
+    // VAL-ENGINE-008: fallback to table-count when ExtractorPlanRecords=0
+    #[tokio::test]
+    #[cfg(not(feature = "metrics"))]
+    async fn snapshot_progress_fallback_table_count() {
+        let m = snapshot_monitor();
+        m.add_no_window_metrics(TaskMetricsType::TotalProgressCount, 10);
+        m.add_no_window_metrics(TaskMetricsType::FinishedProgressCount, 3);
+        let metrics = m.calc().await.unwrap();
+        assert_eq!(metrics.get(&TaskMetricsType::Progress).copied(), Some(30));
+    }
+
+    // VAL-ENGINE-009: Progress absent when both ExtractorPlanRecords=0 and TotalProgressCount=0
+    #[tokio::test]
+    #[cfg(not(feature = "metrics"))]
+    async fn snapshot_progress_omitted_when_both_zero() {
+        let m = snapshot_monitor();
+        let metrics = m.calc().await.unwrap();
+        assert!(metrics.get(&TaskMetricsType::Progress).is_none());
+    }
+
+    // VAL-ENGINE-022: CDC must not emit row-based Progress even when counters are set
+    #[tokio::test]
+    #[cfg(not(feature = "metrics"))]
+    async fn cdc_does_not_emit_snapshot_row_progress() {
+        let m = cdc_monitor();
+        m.add_no_window_metrics(TaskMetricsType::ExtractorPlanRecords, 1000);
+        m.add_no_window_metrics(TaskMetricsType::SinkerSinkedRecords, 500);
+        m.add_no_window_metrics(TaskMetricsType::TotalProgressCount, 10);
+        m.add_no_window_metrics(TaskMetricsType::FinishedProgressCount, 4);
+        let metrics = m.calc().await.unwrap();
+        // CDC must use table-count formula (40), NOT row-based formula (50)
+        assert_eq!(
+            metrics.get(&TaskMetricsType::Progress).copied(),
+            Some(40),
+            "CDC must use table-count formula, not row-based formula"
+        );
+    }
+
+    // VAL-ENGINE-010: Cdc with Timestamp = now - 42 emits Lag in {42, 43}
+    // Uses calc_inner with injected now_unix_secs for determinism.
+    #[tokio::test]
+    #[cfg(not(feature = "metrics"))]
+    async fn cdc_lag_basic_42_seconds() {
+        let m = cdc_monitor();
+        let now: u64 = 1_700_000_000; // fixed epoch second
+        m.add_no_window_metrics(TaskMetricsType::Timestamp, now - 42);
+        let metrics = m.calc_inner(now).await.unwrap();
+        let lag = metrics
+            .get(&TaskMetricsType::Lag)
+            .copied()
+            .expect("Lag must be present for CDC with Timestamp");
+        assert_eq!(lag, 42, "expected lag == 42, got {lag}");
+    }
+
+    // VAL-ENGINE-011: Cdc with Timestamp = now + 100 (future/clock skew) emits Lag = 0
+    #[tokio::test]
+    #[cfg(not(feature = "metrics"))]
+    async fn cdc_lag_future_clock_clamps_to_zero() {
+        let m = cdc_monitor();
+        let now: u64 = 1_700_000_000;
+        m.add_no_window_metrics(TaskMetricsType::Timestamp, now + 100);
+        let metrics = m.calc_inner(now).await.unwrap();
+        assert_eq!(
+            metrics.get(&TaskMetricsType::Lag).copied(),
+            Some(0),
+            "Lag must be 0 when timestamp is in the future"
+        );
+    }
+
+    // VAL-ENGINE-021: Cdc with Timestamp = now exactly emits Lag = 0 exactly
+    #[tokio::test]
+    #[cfg(not(feature = "metrics"))]
+    async fn cdc_lag_boundary_now_equals_timestamp() {
+        let m = cdc_monitor();
+        let now: u64 = 1_700_000_000;
+        m.add_no_window_metrics(TaskMetricsType::Timestamp, now);
+        let metrics = m.calc_inner(now).await.unwrap();
+        assert_eq!(
+            metrics.get(&TaskMetricsType::Lag).copied(),
+            Some(0),
+            "Lag must be exactly 0 when timestamp == now"
+        );
+    }
+
+    // VAL-ENGINE-012: Cdc with no Timestamp recorded emits NO Lag entry
+    #[tokio::test]
+    #[cfg(not(feature = "metrics"))]
+    async fn cdc_lag_absent_before_first_timestamp() {
+        let m = cdc_monitor();
+        let metrics = m.calc_inner(1_700_000_000).await.unwrap();
+        assert!(
+            metrics.get(&TaskMetricsType::Lag).is_none(),
+            "Lag must be absent when no Timestamp has been recorded"
+        );
+    }
+
+    // VAL-ENGINE-013: Snapshot task never emits Lag even when Timestamp is present
+    #[tokio::test]
+    #[cfg(not(feature = "metrics"))]
+    async fn snapshot_never_emits_lag_even_with_timestamp() {
+        let m = snapshot_monitor();
+        let now: u64 = 1_700_000_000;
+        m.add_no_window_metrics(TaskMetricsType::Timestamp, now - 42);
+        let metrics = m.calc_inner(now).await.unwrap();
+        assert!(
+            metrics.get(&TaskMetricsType::Lag).is_none(),
+            "Snapshot tasks must never emit Lag"
+        );
+    }
+
+    // VAL-ENGINE-014 (Struct): Struct task never emits Lag
+    #[tokio::test]
+    #[cfg(not(feature = "metrics"))]
+    async fn struct_task_never_emits_lag() {
+        let m = TaskMonitor::new(Some(TaskType::Struct));
+        let now: u64 = 1_700_000_000;
+        m.add_no_window_metrics(TaskMetricsType::Timestamp, now - 42);
+        let metrics = m.calc_inner(now).await.unwrap();
+        assert!(
+            metrics.get(&TaskMetricsType::Lag).is_none(),
+            "Struct tasks must never emit Lag"
+        );
+    }
+
+    // VAL-ENGINE-014 (Check): Check task never emits Lag
+    #[tokio::test]
+    #[cfg(not(feature = "metrics"))]
+    async fn check_task_never_emits_lag() {
+        let m = TaskMonitor::new(Some(TaskType::Check));
+        let now: u64 = 1_700_000_000;
+        m.add_no_window_metrics(TaskMetricsType::Timestamp, now - 42);
+        let metrics = m.calc_inner(now).await.unwrap();
+        assert!(
+            metrics.get(&TaskMetricsType::Lag).is_none(),
+            "Check tasks must never emit Lag"
+        );
+    }
+
+    // VAL-ENGINE-022 (additional): Cdc with ExtractorPlanRecords > 0 AND Timestamp present:
+    // still uses table-count Progress (not row-based), and Lag is correctly emitted.
+    #[tokio::test]
+    #[cfg(not(feature = "metrics"))]
+    async fn cdc_does_not_emit_snapshot_row_progress_and_emits_lag() {
+        let m = cdc_monitor();
+        let now: u64 = 1_700_000_000;
+        m.add_no_window_metrics(TaskMetricsType::ExtractorPlanRecords, 1000);
+        m.add_no_window_metrics(TaskMetricsType::SinkerSinkedRecords, 500);
+        m.add_no_window_metrics(TaskMetricsType::TotalProgressCount, 10);
+        m.add_no_window_metrics(TaskMetricsType::FinishedProgressCount, 4);
+        m.add_no_window_metrics(TaskMetricsType::Timestamp, now - 10);
+        let metrics = m.calc_inner(now).await.unwrap();
+        // CDC must use table-count formula (40), NOT row-based formula (50)
+        assert_eq!(
+            metrics.get(&TaskMetricsType::Progress).copied(),
+            Some(40),
+            "CDC must use table-count formula, not row-based formula"
+        );
+        // Lag must be computed correctly
+        assert_eq!(
+            metrics.get(&TaskMetricsType::Lag).copied(),
+            Some(10),
+            "CDC must emit Lag = now - timestamp = 10"
+        );
     }
 }

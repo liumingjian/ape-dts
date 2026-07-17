@@ -1,4 +1,0 @@
-id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
-1,新增 dt-tests 模块与 test 入口,DONE,integration_test.rs 可编译且新增用例入口,cargo test -p dt-tests --test integration_test --no-run,2026-04-15 16:46:33 +0800,0,已新增 gaussdb_oracle_to_oracle 模块并通过编译
-2,新增 smoke fixture（task_config + prepare/test/clean SQL）,DONE,fixture 文件齐全且命名与 router/col_map 一致,test -f dt-tests/tests/gaussdb_oracle_to_oracle/snapshot/smoke_test/task_config.ini,2026-04-15 16:46:33 +0800,0,
-3,本机跑通 smoke_test（GaussDBOracle + Oracle XE）,DONE,测试 PASS,cargo test -p dt-tests --test integration_test -- gaussdb_oracle_to_oracle::snapshot_tests::test::smoke_test --nocapture,2026-04-15 16:48:00 +0800,0,PASS（PgSnapshotExtractor -> OracleSinker + compare_data）

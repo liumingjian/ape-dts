@@ -67,6 +67,8 @@ const bodyHeight = computed(() => `${props.height ?? (props.size === 'sm' ? 220 
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 .chart-card__body {
   flex: 1;
@@ -84,5 +86,17 @@ const bodyHeight = computed(() => `${props.height ?? (props.size === 'sm' ? 220 
   border-top: 1px solid var(--color-border);
   color: var(--color-ink-subtle);
   font-size: 12px;
+}
+
+@media (max-width: 767px) {
+  .chart-card__head {
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-4) var(--space-4) var(--space-2);
+  }
+
+  .chart-card__extra {
+    justify-content: flex-start;
+  }
 }
 </style>

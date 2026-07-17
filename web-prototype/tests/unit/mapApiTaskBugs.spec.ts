@@ -21,9 +21,10 @@ const BASE: ApiTask = {
   runtime: null,
   metrics: {
     extractor_pushed_rps_avg: 120,
-    replication_lag: 50,
+    lag: 50,
     pipeline_buffer_size_avg: 1024,
     pipeline_sinked_count_latest: 5000,
+    progress: 73,
   },
   resourceGroupId: 'rg-1',
   ownerUserId: 'u-1',
@@ -53,6 +54,16 @@ describe('mapApiTask — Bug 4: SyncMode "full" must map to "snapshot"', () => {
     const t = mapApiTask({ ...BASE, kind: 'cdc' });
     expect(t.syncMode).toBe('cdc');
   });
+
+  it('maps extractor extract_type=snapshot_and_cdc → syncMode="snapshot_cdc"', () => {
+    const t = mapApiTask({
+      ...BASE,
+      kind: 'snapshot',
+      extractor: { extract_type: 'snapshot_and_cdc' },
+    });
+    expect(t.syncMode).toBe('snapshot_cdc');
+    expect(t.extractType).toBe('snapshot_and_cdc');
+  });
 });
 
 describe('mapApiTask — Bug 5: ResumeType "auto" must map to "from_log"', () => {
@@ -72,20 +83,14 @@ describe('mapApiTask — Bug 5: ResumeType "auto" must map to "from_log"', () =>
 });
 
 describe('mapApiTask — Bug 3: progressPercent must be 0-100 percentage, not raw count', () => {
-  it('calculates progressPercent as percentage when total is available', () => {
+  it('passes backend progress through verbatim into progressPercent', () => {
     const t = mapApiTask({
       ...BASE,
-      metrics: {
-        ...BASE.metrics!,
-        pipeline_sinked_count_latest: 5000,
-      },
-      filter: { do_tbs: 'db1.t1,db1.t2,db1.t3,db1.t4,db1.t5', do_dbs: '' },
+      metrics: { progress: 73 },
     });
-    // With 5 tables and 5000 sinked count, progressPercent should be a
-    // percentage (0-100), not the raw count 5000
+    expect(t.progressPercent).toBe(73);
     expect(t.progressPercent).toBeLessThanOrEqual(100);
     expect(t.progressPercent).toBeGreaterThanOrEqual(0);
-    expect(t.progressPercent).not.toBe(5000);
   });
 
   it('returns 0 when no metrics are available', () => {
@@ -93,7 +98,7 @@ describe('mapApiTask — Bug 3: progressPercent must be 0-100 percentage, not ra
     expect(t.progressPercent).toBe(0);
   });
 
-  it('returns 0 when pipeline_sinked_count_latest is 0', () => {
+  it('returns 0 when progress is undefined in metrics', () => {
     const t = mapApiTask({
       ...BASE,
       metrics: { pipeline_sinked_count_latest: 0 },
@@ -101,15 +106,11 @@ describe('mapApiTask — Bug 3: progressPercent must be 0-100 percentage, not ra
     expect(t.progressPercent).toBe(0);
   });
 
-  it('progressPercent is capped at 100', () => {
+  it('returns 0 when backend progress is 0', () => {
     const t = mapApiTask({
       ...BASE,
-      metrics: {
-        ...BASE.metrics!,
-        pipeline_sinked_count_latest: 999999,
-      },
-      filter: { do_tbs: 'db1.t1', do_dbs: '' },
+      metrics: { progress: 0 },
     });
-    expect(t.progressPercent).toBeLessThanOrEqual(100);
+    expect(t.progressPercent).toBe(0);
   });
 });

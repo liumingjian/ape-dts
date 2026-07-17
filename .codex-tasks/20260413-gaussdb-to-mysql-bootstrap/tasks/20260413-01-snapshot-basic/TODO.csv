@@ -1,5 +1,0 @@
-id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
-1,确认反向 snapshot 主路径可复用的最小边界,DONE,已确定测试目录结构与最小 fixture 策略,"rg -n \"gaussdb_to_pg|mysql_to_mysql|gaussdb_to_mysql\" dt-tests/tests dt-task dt-common",2026-04-13 19:46:25 +0800,0,reused existing gaussdb_to_pg and mysql contracts for the smallest reverse-path proof
-2,新增 gaussdb_to_mysql snapshot basic 模块与夹具,DONE,新的 test module 和 basic_test 夹具文件落盘,"test -f dt-tests/tests/gaussdb_to_mysql/snapshot_tests.rs && test -f dt-tests/tests/gaussdb_to_mysql/snapshot/basic_test/task_config.ini",2026-04-13 19:46:25 +0800,0,added minimal fixture with public to gaussdb_to_mysql_snapshot_dst routing
-3,运行编译与最小验证,DONE,新用例可被 integration_test 编译识别,"cargo test -p dt-tests --test integration_test --no-run",2026-04-13 19:46:25 +0800,0,compile passed and live snapshot test passed after internal retry absorbed shared GaussDB resets
-4,回写 child 与 parent 进展,DONE,PROGRESS.md 与父真表记录了验证结果和 blocker,"test -f .codex-tasks/20260413-gaussdb-to-mysql-bootstrap/tasks/20260413-01-snapshot-basic/PROGRESS.md",2026-04-13 19:46:25 +0800,0,recorded validated outcome environment prerequisite and next child handoff

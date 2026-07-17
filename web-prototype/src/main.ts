@@ -41,14 +41,14 @@ async function bootstrap() {
   app.config.errorHandler = (err, instance, info) => {
     const componentName = (instance as { $options?: { name?: string } } | null)?.$options?.name
       ?? '<anonymous>';
-    console.error('[vue:errorHandler]', { component: componentName, info, error: err });
+    console.error('vue:errorHandler', { component: componentName, info, error: err });
   };
   if (typeof window !== 'undefined') {
     window.addEventListener('unhandledrejection', (event) => {
-      console.error('[unhandledrejection]', event.reason);
+      console.error('unhandledrejection', event.reason);
     });
     window.addEventListener('error', (event) => {
-      console.error('[window:error]', { message: event.message, source: event.filename, error: event.error });
+      console.error('window:error', { message: event.message, source: event.filename, error: event.error });
     });
   }
 

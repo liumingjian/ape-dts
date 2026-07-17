@@ -19,8 +19,7 @@ export const menu: MenuItem[] = [
     labelKey: 'nav.tasks._label',
     icon: 'tabler:arrows-exchange',
     children: [
-      { key: 'tasks.snapshot', labelKey: 'nav.tasks.snapshot', to: '/tasks/snapshot' },
-      { key: 'tasks.cdc', labelKey: 'nav.tasks.cdc', to: '/tasks/cdc' },
+      { key: 'tasks.migration', labelKey: 'nav.tasks.migration', to: '/tasks/migration' },
       { key: 'tasks.check', labelKey: 'nav.tasks.check', to: '/tasks/check' },
       { key: 'tasks.struct', labelKey: 'nav.tasks.struct', to: '/tasks/struct' },
     ],
