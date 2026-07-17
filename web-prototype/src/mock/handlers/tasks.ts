@@ -5,10 +5,61 @@
 import { http, HttpResponse } from 'msw';
 import { pause, ok, notFound, badRequest, parsePage, paginate, q } from './_shared';
 import { db, findTask, tasksOf } from '../db';
-import type { Task, TaskCategory, TaskStatus, MetricSeries } from '@/types/domain';
+import type { Task, TaskCategory, TaskStatus, MetricSeries, Run } from '@/types/domain';
 import { legacyToCategory } from '@/types/domain';
 import { maskConnectionStringPw } from '@/utils/localizeError';
 import { id, intBetween, isoMinus, pick } from '../fake';
+
+function taskRunId(taskId: string): string {
+  return `run_${taskId}`;
+}
+
+function taskIdFromRunId(runId: string): string {
+  return runId.startsWith('run_') ? runId.slice(4) : runId;
+}
+
+function latestRunForTask(task: Task): Run {
+  return {
+    id: taskRunId(task.id),
+    taskId: task.id,
+    status: task.status === 'paused' ? 'paused'
+      : task.status === 'failed' ? 'failed'
+      : task.status === 'stopped' ? 'stopped'
+      : task.status === 'running' ? 'running'
+      : 'stopped',
+    startedAt: task.startedAt ?? task.createdAt,
+    stoppedAt: task.completedAt ?? null,
+    exitCode: task.status === 'failed' ? 1 : task.status === 'completed' ? 0 : null,
+    logDir: `./logs/${task.id}`,
+    iniPath: `./tasks/${task.id}.ini`,
+    pid: task.status === 'running' ? intBetween(10_000, 60_000) : null,
+    position: { kind: 'unknown', raw: task.status === 'running' ? 'live' : 'archived' },
+    createdAt: task.createdAt,
+  };
+}
+
+function buildRunMetricData(task: Task, metric: string, from: number, to: number, stepSeconds: number) {
+  const taskSeries = db.metricsByTask[task.id];
+  const canonicalMetric = metric === 'extractor_rps_avg' ? 'extractor_pushed_rps_avg' : metric;
+  const existing = taskSeries?.[canonicalMetric]?.points
+    ?? (metric === 'lag' ? taskSeries?.latency_ms?.points : undefined);
+  if (existing?.length) {
+    return existing
+      .filter((point) => point.t >= from && point.t <= to)
+      .map((point) => ({ ts: point.t, value: point.v }))
+      .slice(-120);
+  }
+  const count = Math.max(12, Math.min(120, Math.round((to - from) / (stepSeconds * 1000))));
+  const base = metric === 'lag' ? task.metrics.latencyMs : task.metrics.rpsLatest;
+  return Array.from({ length: count }, (_, i) => {
+    const ratio = count === 1 ? 1 : i / (count - 1);
+    const wave = Math.sin(ratio * Math.PI * 2) * 0.16;
+    return {
+      ts: Math.round(from + ratio * (to - from)),
+      value: Math.max(0, Math.round(base * (1 + wave))),
+    };
+  });
+}
 
 function listByCategoryParam(catParam: string, url: URL): Task[] {
   let items: Task[];
@@ -48,6 +99,15 @@ export const taskHandlers = [
     return ok(t);
   }),
 
+  http.get('/api/tasks/:id/runs', async ({ params, request }) => {
+    await pause();
+    const t = findTask(String(params.id));
+    if (!t) return notFound();
+    const url = new URL(request.url);
+    const { page, size } = parsePage(url);
+    return ok(paginate([latestRunForTask(t)], page, size));
+  }),
+
   http.post('/api/tasks', async ({ request }) => {
     await pause(400, 900);
     const body = (await request.json().catch(() => ({}))) as Partial<Task> & { category?: TaskCategory | 'sync' | 'replay' | 'verify' };
@@ -82,8 +142,9 @@ export const taskHandlers = [
       startedAt: undefined,
       completedAt: undefined,
       metrics: {
-        rpsLatest: 0, bpsLatest: 0, sinkerRpsLatest: 0, latencyMs: 0,
+        rpsLatest: 0, bpsLatest: 0, sinkerRpsLatest: 0, latencyMs: 0, lag: 0,
         queryRtUs: 0, bufferSize: 0, errorCount: 0, processedRecords: 0,
+        pipelineQueueSize: 0, finishedProgressCount: 0, totalProgressCount: 0,
       },
       lastHeartbeatAt: now,
     };
@@ -215,6 +276,51 @@ export const taskHandlers = [
       out.push(s);
     }
     return ok({ taskId: t.id, series: out, snapshot: t.metrics });
+  }),
+
+  http.get('/api/runs/:id/metrics', async ({ params, request }) => {
+    await pause();
+    const runId = String(params.id);
+    const t = findTask(taskIdFromRunId(runId));
+    if (!t) return notFound();
+    const url = new URL(request.url);
+    const metric = q(url, 'metric') ?? 'extractor_rps_avg';
+    const now = Date.now();
+    const from = Number(q(url, 'from') ?? now - 3600_000);
+    const to = Number(q(url, 'to') ?? now);
+    const step = Number(q(url, 'step') ?? 60);
+    return ok({
+      metric,
+      data: buildRunMetricData(t, metric, from, to, step),
+    });
+  }),
+
+  http.get('/api/runs/:id/metrics/latest', async ({ params }) => {
+    await pause();
+    const t = findTask(taskIdFromRunId(String(params.id)));
+    if (!t) return notFound();
+    return ok({
+      extractor_rps_avg: t.metrics.rpsLatest,
+      sinker_rps_avg: t.metrics.sinkerRpsLatest,
+      sinker_rt_avg: t.metrics.queryRtUs,
+      pipeline_queue_size: t.metrics.pipelineQueueSize,
+      sinker_sinked_records: t.metrics.processedRecords,
+      extractor_plan_records: t.metrics.totalProgressCount,
+      progress: t.progressPercent,
+      lag: t.metrics.lag,
+    });
+  }),
+
+  http.get('/api/runs/:id/objects', async ({ params }) => {
+    await pause();
+    const t = findTask(taskIdFromRunId(String(params.id)));
+    if (!t) return notFound();
+    const tableCount = Math.max(1, Math.min(6, t.syncObjects.selectedTables));
+    return ok(Array.from({ length: tableCount }, (_, index) => ({
+      schema: t.source.database || 'source',
+      table: `table_${index + 1}`,
+      state: t.status === 'completed' ? 'completed' : index === 0 ? 'loading' : 'pending',
+    })));
   }),
 
   http.get('/api/tasks/:id/logs', async ({ params, request }) => {

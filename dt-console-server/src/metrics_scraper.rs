@@ -1,5 +1,8 @@
-//! MetricsScraper — polls each running Run's /metrics:9090 every 10s,
+//! MetricsScraper — polls each running Run's /metrics endpoint every 10s,
 //! parses Prometheus text via prometheus-parse, writes to MetricPointRepository.
+//!
+//! The scrape port is dynamically allocated per-Run (see `PortPool`); targets
+//! are registered by `start_task` after successful engine spawn.
 //!
 //! Scrape failure → metrics_unavailable alert fired in the alerts table;
 //! recovery → alert marked recovered.
@@ -14,10 +17,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 /// Default scrape interval in seconds.
-const DEFAULT_SCRAPE_INTERVAL_SECS: u64 = 10;
-
-/// Default metrics port on the engine subprocess.
-const DEFAULT_METRICS_PORT: u16 = 9090;
+const DEFAULT_SCRAPE_INTERVAL_SECS: u64 = 5;
 
 /// Number of consecutive scrape failures before emitting metrics_unavailable.
 const FAILURE_THRESHOLD: u32 = 3;
@@ -408,16 +408,77 @@ pub fn spawn_scraper(pool: sqlx::SqlitePool, state: ScraperState, interval_secs:
     });
 }
 
-/// Create a ScrapeTarget from Run information.
+/// Create a ScrapeTarget for a Run using its dynamically-allocated metrics port.
 ///
-/// Uses the metrics_config from the Task to determine host/port.
-/// If metrics is not configured, defaults to 127.0.0.1:9090.
-pub fn scrape_target_from_run(task_id: &str, run_id: &str) -> ScrapeTarget {
+/// The `port` argument must be the value persisted on `runs.metrics_port` for
+/// this Run; it is allocated from [9100, 9199] by `start_task` before spawning.
+pub fn scrape_target_from_run(task_id: &str, run_id: &str, port: u16) -> ScrapeTarget {
     ScrapeTarget {
         task_id: task_id.to_string(),
         run_id: run_id.to_string(),
         host: "127.0.0.1".to_string(),
-        port: DEFAULT_METRICS_PORT,
+        port,
+    }
+}
+
+/// Perform one immediate scrape for a single Run and write the results to the DB.
+///
+/// Called synchronously when a Run transitions to a terminal status (completed,
+/// failed, stopped) to capture the engine's final metric emission (e.g.,
+/// progress=100) before the metrics port is released or the engine process
+/// is fully gone.
+///
+/// Best-effort: if the scrape fails (engine already exited, connection refused),
+/// logs the miss and returns without error. Never panics or propagates failures.
+pub async fn scrape_single_run(
+    pool: &sqlx::SqlitePool,
+    task_id: &str,
+    run_id: &str,
+    host: &str,
+    port: u16,
+) {
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    match scrape_endpoint(host, port).await {
+        Ok(body) => {
+            let samples = parse_prometheus_text(&body);
+            let points: Vec<MetricPoint> = samples
+                .iter()
+                .map(|s| MetricPoint {
+                    id: 0,
+                    task_id: task_id.to_string(),
+                    run_id: run_id.to_string(),
+                    metric_name: s.metric_name.clone(),
+                    ts: now.clone(),
+                    value: s.value,
+                })
+                .collect();
+
+            if !points.is_empty() {
+                if let Err(e) = MetricPointRepository::create_batch(pool, &points).await {
+                    tracing::warn!(
+                        "final-scrape: metric point batch insert failed for run {}: {e}",
+                        run_id
+                    );
+                }
+            }
+
+            tracing::info!(
+                event = "final_scrape_success",
+                run_id = %run_id,
+                sample_count = samples.len(),
+                "final scrape captured {} samples",
+                samples.len()
+            );
+        }
+        Err(e) => {
+            // Best-effort: engine may already be gone. Log and continue.
+            tracing::info!(
+                event = "final_scrape_missed",
+                run_id = %run_id,
+                reason = %e,
+                "final scrape missed (engine likely gone): {e}"
+            );
+        }
     }
 }
 
@@ -468,7 +529,7 @@ mod tests {
                 task_id: "t1".into(),
                 run_id: "r1".into(),
                 host: "127.0.0.1".into(),
-                port: 9090,
+                port: 9100,
             })
             .await;
         let targets = state.get_targets().await;
@@ -491,7 +552,7 @@ mod tests {
                 task_id: "t2".into(),
                 run_id: "r2".into(),
                 host: "127.0.0.1".into(),
-                port: 9090,
+                port: 9100,
             })
             .await;
 

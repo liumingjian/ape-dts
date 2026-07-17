@@ -121,6 +121,75 @@ pub async fn get_metrics(
     }
 }
 
+/// GET /api/runs/:id/metrics/latest — return the latest value per metric for a Run.
+///
+/// Queries `metric_points` for the maximum `ts` row per distinct `metric_name`
+/// for the given `run_id`, returning a flat JSON object `{ "<metric>": <number>, ... }`.
+///
+/// - Returns 200 `{}` when the Run exists but has no metric_points yet.
+/// - Returns 404 `RUN_NOT_FOUND` envelope when the `run_id` is unknown.
+/// - Each metric appears exactly once (latest value wins on ties by ts).
+/// - Keys that were never inserted are absent from the response (not null, not 0).
+#[get("/runs/{id}/metrics/latest")]
+pub async fn get_metrics_latest(
+    pool: web::Data<sqlx::SqlitePool>,
+    user: UserContext,
+    path: web::Path<String>,
+) -> HttpResponse {
+    if let Err(e) = rbac::require_action(&user, RbacAction::TaskRead) {
+        return e.error_response();
+    }
+
+    let run_id = path.into_inner();
+
+    // Check run existence.
+    if RunRepository::find_by_id(&pool, &run_id).await.is_err() {
+        return ApiError::with_details(
+            codes::RUN_NOT_FOUND,
+            "Run not found",
+            serde_json::json!({ "id": run_id }),
+        )
+        .error_response();
+    }
+
+    // Query the latest value per metric name.
+    // The subquery finds the max ts per metric for this run; the outer join
+    // selects the corresponding row. GROUP BY metric_name deduplicates ties.
+    let rows: Vec<(String, f64)> = match sqlx::query_as(
+        "SELECT mp.metric_name, mp.value
+         FROM metric_points mp
+         INNER JOIN (
+           SELECT metric_name, MAX(ts) AS max_ts
+           FROM metric_points
+           WHERE run_id = ?
+           GROUP BY metric_name
+         ) latest ON mp.metric_name = latest.metric_name AND mp.ts = latest.max_ts
+         WHERE mp.run_id = ?
+         GROUP BY mp.metric_name",
+    )
+    .bind(&run_id)
+    .bind(&run_id)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            return ApiError::new(codes::INTERNAL_ERROR, format!("metric query failed: {e}"))
+                .error_response();
+        }
+    };
+
+    let mut map = serde_json::Map::with_capacity(rows.len());
+    for (name, value) in rows {
+        let json_val = serde_json::Number::from_f64(value)
+            .map(serde_json::Value::Number)
+            .unwrap_or(serde_json::Value::Number(serde_json::Number::from(0)));
+        map.insert(name, json_val);
+    }
+
+    HttpResponse::Ok().json(serde_json::Value::Object(map))
+}
+
 #[cfg(test)]
 mod tests {
     use crate::db;
@@ -200,6 +269,7 @@ mod tests {
             stopped_at: None,
             exit_code: None,
             stop_method: None,
+            metrics_port: None,
             created_at: now.clone(),
             updated_at: now,
         };

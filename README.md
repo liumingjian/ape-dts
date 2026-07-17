@@ -18,6 +18,20 @@ The management console consists of a Vue 3 SPA and an actix-web orchestrator. To
 
 Log in with the default admin account, create a Task via the wizard, and start a Run — the orchestrator will fork-exec the `dt-main` binary with a rendered INI config.
 
+### Console observability
+
+Each Run exposes real-time metrics through the Console UI and REST API:
+
+| Endpoint | Description |
+| :------- | :---------- |
+| `GET /runs/:id/metrics/latest` | Latest snapshot progress and CDC lag for a Run |
+| `GET /runs/:id/objects` | Per-table object state (e.g. snapshot/cdc/error) |
+
+- **Snapshot tasks** show row-based progress (completed / total) and a progress bar.
+- **CDC tasks** show replication lag (seconds) and backlog count.
+- The Monitor chart in the UI gates lag metrics on sync mode.
+- The orchestrator scrapes the engine's Prometheus endpoint at 5 s intervals, with a final scrape on terminal status.
+
 ## Key features
 
 - Supports data migration between various databases, both homogeneous and heterogeneous.
@@ -26,6 +40,7 @@ Log in with the default admin account, create a Task via the wizard, and start a
 - Supports filtering and routing at the database, table, and column levels.
 - Implements different parallel algorithms for different sources, targets, and task types to improve performance.
 - Allows loading user-defined Lua scripts to modify the data.
+- Per-Run observability: snapshot progress (completed/total rows), CDC replication lag, and per-table object state — available in the Console UI and via REST API.
 
 ## Supported task types
 
@@ -42,7 +57,7 @@ Log in with the default admin account, create a Task via the wizard, and start a
 
 The dt-main crate provides several optional components which can be enabled via `Cargo [features]`:
 
-- `metrics`: Enable Prometheus format task metrics HTTP service interface.
+- `metrics`: Enable Prometheus format task metrics HTTP service interface. Exposes snapshot progress and CDC replication lag (`lag` gauge, CDC tasks only). Build with `make build-engine` (equivalent to `cargo build --release -p dt-main --features metrics`).
   After enabling this feature, you can customize the metrics service with the following configuration:
 
   ```
@@ -56,6 +71,8 @@ The dt-main crate provides several optional components which can be enabled via 
   # prometheus metrics const labels
   labels=your_label1:your_value1,your_label2:your_value2
   ```
+
+  When running via the Console, the orchestrator auto-assigns a metrics port from the 9100–9199 range per Run and injects the `[metrics]` section — no manual configuration needed.
 
 - TBD
 

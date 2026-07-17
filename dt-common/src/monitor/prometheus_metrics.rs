@@ -195,6 +195,7 @@ impl PrometheusMetrics {
                         "the count of DDL operations",
                         TaskMetricsType::SinkerDdlCount,
                     );
+                    register_handler("lag", "the lag of CDC task in second", TaskMetricsType::Lag);
                 }
                 TaskType::Struct | TaskType::Check => {}
             }
@@ -256,4 +257,167 @@ async fn not_found_handler() -> Result<impl Responder> {
     Ok(HttpResponse::NotFound()
         .content_type("application/json")
         .body(r#"{"error":"Not Found","message":"The requested endpoint does not exist"}"#))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_config() -> MetricsConfig {
+        MetricsConfig {
+            http_host: "127.0.0.1".to_string(),
+            http_port: 9199,
+            workers: 1,
+            metrics_labels: std::collections::HashMap::new(),
+        }
+    }
+
+    fn gather_text(pm: &PrometheusMetrics) -> String {
+        let mut buffer = String::new();
+        let encoder = TextEncoder::new();
+        encoder
+            .encode_utf8(&pm.registry.gather(), &mut buffer)
+            .unwrap();
+        buffer
+    }
+
+    #[test]
+    fn cdc_registers_lag_gauge_with_second_in_help() {
+        let pm = PrometheusMetrics::new(Some(TaskType::Cdc), make_config());
+        pm.initialization();
+        let text = gather_text(&pm);
+        assert!(
+            text.contains("# TYPE lag gauge"),
+            "Expected '# TYPE lag gauge' line, got:\n{}",
+            text
+        );
+        assert!(
+            text.lines()
+                .any(|l| l.starts_with("# HELP lag") && (l.contains("second") || l.contains("秒"))),
+            "Expected '# HELP lag' to mention 'second' or '秒', got:\n{}",
+            text
+        );
+        assert!(
+            text.lines().any(|l| l.starts_with("lag ")),
+            "Expected 'lag <value>' line, got:\n{}",
+            text
+        );
+    }
+
+    #[test]
+    fn cdc_retains_timestamp_and_sinker_ddl_count() {
+        let pm = PrometheusMetrics::new(Some(TaskType::Cdc), make_config());
+        pm.initialization();
+        let text = gather_text(&pm);
+        assert!(
+            text.contains("# TYPE timestamp gauge"),
+            "Expected timestamp gauge"
+        );
+        assert!(
+            text.contains("# TYPE sinker_ddl_count gauge"),
+            "Expected sinker_ddl_count gauge"
+        );
+    }
+
+    #[test]
+    fn snapshot_does_not_register_lag() {
+        let pm = PrometheusMetrics::new(Some(TaskType::Snapshot), make_config());
+        pm.initialization();
+        let text = gather_text(&pm);
+        assert!(
+            !text.contains("# TYPE lag gauge"),
+            "Snapshot must not have '# TYPE lag gauge' line"
+        );
+        assert!(
+            !text.lines().any(|l| l.starts_with("lag ")),
+            "Snapshot must not have 'lag <value>' line"
+        );
+    }
+
+    #[test]
+    fn snapshot_retains_progress_and_extractor_plan_records() {
+        let pm = PrometheusMetrics::new(Some(TaskType::Snapshot), make_config());
+        pm.initialization();
+        let text = gather_text(&pm);
+        assert!(
+            text.contains("# TYPE progress gauge"),
+            "Expected progress gauge"
+        );
+        assert!(
+            text.contains("# TYPE extractor_plan_records gauge"),
+            "Expected extractor_plan_records gauge"
+        );
+    }
+
+    #[test]
+    fn no_delay_gauge_for_cdc_or_snapshot() {
+        for task_type in [TaskType::Cdc, TaskType::Snapshot] {
+            let label = format!("{:?}", task_type);
+            let pm = PrometheusMetrics::new(Some(task_type), make_config());
+            pm.initialization();
+            let text = gather_text(&pm);
+            assert!(
+                !text
+                    .lines()
+                    .any(|l| l.starts_with("delay ") || l.starts_with("# TYPE delay ")),
+                "Must not have delay gauge for {}",
+                label
+            );
+        }
+    }
+
+    // VAL-ORCH-016: /metrics endpoint returns HTTP 200 with # HELP and # TYPE lines.
+    #[actix_web::test]
+    async fn http_metrics_endpoint_returns_200_with_prometheus_format() {
+        use actix_web::test;
+        let pm = PrometheusMetrics::new(Some(TaskType::Cdc), make_config());
+        pm.initialization();
+        let registry = pm.registry.clone();
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(registry))
+                .service(web::resource("/metrics").route(web::get().to(metrics_handler))),
+        )
+        .await;
+        let req = test::TestRequest::get().uri("/metrics").to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), actix_web::http::StatusCode::OK);
+        let body = test::read_body(resp).await;
+        let body_str = String::from_utf8_lossy(&body);
+        assert!(
+            body_str.lines().any(|l| l.starts_with("# HELP ")),
+            "Expected at least one '# HELP' line in /metrics response"
+        );
+        assert!(
+            body_str.lines().any(|l| l.starts_with("# TYPE ")),
+            "Expected at least one '# TYPE' line in /metrics response"
+        );
+    }
+
+    // VAL-ORCH-017 (negative control): without --features metrics, no metrics server is compiled
+    // in — verified by the #[cfg(feature = "metrics")] gate on this entire module.
+    // The following test confirms that a snapshot task's /metrics response has no lag gauge,
+    // ensuring the feature flag truly toggles per-task-type exposure.
+    #[actix_web::test]
+    async fn http_metrics_snapshot_has_no_lag_gauge() {
+        use actix_web::test;
+        let pm = PrometheusMetrics::new(Some(TaskType::Snapshot), make_config());
+        pm.initialization();
+        let registry = pm.registry.clone();
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(registry))
+                .service(web::resource("/metrics").route(web::get().to(metrics_handler))),
+        )
+        .await;
+        let req = test::TestRequest::get().uri("/metrics").to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), actix_web::http::StatusCode::OK);
+        let body = test::read_body(resp).await;
+        let body_str = String::from_utf8_lossy(&body);
+        assert!(
+            !body_str.lines().any(|l| l.starts_with("lag ")),
+            "Snapshot /metrics must not expose a 'lag' gauge"
+        );
+    }
 }

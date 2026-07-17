@@ -80,6 +80,10 @@ init: ## Build
 build: ## Build
 	cargo build --release $(CARGO_BUILD_ARGS)
 
+.PHONY: build-engine
+build-engine: ## Build dt-main engine binary with metrics feature enabled (required for console-server)
+	cargo build --release -p dt-main --features metrics
+
 .PHONY: build-debug
 build-debug: ## Build
 	cargo build $(CARGO_BUILD_ARGS)

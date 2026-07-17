@@ -1,7 +1,7 @@
 {
   "brand": {
     "name": "数据库同步管理平台",
-    "tagline": "",
+    "tagline": "可靠的数据迁移",
     "full": "数据库同步管理平台"
   },
   "common": {
@@ -277,7 +277,10 @@
         "name": "对象名称",
         "type": "类型",
         "rows": "预估行数",
-        "status": "状态"
+        "status": "状态",
+        "schema": "Schema",
+        "table": "Table",
+        "state": "状态"
       }
     },
     "log": {
