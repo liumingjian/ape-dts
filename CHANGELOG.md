@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Document the migration task-detail observability remediation model and acceptance criteria.
+
 ### Removed
 
 - Stop tracking local Codex task artifacts and consolidate maintained GaussDB roadmap documents.
