@@ -47,7 +47,10 @@ enum TablePattern {
 impl TablePattern {
     fn matches(&self, schema: &str, table: &str) -> bool {
         match self {
-            TablePattern::Exact { schema: s, table: t } => s == schema && t == table,
+            TablePattern::Exact {
+                schema: s,
+                table: t,
+            } => s == schema && t == table,
             TablePattern::SchemaWildcard { schema: s } => s == schema,
             TablePattern::GlobalWildcard => true,
         }
@@ -248,7 +251,10 @@ fn read_finished_log(path: &Path) -> HashSet<(String, String)> {
         let left = match line.find('{') {
             Some(i) => i,
             None => {
-                tracing::warn!(line = line, "malformed finished.log line: no JSON object found");
+                tracing::warn!(
+                    line = line,
+                    "malformed finished.log line: no JSON object found"
+                );
                 continue;
             }
         };
@@ -264,7 +270,10 @@ fn read_finished_log(path: &Path) -> HashSet<(String, String)> {
         let json_val: serde_json::Value = match serde_json::from_str(json_str) {
             Ok(v) => v,
             Err(e) => {
-                tracing::warn!(line = line, "malformed finished.log line: invalid JSON: {e}");
+                tracing::warn!(
+                    line = line,
+                    "malformed finished.log line: invalid JSON: {e}"
+                );
                 continue;
             }
         };
@@ -302,7 +311,8 @@ mod tests {
 
     #[test]
     fn test_parse_table_patterns_comma_separated() {
-        let filter = r#"{"do_dbs":"","do_tbs":"test_db.t1,test_db.t2","ignore_dbs":"","ignore_tbs":""}"#;
+        let filter =
+            r#"{"do_dbs":"","do_tbs":"test_db.t1,test_db.t2","ignore_dbs":"","ignore_tbs":""}"#;
         let patterns = parse_table_patterns(filter);
         assert_eq!(patterns.len(), 2);
         assert!(matches!(

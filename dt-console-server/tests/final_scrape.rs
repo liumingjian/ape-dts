@@ -90,9 +90,7 @@ fn build_test_app(
         .app_data(web::Data::new(IDLE_TIMEOUT_SECS))
         .app_data(web::Data::new(run_handlers::new_active_runs()))
         .app_data(web::Data::new(metrics_scraper::ScraperState::new()))
-        .app_data(web::Data::new(
-            dt_console_server::port_pool::PortPool::new(),
-        ))
+        .app_data(web::Data::new(dt_console_server::port_pool::PortPool::new()))
         .app_data(web::Data::new(log_sse_handlers::LogSseState::default()))
         .app_data(web::Data::new(
             dt_console_server::alert_handlers::AlertSseState::new(),
@@ -182,7 +180,11 @@ async fn seed_resource_group(pool: &SqlitePool) {
 }
 
 async fn seed_license(pool: &SqlitePool) {
-    if LicenseRepository::get_current(pool).await.unwrap().is_some() {
+    if LicenseRepository::get_current(pool)
+        .await
+        .unwrap()
+        .is_some()
+    {
         return;
     }
     use sha2::{Digest, Sha256};
@@ -309,11 +311,19 @@ async fn scrape_single_run_captures_live_endpoint() {
 
     metrics_scraper::scrape_single_run(&pool, "task-1", "run-1", "127.0.0.1", port).await;
 
-    let points = MetricPointRepository::list_by_run(&pool, "run-1").await.unwrap();
-    assert!(!points.is_empty(), "metric points should be written after scrape");
+    let points = MetricPointRepository::list_by_run(&pool, "run-1")
+        .await
+        .unwrap();
+    assert!(
+        !points.is_empty(),
+        "metric points should be written after scrape"
+    );
 
     let progress_point = points.iter().find(|p| p.metric_name == "progress");
-    assert!(progress_point.is_some(), "progress metric should be present");
+    assert!(
+        progress_point.is_some(),
+        "progress metric should be present"
+    );
     assert!(
         (progress_point.unwrap().value - 100.0).abs() < f64::EPSILON,
         "progress should be 100, got {}",
@@ -343,8 +353,13 @@ async fn scrape_single_run_handles_dead_endpoint_gracefully() {
     metrics_scraper::scrape_single_run(&pool, "task-2", "run-2", "127.0.0.1", dead_port).await;
 
     // No metric points should have been written.
-    let points = MetricPointRepository::list_by_run(&pool, "run-2").await.unwrap();
-    assert!(points.is_empty(), "no metric points should be written for dead endpoint");
+    let points = MetricPointRepository::list_by_run(&pool, "run-2")
+        .await
+        .unwrap();
+    assert!(
+        points.is_empty(),
+        "no metric points should be written for dead endpoint"
+    );
 }
 
 /// After stop_task, the final scrape writes the engine's last metrics
@@ -378,7 +393,9 @@ async fn stop_task_final_scrape_captures_progress_100() {
     let status = res.status();
 
     // Verify the metric point was captured.
-    let points = MetricPointRepository::list_by_run(&pool, "run-fs-stop").await.unwrap();
+    let points = MetricPointRepository::list_by_run(&pool, "run-fs-stop")
+        .await
+        .unwrap();
     if status == StatusCode::ACCEPTED {
         // The stop succeeded, so the final scrape should have written points.
         let progress_point = points.iter().find(|p| p.metric_name == "progress");
@@ -421,7 +438,9 @@ async fn supervise_run_final_scrape_on_natural_exit() {
     // the same way after detecting the exit).
     metrics_scraper::scrape_single_run(&pool, "task-fs-nat", "run-fs-nat", "127.0.0.1", port).await;
 
-    let points = MetricPointRepository::list_by_run(&pool, "run-fs-nat").await.unwrap();
+    let points = MetricPointRepository::list_by_run(&pool, "run-fs-nat")
+        .await
+        .unwrap();
     let progress_point = points.iter().find(|p| p.metric_name == "progress");
     assert!(
         progress_point.is_some(),
@@ -457,14 +476,24 @@ async fn scrape_single_run_does_not_block_other_runs() {
     );
 
     // Both should have written their metric points.
-    let points_a = MetricPointRepository::list_by_run(&pool, "run-a").await.unwrap();
-    let points_b = MetricPointRepository::list_by_run(&pool, "run-b").await.unwrap();
+    let points_a = MetricPointRepository::list_by_run(&pool, "run-a")
+        .await
+        .unwrap();
+    let points_b = MetricPointRepository::list_by_run(&pool, "run-b")
+        .await
+        .unwrap();
 
     assert!(!points_a.is_empty(), "run-a should have metric points");
     assert!(!points_b.is_empty(), "run-b should have metric points");
 
-    let prog_a = points_a.iter().find(|p| p.metric_name == "progress").map(|p| p.value);
-    let prog_b = points_b.iter().find(|p| p.metric_name == "progress").map(|p| p.value);
+    let prog_a = points_a
+        .iter()
+        .find(|p| p.metric_name == "progress")
+        .map(|p| p.value);
+    let prog_b = points_b
+        .iter()
+        .find(|p| p.metric_name == "progress")
+        .map(|p| p.value);
 
     assert_eq!(prog_a, Some(50.0), "run-a progress should be 50");
     assert_eq!(prog_b, Some(75.0), "run-b progress should be 75");
@@ -474,9 +503,7 @@ async fn scrape_single_run_does_not_block_other_runs() {
 /// Prometheus body on every GET /metrics request. Runs until the task is
 /// dropped (test cleanup). Returns the bound port and a `JoinHandle` for
 /// optional abort.
-async fn start_persistent_prometheus_stub(
-    body: &str,
-) -> (u16, tokio::task::JoinHandle<()>) {
+async fn start_persistent_prometheus_stub(body: &str) -> (u16, tokio::task::JoinHandle<()>) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let body = body.to_string();
@@ -523,8 +550,14 @@ async fn supervise_run_pre_reap_scrape_captures_final_progress() {
     let (port, _stub_handle) = start_persistent_prometheus_stub(prom_body).await;
 
     // Seed a task and a running Run with the stub's port.
-    let task_id = format!("task-pre-reap-{}", uuid::Uuid::new_v4().to_string()[..8].to_string());
-    let run_id = format!("run-pre-reap-{}", uuid::Uuid::new_v4().to_string()[..8].to_string());
+    let task_id = format!(
+        "task-pre-reap-{}",
+        uuid::Uuid::new_v4().to_string()[..8].to_string()
+    );
+    let run_id = format!(
+        "run-pre-reap-{}",
+        uuid::Uuid::new_v4().to_string()[..8].to_string()
+    );
     seed_task(&pool, &task_id).await;
     seed_run_with_port(&pool, &run_id, &task_id, port as i64).await;
 
@@ -591,7 +624,9 @@ async fn supervise_run_pre_reap_scrape_captures_final_progress() {
     );
 
     // Verify: metric_points has progress >= 99.5.
-    let points = MetricPointRepository::list_by_run(&pool, &run_id).await.unwrap();
+    let points = MetricPointRepository::list_by_run(&pool, &run_id)
+        .await
+        .unwrap();
     let progress_point = points.iter().find(|p| p.metric_name == "progress");
     assert!(
         progress_point.is_some(),

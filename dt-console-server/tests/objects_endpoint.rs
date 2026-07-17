@@ -88,9 +88,7 @@ fn build_test_app(
         .app_data(web::Data::new(IDLE_TIMEOUT_SECS))
         .app_data(web::Data::new(run_handlers::new_active_runs()))
         .app_data(web::Data::new(metrics_scraper::ScraperState::new()))
-        .app_data(web::Data::new(
-            dt_console_server::port_pool::PortPool::new(),
-        ))
+        .app_data(web::Data::new(dt_console_server::port_pool::PortPool::new()))
         .app_data(web::Data::new(log_sse_handlers::LogSseState::default()))
         .app_data(web::Data::new(
             dt_console_server::alert_handlers::AlertSseState::new(),
@@ -170,7 +168,11 @@ async fn seed_resource_group(pool: &SqlitePool) {
 }
 
 async fn seed_license(pool: &SqlitePool) {
-    if LicenseRepository::get_current(pool).await.unwrap().is_some() {
+    if LicenseRepository::get_current(pool)
+        .await
+        .unwrap()
+        .is_some()
+    {
         return;
     }
     use sha2::{Digest, Sha256};
@@ -235,12 +237,7 @@ async fn seed_task_with_filter(pool: &SqlitePool, task_id: &str, filter_config: 
 }
 
 /// Seed a run with a specific log_dir pointing to a temp directory.
-async fn seed_run_with_log_dir(
-    pool: &SqlitePool,
-    run_id: &str,
-    task_id: &str,
-    log_dir: &str,
-) {
+async fn seed_run_with_log_dir(pool: &SqlitePool, run_id: &str, task_id: &str, log_dir: &str) {
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let run = Run {
         id: run_id.to_string(),
@@ -402,10 +399,7 @@ async fn objects_table_transitions_to_completed() {
     .await;
     seed_run_with_log_dir(&pool, "run-completed", "task-completed", &log_dir).await;
     // Write a finished.log with one completed table
-    write_finished_log(
-        &log_dir,
-        &[&make_finished_line("test_db", "t1")],
-    );
+    write_finished_log(&log_dir, &[&make_finished_line("test_db", "t1")]);
 
     let app = test::init_service(build_test_app(pool)).await;
     let cookies = do_login!(app);
@@ -458,8 +452,18 @@ async fn objects_two_table_sequence() {
     let req = auth_get("/api/runs/run-seq/objects", &cookies).to_request();
     let res = test::call_service(&app, req).await;
     let body: serde_json::Value = test::read_body_json(res).await;
-    let t1 = body.as_array().unwrap().iter().find(|e| e["schema"] == "s1" && e["table"] == "t1").unwrap();
-    let t2 = body.as_array().unwrap().iter().find(|e| e["schema"] == "s2" && e["table"] == "t2").unwrap();
+    let t1 = body
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["schema"] == "s1" && e["table"] == "t1")
+        .unwrap();
+    let t2 = body
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["schema"] == "s2" && e["table"] == "t2")
+        .unwrap();
     assert_eq!(t1["state"], "completed");
     assert_eq!(t2["state"], "pending");
 
@@ -498,10 +502,7 @@ async fn objects_states_are_valid() {
     let valid_states = ["pending", "loading", "completed"];
     for entry in body.as_array().unwrap() {
         let state = entry["state"].as_str().unwrap();
-        assert!(
-            valid_states.contains(&state),
-            "invalid state: {state}"
-        );
+        assert!(valid_states.contains(&state), "invalid state: {state}");
     }
 }
 
@@ -739,10 +740,7 @@ async fn objects_wildcard_includes_completed() {
     )
     .await;
     seed_run_with_log_dir(&pool, "run-wildcard", "task-wildcard", &log_dir).await;
-    write_finished_log(
-        &log_dir,
-        &[&make_finished_line("test_db", "manual_smoke")],
-    );
+    write_finished_log(&log_dir, &[&make_finished_line("test_db", "manual_smoke")]);
 
     let app = test::init_service(build_test_app(pool)).await;
     let cookies = do_login!(app);

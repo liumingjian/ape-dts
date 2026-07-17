@@ -98,8 +98,7 @@ pub fn render(task: &Task) -> String {
     // Not present in current Task model columns — omitted unless extended.
 
     // [metrics] — always rendered
-    let metrics: serde_json::Value =
-        serde_json::from_str(&task.metrics_config).unwrap_or_default();
+    let metrics: serde_json::Value = serde_json::from_str(&task.metrics_config).unwrap_or_default();
     sections.push(render_metrics(&metrics));
 
     // ── Assemble INI text ─────────────────────────────────────────────────

@@ -298,8 +298,7 @@ async fn reconcile_live_runs(
             let bg_port_pool = port_pool.clone();
             let bg_task_id = task_id.clone();
             let bg_run_id = run.id.clone();
-            let bg_metrics_port: Option<u16> =
-                run.metrics_port.and_then(|p| u16::try_from(p).ok());
+            let bg_metrics_port: Option<u16> = run.metrics_port.and_then(|p| u16::try_from(p).ok());
             tokio::spawn(async move {
                 run_handlers::supervise_run(
                     bg_pool,

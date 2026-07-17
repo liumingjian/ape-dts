@@ -79,7 +79,10 @@ mod tests {
     async fn acquire_returns_port_in_range() {
         let pool = PortPool::new();
         let port = pool.acquire().await.expect("should get a port");
-        assert!(port >= PORT_MIN && port <= PORT_MAX, "port {port} not in range");
+        assert!(
+            port >= PORT_MIN && port <= PORT_MAX,
+            "port {port} not in range"
+        );
     }
 
     #[tokio::test]
@@ -146,7 +149,11 @@ mod tests {
 
         // All 50 ports must be distinct.
         let unique: std::collections::HashSet<u16> = ports.iter().copied().collect();
-        assert_eq!(unique.len(), 50, "all concurrent acquires must return distinct ports");
+        assert_eq!(
+            unique.len(),
+            50,
+            "all concurrent acquires must return distinct ports"
+        );
 
         // All ports must be in range.
         for &p in &ports {

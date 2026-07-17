@@ -93,9 +93,7 @@ fn build_test_app(
         .app_data(web::Data::new(IDLE_TIMEOUT_SECS))
         .app_data(web::Data::new(active_runs))
         .app_data(web::Data::new(metrics_scraper::ScraperState::new()))
-        .app_data(web::Data::new(
-            dt_console_server::port_pool::PortPool::new(),
-        ))
+        .app_data(web::Data::new(dt_console_server::port_pool::PortPool::new()))
         .app_data(web::Data::new(log_sse_handlers::LogSseState::default()))
         .app_data(web::Data::new(
             dt_console_server::alert_handlers::AlertSseState::new(),

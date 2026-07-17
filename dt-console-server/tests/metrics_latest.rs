@@ -87,9 +87,7 @@ fn build_test_app(
         .app_data(web::Data::new(IDLE_TIMEOUT_SECS))
         .app_data(web::Data::new(run_handlers::new_active_runs()))
         .app_data(web::Data::new(metrics_scraper::ScraperState::new()))
-        .app_data(web::Data::new(
-            dt_console_server::port_pool::PortPool::new(),
-        ))
+        .app_data(web::Data::new(dt_console_server::port_pool::PortPool::new()))
         .app_data(web::Data::new(log_sse_handlers::LogSseState::default()))
         .app_data(web::Data::new(
             dt_console_server::alert_handlers::AlertSseState::new(),
@@ -169,7 +167,11 @@ async fn seed_resource_group(pool: &SqlitePool) {
 }
 
 async fn seed_license(pool: &SqlitePool) {
-    if LicenseRepository::get_current(pool).await.unwrap().is_some() {
+    if LicenseRepository::get_current(pool)
+        .await
+        .unwrap()
+        .is_some()
+    {
         return;
     }
     use sha2::{Digest, Sha256};
@@ -252,7 +254,14 @@ async fn seed_run(pool: &SqlitePool, run_id: &str, task_id: &str) {
     RunRepository::create(pool, &run).await.unwrap();
 }
 
-async fn insert_metric_point(pool: &SqlitePool, run_id: &str, task_id: &str, metric_name: &str, value: f64, ts: &str) {
+async fn insert_metric_point(
+    pool: &SqlitePool,
+    run_id: &str,
+    task_id: &str,
+    metric_name: &str,
+    value: f64,
+    ts: &str,
+) {
     let mp = MetricPoint {
         id: 0,
         task_id: task_id.to_string(),
@@ -299,7 +308,11 @@ async fn metrics_latest_no_points_returns_empty_object() {
     assert_eq!(res.status(), StatusCode::OK);
     let body: serde_json::Value = test::read_body_json(res).await;
     assert!(body.is_object());
-    assert_eq!(body.as_object().unwrap().len(), 0, "expected empty JSON object");
+    assert_eq!(
+        body.as_object().unwrap().len(),
+        0,
+        "expected empty JSON object"
+    );
 }
 
 /// VAL-ORCH-020: after scrape, returns JSON map with latest values per metric.
@@ -311,10 +324,42 @@ async fn metrics_latest_returns_latest_values_after_scrape() {
     seed_run(&pool, "run-scrape", "task-scrape").await;
 
     // Insert two metrics with multiple data points each.
-    insert_metric_point(&pool, "run-scrape", "task-scrape", "progress", 50.0, "2026-01-01T00:00:00.000Z").await;
-    insert_metric_point(&pool, "run-scrape", "task-scrape", "progress", 75.0, "2026-01-01T00:00:10.000Z").await;
-    insert_metric_point(&pool, "run-scrape", "task-scrape", "pipeline_queue_size", 12.0, "2026-01-01T00:00:00.000Z").await;
-    insert_metric_point(&pool, "run-scrape", "task-scrape", "pipeline_queue_size", 8.0, "2026-01-01T00:00:10.000Z").await;
+    insert_metric_point(
+        &pool,
+        "run-scrape",
+        "task-scrape",
+        "progress",
+        50.0,
+        "2026-01-01T00:00:00.000Z",
+    )
+    .await;
+    insert_metric_point(
+        &pool,
+        "run-scrape",
+        "task-scrape",
+        "progress",
+        75.0,
+        "2026-01-01T00:00:10.000Z",
+    )
+    .await;
+    insert_metric_point(
+        &pool,
+        "run-scrape",
+        "task-scrape",
+        "pipeline_queue_size",
+        12.0,
+        "2026-01-01T00:00:00.000Z",
+    )
+    .await;
+    insert_metric_point(
+        &pool,
+        "run-scrape",
+        "task-scrape",
+        "pipeline_queue_size",
+        8.0,
+        "2026-01-01T00:00:10.000Z",
+    )
+    .await;
 
     let app = test::init_service(build_test_app(pool)).await;
     let cookies = do_login!(app);
@@ -340,10 +385,42 @@ async fn metrics_latest_keys_are_unique() {
     seed_run(&pool, "run-unique", "task-unique").await;
 
     // Insert 3 data points for the same metric at different times.
-    insert_metric_point(&pool, "run-unique", "task-unique", "lag", 10.0, "2026-01-01T00:00:00.000Z").await;
-    insert_metric_point(&pool, "run-unique", "task-unique", "lag", 5.0, "2026-01-01T00:00:05.000Z").await;
-    insert_metric_point(&pool, "run-unique", "task-unique", "lag", 3.0, "2026-01-01T00:00:10.000Z").await;
-    insert_metric_point(&pool, "run-unique", "task-unique", "progress", 50.0, "2026-01-01T00:00:00.000Z").await;
+    insert_metric_point(
+        &pool,
+        "run-unique",
+        "task-unique",
+        "lag",
+        10.0,
+        "2026-01-01T00:00:00.000Z",
+    )
+    .await;
+    insert_metric_point(
+        &pool,
+        "run-unique",
+        "task-unique",
+        "lag",
+        5.0,
+        "2026-01-01T00:00:05.000Z",
+    )
+    .await;
+    insert_metric_point(
+        &pool,
+        "run-unique",
+        "task-unique",
+        "lag",
+        3.0,
+        "2026-01-01T00:00:10.000Z",
+    )
+    .await;
+    insert_metric_point(
+        &pool,
+        "run-unique",
+        "task-unique",
+        "progress",
+        50.0,
+        "2026-01-01T00:00:00.000Z",
+    )
+    .await;
 
     let app = test::init_service(build_test_app(pool)).await;
     let cookies = do_login!(app);
@@ -370,8 +447,24 @@ async fn metrics_latest_newer_row_updates_value() {
     seed_task(&pool, "task-update").await;
     seed_run(&pool, "run-update", "task-update").await;
 
-    insert_metric_point(&pool, "run-update", "task-update", "lag", 10.0, "2026-01-01T00:00:00.000Z").await;
-    insert_metric_point(&pool, "run-update", "task-update", "progress", 50.0, "2026-01-01T00:00:00.000Z").await;
+    insert_metric_point(
+        &pool,
+        "run-update",
+        "task-update",
+        "lag",
+        10.0,
+        "2026-01-01T00:00:00.000Z",
+    )
+    .await;
+    insert_metric_point(
+        &pool,
+        "run-update",
+        "task-update",
+        "progress",
+        50.0,
+        "2026-01-01T00:00:00.000Z",
+    )
+    .await;
 
     let app = test::init_service(build_test_app(pool.clone())).await;
     let cookies = do_login!(app);
@@ -385,7 +478,15 @@ async fn metrics_latest_newer_row_updates_value() {
     assert_eq!(body["progress"].as_f64().unwrap(), 50.0);
 
     // Insert a newer lag point.
-    insert_metric_point(&pool, "run-update", "task-update", "lag", 2.0, "2026-01-01T00:00:10.000Z").await;
+    insert_metric_point(
+        &pool,
+        "run-update",
+        "task-update",
+        "lag",
+        2.0,
+        "2026-01-01T00:00:10.000Z",
+    )
+    .await;
 
     // Second call: lag should update to 2.0; progress unchanged.
     let req = auth_get("/api/runs/run-update/metrics/latest", &cookies).to_request();
@@ -405,8 +506,24 @@ async fn metrics_latest_lag_absent_when_no_lag_points() {
     seed_run(&pool, "run-no-lag", "task-no-lag").await;
 
     // Insert non-lag metrics only.
-    insert_metric_point(&pool, "run-no-lag", "task-no-lag", "progress", 30.0, "2026-01-01T00:00:00.000Z").await;
-    insert_metric_point(&pool, "run-no-lag", "task-no-lag", "pipeline_queue_size", 5.0, "2026-01-01T00:00:00.000Z").await;
+    insert_metric_point(
+        &pool,
+        "run-no-lag",
+        "task-no-lag",
+        "progress",
+        30.0,
+        "2026-01-01T00:00:00.000Z",
+    )
+    .await;
+    insert_metric_point(
+        &pool,
+        "run-no-lag",
+        "task-no-lag",
+        "pipeline_queue_size",
+        5.0,
+        "2026-01-01T00:00:00.000Z",
+    )
+    .await;
 
     let app = test::init_service(build_test_app(pool)).await;
     let cookies = do_login!(app);
@@ -417,11 +534,16 @@ async fn metrics_latest_lag_absent_when_no_lag_points() {
     assert_eq!(res.status(), StatusCode::OK);
     let body: serde_json::Value = test::read_body_json(res).await;
     // lag key must be absent — not null, not 0.
-    assert!(!body.as_object().unwrap().contains_key("lag"),
-        "lag key must be absent, got: {body}");
+    assert!(
+        !body.as_object().unwrap().contains_key("lag"),
+        "lag key must be absent, got: {body}"
+    );
     // Other metrics are present.
     assert!(body.as_object().unwrap().contains_key("progress"));
-    assert!(body.as_object().unwrap().contains_key("pipeline_queue_size"));
+    assert!(body
+        .as_object()
+        .unwrap()
+        .contains_key("pipeline_queue_size"));
 }
 
 /// Legacy metric_points rows with metric_name='delay' must not crash the endpoint.
@@ -433,8 +555,24 @@ async fn metrics_latest_delay_rows_do_not_crash() {
     seed_run(&pool, "run-delay", "task-delay").await;
 
     // Insert pre-existing 'delay' rows (simulating legacy data).
-    insert_metric_point(&pool, "run-delay", "task-delay", "delay", 5.0, "2026-01-01T00:00:00.000Z").await;
-    insert_metric_point(&pool, "run-delay", "task-delay", "lag", 3.0, "2026-01-01T00:00:00.000Z").await;
+    insert_metric_point(
+        &pool,
+        "run-delay",
+        "task-delay",
+        "delay",
+        5.0,
+        "2026-01-01T00:00:00.000Z",
+    )
+    .await;
+    insert_metric_point(
+        &pool,
+        "run-delay",
+        "task-delay",
+        "lag",
+        3.0,
+        "2026-01-01T00:00:00.000Z",
+    )
+    .await;
 
     let app = test::init_service(build_test_app(pool)).await;
     let cookies = do_login!(app);

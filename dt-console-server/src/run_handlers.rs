@@ -837,7 +837,15 @@ pub async fn start_task(
     let bg_run_id = run_id.clone();
     let bg_metrics_port = Some(metrics_port);
     tokio::spawn(async move {
-        supervise_run(bg_pool, bg_active_runs, bg_task_id, bg_run_id, bg_port_pool, bg_metrics_port).await;
+        supervise_run(
+            bg_pool,
+            bg_active_runs,
+            bg_task_id,
+            bg_run_id,
+            bg_port_pool,
+            bg_metrics_port,
+        )
+        .await;
     });
 
     // Cache the result if an Idempotency-Key was provided.
@@ -961,10 +969,8 @@ pub async fn stop_task(
     // scrape is likely to succeed and capture the final progress value.
     if let Some(port) = run.metrics_port.and_then(|p| u16::try_from(p).ok()) {
         let task_id_for_scrape = run.task_id.as_deref().unwrap_or(&task_id);
-        metrics_scraper::scrape_single_run(
-            &pool, task_id_for_scrape, &run_id, "127.0.0.1", port,
-        )
-        .await;
+        metrics_scraper::scrape_single_run(&pool, task_id_for_scrape, &run_id, "127.0.0.1", port)
+            .await;
     }
 
     // Kill the child process.
@@ -1262,10 +1268,7 @@ pub async fn resume_task(
 /// Returns a flat array of RunResponse objects (no pagination on the dashboard
 /// list; callers can filter by status client-side).
 #[get("/runs")]
-pub async fn list_runs(
-    pool: web::Data<sqlx::SqlitePool>,
-    user: UserContext,
-) -> HttpResponse {
+pub async fn list_runs(pool: web::Data<sqlx::SqlitePool>, user: UserContext) -> HttpResponse {
     if let Err(e) = rbac::require_action(&user, RbacAction::TaskRead) {
         return e.error_response();
     }
@@ -1276,8 +1279,7 @@ pub async fn list_runs(
             HttpResponse::Ok().json(items)
         }
         Err(e) => {
-            ApiError::new(codes::INTERNAL_ERROR, format!("run list failed: {e}"))
-                .error_response()
+            ApiError::new(codes::INTERNAL_ERROR, format!("run list failed: {e}")).error_response()
         }
     }
 }
@@ -1348,10 +1350,7 @@ pub async fn supervise_run(
         // exits, the engine's metrics HTTP server is gone and any
         // scrape attempt will fail (502 / connection refused).
         if let Some(port) = metrics_port {
-            metrics_scraper::scrape_single_run(
-                &pool, &task_id, &run_id, "127.0.0.1", port,
-            )
-            .await;
+            metrics_scraper::scrape_single_run(&pool, &task_id, &run_id, "127.0.0.1", port).await;
         }
 
         let slot = {

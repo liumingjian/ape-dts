@@ -195,11 +195,7 @@ impl PrometheusMetrics {
                         "the count of DDL operations",
                         TaskMetricsType::SinkerDdlCount,
                     );
-                    register_handler(
-                        "lag",
-                        "the lag of CDC task in second",
-                        TaskMetricsType::Lag,
-                    );
+                    register_handler("lag", "the lag of CDC task in second", TaskMetricsType::Lag);
                 }
                 TaskType::Struct | TaskType::Check => {}
             }
@@ -279,7 +275,9 @@ mod tests {
     fn gather_text(pm: &PrometheusMetrics) -> String {
         let mut buffer = String::new();
         let encoder = TextEncoder::new();
-        encoder.encode_utf8(&pm.registry.gather(), &mut buffer).unwrap();
+        encoder
+            .encode_utf8(&pm.registry.gather(), &mut buffer)
+            .unwrap();
         buffer
     }
 
@@ -311,7 +309,10 @@ mod tests {
         let pm = PrometheusMetrics::new(Some(TaskType::Cdc), make_config());
         pm.initialization();
         let text = gather_text(&pm);
-        assert!(text.contains("# TYPE timestamp gauge"), "Expected timestamp gauge");
+        assert!(
+            text.contains("# TYPE timestamp gauge"),
+            "Expected timestamp gauge"
+        );
         assert!(
             text.contains("# TYPE sinker_ddl_count gauge"),
             "Expected sinker_ddl_count gauge"
@@ -338,7 +339,10 @@ mod tests {
         let pm = PrometheusMetrics::new(Some(TaskType::Snapshot), make_config());
         pm.initialization();
         let text = gather_text(&pm);
-        assert!(text.contains("# TYPE progress gauge"), "Expected progress gauge");
+        assert!(
+            text.contains("# TYPE progress gauge"),
+            "Expected progress gauge"
+        );
         assert!(
             text.contains("# TYPE extractor_plan_records gauge"),
             "Expected extractor_plan_records gauge"
@@ -353,7 +357,9 @@ mod tests {
             pm.initialization();
             let text = gather_text(&pm);
             assert!(
-                !text.lines().any(|l| l.starts_with("delay ") || l.starts_with("# TYPE delay ")),
+                !text
+                    .lines()
+                    .any(|l| l.starts_with("delay ") || l.starts_with("# TYPE delay ")),
                 "Must not have delay gauge for {}",
                 label
             );
