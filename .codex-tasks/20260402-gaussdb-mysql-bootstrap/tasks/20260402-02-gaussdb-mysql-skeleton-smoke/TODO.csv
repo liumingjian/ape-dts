@@ -1,4 +1,0 @@
-id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
-1,扩展 DbType 与任务/预检查路由,DONE,`gaussdb_mysql` 能通过配置解析并完成基础编译,"cargo test -p dt-common -p dt-task -p dt-precheck --no-run",2026-04-02 09:53 +0800,0,
-2,新增 dt-tests smoke 测试入口,DONE,存在 `mysql_to_gaussdb_mysql::snapshot_tests::test::smoke_test`,"cargo test -p dt-tests --test integration_test --no-run",2026-04-02 09:53 +0800,0,compile/no-run validation completed after files landed
-3,真实环境 smoke 验证,FAILED,真实环境 smoke 通过并归档证据,"cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::snapshot_tests::test::smoke_test --nocapture",2026-04-02 12:02 +0800,1,live probe confirmed target db jyp_test_m is sql_compatibility=M over postgres://; the original child assumption equating gaussdb_mysql with MySQL wire protocol is invalid and work has been handed off to child 6

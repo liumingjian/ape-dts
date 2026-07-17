@@ -1,6 +1,0 @@
-id,task,status,completed_at,notes
-1,Create taskmaster artifacts (SPEC/TODO/PROGRESS/raw) and baseline notes,DONE,2026-03-31,
-2,Implement candidate-first + sticky endpoint selection for GaussDB CDC client,DONE,2026-03-31,
-3,Improve CDC decode failure diagnostics (classification + truncation + DDL-like hint),DONE,2026-03-31,
-4,Update runbook docs for candidate-first behavior and fail-fast diagnostics,DONE,2026-03-31,
-5,Run unit tests / compile checks and record evidence in PROGRESS,DONE,2026-03-31,

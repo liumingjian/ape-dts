@@ -1,5 +1,0 @@
-name	status	log
-struct_supported_basic_test	PASS	.codex-tasks/20260402-gaussdb-mysql-bootstrap/tasks/20260409-07-precheck-evidence/raw/struct_supported_basic_test.log
-db_not_exists_test	PASS	.codex-tasks/20260402-gaussdb-mysql-bootstrap/tasks/20260409-07-precheck-evidence/raw/db_not_exists_test.log
-target_schema_cleanup	PASS	gaussdb_mysql_precheck_basic/gaussdb_mysql_precheck_missing count=0 on target
-source_schema_cleanup	PASS	gaussdb_mysql_precheck_basic/gaussdb_mysql_precheck_missing count=0 on source

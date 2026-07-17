@@ -1,4 +1,0 @@
-id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
-1,新增 cdc fixture（task_config + prepare/test SQL）,DONE,fixture 文件齐全,test -f dt-tests/tests/pg_to_gaussdb_oracle/cdc/basic_test/task_config.ini,2026-04-15 17:58:44 +0800,0,OK
-2,新增 cdc_tests.rs 并挂到模块入口,DONE,用例可编译,cargo test -p dt-tests --test integration_test --no-run,2026-04-15 17:59:11 +0800,0,PASS
-3,运行并通过 cdc_basic_test,DONE,测试 PASS,cargo test -p dt-tests --test integration_test -- pg_to_gaussdb_oracle::cdc_tests::test::cdc_basic_test --nocapture,2026-04-15 18:14:47 +0800,1,PASS（修复：cdc 测试启动前清理 log_dir；compare/fetch 对 gaussdb_oracle 也启用候选 RW 选主）

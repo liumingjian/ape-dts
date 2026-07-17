@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Archive the dated Chinese project research snapshot under docs/research.
 - Document the migration task-detail observability remediation model and acceptance criteria.
 
+### Removed
+
+- Stop tracking local Codex task artifacts and consolidate maintained GaussDB roadmap documents.
+
 ## ape-dts Console initial release
 
 ### Added

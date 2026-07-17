@@ -1,3 +1,0 @@
-id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
-1,实现 UPDATE/DELETE SQL 生成与执行,DONE,OracleSinker 可处理 update/delete 行且无 panic/corrupt SQL,cargo test -p dt-connector --no-run,2026-04-16 11:35:12 +0800,0,PASS
-2,补充最小单测覆盖（如必要）,DONE,关键路径有测试防回归,cargo test -p dt-connector,2026-04-16 11:35:12 +0800,0,新增 oracle_sinker SQL 生成单测（update/delete）

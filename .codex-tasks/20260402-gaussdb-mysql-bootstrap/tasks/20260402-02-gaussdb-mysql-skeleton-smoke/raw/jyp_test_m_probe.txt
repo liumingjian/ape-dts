@@ -1,3 +1,0 @@
-jyp_test_m
-gaussdb (GaussDB Kernel 505.2.1.SPC0800 build 85996fbb) compiled at 2025-07-03 01:15:58 commit 10558 last mr 24271 release
-M
