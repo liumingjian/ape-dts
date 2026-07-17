@@ -412,6 +412,98 @@ impl TaskMonitor {
     }
 }
 
+fn calc_nowindow_metrics(
+    result_map: &DashMap<TaskMetricsType, u64>,
+    calc_monitors: Vec<(MonitorType, Arc<Monitor>)>,
+) {
+    let batch_metrics = DashMap::<TaskMetricsType, u64>::new();
+    let metric_handler = |monitor: &Arc<Monitor>,
+                          counter_type: CounterType,
+                          metrics_type: TaskMetricsType,
+                          calc_type: CalcType| {
+        if let Some(counter) = monitor.no_window_counters.get(&counter_type) {
+            match calc_type {
+                CalcType::Add => {
+                    result_map
+                        .entry(metrics_type)
+                        .and_modify(|v| *v += counter.value)
+                        .or_insert(counter.value);
+                }
+                CalcType::Max => {
+                    result_map
+                        .entry(metrics_type)
+                        .and_modify(|v| *v = (*v).max(counter.value))
+                        .or_insert(counter.value);
+                }
+                CalcType::Latest => {
+                    result_map
+                        .entry(metrics_type)
+                        .and_modify(|v| *v = counter.value)
+                        .or_insert(counter.value);
+                }
+                _ => {}
+            }
+        }
+    };
+    let batch_metrics_handler =
+        |monitor: &Arc<Monitor>, counter_type: CounterType, metrics_type: TaskMetricsType| {
+            if let Some(counter) = monitor.no_window_counters.get(&counter_type) {
+                batch_metrics
+                    .entry(metrics_type)
+                    .and_modify(|v| *v += counter.value)
+                    .or_insert(counter.value);
+            }
+        };
+
+    for (monitor_type, monitor) in calc_monitors {
+        match monitor_type {
+            MonitorType::Extractor => {}
+            MonitorType::Sinker => {}
+            MonitorType::Pipeline => {
+                metric_handler(
+                    &monitor,
+                    CounterType::Timestamp,
+                    TaskMetricsType::Timestamp,
+                    CalcType::Max,
+                );
+                metric_handler(
+                    &monitor,
+                    CounterType::QueuedRecordCurrent,
+                    TaskMetricsType::PipelineQueueSize,
+                    CalcType::Latest,
+                );
+                metric_handler(
+                    &monitor,
+                    CounterType::QueuedByteCurrent,
+                    TaskMetricsType::PipelineQueueBytes,
+                    CalcType::Latest,
+                );
+                batch_metrics_handler(
+                    &monitor,
+                    CounterType::DDLRecordTotal,
+                    TaskMetricsType::SinkerDdlCount,
+                );
+                batch_metrics_handler(
+                    &monitor,
+                    CounterType::SinkedRecordTotal,
+                    TaskMetricsType::SinkerSinkedRecords,
+                );
+                batch_metrics_handler(
+                    &monitor,
+                    CounterType::SinkedByteTotal,
+                    TaskMetricsType::SinkerSinkedBytes,
+                );
+            }
+        }
+    }
+    for (metrics_type, value) in batch_metrics {
+        result_map
+            .entry(metrics_type)
+            .and_modify(|v| *v = (*v).max(value))
+            .or_insert(value);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[cfg(not(feature = "metrics"))]
@@ -625,97 +717,5 @@ mod tests {
             Some(10),
             "CDC must emit Lag = now - timestamp = 10"
         );
-    }
-}
-
-fn calc_nowindow_metrics(
-    result_map: &DashMap<TaskMetricsType, u64>,
-    calc_monitors: Vec<(MonitorType, Arc<Monitor>)>,
-) {
-    let batch_metrics = DashMap::<TaskMetricsType, u64>::new();
-    let metric_handler = |monitor: &Arc<Monitor>,
-                          counter_type: CounterType,
-                          metrics_type: TaskMetricsType,
-                          calc_type: CalcType| {
-        if let Some(counter) = monitor.no_window_counters.get(&counter_type) {
-            match calc_type {
-                CalcType::Add => {
-                    result_map
-                        .entry(metrics_type)
-                        .and_modify(|v| *v += counter.value)
-                        .or_insert(counter.value);
-                }
-                CalcType::Max => {
-                    result_map
-                        .entry(metrics_type)
-                        .and_modify(|v| *v = (*v).max(counter.value))
-                        .or_insert(counter.value);
-                }
-                CalcType::Latest => {
-                    result_map
-                        .entry(metrics_type)
-                        .and_modify(|v| *v = counter.value)
-                        .or_insert(counter.value);
-                }
-                _ => {}
-            }
-        }
-    };
-    let batch_metrics_handler =
-        |monitor: &Arc<Monitor>, counter_type: CounterType, metrics_type: TaskMetricsType| {
-            if let Some(counter) = monitor.no_window_counters.get(&counter_type) {
-                batch_metrics
-                    .entry(metrics_type)
-                    .and_modify(|v| *v += counter.value)
-                    .or_insert(counter.value);
-            }
-        };
-
-    for (monitor_type, monitor) in calc_monitors {
-        match monitor_type {
-            MonitorType::Extractor => {}
-            MonitorType::Sinker => {}
-            MonitorType::Pipeline => {
-                metric_handler(
-                    &monitor,
-                    CounterType::Timestamp,
-                    TaskMetricsType::Timestamp,
-                    CalcType::Max,
-                );
-                metric_handler(
-                    &monitor,
-                    CounterType::QueuedRecordCurrent,
-                    TaskMetricsType::PipelineQueueSize,
-                    CalcType::Latest,
-                );
-                metric_handler(
-                    &monitor,
-                    CounterType::QueuedByteCurrent,
-                    TaskMetricsType::PipelineQueueBytes,
-                    CalcType::Latest,
-                );
-                batch_metrics_handler(
-                    &monitor,
-                    CounterType::DDLRecordTotal,
-                    TaskMetricsType::SinkerDdlCount,
-                );
-                batch_metrics_handler(
-                    &monitor,
-                    CounterType::SinkedRecordTotal,
-                    TaskMetricsType::SinkerSinkedRecords,
-                );
-                batch_metrics_handler(
-                    &monitor,
-                    CounterType::SinkedByteTotal,
-                    TaskMetricsType::SinkerSinkedBytes,
-                );
-            }
-        }
-    }
-    for (metrics_type, value) in batch_metrics {
-        result_map
-            .entry(metrics_type)
-            .and_modify(|v| *v = (*v).max(value))
-            .or_insert(value);
     }
 }
