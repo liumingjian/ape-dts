@@ -38,10 +38,6 @@ impl LogMinerCursor {
         }
     }
 
-    pub(crate) fn without_row_position(&self) -> Self {
-        Self::new(self.scn)
-    }
-
     pub(crate) fn has_row_position(&self) -> bool {
         !self.rs_id.is_empty()
     }
@@ -120,7 +116,7 @@ pub(crate) async fn fetch_logmnr_rows_in_range(
     script.push_str("END;\n/\n");
     script.push_str("SET TERMOUT ON\n");
     script.push_str(&format!(
-        "SELECT scn, rs_id, ssn, operation, seg_owner, table_name, sql_redo, sql_undo FROM (SELECT scn, rs_id, ssn, operation, seg_owner, table_name, sql_redo, sql_undo FROM V$LOGMNR_CONTENTS WHERE operation IN ('INSERT','UPDATE','DELETE') AND ({cursor_predicate}) AND scn <= {end_scn} AND ({pairs}) ORDER BY scn ASC, rs_id ASC, ssn ASC) WHERE ROWNUM <= {limit};\n",
+        "SELECT scn, TRIM(rs_id), ssn, operation, seg_owner, table_name, sql_redo, sql_undo FROM (SELECT scn, TRIM(rs_id) AS rs_id, ssn, operation, seg_owner, table_name, sql_redo, sql_undo FROM V$LOGMNR_CONTENTS WHERE operation IN ('INSERT','UPDATE','DELETE') AND ({cursor_predicate}) AND scn <= {end_scn} AND ({pairs}) ORDER BY scn ASC, TRIM(rs_id) ASC, ssn ASC) WHERE ROWNUM <= {limit};\n",
         cursor_predicate = cursor_predicate,
         end_scn = end_scn,
         pairs = pairs,
@@ -195,7 +191,7 @@ fn build_cursor_predicate(cursor: &LogMinerCursor) -> String {
 
     let rs_id = escape_sql_string(&cursor.rs_id);
     format!(
-        "(scn > {scn} OR (scn = {scn} AND (rs_id > '{rs_id}' OR (rs_id = '{rs_id}' AND ssn > {ssn}))))",
+        "(scn > {scn} OR (scn = {scn} AND (TRIM(rs_id) > '{rs_id}' OR (TRIM(rs_id) = '{rs_id}' AND ssn > {ssn}))))",
         scn = cursor.scn,
         rs_id = rs_id,
         ssn = cursor.ssn

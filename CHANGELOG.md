@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Preserve Oracle LogMiner row cursor ordering across empty polls and improve GaussDBOracle CDC keepalive behavior.
 - Make the Console brand tagline non-empty in both supported locales.
 
 ### Removed

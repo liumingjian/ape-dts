@@ -116,17 +116,15 @@ impl OracleSqlPlusClient {
         let login = self.build_login()?;
 
         let docker_container = Self::docker_container();
-        let mut uses_docker = false;
         let mut cmd = if let Some(container) = docker_container {
-            uses_docker = true;
             let quoted_login = shell_quote_single(&login);
-            let quoted_script = shell_quote_single(script);
             let command = format!(
-                "export ORACLE_HOME={}; export PATH=$ORACLE_HOME/bin:$PATH; export LD_LIBRARY_PATH=$ORACLE_HOME/lib; tmp=$(mktemp /tmp/ape-dts-sql.XXXXXX); printf %s {} > \"$tmp\"; sqlplus -s {} @\"$tmp\"; rc=$?; rm -f \"$tmp\"; exit $rc",
-                ORACLE_HOME, quoted_script, quoted_login
+                "export ORACLE_HOME={}; export PATH=$ORACLE_HOME/bin:$PATH; export LD_LIBRARY_PATH=$ORACLE_HOME/lib; tmp=$(mktemp /tmp/ape-dts-sql.XXXXXX); cat > \"$tmp\"; sqlplus -s {} @\"$tmp\"; rc=$?; rm -f \"$tmp\"; exit $rc",
+                ORACLE_HOME, quoted_login
             );
             let mut c = Command::new("docker");
             c.arg("exec")
+                .arg("-i")
                 .arg(container)
                 .arg("bash")
                 .arg("-lc")
@@ -138,26 +136,20 @@ impl OracleSqlPlusClient {
             c
         };
 
-        cmd.stdin(if uses_docker {
-            Stdio::null()
-        } else {
-            Stdio::piped()
-        })
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        cmd.stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
 
         let mut child = cmd.spawn().context("failed to spawn sqlplus")?;
-        if !uses_docker {
-            if let Some(mut stdin) = child.stdin.take() {
-                stdin
-                    .write_all(script.as_bytes())
-                    .await
-                    .context("failed to write sqlplus script")?;
-                stdin
-                    .shutdown()
-                    .await
-                    .context("failed to close sqlplus stdin")?;
-            }
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin
+                .write_all(script.as_bytes())
+                .await
+                .context("failed to write sqlplus script")?;
+            stdin
+                .shutdown()
+                .await
+                .context("failed to close sqlplus stdin")?;
         }
 
         let output = child.wait_with_output().await?;

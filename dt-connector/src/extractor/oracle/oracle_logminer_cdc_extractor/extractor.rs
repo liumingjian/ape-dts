@@ -285,7 +285,7 @@ fn rows_poll_outcome(
 ) -> PollOutcome {
     if rows.is_empty() {
         return PollOutcome::Idle {
-            next_cursor: cursor.without_row_position(),
+            next_cursor: cursor.clone(),
         };
     }
 
@@ -311,7 +311,7 @@ mod tests {
     }
 
     #[test]
-    fn empty_logminer_poll_keeps_scn_without_row_position() {
+    fn empty_logminer_poll_preserves_cursor_position() {
         let cursor = logminer::LogMinerCursor {
             scn: 42,
             rs_id: "0x001".to_string(),
@@ -320,7 +320,7 @@ mod tests {
 
         match rows_poll_outcome(&cursor, Vec::new()) {
             PollOutcome::Idle { next_cursor } => {
-                assert_eq!(next_cursor, logminer::LogMinerCursor::new(42));
+                assert_eq!(next_cursor, cursor);
             }
             PollOutcome::Rows { .. } => panic!("empty poll must stay idle"),
         }
