@@ -1,5 +1,0 @@
-id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
-1,初始化子任务 4 工程文件,DONE,本任务目录具备 SPEC/TODO/PROGRESS 三件套,ls .codex-tasks/20260316-gaussdb-mvp/tasks/20260316-04-tests-harness,2026-03-17 09:08 +0800,0,
-2,补齐 dt-tests runner 对 GaussDBPg 的基础支持,DONE,RdbTestRunner/PrecheckTestRunner 可处理 DbType::GaussDBPg,cargo test -p dt-tests --test integration_test --no-run,2026-03-17 09:10 +0800,0,
-3,新增 GaussDB 集成测试目录与用例骨架,DONE,pg_to_gaussdb 与 gaussdb_to_pg 目录/模块可编译,cargo test -p dt-tests --test integration_test --no-run,2026-03-17 09:13 +0800,0,
-4,子任务验收回归,DONE,子任务 4 验收命令通过,cargo test -p dt-tests --test integration_test --no-run,2026-03-17 09:14 +0800,0,

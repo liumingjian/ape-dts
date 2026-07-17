@@ -1,3 +1,0 @@
-id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
-1,编译 smoke（dt-common/dt-task）,DONE,关键 crates 可编译,cargo test -p dt-common -p dt-task --no-run,2026-03-17 08:34 +0800,0,编译通过
-2,子任务验收回归,DONE,子任务 2 验收命令通过,cargo test -p dt-common -p dt-task,2026-03-17 08:34 +0800,0,回归通过

@@ -1,5 +1,0 @@
-id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
-1,新增 dt-tests cdc fixture（task_config + prepare/test SQL）,DONE,fixture 文件齐全,test -f dt-tests/tests/gaussdb_oracle_to_pg/cdc/basic_test/task_config.ini,2026-04-15 18:22:20 +0800,0,OK
-2,新增 dt-tests cdc_tests.rs 并挂到模块入口,DONE,用例可编译,cargo test -p dt-tests --test integration_test --no-run,2026-04-15 18:23:00 +0800,0,PASS
-3,启用 dt-common TaskConfig：gaussdb_oracle + extract_type=cdc,DONE,配置可解析且运行时不报 not-supported,rg -n \"DbType::GaussDBOracle\" dt-common/src/config/task_config.rs,2026-04-15 18:23:30 +0800,0,已将 ExtractType::Cdc 映射到 ExtractorConfig::GaussDBCdc
-4,运行并通过 cdc_basic_test（或沉淀 BLOCKED 证据）,DONE,测试 PASS / 或给出 BLOCKED 证据,cargo test -p dt-tests --test integration_test -- gaussdb_oracle_to_pg::cdc_tests::test::cdc_basic_test --nocapture,2026-04-15 18:28:28 +0800,0,PASS（oracle-mode testdb 支持 mppdb_decoding CDC）

@@ -1,6 +1,0 @@
-id,task,status,completed_at,notes
-1,Create taskmaster artifacts (SPEC/TODO/PROGRESS/raw),DONE,2026-03-31,
-2,Create docs/agent-summary/gaussdb-progress-tracker.md (dashboard+checklist+evidence+workflow),DONE,2026-03-31,
-3,Update docs/agent-summary/plan.md to PRD-driven iteration plan,DONE,2026-03-31,
-4,Map existing .codex-tasks evidence into tracker + update epic SUBTASKS status,DONE,2026-03-31,Tracker 已收敛证据入口；Epic 子任务后续将逐步补齐证据链接
-5,Run basic validation commands and record evidence,DONE,2026-03-31,

@@ -1,4 +1,0 @@
-8.0.44
-binlog_format	ROW
-binlog_row_image	FULL
-gtid_mode	ON

@@ -1,4 +1,0 @@
-id,task,status,completed_at,notes
-1,更新 gaussdb-progress-tracker 能力矩阵（补齐 GaussDBOracle -> Oracle CDC）,DONE,2026-04-16 12:04:15 +0800,已将 `gaussdb_oracle_to_oracle::cdc_basic_test` 状态升级为 PASS 并补证据入口
-2,更新 gaussdb-e2e-test-plan 统一矩阵（加入 gaussdb_oracle_to_oracle CDC basic）,DONE,2026-04-16 12:04:15 +0800,Quick Gate 已补齐新用例命令
-3,文档收口验证（rg 命中入口与 SUBTASKS 对齐）,DONE,2026-04-16 12:04:15 +0800,`rg -n "gaussdb_oracle_to_oracle::cdc_tests" docs/agent-summary/*.md` PASS

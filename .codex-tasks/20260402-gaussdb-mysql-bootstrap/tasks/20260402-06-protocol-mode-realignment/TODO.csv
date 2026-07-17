@@ -1,5 +1,0 @@
-id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
-1,更新 Epic 真表并显式暴露旧假设失败,DONE,`SUBTASKS.csv` 与 child2 台账已体现失败与交接,"rg -n \"FAILED|protocol|sql_compatibility\" .codex-tasks/20260402-gaussdb-mysql-bootstrap/SUBTASKS.csv .codex-tasks/20260402-gaussdb-mysql-bootstrap/tasks/20260402-02-gaussdb-mysql-skeleton-smoke/TODO.csv",2026-04-02 12:08 +0800,0,
-2,新增连接模型设计文档,DONE,存在 `docs/agent-summary/gaussdb-connection-model.md` 且写明 protocol/mode 分离,"rg -n \"wire protocol|sql_compatibility|jyp_test_m|GaussDBOracle\" docs/agent-summary/gaussdb-connection-model.md",2026-04-02 12:08 +0800,0,
-3,补最小代码基础与单测,DONE,存在连接协议与兼容模式的最小枚举/推断测试,"cargo test -p dt-common config_enums -- --nocapture",2026-04-02 12:08 +0800,0,
-4,回写验证与证据,DONE,PROGRESS 与 raw 证据完整,"test -f .codex-tasks/20260402-gaussdb-mysql-bootstrap/tasks/20260402-06-protocol-mode-realignment/PROGRESS.md && test -f .codex-tasks/20260402-gaussdb-mysql-bootstrap/tasks/20260402-02-gaussdb-mysql-skeleton-smoke/raw/jyp_test_m_probe.txt",2026-04-02 12:08 +0800,0,

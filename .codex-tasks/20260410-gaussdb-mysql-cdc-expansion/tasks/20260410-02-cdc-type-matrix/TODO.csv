@@ -1,5 +1,0 @@
-id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
-1,创建 child 2 台账并切换为进行中,DONE,child 2 目录与 epic 真表状态已就位,"test -f .codex-tasks/20260410-gaussdb-mysql-cdc-expansion/tasks/20260410-02-cdc-type-matrix/SPEC.md",2026-04-10 15:23 +0800,0,
-2,设计最小 CDC 类型矩阵与 fixtures,DONE,fixture SQL 覆盖常见类型并包含 DML 三件套,"test -f dt-tests/tests/mysql_to_gaussdb_mysql/cdc/type_matrix_test/task_config.ini && test -f dt-tests/tests/mysql_to_gaussdb_mysql/cdc/type_matrix_test/src_prepare.sql && test -f dt-tests/tests/mysql_to_gaussdb_mysql/cdc/type_matrix_test/src_test.sql",2026-04-10 15:25 +0800,0,
-3,实现 dt-tests 自动化入口,DONE,新增 test 函数并能编译,"cargo test -p dt-tests --test integration_test --no-run",2026-04-10 15:25 +0800,0,
-4,运行自动化与真环境验证并归档证据,DONE,cdc_type_matrix_test PASS and raw evidence archived,"cargo test -p dt-tests --test integration_test -- mysql_to_gaussdb_mysql::cdc_tests::test::cdc_type_matrix_test --nocapture",2026-04-13 14:46 +0800,1,PASS. Evidence: raw/cdc_type_matrix_test.pass.20260413.log. Fix applied: set GaussDB session timezone to UTC for deterministic TIMESTAMP comparisons.
