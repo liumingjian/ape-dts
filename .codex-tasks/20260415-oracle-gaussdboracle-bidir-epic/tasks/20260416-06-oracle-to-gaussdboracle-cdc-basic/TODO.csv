@@ -1,5 +1,0 @@
-id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
-1,扩展配置解析：支持 oracle + extract_type=cdc,DONE,TaskConfig 可解析且不报 not-supported,cargo test -p dt-common --no-run,2026-04-16 10:38:55 +0800,0,PASS：新增 ExtractorConfig::OracleCdc + TaskConfig 解析
-2,实现 OracleCdcExtractor（trigger-based）并接入 dt-task,DONE,dt-connector/dt-task 编译通过且可运行,cargo test -p dt-connector --no-run && cargo test -p dt-task --no-run,2026-04-16 10:39:53 +0800,0,PASS：新增 OracleCdcExtractor + ConnClient/ExtractorUtil 接入
-3,新增 dt-tests：oracle_to_gaussdb_oracle cdc basic fixture + test,DONE,新增用例可运行且通过,cargo test -p dt-tests --test integration_test -- oracle_to_gaussdb_oracle::cdc_tests::test::cdc_basic_test --nocapture,2026-04-16 10:48:07 +0800,0,PASS（含一次 transient retry）
-4,文档/矩阵收口（入口可检索）,DONE,rg 命中并与交付对齐,rg -n \"oracle_to_gaussdb_oracle::cdc_tests\" docs/agent-summary/*.md,2026-04-16 10:50:03 +0800,0,PASS：tracker/e2e-plan/roadmap 已补齐

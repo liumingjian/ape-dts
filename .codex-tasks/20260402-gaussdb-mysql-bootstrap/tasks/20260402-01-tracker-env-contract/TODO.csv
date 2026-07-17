@@ -1,4 +1,0 @@
-id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
-1,更新 plan.md,DONE,plan.md 反映双 Epic 与目标端优先路线,"rg -n \"GaussDBMySQL Bootstrap|GaussDBPg Quality Coverage|GaussDBOracle\" docs/agent-summary/plan.md",2026-04-02 09:53 +0800,0,
-2,更新 tracker,DONE,tracker 增加新 epic 入口与状态,"rg -n \"20260402-gaussdb-mysql-bootstrap|20260402-gaussdbpg-quality-coverage|GaussDBMySQL\" docs/agent-summary/gaussdb-progress-tracker.md",2026-04-02 09:53 +0800,0,
-3,补模板与环境变量契约,DONE,存在 `mysql_to_gaussdb_mysql` 模板并写明 env contract,"rg -n \"gaussdb_mysql_sinker_without_auth_url|db_type=gaussdb_mysql\" docs/templates/mysql_to_gaussdb_mysql.md",2026-04-02 09:53 +0800,0,

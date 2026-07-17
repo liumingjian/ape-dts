@@ -1,5 +1,0 @@
-id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
-1,复现并定位失败阶段（connect vs START_REPLICATION）,DONE,记录主库 HA 端口失败时关键日志并判断失败阶段,rg -n \"gaussdb cdc candidate replication connect/start failed\" -S .codex-tasks/20260330-gaussdb-cdc-ha-repl/raw/*.log || true,2026-03-30 17:47 +0800,0,"日志片段已归档到 raw/；失败发生在 replication connect/start 阶段（HA 端口）"
-2,实现 replication 仅 HA 端口 + NoTLS 优先策略,DONE,gaussdb_cdc_client.rs 已按策略修改且编译通过,cargo test -p dt-connector -q,2026-03-30 17:47 +0800,0,"replication 仅尝试 base_port+1；connect_replication NoTLS 优先，必要时回退 TLS"
-3,验证 dt-tests: gaussdb_to_pg cdc 用例通过,DONE,cdc_basic_test 通过,cargo test -p dt-tests --test integration_test -- gaussdb_to_pg::cdc_tests::test::cdc_basic_test --nocapture,2026-03-30 17:47 +0800,0,"cdc_basic_test 通过"
-4,补充文档说明（HA port + NoTLS 建议）,DONE,docs/templates 或 runbook 更新且无敏感信息,rg -n \"sslmode=disable|NoTLS|HA 端口\" docs/templates/gaussdb_to_pg.md docs/agent-summary/gaussdb-mvp-runbook.md,2026-03-30 17:47 +0800,0,"已更新模板与 runbook：HA port + NoTLS（sslmode=disable）说明"

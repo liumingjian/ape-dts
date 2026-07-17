@@ -1,6 +1,0 @@
-id,task,task_type,status,depends_on,task_dir,acceptance_criteria,validation_command,completed_at,retry_count,notes
-1,基础兼容层接入,single-full,DONE,,tasks/20260316-01-base-compat,GaussDBPg 成为一等 DbType 且基础路由/预检查可用,cargo test -p dt-common -p dt-task -p dt-precheck,2026-03-17 08:30 +0800,0,Precheck 支持 GaussDBPg + mppdb_decoding 检查；本机安装 cmake 通过 rdkafka-sys 构建
-2,PG 兼容数据面打通,single-full,DONE,1,tasks/20260316-02-pg-compatible-data-plane,PG<->GaussDB 的 snapshot/struct/check 复用路径可用,cargo test -p dt-common -p dt-task,2026-03-17 08:34 +0800,0,编译/单测回归通过（非 CDC 复用 PG 路径）
-3,GaussDB CDC Extractor 新建,single-full,DONE,1,tasks/20260316-03-gaussdb-cdc-extractor,基于 mppdb_decoding 的 CDC Extractor + JSON 解码器单测通过,cargo test -p dt-connector,2026-03-17 08:52 +0800,0,新增 GaussDBCdc 配置/解析 + gaussdb extractor 模块 + decoder 单测；dt-task 工厂已接入
-4,测试与联调 Harness,single-full,DONE,2;3,tasks/20260316-04-tests-harness,dt-tests 增加 GaussDB 目录与用例骨架且可编译,cargo test -p dt-tests --test integration_test --no-run,2026-03-17 09:14 +0800,0,新增 pg_to_gaussdb + gaussdb_to_pg 用例骨架、.env 变量占位与 runner 支持 GaussDBPg
-5,文档收口与 SHA256 后续路线,single-full,DONE,4,tasks/20260316-05-docs-sha256-roadmap,文档可独立指导联调且 SHA256 路线边界清晰,rg -n \"GaussDBPg\" -S docs/agent-summary > /dev/null,2026-03-17 09:24 +0800,0,新增 docs/templates 配置模板 + 联调 runbook + SHA256 roadmap；更新 dt-tests README

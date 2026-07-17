@@ -1,6 +1,0 @@
-id,task,status,acceptance_criteria,validation_command,completed_at,retry_count,notes
-1,状态检查（PG/GaussDB/slot/参数）,DONE,"归档 raw/status_check.log，包含 wal_level/slots/active 状态","test -f .codex-tasks/20260329-gaussdb-cdc-fix/raw/status_check.log",2026-03-29 19:22 +0800,0,"wal_level=logical; password_encryption_type=1; slot ape_test_gaussdb active=false; primary=10.250.0.51"
-2,基线重跑 cdc_basic_test（不改代码）,DONE,"raw/cdc_baseline.log 存在","test -f .codex-tasks/20260329-gaussdb-cdc-fix/raw/cdc_baseline.log",2026-03-29 19:50 +0800,0,"passed (finished 351s): gaussdb_to_pg::cdc_basic_test ok"
-3,对标 Flink GaussDB CDC connector 并产出突破口摘要,DONE,"PROGRESS.md 含对标小节","rg -q \"^## Flink Connector Notes\" .codex-tasks/20260329-gaussdb-cdc-fix/PROGRESS.md",2026-03-29 19:50 +0800,0,
-4,实现最小修复（代码/测试配置）,DONE,"修复点落盘且无额外回退逻辑","rg -n \"gaussdb\" -S dt-connector dt-tests | head -n 1 >/dev/null",2026-03-30 10:28 +0800,0,"committed+push: 1b4fd243 (codex/gaussdb-l4-docs-pr)"
-5,验证 e2e 通过并更新记录,TODO,"cdc_basic_test 通过且 PROGRESS.md 记录证据","cargo test -p dt-tests --test integration_test -- gaussdb_to_pg::cdc_tests::test::cdc_basic_test --nocapture",,0,
