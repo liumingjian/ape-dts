@@ -36,7 +36,7 @@ impl PortPool {
     pub async fn seed(&self, ports: impl IntoIterator<Item = u16>) {
         let mut guard = self.in_use.lock().await;
         for p in ports {
-            if p >= PORT_MIN && p <= PORT_MAX {
+            if (PORT_MIN..=PORT_MAX).contains(&p) {
                 guard.insert(p);
             }
         }
@@ -80,7 +80,7 @@ mod tests {
         let pool = PortPool::new();
         let port = pool.acquire().await.expect("should get a port");
         assert!(
-            port >= PORT_MIN && port <= PORT_MAX,
+            (PORT_MIN..=PORT_MAX).contains(&port),
             "port {port} not in range"
         );
     }
@@ -157,7 +157,7 @@ mod tests {
 
         // All ports must be in range.
         for &p in &ports {
-            assert!(p >= PORT_MIN && p <= PORT_MAX);
+            assert!((PORT_MIN..=PORT_MAX).contains(&p));
         }
     }
 

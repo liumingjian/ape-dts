@@ -23,7 +23,7 @@ use dt_console_server::error;
 use dt_console_server::log_sse_handlers;
 use dt_console_server::metrics_scraper;
 use dt_console_server::middleware::csrf::{Csrf, XSRF_COOKIE_NAME, XSRF_HEADER_NAME};
-use dt_console_server::models::{LoginRequest, MetricPoint, ResourceGroup, Run};
+use dt_console_server::models::{LoginRequest, ResourceGroup, Run};
 use dt_console_server::rate_limit::{RateLimitConfig, RateLimiter};
 use dt_console_server::repositories::license_repository::LicenseRepository;
 use dt_console_server::repositories::metric_point_repository::MetricPointRepository;
@@ -139,16 +139,6 @@ macro_rules! do_login {
 
 fn auth_post(uri: &str, cookies: &[Cookie<'static>]) -> test::TestRequest {
     let mut req = test::TestRequest::post().uri(uri);
-    for c in cookies {
-        req = req.cookie(c.clone());
-    }
-    req = req.cookie(Cookie::new(XSRF_COOKIE_NAME, XSRF));
-    req = req.insert_header((XSRF_HEADER_NAME, XSRF));
-    req
-}
-
-fn auth_get(uri: &str, cookies: &[Cookie<'static>]) -> test::TestRequest {
-    let mut req = test::TestRequest::get().uri(uri);
     for c in cookies {
         req = req.cookie(c.clone());
     }
@@ -550,14 +540,10 @@ async fn supervise_run_pre_reap_scrape_captures_final_progress() {
     let (port, _stub_handle) = start_persistent_prometheus_stub(prom_body).await;
 
     // Seed a task and a running Run with the stub's port.
-    let task_id = format!(
-        "task-pre-reap-{}",
-        uuid::Uuid::new_v4().to_string()[..8].to_string()
-    );
-    let run_id = format!(
-        "run-pre-reap-{}",
-        uuid::Uuid::new_v4().to_string()[..8].to_string()
-    );
+    let task_uuid = uuid::Uuid::new_v4().to_string();
+    let task_id = format!("task-pre-reap-{}", &task_uuid[..8]);
+    let run_uuid = uuid::Uuid::new_v4().to_string();
+    let run_id = format!("run-pre-reap-{}", &run_uuid[..8]);
     seed_task(&pool, &task_id).await;
     seed_run_with_port(&pool, &run_id, &task_id, port as i64).await;
 

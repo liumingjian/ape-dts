@@ -149,14 +149,12 @@ pub async fn get_objects(
             continue;
         }
         let matches_any = patterns.iter().any(|p| p.matches(schema, table));
-        if matches_any {
-            if seen.insert((schema.clone(), table.clone())) {
-                response.push(ObjectState {
-                    schema: schema.clone(),
-                    table: table.clone(),
-                    state: "completed".to_string(),
-                });
-            }
+        if matches_any && seen.insert((schema.clone(), table.clone())) {
+            response.push(ObjectState {
+                schema: schema.clone(),
+                table: table.clone(),
+                state: "completed".to_string(),
+            });
         }
     }
 

@@ -429,10 +429,10 @@ pub async fn start_task(
     path: web::Path<String>,
     active_runs: web::Data<ActiveRuns>,
     scraper_state: web::Data<ScraperState>,
-    port_pool: web::Data<PortPool>,
-    idempotency_cache: web::Data<IdempotencyCache>,
+    runtime_state: (web::Data<PortPool>, web::Data<IdempotencyCache>),
     req: actix_web::HttpRequest,
 ) -> HttpResponse {
+    let (port_pool, idempotency_cache) = runtime_state;
     if let Err(e) = rbac::require_action(&user, RbacAction::TaskStart) {
         return e.error_response();
     }
