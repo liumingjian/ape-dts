@@ -81,10 +81,11 @@ const route = useRoute();
 const router = useRouter();
 const appStore = useAppStore();
 const auth = useAuthStore();
+const isMockMode = import.meta.env.VITE_USE_MOCK === 'true';
 
 // Global SSE alert stream — badge counter + toast
 const alertCount = ref(0);
-const alertStream = auth.isAuthenticated
+const alertStream = auth.isAuthenticated && !isMockMode
   ? useAlertStream({
       url: '/api/alerts/stream',
       onAlert: (e) => {
