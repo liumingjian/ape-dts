@@ -5,8 +5,11 @@
 //! binary (or a path overridden via `APE_DTS_BINARY_PATH`) on the orchestrator
 //! host.
 
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::{
+    fs::OpenOptions,
+    path::{Path, PathBuf},
+};
 use tokio::sync::Mutex;
 
 /// Default engine binary path (relative to workspace root).
@@ -219,13 +222,16 @@ impl LocalExecutor {
             PathBuf::from(&engine_binary)
         };
 
+        let stdout_log = open_child_output_log(&logs_dir, "stdout.log")?;
+        let stderr_log = open_child_output_log(&logs_dir, "stderr.log")?;
+
         // Spawn the child process.
         let mut command = tokio::process::Command::new(&engine_program);
         command
             .arg(ini_path_abs.to_string_lossy().as_ref())
             .current_dir(&run_dir)
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped());
+            .stdout(std::process::Stdio::from(stdout_log))
+            .stderr(std::process::Stdio::from(stderr_log));
         for (key, value) in extra_env {
             command.env(key, value);
         }
@@ -455,6 +461,14 @@ impl LocalExecutor {
 fn absolutize_log4rs_path(ini: &str) -> String {
     let base = std::env::current_dir().ok();
     absolutize_log4rs_path_with_base(ini, base.as_deref())
+}
+
+fn open_child_output_log(logs_dir: &Path, file_name: &str) -> Result<std::fs::File, String> {
+    OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(logs_dir.join(file_name))
+        .map_err(|e| format!("failed to open child {file_name}: {e}"))
 }
 
 fn absolutize_log4rs_path_with_base(ini: &str, base: Option<&Path>) -> String {
@@ -822,7 +836,16 @@ mod tests {
             run_dir.join("task_config.ini").exists(),
             "INI file should exist"
         );
-        assert!(run_dir.join("logs").exists(), "logs directory should exist");
+        let logs_dir = run_dir.join("logs");
+        assert!(logs_dir.exists(), "logs directory should exist");
+        assert!(
+            logs_dir.join("stdout.log").exists(),
+            "stdout log file should exist"
+        );
+        assert!(
+            logs_dir.join("stderr.log").exists(),
+            "stderr log file should exist"
+        );
 
         // Check status while running.
         let status = LocalExecutor::status(&handle).await;

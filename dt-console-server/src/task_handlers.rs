@@ -334,6 +334,7 @@ pub async fn list_tasks(
     let (tasks, total) = match TaskRepository::list_filtered(
         &pool,
         query.category.as_deref(),
+        query.mode.as_deref(),
         query.status.as_deref(),
         query.engine.as_deref(),
         query.q.as_deref(),
@@ -626,6 +627,7 @@ pub async fn check_no_active_run(pool: &SqlitePool, task_id: &str) -> Result<(),
 #[serde(rename_all = "camelCase")]
 pub struct TaskListQuery {
     pub category: Option<String>,
+    pub mode: Option<String>,
     pub status: Option<String>,
     pub engine: Option<String>,
     pub q: Option<String>,

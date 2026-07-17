@@ -27,8 +27,11 @@ export const authHandlers = [
         role: username === 'admin' ? 'admin' as const : 'operator' as const,
       };
     user.lastLoginAt = new Date().toISOString();
-    const token = `mock.${username}.${Date.now().toString(36)}`;
-    return ok({ user, token });
+    return ok({
+      username: user.username,
+      display_name: user.displayName,
+      role: user.role,
+    });
   }),
 
   http.post('/api/auth/logout', async () => {

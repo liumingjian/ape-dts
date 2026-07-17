@@ -95,8 +95,8 @@ describe('Route-level RBAC — meta.roles', () => {
     expect((ctrl!.meta?.roles as Role[])).toContain('operator');
   });
 
-  it('viewer can access dashboard, tasks, and alerts routes', () => {
-    const viewerRoutes = ['dashboard', 'tasks/snapshot', 'tasks/cdc', 'tasks/check', 'tasks/struct', 'alerts/current', 'alerts/history'];
+  it('viewer can access dashboard, migration, check, struct, and alerts routes', () => {
+    const viewerRoutes = ['dashboard', 'tasks/migration', 'tasks/check', 'tasks/struct', 'alerts/current', 'alerts/history'];
     for (const p of viewerRoutes) {
       const r = leaves.find((l) => l.path === p);
       expect(r, `${p} should exist`).toBeDefined();

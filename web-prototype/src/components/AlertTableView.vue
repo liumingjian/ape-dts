@@ -302,6 +302,7 @@ import EngineTag from './EngineTag.vue';
 import AlertSourceTag from './AlertSourceTag.vue';
 import { api } from '@/api/client';
 import { useRbac } from '@/composables/useRbac';
+import { detailPathForTask } from '@/utils/migrationMode';
 import {
   ENGINE_LABELS,
   type Alert,
@@ -436,7 +437,8 @@ function goTask(row: Alert) {
     : row.taskId.startsWith('check') ? 'check'
     : row.taskId.startsWith('struct') ? 'struct'
     : 'snapshot';
-  router.push({ path: `/tasks/${category}/${row.taskId}`, query: { tab: 'alerts' } });
+  const target = detailPathForTask(category, row.taskId, category === 'cdc' ? 'cdc' : undefined);
+  router.push({ ...target, query: { ...target.query, tab: 'alerts' } });
 }
 
 function confirmClear(row: Alert) {
@@ -506,7 +508,7 @@ onUnmounted(stopPoll);
 }
 .alert-view__summary {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: 1.25fr 1.1fr repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 .alert-view__sum-card {
@@ -514,7 +516,7 @@ onUnmounted(stopPoll);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  padding: 14px 18px;
+  padding: 14px 18px 13px;
   cursor: pointer;
   transition: box-shadow var(--dur) var(--ease-soft), transform var(--dur) var(--ease-soft);
   display: flex;
@@ -538,6 +540,14 @@ onUnmounted(stopPoll);
 .alert-view__sum-card--major::before { background: var(--color-warning); }
 .alert-view__sum-card--minor::before { background: var(--color-info); }
 .alert-view__sum-card--info::before { background: var(--color-ink-faint); }
+.alert-view__sum-card--critical {
+  border-color: color-mix(in oklab, var(--color-danger) 34%, var(--color-border));
+  background: linear-gradient(135deg, var(--color-danger-soft), var(--color-surface) 68%);
+}
+.alert-view__sum-card--major {
+  border-color: color-mix(in oklab, var(--color-warning) 34%, var(--color-border));
+  background: linear-gradient(135deg, var(--color-warning-soft), var(--color-surface) 68%);
+}
 .alert-view__sum-card--total {
   background: linear-gradient(135deg, var(--color-primary-50), var(--color-surface));
   border-color: var(--color-primary-200);
@@ -555,6 +565,17 @@ onUnmounted(stopPoll);
   color: var(--color-ink);
   letter-spacing: -0.02em;
   line-height: 1.1;
+}
+.alert-view__sum-card--critical .alert-view__sum-value,
+.alert-view__sum-card--major .alert-view__sum-value {
+  font-size: 32px;
+  font-weight: 700;
+}
+.alert-view__sum-card--critical .alert-view__sum-value {
+  color: var(--color-danger);
+}
+.alert-view__sum-card--major .alert-view__sum-value {
+  color: color-mix(in oklab, var(--color-warning) 86%, var(--color-ink));
 }
 .alert-view__panel {
   padding: 16px 20px 12px;
@@ -647,5 +668,24 @@ onUnmounted(stopPoll);
 }
 @media (max-width: 880px) {
   .alert-view__summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 767px) {
+  .alert-view__panel {
+    padding: var(--space-4);
+  }
+
+  .alert-view__filter--sm,
+  .alert-view__filter--grow,
+  .alert-view__filter--range {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .alert-view__footer {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
 }
 </style>

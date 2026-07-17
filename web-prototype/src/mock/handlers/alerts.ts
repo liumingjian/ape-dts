@@ -4,7 +4,28 @@
 import { http } from 'msw';
 import { pause, ok, notFound, parsePage, paginate, q } from './_shared';
 import { db } from '../db';
-import type { AlertLevel } from '@/types/domain';
+import type { Alert, AlertLevel, ApiAlert } from '@/types/domain';
+
+function toApiAlert(alert: Alert): ApiAlert {
+  return {
+    id: alert.id,
+    taskId: alert.taskId,
+    runId: null,
+    ruleId: null,
+    metricName: alert.source,
+    operator: null,
+    severity: alert.level,
+    status: alert.status === 'active' ? 'firing' : alert.status,
+    silenced: false,
+    firedAt: alert.firstAt,
+    recoveredAt: alert.status === 'cleared' ? alert.lastAt : null,
+    clearedAt: alert.clearedAt ?? null,
+    deliveredAt: null,
+    clearedBy: null,
+    lastError: alert.message,
+    createdAt: alert.firstAt,
+  };
+}
 
 function filterAlerts(list: typeof db.activeAlerts, url: URL) {
   let items = [...list];
@@ -29,7 +50,8 @@ export const alertHandlers = [
     const pool = status === 'cleared' ? db.historyAlerts : db.activeAlerts;
     const items = filterAlerts(pool, url);
     const { page, size } = parsePage(url);
-    return ok(paginate(items.sort((a, b) => b.lastAt.localeCompare(a.lastAt)), page, size));
+    const pageData = paginate(items.sort((a, b) => b.lastAt.localeCompare(a.lastAt)), page, size);
+    return ok({ ...pageData, items: pageData.items.map(toApiAlert) });
   }),
 
   // Legacy aliases for backward compatibility
@@ -38,7 +60,8 @@ export const alertHandlers = [
     const url = new URL(request.url);
     const items = filterAlerts(db.activeAlerts, url);
     const { page, size } = parsePage(url);
-    return ok(paginate(items.sort((a, b) => b.lastAt.localeCompare(a.lastAt)), page, size));
+    const pageData = paginate(items.sort((a, b) => b.lastAt.localeCompare(a.lastAt)), page, size);
+    return ok({ ...pageData, items: pageData.items.map(toApiAlert) });
   }),
 
   http.get('/api/alerts/history', async ({ request }) => {
@@ -46,7 +69,8 @@ export const alertHandlers = [
     const url = new URL(request.url);
     const items = filterAlerts(db.historyAlerts, url);
     const { page, size } = parsePage(url);
-    return ok(paginate(items.sort((a, b) => b.lastAt.localeCompare(a.lastAt)), page, size));
+    const pageData = paginate(items.sort((a, b) => b.lastAt.localeCompare(a.lastAt)), page, size);
+    return ok({ ...pageData, items: pageData.items.map(toApiAlert) });
   }),
 
   http.post('/api/alerts/:id/clear', async ({ params }) => {

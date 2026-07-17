@@ -19,27 +19,25 @@ function isRenderedLeaf(r: RouteRecordRaw): boolean {
   return !('redirect' in r) && !!r.component;
 }
 
-describe('Task list routes — per-category canonical paths', () => {
+describe('Task list routes — canonical task modules', () => {
   let leaves: RouteRecordRaw[];
 
   beforeEach(() => {
     leaves = getLeafRoutes(routes);
   });
 
-  it('/tasks/snapshot is a canonical route', () => {
-    const r = leaves.find((l) => l.path === 'tasks/snapshot');
+  it('/tasks/migration is the canonical migration route', () => {
+    const r = leaves.find((l) => l.path === 'tasks/migration');
     expect(r).toBeDefined();
-    expect(r!.name).toBe('SnapshotTasks');
+    expect(r!.name).toBe('MigrationTasks');
     expect(r!.meta?.roles).toContain('viewer');
     expect(isRenderedLeaf(r!)).toBe(true);
   });
 
-  it('/tasks/cdc is a canonical route', () => {
-    const r = leaves.find((l) => l.path === 'tasks/cdc');
+  it('/tasks/snapshot|cdc|sync is a legacy redirect, not a rendered leaf', () => {
+    const r = leaves.find((l) => l.path === 'tasks/:legacy(snapshot|cdc|sync)');
     expect(r).toBeDefined();
-    expect(r!.name).toBe('CdcTasks');
-    expect(r!.meta?.roles).toContain('viewer');
-    expect(isRenderedLeaf(r!)).toBe(true);
+    expect(isRenderedLeaf(r!)).toBe(false);
   });
 
   it('/tasks/check is a canonical route', () => {
@@ -56,12 +54,6 @@ describe('Task list routes — per-category canonical paths', () => {
     expect(r!.name).toBe('StructTasks');
     expect(r!.meta?.roles).toContain('viewer');
     expect(isRenderedLeaf(r!)).toBe(true);
-  });
-
-  it('/tasks/sync is a redirect, not a rendered leaf', () => {
-    const r = leaves.find((l) => l.path === 'tasks/sync');
-    expect(r).toBeDefined();
-    expect(isRenderedLeaf(r!)).toBe(false);
   });
 
   it('/tasks/replay is a redirect, not a rendered leaf', () => {
@@ -84,8 +76,8 @@ describe('Task detail routes', () => {
     leaves = getLeafRoutes(routes);
   });
 
-  it('/tasks/:category/:id route exists', () => {
-    const r = leaves.find((l) => l.path === 'tasks/:category(snapshot|cdc|check|struct)/:id');
+  it('/tasks/:category/:id route exists for migration/check/struct', () => {
+    const r = leaves.find((l) => l.path === 'tasks/:category(migration|check|struct)/:id');
     expect(r).toBeDefined();
     expect(r!.name).toBe('TaskDetail');
     expect(r!.meta?.roles).toContain('viewer');
@@ -93,7 +85,7 @@ describe('Task detail routes', () => {
   });
 
   it('legacy /tasks/:legacy/:id is a redirect, not a rendered leaf', () => {
-    const r = leaves.find((l) => l.path === 'tasks/:legacy(sync|replay|verify)/:id');
+    const r = leaves.find((l) => l.path === 'tasks/:legacy(snapshot|cdc|sync|replay|verify)/:id');
     expect(r).toBeDefined();
     expect(isRenderedLeaf(r!)).toBe(false);
   });

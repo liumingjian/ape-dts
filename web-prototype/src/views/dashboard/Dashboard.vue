@@ -28,7 +28,7 @@
           tone="success"
           :compare-label="t('dashboard.kpi.compareLabel')"
           class="dashboard__kpi-item"
-          @click="go('/tasks/snapshot?status=running')"
+          @click="go('/tasks/migration?status=running')"
         />
         <KpiCard
           :label="t('dashboard.kpi.todayAlerts')"
@@ -78,10 +78,10 @@
         >
           <template #extra>
             <span class="dashboard__legend">
-              <span class="dashboard__legend-dot" style="background:#0F766E" />{{ t('dashboard.kpi.throughput') }} (rows/s)
+              <span class="dashboard__legend-dot dashboard__legend-dot--throughput" />{{ t('dashboard.kpi.throughput') }} (rows/s)
             </span>
             <span class="dashboard__legend">
-              <span class="dashboard__legend-dot" style="background:#F59E0B" />{{ t('dashboard.kpi.latency') }} (ms)
+              <span class="dashboard__legend-dot dashboard__legend-dot--latency" />{{ t('dashboard.kpi.latency') }} (ms)
             </span>
           </template>
           <v-chart
@@ -170,8 +170,8 @@
               :tasks="topRunning"
               :empty-hint="t('dashboard.empty.topRunning')"
               :more-label="t('common.more')"
-              @select="(task) => go(`/tasks/${task.category}/${task.id}`)"
-              @more="go('/tasks/snapshot?status=running')"
+              @select="goToTask"
+              @more="go('/tasks/migration?status=running')"
             />
           </div>
         </div>
@@ -193,7 +193,8 @@ import EmptyState from '@/components/EmptyState.vue';
 import ActivityTimeline from '@/components/ActivityTimeline.vue';
 import RunningTaskGrid from '@/components/RunningTaskGrid.vue';
 import { useDashboardData } from '@/composables/useDashboardData';
-import { ENGINE_LABELS, type ActivityEvent, type TaskStatus, type TaskCategory } from '@/types/domain';
+import { ENGINE_LABELS, type ActivityEvent, type DashboardTopTask, type TaskStatus, type TaskCategory } from '@/types/domain';
+import { detailPathForTask } from '@/utils/migrationMode';
 import { AXIS_BASE } from '@/composables/useEcharts';
 import IconActivity from '~icons/tabler/activity';
 import IconAlertTriangle from '~icons/tabler/alert-triangle';
@@ -436,15 +437,20 @@ const alertTrendOption = computed(() => {
 function go(path: string) { router.push(path); }
 function onStatusClick(ev: unknown) {
   const data = (ev as { data?: { status?: TaskStatus } } | undefined)?.data;
-  if (data?.status) router.push({ path: '/tasks/sync', query: { status: data.status } });
+  if (data?.status) router.push({ path: '/tasks/migration', query: { status: data.status } });
+}
+function goToTask(task: DashboardTopTask) {
+  router.push(detailPathForTask(task.category, task.id, task.category === 'cdc' ? 'cdc' : undefined));
 }
 function goToActivity(event: ActivityEvent) {
   if (!event.taskId) return;
   const cat: TaskCategory = (event.taskCategory ?? 'snapshot');
+  const mode = event.taskSyncMode ?? (cat === 'cdc' ? 'cdc' : undefined);
+  const target = detailPathForTask(cat, event.taskId, mode);
   if (event.category === 'alert') {
-    router.push({ path: `/tasks/${cat}/${event.taskId}`, query: { tab: 'alerts' } });
+    router.push({ ...target, query: { ...target.query, tab: 'alerts' } });
   } else {
-    router.push({ path: `/tasks/${cat}/${event.taskId}` });
+    router.push(target);
   }
 }
 
@@ -461,7 +467,7 @@ function formatShort(v: number): string {
 .dashboard__body {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
 }
 .dashboard__banner {
   border-radius: var(--radius-md);
@@ -478,7 +484,7 @@ function formatShort(v: number): string {
 .dashboard__hero {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
+  gap: 12px;
 }
 .dashboard__kpi-item { cursor: pointer; min-height: 138px; }
 
@@ -492,6 +498,7 @@ function formatShort(v: number): string {
   align-items: baseline;
   justify-content: space-between;
   padding: 4px 2px;
+  gap: var(--space-3);
 }
 .dashboard__section-head h2 {
   margin: 0;
@@ -518,10 +525,12 @@ function formatShort(v: number): string {
   border-radius: 2px;
   display: inline-block;
 }
+.dashboard__legend-dot--throughput { background: var(--color-primary-700); }
+.dashboard__legend-dot--latency { background: var(--color-warning); }
 
 .dashboard__grid {
   display: grid;
-  gap: 16px;
+  gap: 12px;
 }
 .dashboard__grid--3 { grid-template-columns: repeat(3, 1fr); }
 .dashboard__grid--recent { grid-template-columns: 2fr 1fr; }
@@ -543,5 +552,25 @@ function formatShort(v: number): string {
   .dashboard__hero { grid-template-columns: repeat(2, 1fr); }
   .dashboard__grid--3,
   .dashboard__grid--recent { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 767px) {
+  .dashboard__body {
+    gap: var(--space-4);
+  }
+
+  .dashboard__hero {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard__section-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .dashboard__activity-wrap {
+    min-height: 360px;
+    max-height: none;
+  }
 }
 </style>

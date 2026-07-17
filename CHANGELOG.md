@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Unify Snapshot, CDC, and Snapshot+CDC under the Console migration task experience.
+
 ### Added
 
 - Add per-Run migration metrics, object state, phase-aware Console KPIs, and final metric capture.

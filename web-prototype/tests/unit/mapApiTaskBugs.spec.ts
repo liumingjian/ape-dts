@@ -54,6 +54,16 @@ describe('mapApiTask — Bug 4: SyncMode "full" must map to "snapshot"', () => {
     const t = mapApiTask({ ...BASE, kind: 'cdc' });
     expect(t.syncMode).toBe('cdc');
   });
+
+  it('maps extractor extract_type=snapshot_and_cdc → syncMode="snapshot_cdc"', () => {
+    const t = mapApiTask({
+      ...BASE,
+      kind: 'snapshot',
+      extractor: { extract_type: 'snapshot_and_cdc' },
+    });
+    expect(t.syncMode).toBe('snapshot_cdc');
+    expect(t.extractType).toBe('snapshot_and_cdc');
+  });
 });
 
 describe('mapApiTask — Bug 5: ResumeType "auto" must map to "from_log"', () => {

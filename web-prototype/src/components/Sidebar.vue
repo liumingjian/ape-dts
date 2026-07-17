@@ -11,6 +11,7 @@
         text-color="var(--color-ink)"
         active-text-color="var(--color-primary-700)"
         router
+        @select="emit('navigate')"
       >
         <template v-for="item in visibleMenu" :key="item.key">
           <el-sub-menu v-if="item.children?.length" :index="item.key">
@@ -68,6 +69,7 @@ const { t } = useI18n();
 const route = useRoute();
 const appStore = useAppStore();
 const { visibleNav } = useRbac();
+const emit = defineEmits<{ navigate: [] }>();
 
 const collapsed = computed(() => appStore.sidebarCollapsed);
 const activeKey = computed(() => route.path);
@@ -195,5 +197,15 @@ function resolveIcon(name?: string) {
 .sidebar__collapse-btn svg {
   width: 16px;
   height: 16px;
+}
+
+@media (max-width: 767px) {
+  .sidebar__footer {
+    display: none;
+  }
+
+  .sidebar__menu {
+    padding-bottom: var(--space-4);
+  }
 }
 </style>

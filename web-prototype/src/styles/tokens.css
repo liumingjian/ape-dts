@@ -63,6 +63,7 @@
   --layout-footer-h: 44px;
   --layout-page-x: 24px;
   --layout-page-y: 20px;
+  --layout-mobile-header-h: 52px;
 
   /* Motion */
   --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);

@@ -63,7 +63,7 @@ function buildRunMetricData(task: Task, metric: string, from: number, to: number
 
 function listByCategoryParam(catParam: string, url: URL): Task[] {
   let items: Task[];
-  if (catParam === 'sync') {
+  if (catParam === 'sync' || catParam === 'migration') {
     items = [...tasksOf('snapshot'), ...tasksOf('cdc')];
   } else {
     const cat = legacyToCategory(catParam) as TaskCategory;

@@ -36,6 +36,7 @@ export const ENGINE_LABELS: Record<EngineType, string> = {
 };
 
 export type TaskCategory = "snapshot" | "cdc" | "check" | "struct";
+export type TaskViewKind = TaskCategory | "migration";
 export type TaskStatus =
   | "draft"
   | "ready"
@@ -376,6 +377,7 @@ export interface ActivityEvent {
   taskId?: string;
   taskName?: string;
   taskCategory?: TaskCategory;
+  taskSyncMode?: SyncMode;
   sourceEngine?: EngineType;
   targetEngine?: EngineType;
   alertLevel?: AlertLevel;
@@ -665,6 +667,21 @@ function pickString(
   return undefined;
 }
 
+function resolveExtractType(raw: ApiTask): ExtractType {
+  const value = pickString(raw.extractor, "extract_type", "extractType");
+  if (
+    value === "snapshot" ||
+    value === "snapshot_file" ||
+    value === "snapshot_and_cdc" ||
+    value === "cdc" ||
+    value === "struct" ||
+    value === "scan"
+  ) {
+    return value;
+  }
+  return raw.kind === "cdc" ? "cdc" : "snapshot";
+}
+
 function resolveParallelizer(
   parallelizer: Record<string, unknown> | null,
 ): ParallelType {
@@ -771,6 +788,9 @@ export function mapApiTask(raw: ApiTask): Task {
   const src = parseEndpointUrl(srcRaw);
   const tgt = parseEndpointUrl(tgtRaw);
   const m = raw.metrics;
+  const extractType = resolveExtractType(raw);
+  const syncMode: SyncMode =
+    extractType === "snapshot_and_cdc" ? "snapshot_cdc" : extractType === "cdc" ? "cdc" : "snapshot";
   return {
     id: raw.id,
     name: raw.name,
@@ -794,8 +814,8 @@ export function mapApiTask(raw: ApiTask): Task {
     },
     sourceUrl: maskConnectionStringPw(srcRaw),
     targetUrl: maskConnectionStringPw(tgtRaw),
-    syncMode: (raw.kind === "cdc" ? "cdc" : "snapshot") as SyncMode,
-    extractType: (raw.kind === "cdc" ? "cdc" : "snapshot") as ExtractType,
+    syncMode,
+    extractType,
     taskType: "standalone",
     resourceGroup: raw.resourceGroupId ?? "",
     instanceIp: src.host,

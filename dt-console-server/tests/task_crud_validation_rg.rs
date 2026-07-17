@@ -633,6 +633,96 @@ async fn list_tasks_filter_category() {
     assert_eq!(body["total"], 0);
 }
 
+#[actix_web::test]
+async fn list_tasks_migration_category_filters_by_mode() {
+    let pool = setup().await;
+    let app = test::init_service(build_test_app(pool.clone())).await;
+    let cookies = do_login!(app, "admin", "admin123");
+
+    let mut snapshot = snapshot_task_body();
+    snapshot["name"] = serde_json::json!("snapshot-only");
+    snapshot["extractor"] = serde_json::json!({"extract_type": "snapshot"});
+    let req = add_auth(
+        test::TestRequest::post()
+            .uri("/api/tasks")
+            .set_json(snapshot),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::CREATED);
+
+    let mut snapshot_cdc = snapshot_task_body();
+    snapshot_cdc["name"] = serde_json::json!("snapshot-cdc");
+    snapshot_cdc["extractor"] =
+        serde_json::json!({"extract_type": "snapshot_and_cdc", "server_id": "2"});
+    let req = add_auth(
+        test::TestRequest::post()
+            .uri("/api/tasks")
+            .set_json(snapshot_cdc),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::CREATED);
+
+    let mut cdc = cdc_task_body();
+    cdc["name"] = serde_json::json!("cdc-only");
+    cdc["extractor"] = serde_json::json!({"extract_type": "cdc", "server_id": "3"});
+    let req = add_auth(
+        test::TestRequest::post().uri("/api/tasks").set_json(cdc),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::CREATED);
+
+    let req = add_cookies(
+        test::TestRequest::get().uri("/api/tasks?category=migration"),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(body["total"], 3);
+    let items = body["items"].as_array().unwrap();
+    assert!(items.iter().all(|item| item["kind"] != "migration"));
+
+    let req = add_cookies(
+        test::TestRequest::get().uri("/api/tasks?category=migration&mode=snapshot"),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(body["total"], 1);
+    assert_eq!(body["items"][0]["name"], "snapshot-only");
+
+    let req = add_cookies(
+        test::TestRequest::get().uri("/api/tasks?category=migration&mode=snapshot_cdc"),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(body["total"], 1);
+    assert_eq!(body["items"][0]["name"], "snapshot-cdc");
+
+    let req = add_cookies(
+        test::TestRequest::get().uri("/api/tasks?category=migration&mode=cdc"),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(body["total"], 1);
+    assert_eq!(body["items"][0]["name"], "cdc-only");
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // GAUSSDB VALIDATION
 // ═══════════════════════════════════════════════════════════════════════════

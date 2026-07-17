@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import type { Role } from '@/auth/permissions';
+import { isMigrationMode, modeForLegacyTaskPath } from '@/utils/migrationMode';
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -17,6 +18,13 @@ const MainLayout = () => import('@/layouts/MainLayout.vue');
 const BlankLayout = () => import('@/layouts/BlankLayout.vue');
 
 const ALL_ROLES: Role[] = ['admin', 'operator', 'viewer'];
+
+function modeForLegacyRoute(legacy: string, explicitMode: unknown) {
+  if (isMigrationMode(explicitMode)) return explicitMode;
+  if (legacy === 'cdc') return 'cdc';
+  if (legacy === 'sync') return 'snapshot_cdc';
+  return 'snapshot';
+}
 
 export const routes: RouteRecordRaw[] = [
   {
@@ -48,18 +56,11 @@ export const routes: RouteRecordRaw[] = [
         component: () => import('@/views/dashboard/Dashboard.vue'),
         meta: { title: 'nav.dashboard', module: 'dashboard', breadcrumb: ['nav.dashboard'], roles: ALL_ROLES },
       },
-      // Task management — per-category canonical paths
       {
-        path: 'tasks/snapshot',
-        name: 'SnapshotTasks',
-        component: () => import('@/views/tasks/SnapshotTaskList.vue'),
-        meta: { title: 'nav.tasks.snapshot', module: 'tasks', breadcrumb: ['nav.tasks._label', 'nav.tasks.snapshot'], roles: ALL_ROLES },
-      },
-      {
-        path: 'tasks/cdc',
-        name: 'CdcTasks',
-        component: () => import('@/views/tasks/CdcTaskList.vue'),
-        meta: { title: 'nav.tasks.cdc', module: 'tasks', breadcrumb: ['nav.tasks._label', 'nav.tasks.cdc'], roles: ALL_ROLES },
+        path: 'tasks/migration',
+        name: 'MigrationTasks',
+        component: () => import('@/views/tasks/SyncTaskList.vue'),
+        meta: { title: 'nav.tasks.migration', module: 'tasks', breadcrumb: ['nav.tasks._label', 'nav.tasks.migration'], roles: ALL_ROLES },
       },
       {
         path: 'tasks/check',
@@ -73,43 +74,43 @@ export const routes: RouteRecordRaw[] = [
         component: () => import('@/views/tasks/StructTaskList.vue'),
         meta: { title: 'nav.tasks.struct', module: 'tasks', breadcrumb: ['nav.tasks._label', 'nav.tasks.struct'], roles: ALL_ROLES },
       },
-      // Legacy taxonomy redirects (ADR-0006). Preserve any query / hash payload.
-      // /tasks/sync now redirects to /tasks/snapshot (or /tasks/cdc based on ?mode=)
-      { path: 'tasks/sync', redirect: (to) => {
-        const mode = to.query.mode as string | undefined;
-        if (mode === 'cdc') return { path: '/tasks/cdc', query: { ...to.query, mode: undefined } };
-        return { path: '/tasks/snapshot', query: { ...to.query, mode: undefined } };
+      { path: 'tasks/:legacy(snapshot|cdc|sync)', redirect: (to) => {
+        const existingMode = isMigrationMode(to.query.mode) ? to.query.mode : undefined;
+        const mode = existingMode ?? modeForLegacyTaskPath(to.path);
+        return { path: '/tasks/migration', query: { ...to.query, ...(mode ? { mode } : {}) }, hash: to.hash };
       }},
-      { path: 'tasks/replay', redirect: { path: '/tasks/snapshot' } },
+      { path: 'tasks/replay', redirect: (to) => ({ path: '/tasks/migration', query: to.query, hash: to.hash }) },
       { path: 'tasks/verify', redirect: { path: '/tasks/check' } },
       {
-        path: 'tasks/create/:type(snapshot|cdc|check|struct)',
+        path: 'tasks/create/:type(migration|check|struct)',
         name: 'CreateTask',
         component: () => import('@/views/tasks/CreateTaskWizard.vue'),
         meta: { title: 'task.action.create', module: 'tasks', hideInMenu: true, roles: ['admin', 'operator'] },
       },
       {
-        path: 'tasks/create/:legacy(sync|replay|verify)',
-        redirect: (to) => {
-          const legacy = String(to.params.legacy);
-          const next = legacy === 'verify' ? 'check' : 'snapshot';
-          return { path: `/tasks/create/${next}`, query: to.query };
-        },
-      },
+        path: 'tasks/create/:legacy(snapshot|cdc|sync|replay|verify)',
+	        redirect: (to) => {
+	          const legacy = String(to.params.legacy);
+	          if (legacy === 'verify') return { path: '/tasks/create/check', query: to.query, hash: to.hash };
+	          const mode = modeForLegacyRoute(legacy, to.query.mode);
+	          return { path: '/tasks/create/migration', query: { ...to.query, mode }, hash: to.hash };
+	        },
+	      },
       {
-        path: 'tasks/:category(snapshot|cdc|check|struct)/:id',
+        path: 'tasks/:category(migration|check|struct)/:id',
         name: 'TaskDetail',
         component: () => import('@/views/tasks/TaskDetail.vue'),
         meta: { title: 'task.action.view', module: 'tasks', hideInMenu: true, roles: ALL_ROLES },
       },
       {
-        path: 'tasks/:legacy(sync|replay|verify)/:id',
-        redirect: (to) => {
-          const legacy = String(to.params.legacy);
-          const next = legacy === 'verify' ? 'check' : 'snapshot';
-          return { path: `/tasks/${next}/${to.params.id}`, query: to.query, hash: to.hash };
-        },
-      },
+        path: 'tasks/:legacy(snapshot|cdc|sync|replay|verify)/:id',
+	        redirect: (to) => {
+	          const legacy = String(to.params.legacy);
+	          if (legacy === 'verify') return { path: `/tasks/check/${to.params.id}`, query: to.query, hash: to.hash };
+	          const mode = modeForLegacyRoute(legacy, to.query.mode);
+	          return { path: `/tasks/migration/${to.params.id}`, query: { ...to.query, mode }, hash: to.hash };
+	        },
+	      },
       // Alerts
       {
         path: 'alerts/current',

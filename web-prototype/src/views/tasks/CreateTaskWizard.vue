@@ -1092,6 +1092,7 @@ import type {
   ParallelType,
   ResumeType,
   TaskCategory,
+  TaskViewKind,
 } from "@/types/domain";
 import { ENGINE_LABELS, GAUSSDB_SUB_MODES } from "@/types/domain";
 import {
@@ -1109,6 +1110,12 @@ import {
   type WizardDraftForm,
   type DraftProcRule,
 } from "@/stores/wizardDraft";
+import { buildRouterConfig } from "@/utils/routerConfig";
+import {
+  extractTypeForMigrationMode,
+  isMigrationMode,
+  wizardTaskKind,
+} from "@/utils/migrationMode";
 import ConnectionTestCard from "@/components/wizard/ConnectionTestCard.vue";
 
 const { t } = useI18n();
@@ -1118,16 +1125,43 @@ const authStore = useAuthStore();
 const draftStore = useWizardDraftStore();
 
 /* ---------- category & steps ---------- */
-const category = computed<TaskCategory>(
-  () => (route.params.type as TaskCategory) ?? "snapshot",
+function normalizeWizardCategory(value: unknown): TaskViewKind {
+  if (value === "migration" || value === "check" || value === "struct") {
+    return value;
+  }
+  if (value === "cdc" || value === "snapshot" || value === "sync") {
+    return "migration";
+  }
+  return "migration";
+}
+
+function initialSyncMode(): SyncMode {
+  if (isMigrationMode(route.query.mode)) return route.query.mode;
+  const rawType = route.params.type;
+  if (rawType === "cdc") return "cdc";
+  if (rawType === "snapshot") return "snapshot";
+  return "snapshot_cdc";
+}
+
+const category = computed<TaskViewKind>(() =>
+  normalizeWizardCategory(route.params.type),
+);
+const stepCategory = computed<TaskCategory>(() =>
+  category.value === "migration" ? "snapshot" : category.value,
+);
+const taskKind = computed<TaskCategory>(() =>
+  wizardTaskKind(category.value, form.syncMode),
+);
+const taskListPath = computed(() =>
+  category.value === "migration" ? "/tasks/migration" : `/tasks/${category.value}`,
 );
 const current = ref(0);
 
-const steps = computed(() => buildWizardSteps(category.value, t));
+const steps = computed(() => buildWizardSteps(stepCategory.value, t));
 const currentStep = computed(() => steps.value[current.value]);
 
 /* ---------- sync_mode visibility ---------- */
-const showSyncMode = computed(() => category.value === "snapshot");
+const showSyncMode = computed(() => category.value === "migration");
 
 /* ---------- engine options ---------- */
 const engineOptions = (Object.keys(ENGINE_LABELS) as EngineType[]).map((k) => ({
@@ -1187,6 +1221,13 @@ const modeOptions = computed(() => {
   );
   return [
     {
+      value: "snapshot" as SyncMode,
+      label: t("wizard.mode.snapshot.label"),
+      desc: t("wizard.mode.snapshot.desc"),
+      disabled: false,
+      disabledReason: "",
+    },
+    {
       value: "snapshot_cdc" as SyncMode,
       label: t("wizard.mode.snapshot_cdc.label"),
       desc: t("wizard.mode.snapshot_cdc.desc"),
@@ -1196,9 +1237,9 @@ const modeOptions = computed(() => {
         : t("wizard.mode.snapshot_cdc.unsupported"),
     },
     {
-      value: "snapshot" as SyncMode,
-      label: t("wizard.mode.snapshot.label"),
-      desc: t("wizard.mode.snapshot.desc"),
+      value: "cdc" as SyncMode,
+      label: t("wizard.mode.cdc.label"),
+      desc: t("wizard.mode.cdc.desc"),
       disabled: false,
       disabledReason: "",
     },
@@ -1246,7 +1287,7 @@ function defaultForm(): WizardDraftForm {
       ssl: false,
     },
     targetHasPdb: false,
-    syncMode: (route.query.mode as SyncMode) || "snapshot_cdc",
+    syncMode: initialSyncMode(),
     rate: { mode: "unlimited", maxRps: 10000 },
     fullType: { schema: true, data: true, index: false },
     conflict: "insert",
@@ -1306,12 +1347,12 @@ onMounted(() => {
   // Snapshot original for dirty tracking
   draftStore.snapshotOriginal(category.value);
 
-  if (route.query.mode) form.syncMode = route.query.mode as SyncMode;
+  form.syncMode = initialSyncMode();
   sanitizeSyncMode();
 });
 
 function sanitizeSyncMode() {
-  if (category.value !== "snapshot") return;
+  if (category.value !== "migration") return;
   const allowed = new Set(modeOptions.value.map((o) => o.value));
   if (!allowed.has(form.syncMode)) {
     form.syncMode = "snapshot_cdc";
@@ -1744,7 +1785,7 @@ async function togglePreview() {
 function generateLocalIniPreview(): string {
   const extractType = syncModeToExtractType(
     form.syncMode,
-    category.value,
+    stepCategory.value,
     form.source.engine,
   );
   const srcHost = endpointHost(form.source.host);
@@ -1855,10 +1896,10 @@ function normalizeOptionalTableFilter(value?: string): string {
 function formToTaskDraft() {
   const extractType = syncModeToExtractType(
     form.syncMode,
-    category.value,
+    stepCategory.value,
     form.source.engine,
   );
-  const kind = category.value;
+  const kind = taskKind.value;
   const doDbs = normalizeDbFilter(form.filter.doDbs, form.filter.doTbs);
   const doTbs = normalizeTableFilter(form.filter.doTbs);
   const ignoreDbs = form.filter.ignoreDbs?.trim() || "";
@@ -1906,11 +1947,12 @@ function formToTaskDraft() {
       ignore_tbs: ignoreTbs,
       do_events: form.filter.doEvents?.join(",") || "",
     },
-    router: parseMapField(
+    router: buildRouterConfig(
       form.router.dbMap,
       form.router.tbMap,
       form.router.colMap,
       form.router.topicMap,
+      form.target.engine === "kafka",
     ),
     parallelizer: {
       parallel_type: form.config.parallelizer,
@@ -2019,56 +2061,6 @@ function buildEndpoint(
   };
 }
 
-function parseMapField(
-  dbMap: string | undefined,
-  tbMap: string | undefined,
-  colMap: string | undefined,
-  topicMap: string | undefined,
-) {
-  const router: Record<string, string> = {};
-  if (dbMap) {
-    router.db_map = dbMap
-      .split("\n")
-      .filter((l) => l.includes(":"))
-      .map((l) => {
-        const [k, v] = l.split(":");
-        return `${k.trim()}:${v.trim()}`;
-      })
-      .join(",");
-  }
-  if (tbMap) {
-    router.tb_map = tbMap
-      .split("\n")
-      .filter((l) => l.includes(":"))
-      .map((l) => {
-        const [k, v] = l.split(":");
-        return `${k.trim()}:${v.trim()}`;
-      })
-      .join(",");
-  }
-  if (colMap) {
-    router.col_map = colMap
-      .split("\n")
-      .filter((l) => l.includes(":"))
-      .map((l) => {
-        const [k, v] = l.split(":");
-        return `${k.trim()}:${v.trim()}`;
-      })
-      .join(",");
-  }
-  if (topicMap && form.target.engine === "kafka") {
-    router.topic_map = topicMap
-      .split("\n")
-      .filter((l) => l.includes(":"))
-      .map((l) => {
-        const [k, v] = l.split(":");
-        return `${k.trim()}:${v.trim()}`;
-      })
-      .join(",");
-  }
-  return Object.keys(router).length > 0 ? router : undefined;
-}
-
 function deriveServerId(seed: string): string {
   let hash = 0;
   for (let i = 0; i < seed.length; i += 1) {
@@ -2125,6 +2117,15 @@ function syncModeToExtractType(
 ) {
   if (cat === "struct") return "struct" as const;
   if (cat === "check") return "snapshot" as const;
+  if (category.value === "migration") {
+    if (
+      mode === "snapshot_cdc" &&
+      !SNAPSHOT_CDC_SUPPORTED_ENGINES.includes(sourceEngine)
+    ) {
+      throw new Error(t("wizard.mode.snapshot_cdc.unsupported"));
+    }
+    return extractTypeForMigrationMode(mode);
+  }
   if (mode === "snapshot_cdc") {
     if (!SNAPSHOT_CDC_SUPPORTED_ENGINES.includes(sourceEngine)) {
       throw new Error(t("wizard.mode.snapshot_cdc.unsupported"));
@@ -2257,13 +2258,13 @@ function onBack() {
     )
       .then(() => {
         draftStore.discard(category.value);
-        router.push({ path: `/tasks/${category.value}` });
+        router.push({ path: taskListPath.value });
       })
       .catch(() => {
         /* cancelled — stay */
       });
   } else {
-    router.push({ path: `/tasks/${category.value}` });
+    router.push({ path: taskListPath.value });
   }
 }
 
@@ -2339,7 +2340,7 @@ async function onSubmit() {
         ? t("wizard.toast.created")
         : t("wizard.toast.createdLater"),
     );
-    router.push({ path: `/tasks/${category.value}/${res.id}` });
+    router.push({ path: `${taskListPath.value}/${res.id}` });
   } catch (err: unknown) {
     const apiErr = err as { code?: string; message?: string };
     if (apiErr.code === "task_id_taken") {
@@ -2350,6 +2351,8 @@ async function onSubmit() {
     submitting.value = false;
   }
 }
+
+defineExpose({ onSubmit });
 
 /* ---------- watch for category change resetting steps ---------- */
 watch(category, () => {
