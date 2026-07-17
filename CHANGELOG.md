@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Add the real MySQL-to-PostgreSQL Snapshot+CDC migration red-line.
+- Document the migration task-detail observability remediation model and acceptance criteria.
 
 ## ape-dts Console initial release
 
