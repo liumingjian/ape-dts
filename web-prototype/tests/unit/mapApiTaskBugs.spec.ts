@@ -22,8 +22,8 @@ const BASE: ApiTask = {
   metrics: {
     extractor_pushed_rps_avg: 120,
     lag: 50,
-    pipeline_buffer_size_avg: 1024,
-    pipeline_sinked_count_latest: 5000,
+    pipeline_queue_size: 1024,
+    sinker_sinked_records: 5000,
     progress: 73,
   },
   resourceGroupId: 'rg-1',
@@ -101,7 +101,7 @@ describe('mapApiTask — Bug 3: progressPercent must be 0-100 percentage, not ra
   it('returns 0 when progress is undefined in metrics', () => {
     const t = mapApiTask({
       ...BASE,
-      metrics: { pipeline_sinked_count_latest: 0 },
+      metrics: { sinker_sinked_records: 0 },
     });
     expect(t.progressPercent).toBe(0);
   });

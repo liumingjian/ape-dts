@@ -128,13 +128,13 @@ export interface Endpoint {
 export interface TaskMetricsSnapshot {
   rpsLatest: number; // extractor_pushed_rps_avg
   bpsLatest: number; // extractor_pushed_bps_avg
-  sinkerRpsLatest: number; // sinker_record_count_avg_by_sec
+  sinkerRpsLatest: number; // sinker_rps_avg
   latencyMs: number; // replication lag
   lag: number; // CDC lag (seconds)
-  queryRtUs: number; // sinker_rt_per_query_avg (μs)
-  bufferSize: number; // pipeline_buffer_size_avg
+  queryRtUs: number; // sinker_rt_avg (μs)
+  bufferSize: number; // pipeline_queue_size
   errorCount: number;
-  processedRecords: number; // pipeline_sinked_count_latest
+  processedRecords: number; // sinker_sinked_records
   pipelineQueueSize: number; // pipeline_queue_size
   finishedProgressCount: number; // finished_progress_count
   totalProgressCount: number; // total_progress_count
@@ -581,15 +581,19 @@ export interface ApiTask {
   processor: Record<string, unknown> | null;
   runtime: Record<string, unknown> | null;
   metrics: {
+    extractor_rps_avg?: number;
     extractor_pushed_rps_avg?: number;
     extractor_pushed_bps_avg?: number;
-    sinker_record_count_avg_by_sec?: number;
+    sinker_rps_avg?: number;
+    sinker_rt_avg?: number;
+    sinker_sinked_records?: number;
+    sinker_sinked_bytes?: number;
+    extractor_plan_records?: number;
     progress?: number;
     lag?: number;
-    sinker_rt_per_query_avg?: number;
-    pipeline_buffer_size_avg?: number;
-    pipeline_sinked_count_latest?: number;
+    timestamp?: number;
     pipeline_queue_size?: number;
+    pipeline_queue_bytes?: number;
     finished_progress_count?: number;
     total_progress_count?: number;
     error_count?: number;
@@ -890,13 +894,13 @@ export function mapApiTask(raw: ApiTask): Task {
     metrics: {
       rpsLatest: m?.extractor_pushed_rps_avg ?? 0,
       bpsLatest: m?.extractor_pushed_bps_avg ?? 0,
-      sinkerRpsLatest: m?.sinker_record_count_avg_by_sec ?? 0,
+      sinkerRpsLatest: m?.sinker_rps_avg ?? 0,
       latencyMs: 0,
       lag: m?.lag ?? 0,
-      queryRtUs: m?.sinker_rt_per_query_avg ?? 0,
-      bufferSize: m?.pipeline_buffer_size_avg ?? 0,
+      queryRtUs: m?.sinker_rt_avg ?? 0,
+      bufferSize: m?.pipeline_queue_size ?? 0,
       errorCount: m?.error_count ?? 0,
-      processedRecords: m?.pipeline_sinked_count_latest ?? 0,
+      processedRecords: m?.sinker_sinked_records ?? 0,
       pipelineQueueSize: m?.pipeline_queue_size ?? 0,
       finishedProgressCount: m?.finished_progress_count ?? 0,
       totalProgressCount: m?.total_progress_count ?? 0,

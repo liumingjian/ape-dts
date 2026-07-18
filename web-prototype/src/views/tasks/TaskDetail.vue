@@ -1,64 +1,65 @@
 <template>
   <div class="detail">
-    <!-- persistent action bar -->
     <header class="detail__header">
-      <div class="detail__header-left">
+      <div class="detail__identity">
         <el-button link @click="onBack">
           <IconArrowLeft /> {{ t('taskDetail.back') }}
         </el-button>
-        <span class="detail__sep">|</span>
-        <h1 class="detail__title">{{ task?.name ?? '—' }}</h1>
-        <StatusBadge v-if="task" :status="task.status" />
+        <div class="detail__identity-main">
+          <span class="detail__eyebrow">Task</span>
+          <div class="detail__title-row">
+            <h1 class="detail__title">{{ task?.name ?? '—' }}</h1>
+            <span v-if="task" class="detail__task-id">{{ task.id }}</span>
+          </div>
+          <div v-if="task" class="detail__runtime-state" aria-label="Current run state">
+            <StatusBadge :status="task.status" />
+            <span>Run: {{ detail?.currentRun?.status ?? 'Not started' }}</span>
+            <span>Phase: {{ currentPhaseLabel }}</span>
+          </div>
+        </div>
       </div>
-      <div class="detail__header-right">
-        <el-button
-          v-if="rbac.can('task.start') && canStart"
-          type="success"
-          @click="doLifecycle('start')"
-        >
-          <template #icon><IconPlayerPlay /></template>
-          {{ t('taskDetail.action.start') }}
-        </el-button>
-        <el-button
-          v-if="rbac.can('task.pause') && task?.status === 'running'"
-          @click="doLifecycle('pause')"
-        >
-          <template #icon><IconPlayerPause /></template>
-          {{ t('taskDetail.action.pause') }}
-        </el-button>
-        <el-button
-          v-if="rbac.can('task.resume') && (task?.status === 'paused')"
-          type="primary"
-          @click="doLifecycle('resume')"
-        >
-          <template #icon><IconPlayerPlay /></template>
-          {{ t('taskDetail.action.resume') }}
-        </el-button>
-        <el-button
-          v-if="rbac.can('task.stop') && canStop"
-          @click="confirmStop"
-        >
-          <template #icon><IconPlayerStop /></template>
-          {{ t('taskDetail.action.stop') }}
-        </el-button>
-        <el-button
-          v-if="rbac.can('task.delete')"
-          type="danger"
-          plain
-          @click="confirmDelete"
-        >
-          <template #icon><IconTrash /></template>
-          {{ t('taskDetail.action.delete') }}
-        </el-button>
-        <el-button
-          v-if="rbac.can('task.create')"
-          type="primary"
-          plain
-          @click="editorVisible = true"
-        >
-          <template #icon><IconEdit /></template>
-          {{ t('taskDetail.action.edit') }}
-        </el-button>
+      <div class="detail__actions">
+        <div class="detail__actions-primary">
+          <el-button
+            v-if="rbac.can('task.start') && canStart"
+            type="success"
+            @click="doLifecycle('start')"
+          >
+            <template #icon><IconPlayerPlay /></template>
+            {{ t('taskDetail.action.start') }}
+          </el-button>
+          <el-button
+            v-else-if="rbac.can('task.resume') && task?.status === 'paused'"
+            type="primary"
+            @click="doLifecycle('resume')"
+          >
+            <template #icon><IconPlayerPlay /></template>
+            {{ t('taskDetail.action.resume') }}
+          </el-button>
+        </div>
+        <div class="detail__actions-secondary" aria-label="Secondary task actions">
+          <el-button
+            v-if="rbac.can('task.pause') && task?.status === 'running'"
+            @click="doLifecycle('pause')"
+          >
+            <template #icon><IconPlayerPause /></template>
+            {{ t('taskDetail.action.pause') }}
+          </el-button>
+          <el-button v-if="rbac.can('task.stop') && canStop" @click="confirmStop">
+            <template #icon><IconPlayerStop /></template>
+            {{ t('taskDetail.action.stop') }}
+          </el-button>
+          <el-button v-if="rbac.can('task.create')" plain @click="openEditor">
+            <template #icon><IconEdit /></template>
+            {{ t('taskDetail.action.edit') }}
+          </el-button>
+        </div>
+        <div v-if="rbac.can('task.delete')" class="detail__actions-destructive" aria-label="Destructive task actions">
+          <el-button type="danger" plain @click="confirmDelete">
+            <template #icon><IconTrash /></template>
+            {{ t('taskDetail.action.delete') }}
+          </el-button>
+        </div>
       </div>
     </header>
 
@@ -82,7 +83,7 @@
       <section class="detail__flow ape-dts-console-card">
         <div class="detail__kpi-row">
           <KpiCard :label="t('taskDetail.kpi.status')" :value="0" :badge="detail?.currentRun?.status ?? task.status" :icon-comp="IconActivity" />
-          <KpiCard :label="t('taskDetail.kpi.rps')" :value="rawLatestMetrics.extractor_rps_avg ?? 0" unit="rows/s" :icon-comp="IconBolt" :sentinel-text="rawLatestMetrics.extractor_rps_avg === undefined ? '—' : undefined" />
+          <KpiCard :label="currentPhase === 'cdc' ? 'Apply throughput' : 'Copy throughput'" :value="throughputValue ?? 0" unit="rows/s" :icon-comp="IconBolt" :sentinel-text="throughputValue === null ? '—' : undefined" />
 
           <template v-if="currentPhase !== 'cdc'">
             <div class="detail__kpi-progress-card kpi">
@@ -97,55 +98,112 @@
                 <span v-else>—</span>
               </div>
               <div class="detail__progress-counts">
-                {{ progress?.copiedRecords ?? '—' }} / {{ progress?.estimatedTotalRecords ?? '—' }} rows
+                <template v-if="progress?.copiedRecords !== null && progress?.copiedRecords !== undefined">
+                  <template v-if="progress.estimatedTotalRecords !== null && progress.estimatedTotalRecords !== undefined">
+                    {{ progress.copiedRecords }} / {{ progress.totalIsEstimate ? 'estimated ' : '' }}{{ progress.estimatedTotalRecords }} records
+                  </template>
+                  <template v-else>
+                    {{ progress.copiedRecords }} records · Estimating total
+                  </template>
+                </template>
+                <template v-else>No row sample received</template>
+              </div>
+              <div class="detail__progress-counts">
+                {{ snapshotCompletedTables ?? '—' }} / {{ snapshotSelectedTables ?? '—' }} tables
               </div>
             </div>
           </template>
 
           <template v-if="currentPhase === 'cdc'">
-            <KpiCard label="Lag" :value="lagHasValue ? (rawLatestMetrics.lag ?? 0) : 0" unit="秒" :icon-comp="IconClock" :sentinel-text="lagHasValue ? undefined : '—'" />
-            <KpiCard label="积压数" :value="rawLatestMetrics.pipeline_queue_size ?? 0" :icon-comp="IconChartBar" :sentinel-text="rawLatestMetrics.pipeline_queue_size === undefined ? '—' : undefined" />
+            <KpiCard label="Replication lag" :value="lagHasValue ? (rawLatestMetrics.lag ?? 0) : 0" unit="s" :icon-comp="IconClock" :sentinel-text="lagHasValue ? undefined : '—'" />
+            <KpiCard label="Queue backlog" :value="rawLatestMetrics.pipeline_queue_size ?? 0" :icon-comp="IconChartBar" :sentinel-text="rawLatestMetrics.pipeline_queue_size === undefined ? '—' : undefined" />
+            <KpiCard label="Applied changes" :value="rawLatestMetrics.sinker_sinked_records ?? 0" :icon-comp="IconChartBar" :sentinel-text="rawLatestMetrics.sinker_sinked_records === undefined ? '—' : undefined" />
           </template>
+        </div>
+        <div v-if="metricsAreStale" class="detail__metric-state" role="status">
+          Metrics stale · Last sample {{ metricsSampledAt ? dayjs(metricsSampledAt).format('YYYY-MM-DD HH:mm:ss') : '—' }}
+        </div>
+        <div v-if="metricErrors.length" class="detail__diagnostic" data-testid="metric-diagnostics" role="alert">
+          <h2>Metric query failed</h2>
+          <dl v-for="error in metricErrors" :key="error.metric">
+            <dt>Metric</dt><dd>{{ error.metric }}</dd>
+            <dt>Code</dt><dd>{{ error.code ?? 'UNKNOWN_ERROR' }}</dd>
+            <dt>Message</dt><dd>{{ error.message }}</dd>
+            <dt>HTTP status</dt><dd>{{ error.status }}</dd>
+            <dt>Request ID</dt><dd>{{ error.requestId ?? '—' }}</dd>
+            <dt>Last refresh</dt><dd>{{ lastMetricsRefresh ? dayjs(lastMetricsRefresh).format('YYYY-MM-DD HH:mm:ss') : '—' }}</dd>
+          </dl>
+          <div class="detail__diagnostic-actions">
+            <el-button type="primary" @click="loadMetricSeries">Retry</el-button>
+            <el-button @click="copyMetricDiagnostics">Copy diagnostics</el-button>
+          </div>
+        </div>
+        <div v-if="currentPhase === 'cdc'" class="detail__metric-context">
+          <span v-if="throughputValue === 0">No new changes</span>
+          <span v-else-if="throughputValue === null">No sample received for sinker_rps_avg</span>
+          <span v-if="detail?.currentRun?.checkpoint">Checkpoint: {{ formatPosition(detail.currentRun.checkpoint) }}</span>
+          <span v-else>Checkpoint: —</span>
+          <span>Last event: {{ lastEventText }}</span>
         </div>
       </section>
 
       <!-- 3 charts -->
       <section class="detail__charts ape-dts-console-card">
-        <ChartCard :title="'extractor_rps_avg'" :height="200">
+        <ChartCard title="Source read throughput · rows/s" :height="200">
           <v-chart v-if="rpsOption" :option="rpsOption" autoresize class="detail__chart" />
-          <el-empty v-else :description="t('common.empty')" :image-size="40" />
+          <div v-else class="detail__chart-state">No sample received for extractor_rps_avg</div>
         </ChartCard>
-        <ChartCard :title="'sinker_rps_avg'" :height="200">
+        <ChartCard title="Target apply throughput · rows/s" :height="200">
           <v-chart v-if="sinkRpsOption" :option="sinkRpsOption" autoresize class="detail__chart" />
-          <el-empty v-else :description="t('common.empty')" :image-size="40" />
+          <div v-else class="detail__chart-state">No sample received for sinker_rps_avg</div>
         </ChartCard>
-        <ChartCard :title="'pipeline_queue_size'" :height="200">
+        <ChartCard title="Queue backlog · records" :height="200">
           <v-chart v-if="bufferOption" :option="bufferOption" autoresize class="detail__chart" />
-          <el-empty v-else :description="t('common.empty')" :image-size="40" />
+          <div v-else class="detail__chart-state">No sample received for pipeline_queue_size</div>
         </ChartCard>
       </section>
 
-      <!-- 6 tabs -->
       <el-tabs v-model="activeTab" class="detail__tabs ape-dts-console-card" @tab-change="onTabChange as any">
-        <!-- Config -->
-        <el-tab-pane :label="t('taskDetail.tab.config')" name="config">
+        <el-tab-pane :label="t('taskDetail.tab.overview')" name="overview">
+          <section class="detail__topology" aria-labelledby="database-topology-title">
+            <h2 id="database-topology-title">Database topology</h2>
+            <div class="detail__topology-flow">
+              <article class="detail__endpoint" aria-label="Source database">
+                <span class="detail__endpoint-role">Source</span>
+                <EngineTag :engine="task.source.engine" />
+                <dl>
+                  <dt>Host</dt><dd>{{ task.source.host || 'Unavailable' }}</dd>
+                  <dt>Port</dt><dd>{{ task.source.port || 'Unavailable' }}</dd>
+                  <dt>Database</dt><dd>{{ task.source.database || 'Unavailable' }}</dd>
+                </dl>
+              </article>
+              <div class="detail__topology-arrow" aria-label="Replicates to"><IconArrowRight /></div>
+              <article class="detail__endpoint" aria-label="Target database">
+                <span class="detail__endpoint-role">Target</span>
+                <EngineTag :engine="task.target.engine" />
+                <dl>
+                  <dt>Host</dt><dd>{{ task.target.host || 'Unavailable' }}</dd>
+                  <dt>Port</dt><dd>{{ task.target.port || 'Unavailable' }}</dd>
+                  <dt>Database</dt><dd>{{ task.target.database || 'Unavailable' }}</dd>
+                </dl>
+              </article>
+            </div>
+          </section>
           <div class="detail__config">
+            <h2>Configuration summary</h2>
             <dl>
-              <dt>源端连接</dt><dd class="detail__mono">{{ task.sourceUrl || '—' }}</dd>
-              <dt>目标连接</dt><dd class="detail__mono">{{ task.targetUrl || '—' }}</dd>
-              <dt>并行模式</dt><dd>{{ task.config.parallelizer }}</dd>
-              <dt>并行度</dt><dd>{{ task.config.parallelSize }}</dd>
-              <dt>缓冲区</dt><dd>{{ task.config.bufferSize }} rows</dd>
-              <dt>断点提交间隔</dt><dd>{{ task.config.checkpointIntervalSecs }} s</dd>
-              <dt>最大 RPS</dt><dd>{{ task.config.maxRps || '不限速' }}</dd>
-              <dt>续传策略</dt><dd>{{ task.config.resumeType }}</dd>
-              <dt>Prometheus</dt><dd>{{ task.config.metricsEnabled ? '已启用' : '未启用' }}</dd>
-              <dt>同步对象</dt><dd>{{ task.syncObjects.selectedTables }} / {{ task.syncObjects.totalTables }}</dd>
+              <dt>Parallel mode</dt><dd>{{ task.config.parallelizer }}</dd>
+              <dt>Parallel size</dt><dd>{{ task.config.parallelSize }}</dd>
+              <dt>Buffer</dt><dd>{{ task.config.bufferSize }} rows</dd>
+              <dt>Checkpoint interval</dt><dd>{{ task.config.checkpointIntervalSecs }} s</dd>
+              <dt>Maximum RPS</dt><dd>{{ task.config.maxRps || 'Unlimited' }}</dd>
+              <dt>Resume strategy</dt><dd>{{ task.config.resumeType }}</dd>
+              <dt>Prometheus</dt><dd>{{ task.config.metricsEnabled ? 'Enabled' : 'Disabled' }}</dd>
+              <dt>Selected objects</dt><dd>{{ detail?.task.selectedObjects.length ?? 'Unavailable' }}</dd>
             </dl>
           </div>
         </el-tab-pane>
 
-        <!-- Objects -->
         <el-tab-pane :label="t('taskDetail.tab.objects')" name="objects">
           <el-empty v-if="objects.length === 0" :description="t('common.empty')" />
           <el-table v-else :data="objects" class="detail__objects">
@@ -161,6 +219,12 @@
 
         <!-- Logs (SSE) -->
         <el-tab-pane :label="t('taskDetail.tab.logs')" name="logs">
+          <div class="detail__log-context" aria-label="Log context">
+            <span>Run ID: <strong>{{ currentRunId || '—' }}</strong></span>
+            <span>Phase: <strong>{{ currentPhaseLabel }}</strong></span>
+            <span>File: <strong>{{ logFile }}.log</strong></span>
+            <span>Last event: <strong>{{ logLastEventText }}</strong></span>
+          </div>
           <div class="detail__log-toolbar">
             <div class="detail__log-toolbar-left">
               <el-select v-model="logFile" class="detail__log-file-select" @change="reopenLogStream">
@@ -173,6 +237,13 @@
                 <el-option label="INFO" value="info" />
                 <el-option label="DEBUG" value="debug" />
               </el-select>
+              <el-input
+                v-model="logSearch"
+                class="detail__log-search"
+                clearable
+                placeholder="Search logs"
+                aria-label="Search logs"
+              />
               <span
                 class="detail__log-status-pill"
                 :class="`detail__log-status-pill--${sseState}`"
@@ -188,13 +259,42 @@
               </el-button>
             </div>
             <div class="detail__log-toolbar-right">
+              <el-button size="small" @click="downloadLogs">Download</el-button>
               <el-button
                 size="small"
                 :type="logPaused ? 'primary' : 'default'"
-                @click="logPaused = !logPaused"
+                @click="toggleLogPause"
               >
                 {{ logPaused ? t('taskDetail.log.resume') : t('taskDetail.log.pause') }}
               </el-button>
+            </div>
+          </div>
+          <p class="detail__sr-only" role="status" aria-live="polite" aria-atomic="true">{{ logLiveRegionText }}</p>
+          <el-alert
+            v-if="logNotice"
+            type="warning"
+            :closable="false"
+            show-icon
+            class="detail__run-alert"
+            :title="logNotice"
+          />
+          <div v-if="logError" class="detail__diagnostic detail__log-diagnostic" role="alert">
+            <h2>Run logs unavailable</h2>
+            <dl>
+              <dt>Code</dt><dd>{{ logError.code ?? 'UNKNOWN_ERROR' }}</dd>
+              <dt>Message</dt><dd>{{ logError.message }}</dd>
+              <dt>HTTP status</dt><dd>{{ logError.status }}</dd>
+              <dt>Request ID</dt><dd>{{ logError.requestId ?? '—' }}</dd>
+              <dt>Run ID</dt><dd>{{ currentRunId || '—' }}</dd>
+              <dt>Phase</dt><dd>{{ currentPhaseLabel }}</dd>
+              <dt>File</dt><dd>{{ logFile }}.log</dd>
+              <dt>Connection</dt><dd>{{ sseStateLabel }}</dd>
+              <dt>Last event</dt><dd>{{ logLastEventText }}</dd>
+              <dt>Last refresh</dt><dd>{{ lastLogRefresh ? dayjs(lastLogRefresh).format('YYYY-MM-DD HH:mm:ss') : '—' }}</dd>
+            </dl>
+            <div class="detail__diagnostic-actions">
+              <el-button type="primary" @click="reopenLogStream">Retry</el-button>
+              <el-button @click="copyLogDiagnostics">Copy diagnostics</el-button>
             </div>
           </div>
           <el-alert
@@ -213,8 +313,9 @@
               class="detail__log-line"
               :class="`detail__log-line--${ln.level}`"
             >
-              <span class="detail__log-time">{{ formatLogTime(ln.ts) }}</span>
+              <span class="detail__log-time">{{ formatLogTime(ln.timestamp) }}</span>
               <span class="detail__log-level">{{ ln.level.toUpperCase() }}</span>
+              <span class="detail__log-source">{{ ln.source }}</span>
               <span class="detail__log-msg">{{ ln.message }}</span>
             </div>
           </div>
@@ -226,7 +327,7 @@
         </el-tab-pane>
 
         <!-- Monitor -->
-        <el-tab-pane :label="t('taskDetail.tab.monitor')" name="monitor">
+        <el-tab-pane :label="t('taskDetail.tab.monitoring')" name="monitoring">
           <div class="detail__monitor-toolbar">
             <el-button-group>
               <el-button
@@ -250,26 +351,6 @@
           </div>
         </el-tab-pane>
 
-        <!-- Alerts -->
-        <el-tab-pane :label="t('taskDetail.tab.alerts')" name="alerts">
-          <el-table v-if="alerts.length" :data="alerts" class="detail__alerts">
-            <el-table-column label="级别" width="110">
-              <template #default="{ row }"><LevelBadge :level="row.level" /></template>
-            </el-table-column>
-            <el-table-column label="来源" width="120" prop="source" />
-            <el-table-column label="消息" prop="message" />
-            <el-table-column label="服务" width="140" prop="service" />
-            <el-table-column label="首次发生" width="170">
-              <template #default="{ row }">{{ dayjs(row.firstAt).format('MM-DD HH:mm:ss') }}</template>
-            </el-table-column>
-            <el-table-column label="次数" width="80" align="right">
-              <template #default="{ row }">{{ row.count }}</template>
-            </el-table-column>
-          </el-table>
-          <el-empty v-else :description="t('taskDetail.alerts.none')" />
-        </el-tab-pane>
-
-        <!-- History -->
         <el-tab-pane :label="t('taskDetail.tab.history')" name="history">
           <el-table v-loading="historyLoading" :data="historyRuns" class="detail__history">
             <el-table-column label="Run ID" width="200" prop="id" />
@@ -311,6 +392,27 @@
               @current-change="loadHistory"
             />
           </footer>
+        </el-tab-pane>
+
+        <el-tab-pane :label="t('taskDetail.tab.more')" name="more">
+          <section class="detail__more-section">
+            <h2>Alerts</h2>
+            <el-table v-if="alerts.length" :data="alerts" class="detail__alerts">
+              <el-table-column label="Level" width="110">
+                <template #default="{ row }"><LevelBadge :level="row.level" /></template>
+              </el-table-column>
+              <el-table-column label="Source" width="120" prop="source" />
+              <el-table-column label="Message" prop="message" />
+              <el-table-column label="Service" width="140" prop="service" />
+              <el-table-column label="First seen" width="170">
+                <template #default="{ row }">{{ dayjs(row.firstAt).format('MM-DD HH:mm:ss') }}</template>
+              </el-table-column>
+              <el-table-column label="Count" width="80" align="right">
+                <template #default="{ row }">{{ row.count }}</template>
+              </el-table-column>
+            </el-table>
+            <el-empty v-else :description="t('taskDetail.alerts.none')" />
+          </section>
         </el-tab-pane>
       </el-tabs>
     </div>
@@ -370,7 +472,7 @@
           class="detail__log-line"
           :class="`detail__log-line--${ln.level ?? 'info'}`"
         >
-          <span class="detail__log-time">{{ formatLogTime(ln.ts) }}</span>
+          <span class="detail__log-time">{{ formatLogTime(ln.timestamp) }}</span>
           <span class="detail__log-level">{{ (ln.level ?? 'info').toUpperCase() }}</span>
           <span class="detail__log-msg">{{ ln.message }}</span>
         </div>
@@ -383,7 +485,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, shallowRef, unref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import type { RouteLocationRaw } from 'vue-router';
@@ -396,6 +498,8 @@ import { useLogStream, type LogLine, type LogStreamHandle } from '@/composables/
 import type { Task, Alert, ApiAlert, MetricQueryResponse, Run, RunPosition, TableLoadState, TaskCategory, TaskDetailAggregate, TaskDetailPhaseName } from '@/types/domain';
 import { mapApiTask, mapApiAlert } from '@/types/domain';
 import { listPathForTaskKind } from '@/utils/migrationMode';
+import { redactDiagnosticText, redactDiagnosticValue } from '@/utils/redactDiagnostics';
+import EngineTag from '@/components/EngineTag.vue';
 import KpiCard from '@/components/KpiCard.vue';
 import ChartCard from '@/components/ChartCard.vue';
 import LevelBadge from '@/components/LevelBadge.vue';
@@ -406,6 +510,7 @@ import IconBolt from '~icons/tabler/bolt';
 import IconClock from '~icons/tabler/clock';
 import IconChartBar from '~icons/tabler/chart-bar';
 import IconActivity from '~icons/tabler/activity';
+import IconArrowRight from '~icons/tabler/arrow-right';
 
 const { t } = useI18n();
 const route = useRoute();
@@ -413,8 +518,12 @@ const router = useRouter();
 const rbac = useRbac();
 const { isVisible } = useDocumentVisibility();
 
-const VALID_TABS = ['config', 'objects', 'logs', 'monitor', 'alerts', 'history'] as const;
+const VALID_TABS = ['overview', 'objects', 'logs', 'monitoring', 'history', 'more'] as const;
 type TabName = (typeof VALID_TABS)[number];
+
+function resolveTab(value: unknown): TabName {
+  return typeof value === 'string' && VALID_TABS.includes(value as TabName) ? value as TabName : 'overview';
+}
 
 const taskId = computed(() => String(route.params.id));
 const taskCategory = computed<TaskCategory>(() => {
@@ -426,7 +535,7 @@ const detail = ref<TaskDetailAggregate | null>(null);
 const task = ref<Task | null>(null);
 const detailError = ref<ApiError | null>(null);
 const lastDetailRefresh = ref<string | null>(null);
-const activeTab = ref<TabName>((route.query.tab as TabName) || 'config');
+const activeTab = ref<TabName>(resolveTab(route.query.tab));
 const editorVisible = ref(Boolean(route.query.edit === '1'));
 const saving = ref(false);
 const resourceGroups = ['default', 'production', 'staging', 'dev'];
@@ -482,7 +591,14 @@ async function loadDetail() {
     } : null;
     currentRunId.value = aggregate.currentRun?.id ?? '';
     rawLatestMetrics.value = aggregate.metricsSnapshot?.values ?? {};
+    metricsSampledAt.value = aggregate.metricsSnapshot?.sampledAt ?? null;
     accumulateMetrics(aggregate.metricsSnapshot?.sampledAt);
+    const shouldLoadSeries = currentRunId.value !== metricSeriesRunId.value;
+    if (shouldLoadSeries) metricSeriesRunId.value = currentRunId.value;
+    await Promise.all([
+      shouldLoadSeries ? loadMetricSeries() : Promise.resolve(),
+      aggregate.currentRun?.currentPhase === 'snapshot' ? loadObjects() : Promise.resolve(),
+    ]);
     detailError.value = null;
   } catch (error) {
     detailError.value = error as ApiError;
@@ -575,6 +691,10 @@ async function saveEdit() {
   } finally { saving.value = false; }
 }
 
+function openEditor() {
+  router.replace({ query: { ...route.query, tab: 'overview', edit: '1' } });
+}
+
 function onEditorClose() {
   router.replace({ query: { ...route.query, edit: undefined } });
 }
@@ -583,7 +703,7 @@ function onEditorClose() {
 function onTabChange(tab: string | number) {
   const tabStr = String(tab);
   const query: Record<string, string | undefined> = { ...route.query, tab: tabStr };
-  if (tabStr !== 'config') delete (query as Partial<typeof query>).edit;
+  if (tabStr !== 'overview') delete (query as Partial<typeof query>).edit;
   router.replace({ query });
   if (tabStr === 'logs') {
     reopenLogStream();
@@ -591,7 +711,7 @@ function onTabChange(tab: string | number) {
 }
 
 watch(() => route.query.tab, (v) => {
-  if (v && VALID_TABS.includes(v as TabName)) activeTab.value = v as TabName;
+  activeTab.value = resolveTab(v);
 });
 
 watch(() => route.query.edit, (v) => {
@@ -607,9 +727,76 @@ const currentRunId = ref('');
 const latestRun = ref<Run | null>(null);
 const rawLatestMetrics = ref<Record<string, number>>({});
 const metricsHistory = ref<Record<string, { ts: number; value: number }[]>>({});
+const metricsSampledAt = ref<string | null>(null);
+const lastMetricsRefresh = ref<string | null>(null);
+type MetricQueryError = ApiError & { metric: string };
+const metricErrors = ref<MetricQueryError[]>([]);
+const metricSeriesRunId = ref('');
 const MAX_HISTORY_POINTS = 720; // ~1 h at 5 s interval
+const METRIC_STALE_AFTER_MS = 30_000;
 
 const DETAIL_METRIC_NAMES = ['extractor_rps_avg', 'sinker_rps_avg', 'pipeline_queue_size'];
+const activeMetricNames = computed(() => {
+  const names = new Set(DETAIL_METRIC_NAMES);
+  names.add('sinker_sinked_records');
+  names.add('sinker_rt_avg');
+  if (currentPhase.value === 'snapshot') {
+    names.add('progress');
+    names.add('extractor_plan_records');
+  }
+  if (currentPhase.value === 'cdc') {
+    names.add('lag');
+    names.add('timestamp');
+  }
+  return [...names];
+});
+
+async function loadMetricSeries() {
+  if (!currentRunId.value) return;
+  const to = Date.now();
+  const from = to - 3600_000;
+  const results = await Promise.all(activeMetricNames.value.map(async (metric) => {
+    try {
+      const response = await api.get<MetricQueryResponse>(
+        `/runs/${currentRunId.value}/metrics?metric=${metric}&from=${from}&to=${to}&step=60`,
+      );
+      return { metric, response } as const;
+    } catch (error) {
+      return { metric, error: error as ApiError } as const;
+    }
+  }));
+  const errors: MetricQueryError[] = [];
+  for (const result of results) {
+    const error = 'error' in result ? result.error : undefined;
+    if (error) {
+      errors.push({
+        metric: result.metric,
+        status: error.status ?? 0,
+        code: error.code,
+        message: error.message ?? 'Metric query failed',
+        details: error.details,
+        requestId: error.requestId,
+      });
+      continue;
+    }
+    const response = 'response' in result ? result.response : undefined;
+    if (response) {
+      metricsHistory.value[result.metric] = response.data ?? [];
+    }
+  }
+  metricErrors.value = errors;
+  lastMetricsRefresh.value = new Date().toISOString();
+}
+
+async function copyMetricDiagnostics() {
+  await navigator.clipboard.writeText(JSON.stringify({
+    runId: currentRunId.value,
+    errors: metricErrors.value,
+    lastRefresh: lastMetricsRefresh.value,
+  }, null, 2));
+  ElMessage.success('Diagnostics copied');
+}
+
 const detailMetricSeries = computed<MetricQueryResponse[]>(() =>
   DETAIL_METRIC_NAMES
     .filter(m => (metricsHistory.value[m]?.length ?? 0) > 0)
@@ -618,6 +805,12 @@ const detailMetricSeries = computed<MetricQueryResponse[]>(() =>
 
 /* ---------- KPI computed helpers ---------- */
 const currentPhase = computed<TaskDetailPhaseName | null>(() => detail.value?.currentRun?.currentPhase ?? null);
+const currentPhaseLabel = computed(() => {
+  if (currentPhase.value === 'snapshot') return 'Snapshot';
+  if (currentPhase.value === 'transitioning_to_cdc') return 'Transitioning to CDC';
+  if (currentPhase.value === 'cdc') return 'CDC';
+  return 'Not started';
+});
 const progress = computed(() => detail.value?.progress ?? null);
 const progressValue = computed<number | null>(() => {
   const percent = progress.value?.phase === 'snapshot' ? progress.value.percent : null;
@@ -627,6 +820,29 @@ const progressValue = computed<number | null>(() => {
 
 const lagHasValue = computed(() => {
   return 'lag' in rawLatestMetrics.value;
+});
+
+const throughputValue = computed<number | null>(() => {
+  const metric = currentPhase.value === 'cdc' ? 'sinker_rps_avg' : 'extractor_rps_avg';
+  const value = rawLatestMetrics.value[metric];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+});
+
+const snapshotCompletedTables = computed(() => {
+  if (!objects.value.length) return null;
+  return objects.value.filter((object) => object.state === 'completed').length;
+});
+const snapshotSelectedTables = computed(() => detail.value?.task.selectedObjects.length ?? null);
+const lastEventText = computed(() => {
+  const timestamp = rawLatestMetrics.value.timestamp;
+  if (typeof timestamp !== 'number' || !Number.isFinite(timestamp)) return '—';
+  const milliseconds = timestamp < 10_000_000_000 ? timestamp * 1000 : timestamp;
+  return dayjs(milliseconds).format('YYYY-MM-DD HH:mm:ss');
+});
+const metricsAreStale = computed(() => {
+  if (!metricsSampledAt.value) return false;
+  const sampledAt = dayjs(metricsSampledAt.value).valueOf();
+  return Number.isFinite(sampledAt) && Date.now() - sampledAt > METRIC_STALE_AFTER_MS;
 });
 
 function baseLine(name: string, xs: string[], sData: { name: string; data: number[]; color: string }[]) {
@@ -696,70 +912,162 @@ async function loadObjects() {
 const logFile = ref('default');
 const logFiles = ['task', 'default', 'position', 'monitor', 'commit', 'finished', 'http'];
 const logLevelFilter = ref('ALL');
+const logSearch = ref('');
 const logPaused = ref(false);
 const logPaneRef = ref<HTMLElement | null>(null);
 const showFollowBtn = ref(false);
 const logStreamHandle = shallowRef<LogStreamHandle | null>(null);
-const archivedLogLines = ref<LogLine[]>([]);
+const persistedLogLines = ref<LogLine[]>([]);
+const pausedLogLines = ref<LogLine[]>([]);
+const logNotice = ref('');
+const logError = ref<ApiError | null>(null);
+const lastLogRefresh = ref<string | null>(null);
+const logLiveRegionText = ref('');
+const FALLBACK_NOTICE = 'Live stream unavailable; showing persisted logs.';
 
-/** Derive SSE state from the handle's state ref so it stays in sync after reconnect. */
-const sseState = computed<'connected' | 'reconnecting' | 'disconnected'>(() => {
-  if (!logStreamHandle.value) return 'disconnected';
-  return logStreamHandle.value.state.value;
-});
+const sseState = computed(() => logStreamHandle.value?.state.value ?? 'disconnected');
 
 const sseStateLabel = computed(() => {
+  if (sseState.value === 'connecting') return 'Connecting';
   if (sseState.value === 'connected') return t('taskDetail.log.connected');
   if (sseState.value === 'reconnecting') return t('taskDetail.log.reconnecting');
   return t('taskDetail.log.disconnected');
 });
 
-const filteredLogLines = computed<LogLine[]>(() => {
-  const handle = logStreamHandle.value;
-  if (!handle) {
-    return filterLogLines(archivedLogLines.value);
-  }
-  // handle.lines is Ref<LogLine[]>, need .value to unwrap
-  const rawLines: LogLine[] = unref(handle.lines);
-  return filterLogLines(rawLines);
+const logLastEventText = computed(() => {
+  const timestamp = logStreamHandle.value?.lastEventAt.value;
+  return timestamp ? dayjs(timestamp).format('YYYY-MM-DD HH:mm:ss') : '—';
 });
 
-function filterLogLines(rawLines: LogLine[]): LogLine[] {
-  if (logLevelFilter.value === 'ALL') return rawLines;
-  return rawLines.filter((l: LogLine) => l.level === logLevelFilter.value);
+function logLineKey(line: LogLine): string {
+  return [line.timestamp, line.level, line.source, line.file, line.message].join(' ');
 }
 
-function formatLogTime(ts: number): string {
-  return dayjs(ts).format('HH:mm:ss');
+const combinedLogLines = computed<LogLine[]>(() => {
+  const seen = new Set<string>();
+  const receivedLiveLines = logStreamHandle.value?.lines.value ?? [];
+  const visibleLiveLines = logPaused.value && pausedLogLines.value.length
+    ? receivedLiveLines.slice(0, -pausedLogLines.value.length)
+    : receivedLiveLines;
+  const lines = [...persistedLogLines.value, ...visibleLiveLines];
+  return lines.filter((line) => {
+    const key = logLineKey(line);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(-500);
+});
+
+const filteredLogLines = computed<LogLine[]>(() => {
+  const search = logSearch.value.trim().toLowerCase();
+  return combinedLogLines.value.filter((line) => {
+    if (logLevelFilter.value !== 'ALL' && line.level !== logLevelFilter.value) return false;
+    if (!search) return true;
+    return [line.message, line.source, line.file, line.level]
+      .some((value) => value.toLowerCase().includes(search));
+  });
+});
+
+function formatLogTime(timestamp: string): string {
+  const value = dayjs(timestamp);
+  return value.isValid() ? value.format('HH:mm:ss') : '—';
 }
 
-function reopenLogStream() {
-  logStreamHandle.value?.close();
-  if (!currentRunId.value) return;
-  if (latestRun.value && !['running', 'paused'].includes(latestRun.value.status)) {
-    loadArchivedLogIntoPane(latestRun.value);
-    return;
+async function loadPersistedLogs(runId: string): Promise<boolean> {
+  try {
+    const text = await api.get<string>(`/runs/${runId}/logs?file=${logFile.value}`, { parseAs: 'text' });
+    persistedLogLines.value = parseLogText(text, logFile.value);
+    logError.value = null;
+    return true;
+  } catch (error) {
+    persistedLogLines.value = [];
+    logError.value = error as ApiError;
+    return false;
+  } finally {
+    lastLogRefresh.value = new Date().toISOString();
   }
-  archivedLogLines.value = [];
+}
+
+async function fallbackToPersistedLogs() {
+  logNotice.value = FALLBACK_NOTICE;
+  logLiveRegionText.value = FALLBACK_NOTICE;
+  await loadPersistedLogs(currentRunId.value);
+}
+
+async function reopenLogStream() {
+  logStreamHandle.value?.close();
+  logStreamHandle.value = null;
+  logNotice.value = '';
+  logError.value = null;
+  if (!currentRunId.value) return;
+  await loadPersistedLogs(currentRunId.value);
+  if (latestRun.value && !['running', 'paused'].includes(latestRun.value.status)) return;
+
+  logLiveRegionText.value = 'Connecting to live logs.';
   logStreamHandle.value = useLogStream({
     runId: currentRunId.value,
     file: logFile.value,
-    level: logLevelFilter.value !== 'ALL' ? logLevelFilter.value as 'debug' | 'info' | 'warn' | 'error' : undefined,
     bufferLimit: 500,
+    onLine: (line) => {
+      if (logPaused.value) pausedLogLines.value.push(line);
+      if (!logPaused.value && !showFollowBtn.value) nextTick(scrollToBottom);
+      logLiveRegionText.value = `Live logs connected. Latest ${line.level} event received.`;
+    },
+    onUnavailable: () => { void fallbackToPersistedLogs(); },
   });
+}
+
+function toggleLogPause() {
+  logPaused.value = !logPaused.value;
+  if (!logPaused.value && pausedLogLines.value.length) {
+    pausedLogLines.value = [];
+    nextTick(scrollToBottom);
+  }
 }
 
 function onLogScroll() {
   if (!logPaneRef.value) return;
   const el = logPaneRef.value;
-  const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-  showFollowBtn.value = !atBottom;
+  showFollowBtn.value = el.scrollHeight - el.scrollTop - el.clientHeight >= 40;
 }
 
 function scrollToBottom() {
   if (!logPaneRef.value) return;
   logPaneRef.value.scrollTop = logPaneRef.value.scrollHeight;
   showFollowBtn.value = false;
+}
+
+function serializeLogLines(lines: LogLine[]): string {
+  return lines.map((line) => redactDiagnosticText(
+    `${line.timestamp} - ${line.level.toUpperCase()} - [${line.source}] - ${line.message}`,
+  )).join('\n');
+}
+
+function downloadLogs() {
+  const blob = new Blob([serializeLogLines(filteredLogLines.value)], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `run-${currentRunId.value}-${logFile.value}.log`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+async function copyLogDiagnostics() {
+  await navigator.clipboard.writeText(JSON.stringify(redactDiagnosticValue({
+    taskId: taskId.value,
+    runId: currentRunId.value,
+    phase: currentPhase.value,
+    file: `${logFile.value}.log`,
+    connectionState: sseState.value,
+    lastEvent: logStreamHandle.value?.lastEventAt.value ?? null,
+    lastRefresh: lastLogRefresh.value,
+    code: logError.value?.code,
+    message: logError.value?.message,
+    status: logError.value?.status,
+    requestId: logError.value?.requestId,
+  }), null, 2));
+  ElMessage.success('Diagnostics copied');
 }
 
 /* ---------- Alerts tab ---------- */
@@ -863,28 +1171,35 @@ async function viewArchivedLogs(run: Run) {
   archivedLoading.value = true;
   try {
     const text = await api.get<string>(`/runs/${run.id}/logs?file=${logFile.value}`, { parseAs: 'text' });
-    archivedLines.value = parseLogText(text);
+    archivedLines.value = parseLogText(text, logFile.value);
   } catch { archivedLines.value = []; }
   finally { archivedLoading.value = false; }
 }
 
-function parseLogText(text: string): LogLine[] {
+function parseLogText(text: string, file: string): LogLine[] {
   return text
     .split('\n')
     .filter((line) => line.trim().length > 0)
-    .map(parseLogLine);
+    .map((line) => parseLogLine(line, file));
 }
 
-function parseLogLine(line: string): LogLine {
-  const match = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?) - (DEBUG|INFO|WARN|ERROR) - (?:\[[^\]]+\] - )?(.*)$/);
+function parseLogLine(line: string, file: string): LogLine {
+  const match = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?) - (DEBUG|INFO|WARN|ERROR) - (?:\[([^\]]+)\] - )?(.*)$/);
   if (!match) {
-    return { ts: Date.now(), level: 'info', source: 'default', message: line };
+    return {
+      timestamp: new Date().toISOString(),
+      level: 'info',
+      source: 'dt-main',
+      file: `${file}.log`,
+      message: line,
+    };
   }
   return {
-    ts: dayjs(match[1]).valueOf(),
+    timestamp: `${match[1].replace(' ', 'T')}Z`,
     level: match[2].toLowerCase() as LogLine['level'],
-    source: 'default',
-    message: match[3],
+    source: match[3] ?? 'dt-main',
+    file: `${file}.log`,
+    message: match[4],
   };
 }
 
@@ -895,7 +1210,7 @@ const POLL_INTERVAL_MS = 5_000;
 onMounted(async () => {
   await loadDetail();
   if (latestRun.value?.status === 'failed') {
-    await loadArchivedLogIntoPane(latestRun.value);
+    await loadPersistedLogs(latestRun.value.id);
   }
   loadAlerts();
   loadHistory();
@@ -906,21 +1221,10 @@ onMounted(async () => {
   pollId = setInterval(() => {
     if (isVisible.value) {
       loadDetail();
-      if (activeTab.value === 'alerts') loadAlerts();
+      if (activeTab.value === 'more') loadAlerts();
     }
   }, POLL_INTERVAL_MS);
 });
-
-async function loadArchivedLogIntoPane(run: Run) {
-  try {
-    const text = await api.get<string>(`/runs/${run.id}/logs?file=${logFile.value}`, { parseAs: 'text' });
-    logStreamHandle.value?.close();
-    logStreamHandle.value = null;
-    archivedLogLines.value = parseLogText(text);
-  } catch {
-    archivedLogLines.value = [];
-  }
-}
 
 onUnmounted(() => {
   if (pollId) clearInterval(pollId);
@@ -961,14 +1265,36 @@ function onBack() {
   gap: 12px;
   flex-wrap: wrap;
 }
-.detail__header-left {
-  display: inline-flex;
+.detail__identity {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  min-width: 0;
+}
+.detail__identity-main { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.detail__eyebrow,
+.detail__endpoint-role {
+  color: var(--color-ink-subtle);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.detail__title-row,
+.detail__runtime-state,
+.detail__actions,
+.detail__actions-primary,
+.detail__actions-secondary,
+.detail__actions-destructive {
+  display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
-.detail__sep {
-  color: var(--color-border);
-}
+.detail__title-row { min-width: 0; flex-wrap: wrap; }
+.detail__runtime-state { color: var(--color-ink-muted); font-size: 13px; flex-wrap: wrap; }
+.detail__task-id { color: var(--color-ink-subtle); font-family: var(--font-mono); font-size: 12px; }
+.detail__actions { flex-wrap: wrap; justify-content: flex-end; }
+.detail__actions-destructive { border-left: 1px solid var(--color-border); padding-left: 12px; }
 .detail__title {
   margin: 0;
   font-size: var(--text-xl);
@@ -1006,6 +1332,33 @@ function onBack() {
 .detail__tabs {
   padding: 8px 20px 20px;
 }
+.detail__topology { padding: 12px 0 20px; }
+.detail__topology h2,
+.detail__config h2,
+.detail__more-section h2 { margin: 0 0 12px; font-size: var(--text-lg); }
+.detail__topology-flow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 20px;
+}
+.detail__endpoint {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  min-width: 0;
+}
+.detail__endpoint .engine-tag { margin: 8px 0 14px; }
+.detail__endpoint dl {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  gap: 8px 12px;
+  margin: 0;
+}
+.detail__endpoint dt { color: var(--color-ink-subtle); font-size: 12px; }
+.detail__endpoint dd { margin: 0; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: 12px; }
+.detail__topology-arrow { color: var(--color-ink-muted); display: flex; align-items: center; font-size: 24px; }
+.detail__more-section { padding-top: 12px; }
 .detail__config dl {
   display: grid;
   grid-template-columns: 180px 1fr;
@@ -1015,11 +1368,30 @@ function onBack() {
 }
 .detail__config dt { color: var(--color-ink-subtle); font-size: 13px; }
 .detail__config dd { margin: 0; color: var(--color-ink); font-size: 13px; font-family: var(--font-mono); }
+@media (max-width: 800px) {
+  .detail__header { align-items: stretch; padding: 12px 16px; }
+  .detail__identity { width: 100%; }
+  .detail__actions { width: 100%; justify-content: flex-start; }
+  .detail__actions-destructive { margin-left: auto; }
+  .detail__topology-flow { grid-template-columns: 1fr; }
+  .detail__topology-arrow { justify-content: center; }
+  .detail__topology-arrow svg { transform: rotate(90deg); }
+  .detail__config dl { grid-template-columns: 1fr; gap: 4px; }
+}
 .detail__mono { font-family: var(--font-mono); font-size: 12px; }
 .detail__muted { color: var(--color-ink-subtle); font-size: 12px; }
 .detail__position { font-size: 11px; word-break: break-all; }
 
 /* logs */
+.detail__log-context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin: 12px 0;
+  color: var(--color-ink-muted);
+  font-size: 12px;
+}
+.detail__log-context strong { color: var(--color-ink); font-family: var(--font-mono); }
 .detail__log-toolbar {
   display: flex;
   justify-content: space-between;
@@ -1040,6 +1412,20 @@ function onBack() {
 }
 .detail__log-file-select { width: 140px; }
 .detail__log-level-select { width: 100px; }
+.detail__log-search { width: min(260px, 45vw); }
+.detail__log-diagnostic { margin: 12px 0; }
+.detail__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.detail__log-status-pill--connecting { background: #EFF6FF; color: #1D4ED8; }
 .detail__log-status-pill {
   display: inline-flex;
   align-items: center;
@@ -1073,6 +1459,7 @@ function onBack() {
 .detail__log-line--info .detail__log-level { color: #67E8F9; }
 .detail__log-line--debug .detail__log-level { color: #94A3B8; }
 .detail__log-time { color: #64748B; }
+.detail__log-source { color: #94A3B8; }
 .detail__log-msg { color: #E2E8F0; overflow-wrap: anywhere; }
 .detail__log-follow {
   position: sticky;

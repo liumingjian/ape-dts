@@ -59,7 +59,7 @@ describe('Router task taxonomy redirects', () => {
     await router.push('/tasks/cdc/abc-123?tab=alerts#tail');
     expect(router.currentRoute.value.path).toBe('/tasks/migration/abc-123');
     expect(router.currentRoute.value.query.mode).toBe('cdc');
-    expect(router.currentRoute.value.query.tab).toBe('alerts');
+    expect(router.currentRoute.value.query.tab).toBe('more');
     expect(router.currentRoute.value.hash).toBe('#tail');
   });
 
@@ -67,9 +67,39 @@ describe('Router task taxonomy redirects', () => {
     await router.push('/tasks/sync/abc-123?mode=cdc&tab=alerts#tail');
     expect(router.currentRoute.value.path).toBe('/tasks/migration/abc-123');
     expect(router.currentRoute.value.query.mode).toBe('cdc');
-    expect(router.currentRoute.value.query.tab).toBe('alerts');
+    expect(router.currentRoute.value.query.tab).toBe('more');
     expect(router.currentRoute.value.hash).toBe('#tail');
   });
+
+  it.each([
+    ['config', 'overview'],
+    ['objects', 'objects'],
+    ['logs', 'logs'],
+    ['monitor', 'monitoring'],
+    ['alerts', 'more'],
+    ['history', 'history'],
+  ])('maps legacy task-detail tab %s to %s without losing saved-link state', async (legacyTab, canonicalTab) => {
+    await router.push(`/tasks/cdc/abc-123?tab=${legacyTab}&edit=1&trace=keep#tail`);
+    expect(router.currentRoute.value.path).toBe('/tasks/migration/abc-123');
+    expect(router.currentRoute.value.query.mode).toBe('cdc');
+    expect(router.currentRoute.value.query.tab).toBe(canonicalTab);
+    expect(router.currentRoute.value.query.edit).toBe('1');
+    expect(router.currentRoute.value.query.trace).toBe('keep');
+    expect(router.currentRoute.value.hash).toBe('#tail');
+  });
+
+  it('normalizes legacy tab keys on canonical task-detail links', async () => {
+    await router.push('/tasks/migration/abc-123?mode=snapshot_cdc&tab=monitor#charts');
+    expect(router.currentRoute.value.fullPath).toBe('/tasks/migration/abc-123?mode=snapshot_cdc&tab=monitoring#charts');
+  });
+
+  it.each(['overview', 'objects', 'logs', 'monitoring', 'history', 'more'])(
+    'preserves canonical task-detail tab %s',
+    async (tab) => {
+      await router.push(`/tasks/migration/abc-123?mode=cdc&tab=${tab}`);
+      expect(router.currentRoute.value.query.tab).toBe(tab);
+    },
+  );
 
   it('redirects legacy create paths to migration create with mode defaults', async () => {
     await router.push('/tasks/create/snapshot');

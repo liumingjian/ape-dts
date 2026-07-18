@@ -195,12 +195,12 @@
   "taskDetail": {
     "back": "Back to list",
     "tab": {
-      "config": "Sync config",
+      "overview": "Overview",
       "objects": "Sync objects",
       "logs": "Logs",
-      "monitor": "Monitor",
-      "alerts": "Alerts",
-      "history": "Run history"
+      "monitoring": "Monitoring",
+      "history": "Run history",
+      "more": "More"
     },
     "kpi": {
       "status": "Status",

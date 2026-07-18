@@ -258,12 +258,12 @@
   "taskDetail": {
     "back": "返回列表",
     "tab": {
-      "config": "同步配置",
+      "overview": "概览",
       "objects": "同步对象",
-      "logs": "运行日志",
-      "monitor": "监控",
-      "alerts": "告警",
-      "history": "运行历史"
+      "logs": "日志",
+      "monitoring": "监控",
+      "history": "运行历史",
+      "more": "更多"
     },
     "kpi": {
       "status": "状态",

@@ -1,7 +1,8 @@
 /* eslint-disable vue/one-component-per-file -- test file with stub components */
 /**
  * Batched metrics fetch: validates that TaskDetail polls one authoritative
- * GET /tasks/:id/detail aggregate instead of issuing per-metric requests.
+ * GET /tasks/:id/detail aggregate and loads canonical Run series concurrently
+ * once per Run rather than issuing serial requests on every poll.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
@@ -188,28 +189,32 @@ describe('Batched metrics fetch', () => {
     vi.useRealTimers();
   });
 
-  it('loadDetailMetrics does not make per-metric serial fetches', async () => {
+  it('loads canonical Run metric series concurrently', async () => {
     const { TaskDetail, router, i18n } = await buildHarness();
     mount(TaskDetail, {
       global: { plugins: [router, i18n], stubs: GLOBAL_STUBS },
     });
     await flushPromises();
 
-    expect(countPerMetricCalls()).toBe(0);
+    expect(countPerMetricCalls()).toBe(7);
+    const calls = mockGet.mock.calls
+      .map(([url]) => String(url))
+      .filter((url) => url.includes('/metrics?metric='));
+    expect(calls.every((url) => url.includes('/runs/snap-1-run-1/metrics?metric='))).toBe(true);
   });
 
-  it('loadMonitorMetrics does not make per-metric serial fetches', async () => {
+  it('does not reload time series on each aggregate poll', async () => {
     const { TaskDetail, router, i18n } = await buildHarness();
     mount(TaskDetail, {
       global: { plugins: [router, i18n], stubs: GLOBAL_STUBS },
     });
     await flushPromises();
 
-    // Advance one poll cycle — monitor tab metrics should not trigger serial fetches
+    const initialCalls = countPerMetricCalls();
     vi.advanceTimersByTime(5_000);
     await flushPromises();
 
-    expect(countPerMetricCalls()).toBe(0);
+    expect(countPerMetricCalls()).toBe(initialCalls);
   });
 
   it('polls exactly one task detail aggregate per cycle', async () => {

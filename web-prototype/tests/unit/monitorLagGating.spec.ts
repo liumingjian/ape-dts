@@ -76,7 +76,7 @@ const CDC_FIXTURE: ApiTask = {
   taskId: 'cdc_mysql_mysql_cdc1',
   name: 'test-cdc',
   kind: 'cdc',
-  metrics: { extractor_pushed_rps_avg: 100, lag: 5, pipeline_buffer_size_avg: 1024 },
+  metrics: { extractor_pushed_rps_avg: 100, lag: 5, pipeline_queue_size: 1024 },
 };
 
 /* ---------- Stubs ---------- */
@@ -296,6 +296,6 @@ describe('Monitor lag gating — runtime', () => {
     // The CDC KPI strip should show Lag tile (already tested in taskDetailKpiBranching)
     // Here we verify that the component renders without errors when lag data is present
     expect(wrapper.html()).toBeTruthy();
-    expect(wrapper.html()).toContain('Lag');
+    expect(wrapper.html()).toContain('Replication lag');
   });
 });

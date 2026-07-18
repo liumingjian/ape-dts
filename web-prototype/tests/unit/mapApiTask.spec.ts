@@ -21,9 +21,11 @@ const BASE: ApiTask = {
   runtime: null,
   metrics: {
     extractor_pushed_rps_avg: 120,
+    sinker_rps_avg: 95,
+    sinker_rt_avg: 2800,
     lag: 50,
-    pipeline_buffer_size_avg: 1024,
-    pipeline_sinked_count_latest: 5000,
+    pipeline_queue_size: 1024,
+    sinker_sinked_records: 5000,
     progress: 73,
   },
   resourceGroupId: 'rg-1',
@@ -70,12 +72,30 @@ describe('mapApiTask', () => {
     expect(t.target.engine).toBe('gaussdb');
   });
 
-  it('maps metrics when present', () => {
+  it('maps canonical engine metrics when present', () => {
     const t = mapApiTask(BASE);
     expect(t.metrics.rpsLatest).toBe(120);
+    expect(t.metrics.sinkerRpsLatest).toBe(95);
+    expect(t.metrics.queryRtUs).toBe(2800);
     expect(t.metrics.lag).toBe(50);
     expect(t.metrics.bufferSize).toBe(1024);
     expect(t.metrics.processedRecords).toBe(5000);
+  });
+
+  it('does not map prototype metric aliases', () => {
+    const t = mapApiTask({
+      ...BASE,
+      metrics: {
+        sinker_record_count_avg_by_sec: 95,
+        sinker_rt_per_query_avg: 2800,
+        pipeline_buffer_size_avg: 1024,
+        pipeline_sinked_count_latest: 5000,
+      } as ApiTask['metrics'],
+    });
+    expect(t.metrics.sinkerRpsLatest).toBe(0);
+    expect(t.metrics.queryRtUs).toBe(0);
+    expect(t.metrics.bufferSize).toBe(0);
+    expect(t.metrics.processedRecords).toBe(0);
   });
 
   it('defaults metrics to 0 when null', () => {
