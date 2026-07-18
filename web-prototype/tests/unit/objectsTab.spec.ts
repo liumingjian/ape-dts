@@ -41,8 +41,8 @@ const SNAPSHOT_FIXTURE: ApiTask = {
   kind: 'snapshot',
   dbTypeSource: 'mysql',
   dbTypeTarget: 'postgres',
-  sourceEndpoint: { url: '' },
-  targetEndpoint: { url: '' },
+  sourceEndpoint: { url: 'mysql://source_user:source-secret@mysql.internal:3307/sales' },
+  targetEndpoint: { url: 'postgres://target_user:target-secret@postgres.internal:5432/warehouse' },
   extractor: null,
   sinker: null,
   filter: null,
@@ -81,6 +81,17 @@ const KpiCardStub = defineComponent({
   template: `<div class="kpi-card-stub"><span class="kpi-label">{{ label }}</span><span class="kpi-value">{{ sentinelText ?? value }}</span><span class="kpi-unit" v-if="unit && !sentinelText">{{ unit }}</span></div>`,
 });
 
+const TabsStub = defineComponent({
+  name: 'ElTabs',
+  template: '<div class="tabs-stub"><slot /></div>',
+});
+
+const TabPaneStub = defineComponent({
+  name: 'ElTabPane',
+  props: { label: { type: String, default: '' }, name: { type: String, default: '' } },
+  template: '<section class="tab-pane-stub" :data-name="name"><span class="tab-label">{{ label }}</span><slot /></section>',
+});
+
 const GLOBAL_STUBS = {
   KpiCard: KpiCardStub,
   ChartCard: true as const,
@@ -90,8 +101,8 @@ const GLOBAL_STUBS = {
   ElProgress: true as const,
   ElTable: true as const,
   ElTableColumn: true as const,
-  ElTabPane: true as const,
-  ElTabs: true as const,
+  ElTabPane: TabPaneStub,
+  ElTabs: TabsStub,
   ElDrawer: true as const,
   ElDialog: true as const,
   ElPagination: true as const,
@@ -108,7 +119,10 @@ const GLOBAL_STUBS = {
 };
 
 /* ---------- Harness ---------- */
-async function buildHarness(taskFixture: ApiTask = SNAPSHOT_FIXTURE, objectsResponse: TableLoadState[] | null = MOCK_OBJECTS) {
+async function buildHarness(
+  taskFixture: ApiTask = SNAPSHOT_FIXTURE,
+  objectsResponse: TableLoadState[] | Error | null = MOCK_OBJECTS,
+) {
   setActivePinia(createPinia());
   const i18n = createI18n({
     legacy: false,
@@ -120,7 +134,7 @@ async function buildHarness(taskFixture: ApiTask = SNAPSHOT_FIXTURE, objectsResp
           back: '返回',
           kpi: { status: '状态', rps: 'RPS', latency: '延迟', progress: '进度' },
           action: { start: '启动', stop: '停止', pause: '暂停', resume: '恢复', delete: '删除', edit: '编辑' },
-          tab: { config: '配置', objects: '对象', logs: '日志', monitor: '监控', alerts: '告警', history: '历史' },
+          tab: { overview: 'Overview', objects: 'Sync objects', logs: 'Logs', monitoring: 'Monitoring', history: 'Run history', more: 'More' },
           objects: { col: { name: '名称', type: '类型', rows: '行数', status: '状态', schema: 'Schema', table: 'Table', state: 'State' } },
           log: { connected: '已连接', reconnecting: '重连中', disconnected: '已断开', reconnect: '重连', resume: '继续', pause: '暂停', follow: '跟随' },
           editor: { title: '编辑', tip: '提示' },
@@ -151,7 +165,9 @@ async function buildHarness(taskFixture: ApiTask = SNAPSHOT_FIXTURE, objectsResp
   mockGet.mockImplementation((url: string) => {
     if (url.endsWith(`/tasks/${taskFixture.id}/detail`)) return Promise.resolve(aggregate);
     if (url.includes('/runs') && url.includes('/objects')) {
-      return Promise.resolve(objectsResponse ?? []);
+      return objectsResponse instanceof Error
+        ? Promise.reject(objectsResponse)
+        : Promise.resolve(objectsResponse ?? []);
     }
     if (url.includes('/runs') && url.includes('/logs')) return Promise.resolve('');
     if (url.includes('/runs')) return Promise.resolve({ items: [], total: 0 });
@@ -193,6 +209,56 @@ describe('Objects tab real data', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
     mockGet.mockReset();
+  });
+
+  it('renders the production hierarchy and credential-free database topology', async () => {
+    const { TaskDetail, router, i18n } = await buildHarness();
+    const wrapper = mount(TaskDetail, {
+      global: { plugins: [router, i18n], stubs: GLOBAL_STUBS },
+    });
+    await flushPromises();
+
+    const text = wrapper.text();
+    expect(text).toContain('test-snapshot');
+    expect(text).toContain('Run: running');
+    expect(text).toContain('Phase: Snapshot');
+    expect(text).toContain('Database topology');
+    expect(text).toContain('mysql.internal');
+    expect(text).toContain('3307');
+    expect(text).toContain('sales');
+    expect(text).toContain('postgres.internal');
+    expect(text).toContain('5432');
+    expect(text).toContain('warehouse');
+    expect(text).not.toContain('source_user');
+    expect(text).not.toContain('source-secret');
+    expect(text).not.toContain('target_user');
+    expect(text).not.toContain('target-secret');
+  });
+
+  it('exposes production tab labels in the documented order', async () => {
+    const { TaskDetail, router, i18n } = await buildHarness();
+    const wrapper = mount(TaskDetail, {
+      global: { plugins: [router, i18n], stubs: GLOBAL_STUBS },
+    });
+    await flushPromises();
+
+    const labels = wrapper.findAll('.tab-label').map((item) => item.text());
+    expect(labels).toEqual(['Overview', 'Sync objects', 'Logs', 'Monitoring', 'Run history', 'More']);
+  });
+
+  it('keeps edit deep links on Overview and opens the configuration drawer', async () => {
+    const { TaskDetail, router, i18n } = await buildHarness();
+    await router.push({ path: `/tasks/snapshot/${SNAPSHOT_FIXTURE.id}`, query: { tab: 'overview', edit: '1' } });
+    await router.isReady();
+
+    const wrapper = mount(TaskDetail, {
+      global: { plugins: [router, i18n], stubs: GLOBAL_STUBS },
+    });
+    await flushPromises();
+
+    expect((wrapper.vm as any).activeTab).toBe('overview');
+    expect((wrapper.vm as any).editorVisible).toBe(true);
+    expect(router.currentRoute.value.query.edit).toBe('1');
   });
 
   it('switching to Objects tab triggers GET /runs/:id/objects', async () => {
@@ -259,6 +325,29 @@ describe('Objects tab real data', () => {
 
     const objects: TableLoadState[] = (wrapper.vm as any).objects;
     expect(objects).toHaveLength(0);
+  });
+
+  it('renders an authoritative diagnostic when the objects request fails', async () => {
+    const apiError = Object.assign(new Error('objects endpoint unavailable'), {
+      code: 'OBJECTS_UNAVAILABLE',
+      status: 503,
+      requestId: 'req-objects-1',
+    });
+    const { TaskDetail, router, i18n } = await buildHarness(SNAPSHOT_FIXTURE, apiError);
+    const wrapper = mount(TaskDetail, {
+      global: { plugins: [router, i18n], stubs: GLOBAL_STUBS },
+    });
+    await flushPromises();
+
+    (wrapper.vm as any).activeTab = 'objects';
+    await flushPromises();
+
+    const text = wrapper.text();
+    expect(text).toContain('Sync objects unavailable');
+    expect(text).toContain('OBJECTS_UNAVAILABLE');
+    expect(text).toContain('objects endpoint unavailable');
+    expect(text).toContain('503');
+    expect(text).toContain('req-objects-1');
   });
 
   it('stateTagType returns correct el-tag type for each state', async () => {

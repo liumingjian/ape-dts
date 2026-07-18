@@ -8,7 +8,9 @@
         <div class="detail__identity-main">
           <span class="detail__eyebrow">Task</span>
           <div class="detail__title-row">
-            <h1 class="detail__title">{{ task?.name ?? '—' }}</h1>
+            <el-tooltip :content="task?.name ?? ''" placement="top" :disabled="!task?.name">
+              <h1 class="detail__title" tabindex="0">{{ task?.name ?? '—' }}</h1>
+            </el-tooltip>
             <span v-if="task" class="detail__task-id">{{ task.id }}</span>
           </div>
           <div v-if="task" class="detail__runtime-state" aria-label="Current run state">
@@ -205,7 +207,17 @@
         </el-tab-pane>
 
         <el-tab-pane :label="t('taskDetail.tab.objects')" name="objects">
-          <el-empty v-if="objects.length === 0" :description="t('common.empty')" />
+          <div v-if="objectsError" class="detail__diagnostic" role="alert">
+            <h2>Sync objects unavailable</h2>
+            <dl>
+              <dt>Code</dt><dd>{{ objectsError.code ?? 'UNKNOWN_ERROR' }}</dd>
+              <dt>Message</dt><dd>{{ objectsError.message }}</dd>
+              <dt>HTTP status</dt><dd>{{ objectsError.status }}</dd>
+              <dt>Request ID</dt><dd>{{ objectsError.requestId ?? '—' }}</dd>
+            </dl>
+            <el-button type="primary" @click="loadObjects">Retry</el-button>
+          </div>
+          <el-empty v-else-if="objects.length === 0" :description="t('common.empty')" />
           <el-table v-else :data="objects" class="detail__objects">
             <el-table-column :label="t('taskDetail.objects.col.schema')" min-width="180" prop="schema" />
             <el-table-column :label="t('taskDetail.objects.col.table')" min-width="240" prop="table" />
@@ -888,6 +900,7 @@ const bufferOption = computed(() => {
 /* ---------- objects (per-table state from /runs/:id/objects) ---------- */
 const objects = ref<TableLoadState[]>([]);
 const objectsLoading = ref(false);
+const objectsError = ref<ApiError | null>(null);
 
 function stateTagType(state: TableLoadState['state']): 'info' | 'warning' | 'success' {
   if (state === 'pending') return 'info';
@@ -898,11 +911,13 @@ function stateTagType(state: TableLoadState['state']): 'info' | 'warning' | 'suc
 async function loadObjects() {
   if (!currentRunId.value) return;
   objectsLoading.value = true;
+  objectsError.value = null;
   try {
     const res = await api.get<TableLoadState[]>(`/runs/${currentRunId.value}/objects`);
     objects.value = Array.isArray(res) ? res : [];
-  } catch {
+  } catch (error) {
     objects.value = [];
+    objectsError.value = error as ApiError;
   } finally {
     objectsLoading.value = false;
   }
@@ -940,7 +955,7 @@ const logLastEventText = computed(() => {
 });
 
 function logLineKey(line: LogLine): string {
-  return [line.timestamp, line.level, line.source, line.file, line.message].join(' ');
+  return [line.timestamp, line.level, line.source, line.file, line.message].join('\u0000');
 }
 
 const combinedLogLines = computed<LogLine[]>(() => {
@@ -1290,13 +1305,19 @@ function onBack() {
   align-items: center;
   gap: 8px;
 }
-.detail__title-row { min-width: 0; flex-wrap: wrap; }
+.detail__title-row { min-width: 0; flex-wrap: nowrap; }
+.detail__title-row > :first-child { min-width: 0; }
 .detail__runtime-state { color: var(--color-ink-muted); font-size: 13px; flex-wrap: wrap; }
 .detail__task-id { color: var(--color-ink-subtle); font-family: var(--font-mono); font-size: 12px; }
 .detail__actions { flex-wrap: wrap; justify-content: flex-end; }
 .detail__actions-destructive { border-left: 1px solid var(--color-border); padding-left: 12px; }
 .detail__title {
   margin: 0;
+  min-width: 0;
+  max-width: min(42vw, 560px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: var(--text-xl);
   font-weight: 600;
 }
@@ -1371,6 +1392,8 @@ function onBack() {
 @media (max-width: 800px) {
   .detail__header { align-items: stretch; padding: 12px 16px; }
   .detail__identity { width: 100%; }
+  .detail__title { max-width: 100%; }
+  .detail__title-row { flex-wrap: wrap; }
   .detail__actions { width: 100%; justify-content: flex-start; }
   .detail__actions-destructive { margin-left: auto; }
   .detail__topology-flow { grid-template-columns: 1fr; }
