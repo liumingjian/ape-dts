@@ -526,8 +526,8 @@ export interface CreateTaskDto {
   extractor: { extract_type: ExtractType };
   sinker: Record<string, unknown>;
   filter?: {
-    do_dbs?: string;
-    do_tbs?: string;
+    do_dbs?: string | string[];
+    do_tbs?: string | string[];
     ignore_dbs?: string;
     ignore_tbs?: string;
     do_events?: string;
