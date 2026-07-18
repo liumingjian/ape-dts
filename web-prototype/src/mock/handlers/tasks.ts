@@ -71,12 +71,15 @@ function listByCategoryParam(catParam: string, url: URL): Task[] {
   }
   const status = q(url, 'status');
   const engine = q(url, 'engine');
-  const rg = q(url, 'resourceGroup');
+  const rg = q(url, 'resource_group');
   const mode = q(url, 'mode');
   const key = q(url, 'q')?.toLowerCase();
   if (status) items = items.filter((t) => t.status === status);
   if (engine) items = items.filter((t) => t.source.engine === engine || t.target.engine === engine);
-  if (rg) items = items.filter((t) => t.resourceGroup === rg);
+  if (rg) {
+    const groupName = db.resourceGroups.find((group) => group.id === rg)?.name;
+    items = items.filter((t) => t.resourceGroup === (groupName ?? rg));
+  }
   if (mode) items = items.filter((t) => t.syncMode === mode);
   if (key) items = items.filter((t) => t.name.toLowerCase().includes(key) || t.id.toLowerCase().includes(key));
   return items;
@@ -87,9 +90,26 @@ export const taskHandlers = [
     await pause();
     const url = new URL(request.url);
     const catParam = q(url, 'category') ?? 'snapshot';
-    const items = listByCategoryParam(catParam, url);
-    const { page, size } = parsePage(url);
-    return ok(paginate(items, page, size));
+    let items = listByCategoryParam(catParam, url);
+    const sort = q(url, 'sort');
+    const order = q(url, 'order') === 'asc' ? 1 : -1;
+    if (sort) {
+      const values: Record<string, (task: Task) => string> = {
+        name: (task) => task.name,
+        engine: (task) => task.source.engine,
+        status: (task) => task.status,
+        kind: (task) => task.category,
+        created_at: (task) => task.createdAt,
+        updated_at: (task) => task.updatedAt,
+      };
+      const value = values[sort];
+      if (value) items = [...items].sort((a, b) => value(a).localeCompare(value(b)) * order);
+    }
+    const page = Math.max(1, Number(url.searchParams.get('page') ?? 1));
+    const pageSize = Math.max(1, Math.min(100, Number(url.searchParams.get('page_size') ?? 20)));
+    const total = items.length;
+    const start = (page - 1) * pageSize;
+    return ok({ items: items.slice(start, start + pageSize), total, page, pageSize });
   }),
 
   http.get('/api/tasks/:id', async ({ params }) => {

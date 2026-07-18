@@ -1,7 +1,7 @@
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { createI18n } from 'vue-i18n';
-import { defineComponent, h } from 'vue';
+import { defineComponent, h, nextTick } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMemoryHistory, createRouter, type RouteRecordRaw } from 'vue-router';
 import TaskListView from '@/components/TaskListView.vue';
@@ -25,8 +25,10 @@ vi.mock('@/composables/useRbac', () => ({
   useRbac: () => ({ can: () => true }),
 }));
 
+const documentVisibility = vi.hoisted(() => ({ isVisible: { value: true } }));
+
 vi.mock('@/composables/useDocumentVisibility', () => ({
-  useDocumentVisibility: () => ({ isVisible: { value: true } }),
+  useDocumentVisibility: () => documentVisibility,
 }));
 
 const Stub = defineComponent({ name: 'Stub', render: () => h('div') });
@@ -84,6 +86,12 @@ function taskItem(kind: 'snapshot' | 'cdc', extractType: 'snapshot' | 'snapshot_
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
   };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
 }
 
 async function mountTaskList(path: string) {
@@ -219,6 +227,8 @@ describe('Migration module routes and menu', () => {
 
 describe('Migration task list behavior', () => {
   beforeEach(() => {
+    documentVisibility.isVisible.value = true;
+    vi.useRealTimers();
     vi.mocked(api.get).mockReset();
     vi.mocked(api.get).mockImplementation(async (url: string) => {
       if (url === '/license') return { maxTasks: 0, currentTasks: 0 };
@@ -239,6 +249,86 @@ describe('Migration task list behavior', () => {
     expect(taskCall?.[0]).toContain('category=migration');
     expect(taskCall?.[0]).toContain('mode=cdc');
     expect(taskCall?.[0]).toContain('status=running');
+  });
+
+  it('restores shareable list state and sends the exact canonical backend query', async () => {
+    await mountTaskList('/tasks/migration?mode=cdc&status=running&engine=mysql&resource_group=rg-prod&q=orders&page=2&page_size=50&sort=updated_at&order=desc');
+    const taskCall = vi.mocked(api.get).mock.calls.find(([url]) => String(url).startsWith('/tasks?'));
+    expect(taskCall?.[0]).toBe('/tasks?category=migration&page=2&page_size=50&resource_group=rg-prod&engine=mysql&status=running&mode=cdc&q=orders&sort=updated_at&order=desc');
+  });
+
+  it('reloads the server list when browser navigation restores prior state', async () => {
+    const { router } = await mountTaskList('/tasks/migration?status=running&page=2');
+    vi.mocked(api.get).mockClear();
+
+    await router.push('/tasks/migration?status=failed&page=3&page_size=20');
+    await nextTick();
+
+    const taskCall = vi.mocked(api.get).mock.calls.find(([url]) => String(url).startsWith('/tasks?'));
+    expect(taskCall?.[0]).toBe('/tasks?category=migration&page=3&page_size=20&status=failed');
+  });
+
+  it('keeps the newest URL state when list requests resolve out of order', async () => {
+    const first = deferred<{ items: ApiTask[]; total: number }>();
+    const second = deferred<{ items: ApiTask[]; total: number }>();
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      if (url === '/license') return { maxTasks: 0, currentTasks: 0 };
+      if (url === '/resource_groups') return [];
+      if (url.includes('page=2')) return first.promise;
+      if (url.includes('page=3')) return second.promise;
+      return { items: [], total: 0 };
+    });
+
+    const { router, wrapper } = await mountTaskList('/tasks/migration?page=2');
+    await router.push('/tasks/migration?page=3');
+    await nextTick();
+
+    second.resolve({ items: [taskItem('cdc', 'cdc')], total: 1 });
+    await Promise.resolve();
+    await nextTick();
+    first.resolve({ items: [taskItem('snapshot', 'snapshot')], total: 1 });
+    await Promise.resolve();
+    await nextTick();
+
+    expect(wrapper.findAll('.row').map((row) => row.text())).toEqual(['cdc-cdc']);
+  });
+
+  it('pauses five-second polling while the document is hidden', async () => {
+    vi.useFakeTimers();
+    await mountTaskList('/tasks/migration?status=running&page=2');
+    vi.mocked(api.get).mockClear();
+
+    documentVisibility.isVisible.value = false;
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(vi.mocked(api.get).mock.calls.some(([url]) => String(url).startsWith('/tasks?'))).toBe(false);
+
+    documentVisibility.isVisible.value = true;
+    await vi.advanceTimersByTimeAsync(5_000);
+    const taskCall = vi.mocked(api.get).mock.calls.find(([url]) => String(url).startsWith('/tasks?'));
+    expect(taskCall?.[0]).toBe('/tasks?category=migration&page=2&page_size=10&status=running');
+  });
+
+  it('renders production diagnostics and retries the exact failed request', async () => {
+    const failedRequest = '/tasks?category=migration&page=2&page_size=10&status=running';
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      if (url === '/license') return { maxTasks: 0, currentTasks: 0 };
+      if (url === '/resource_groups') return [];
+      throw { status: 503, code: 'TASK_LIST_UNAVAILABLE', message: 'database is locked', requestId: 'req-list-12' };
+    });
+
+    const { wrapper } = await mountTaskList('/tasks/migration?status=running&page=2');
+    await nextTick();
+
+    const diagnostics = wrapper.get('[data-testid="task-list-diagnostics"]');
+    expect(diagnostics.text()).toContain('TASK_LIST_UNAVAILABLE');
+    expect(diagnostics.text()).toContain('database is locked');
+    expect(diagnostics.text()).toContain('503');
+    expect(diagnostics.text()).toContain('req-list-12');
+    expect(diagnostics.text()).toContain('taskList.diagnostics.lastRefresh');
+
+    vi.mocked(api.get).mockResolvedValue({ items: [], total: 0 });
+    await wrapper.get('[data-testid="task-list-retry"]').trigger('click');
+    expect(vi.mocked(api.get).mock.calls.some(([url]) => url === failedRequest)).toBe(true);
   });
 
   it('maps persisted snapshot_and_cdc tasks to the snapshot_cdc display mode', () => {

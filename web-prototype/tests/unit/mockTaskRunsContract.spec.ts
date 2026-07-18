@@ -9,12 +9,13 @@ describe('mock task runs contract', () => {
     server.listen({ onUnhandledRequest: 'error' });
 
     try {
-      const listResponse = await fetch('/api/tasks?category=snapshot&page=1&size=1');
-      const listBody = await listResponse.json() as { items: Array<{ id: string }> };
+      const listResponse = await fetch('/api/tasks?category=snapshot&page=1&page_size=1');
+      const listBody = await listResponse.json() as { items: Array<{ id: string }>; pageSize: number };
       const taskId = listBody.items[0]?.id;
 
       expect(listResponse.status).toBe(200);
       expect(taskId).toEqual(expect.any(String));
+      expect(listBody.pageSize).toBe(1);
 
       const runId = `run_${taskId}`;
       const runsResponse = await fetch(`/api/tasks/${taskId}/runs?page=1&size=1`);
@@ -72,12 +73,10 @@ describe('mock task runs contract', () => {
       }));
 
       const resourceGroupsResponse = await fetch('/api/resource_groups');
-      const resourceGroupsBody = await resourceGroupsResponse.json() as {
-        items: Array<{ id: string; name: string }>;
-      };
+      const resourceGroupsBody = await resourceGroupsResponse.json() as Array<{ id: string; name: string }>;
 
       expect(resourceGroupsResponse.status).toBe(200);
-      expect(resourceGroupsBody.items.length).toBeGreaterThan(0);
+      expect(resourceGroupsBody.length).toBeGreaterThan(0);
     } finally {
       server.close();
     }

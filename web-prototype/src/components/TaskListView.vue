@@ -132,7 +132,7 @@
             class="task-list__filter task-list__filter--sm"
             @change="applyFilter"
           >
-            <el-option v-for="g in resourceGroups" :key="g" :label="g" :value="g" />
+            <el-option v-for="g in resourceGroups" :key="g.id" :label="g.name" :value="g.id" />
           </el-select>
           <el-select
             v-model="filter.engine"
@@ -213,8 +213,42 @@
           </el-button>
         </div>
 
+        <section
+          v-if="listError"
+          class="task-list__diagnostics"
+          data-testid="task-list-diagnostics"
+          role="alert"
+        >
+          <div class="task-list__diagnostics-title">{{ t('taskList.diagnostics.title') }}</div>
+          <dl class="task-list__diagnostics-grid">
+            <template v-if="listError.code">
+              <dt>{{ t('taskList.diagnostics.code') }}</dt>
+              <dd><code>{{ listError.code }}</code></dd>
+            </template>
+            <dt>{{ t('taskList.diagnostics.message') }}</dt>
+            <dd>{{ listError.message }}</dd>
+            <dt>{{ t('taskList.diagnostics.httpStatus') }}</dt>
+            <dd>{{ listError.status || '—' }}</dd>
+            <template v-if="listError.requestId">
+              <dt>{{ t('taskList.diagnostics.requestId') }}</dt>
+              <dd><code>{{ listError.requestId }}</code></dd>
+            </template>
+            <dt>{{ t('taskList.diagnostics.lastRefresh') }}</dt>
+            <dd>{{ lastRefreshAt }}</dd>
+          </dl>
+          <div class="task-list__diagnostics-actions">
+            <el-button data-testid="task-list-retry" type="primary" @click="loadList">
+              {{ t('taskList.diagnostics.retry') }}
+            </el-button>
+            <el-button data-testid="task-list-copy-diagnostics" @click="copyDiagnostics">
+              {{ t('taskList.diagnostics.copy') }}
+            </el-button>
+          </div>
+        </section>
+
         <!-- table -->
         <el-table
+          v-else
           ref="tableRef"
           v-loading="loading"
           :data="list"
@@ -226,8 +260,8 @@
           @selection-change="onSelectionChange"
           @sort-change="onSortChange"
         >
-          <el-table-column type="selection" width="44" align="center" class-name="task-list__sel-cell" />
-          <el-table-column :label="t('taskList.col.name')" min-width="240" header-align="left">
+          <el-table-column type="selection" :reserve-selection="true" width="44" align="center" class-name="task-list__sel-cell" />
+          <el-table-column :label="t('taskList.col.name')" prop="name" min-width="240" header-align="left" sortable="custom">
             <template #default="{ row }">
               <div class="task-list__name-cell" :data-testid="`task-row-${row.id}`">
                 <button
@@ -258,7 +292,7 @@
               </span>
             </template>
           </el-table-column>
-          <el-table-column :label="t('taskList.col.source')" width="148" header-align="left" sortable="custom" sort-by="source.engine">
+          <el-table-column :label="t('taskList.col.source')" prop="engine" width="148" header-align="left" sortable="custom">
             <template #default="{ row }">
               <EngineTag :engine="row.source.engine" />
             </template>
@@ -268,12 +302,12 @@
               <EngineTag :engine="row.target.engine" />
             </template>
           </el-table-column>
-          <el-table-column :label="t('taskList.col.status')" width="120" header-align="left" align="left" sortable="custom" sort-by="status">
+          <el-table-column :label="t('taskList.col.status')" prop="status" width="120" header-align="left" align="left" sortable="custom">
             <template #default="{ row }">
               <StatusBadge :status="row.status" />
             </template>
           </el-table-column>
-          <el-table-column :label="t('taskList.col.rps')" width="100" header-align="right" align="right" sortable="custom" sort-by="metrics.rpsLatest">
+          <el-table-column :label="t('taskList.col.rps')" width="100" header-align="right" align="right">
             <template #default="{ row }">
               <span class="task-list__rps tabular-nums">{{ row.metrics?.rpsLatest ?? 0 }}</span>
             </template>
@@ -428,7 +462,7 @@
             :total="total"
             layout="sizes, prev, pager, next, jumper"
             background
-            @current-change="loadList"
+            @current-change="onPageChange"
             @size-change="onSizeChange"
           />
         </footer>
@@ -443,11 +477,11 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter, useRoute } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { api } from '@/api/client';
+import { api, type ApiError } from '@/api/client';
 import { useRbac } from '@/composables/useRbac';
 import { useDocumentVisibility } from '@/composables/useDocumentVisibility';
 import type {
-  Task, TaskStatus, EngineType, Paginated, ApiTask, TaskViewKind, SyncMode,
+  Task, TaskStatus, EngineType, Paginated, ApiTask, TaskViewKind, SyncMode, ResourceGroup,
 } from '@/types/domain';
 import { mapApiTask } from '@/types/domain';
 import { ENGINE_LABELS } from '@/types/domain';
@@ -504,6 +538,9 @@ const loading = ref(false);
 const selected = ref<Task[]>([]);
 const sortKey = ref<string>('');
 const sortDir = ref<'asc' | 'desc'>('asc');
+const listError = ref<ApiError | null>(null);
+const lastRefreshAt = ref('—');
+let listRequestGeneration = 0;
 
 const filter = reactive({
   resourceGroup: '',
@@ -575,7 +612,7 @@ function setDensity(d: Density) {
 }
 
 /* ---------- options ---------- */
-const resourceGroups = ['default', 'production', 'staging', 'dev'];
+const resourceGroups = ref<Pick<ResourceGroup, 'id' | 'name'>[]>([]);
 const engineOptions = (Object.keys(ENGINE_LABELS) as EngineType[])
   .map((k) => ({ value: k, label: ENGINE_LABELS[k] }));
 const statusOptions: TaskStatus[] = ['draft', 'ready', 'running', 'paused', 'stopping', 'stopped', 'failed'];
@@ -616,31 +653,61 @@ function clearAllChips() {
 }
 
 /* ---------- URL sync ---------- */
-function syncFiltersToUrl() {
+function positiveInt(value: unknown, fallback: number, allowed?: number[]): number {
+  const parsed = Number(Array.isArray(value) ? value[0] : value);
+  if (!Number.isInteger(parsed) || parsed < 1) return fallback;
+  return allowed && !allowed.includes(parsed) ? fallback : parsed;
+}
+
+function syncListStateToUrl() {
   const query: Record<string, string> = {};
   if (filter.status) query.status = filter.status;
   if (showModeCol.value && filter.mode) query.mode = filter.mode;
   if (filter.engine) query.engine = filter.engine;
+  if (filter.resourceGroup) query.resource_group = filter.resourceGroup;
   if (filter.q) query.q = filter.q;
-  router.replace({ query });
+  if (page.value !== 1) query.page = String(page.value);
+  if (pageSize.value !== 10) query.page_size = String(pageSize.value);
+  if (sortKey.value) {
+    query.sort = sortKey.value;
+    query.order = sortDir.value;
+  }
+  return router.push({ query });
 }
 
-function readFiltersFromUrl() {
-  if (route.query.status) filter.status = route.query.status as TaskStatus;
-  if (showModeCol.value) filter.mode = isMigrationMode(route.query.mode) ? route.query.mode : '';
-  if (route.query.engine) filter.engine = route.query.engine as EngineType;
-  if (route.query.q) filter.q = String(route.query.q);
+function readListStateFromUrl() {
+  filter.status = route.query.status ? String(route.query.status) as TaskStatus : '';
+  filter.mode = showModeCol.value && isMigrationMode(route.query.mode) ? route.query.mode : '';
+  filter.engine = route.query.engine ? String(route.query.engine) as EngineType : '';
+  filter.resourceGroup = route.query.resource_group ? String(route.query.resource_group) : '';
+  filter.q = route.query.q ? String(route.query.q) : '';
+  page.value = positiveInt(route.query.page, 1);
+  pageSize.value = positiveInt(route.query.page_size, 10, [10, 20, 50]);
+  const requestedSort = route.query.sort ? String(route.query.sort) : '';
+  sortKey.value = ['name', 'engine', 'status', 'kind', 'created_at', 'updated_at'].includes(requestedSort)
+    ? requestedSort
+    : '';
+  sortDir.value = route.query.order === 'desc' ? 'desc' : 'asc';
+}
+
+async function loadResourceGroups() {
+  try {
+    resourceGroups.value = await api.get<Pick<ResourceGroup, 'id' | 'name'>[]>('/resource_groups');
+  } catch {
+    resourceGroups.value = [];
+  }
 }
 
 async function loadList() {
+  const requestGeneration = ++listRequestGeneration;
   loading.value = true;
   try {
     const params = new URLSearchParams({
       category: apiCategory.value,
       page: String(page.value),
-      size: String(pageSize.value),
+      page_size: String(pageSize.value),
     });
-    if (filter.resourceGroup) params.set('resourceGroup', filter.resourceGroup);
+    if (filter.resourceGroup) params.set('resource_group', filter.resourceGroup);
     if (filter.engine) params.set('engine', filter.engine);
     if (filter.status) params.set('status', filter.status);
     if (showModeCol.value && filter.mode) params.set('mode', filter.mode);
@@ -650,25 +717,58 @@ async function loadList() {
       params.set('order', sortDir.value);
     }
     const data = await api.get<Paginated<ApiTask>>(`/tasks?${params.toString()}`);
+    if (requestGeneration !== listRequestGeneration) return;
     list.value = (data.items ?? []).map(mapApiTask);
     total.value = data.total;
-  } catch {
+    listError.value = null;
+    lastRefreshAt.value = new Date().toLocaleString();
+  } catch (error) {
+    if (requestGeneration !== listRequestGeneration) return;
+    const apiError = error as Partial<ApiError>;
+    listError.value = {
+      status: apiError.status ?? 0,
+      code: apiError.code,
+      message: apiError.message || t('taskList.toast.loadFailed'),
+      details: apiError.details,
+      requestId: apiError.requestId,
+    };
+    lastRefreshAt.value = new Date().toLocaleString();
     ElMessage.error(t('taskList.toast.loadFailed'));
   } finally {
-    loading.value = false;
+    if (requestGeneration === listRequestGeneration) loading.value = false;
   }
 }
 
-function applyFilter() {
-  page.value = 1;
-  syncFiltersToUrl();
-  loadList();
+async function copyDiagnostics() {
+  if (!listError.value) return;
+  const diagnostics = {
+    code: listError.value.code,
+    message: listError.value.message,
+    httpStatus: listError.value.status,
+    requestId: listError.value.requestId,
+    lastRefresh: lastRefreshAt.value,
+  };
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(diagnostics, null, 2));
+    ElMessage.success(t('taskList.diagnostics.copied'));
+  } catch {
+    ElMessage.error(t('taskList.diagnostics.copyFailed'));
+  }
 }
 
-function onSizeChange(size: number) {
+async function applyFilter() {
+  page.value = 1;
+  await syncListStateToUrl();
+}
+
+async function onPageChange() {
+  await syncListStateToUrl();
+}
+
+async function onSizeChange(size: number) {
   pageSize.value = size;
   page.value = 1;
-  loadList();
+  await syncListStateToUrl();
 }
 
 function onSelectionChange(rows: Task[]) {
@@ -862,7 +962,7 @@ function onCreate() {
 defineExpose({ goDetail, onCreate });
 
 /* ---------- sorting ---------- */
-function onSortChange({ prop, order }: { prop: string; order: string | null }) {
+async function onSortChange({ prop, order }: { prop: string; order: string | null }) {
   if (!order) {
     sortKey.value = '';
     sortDir.value = 'asc';
@@ -870,16 +970,18 @@ function onSortChange({ prop, order }: { prop: string; order: string | null }) {
     sortKey.value = prop;
     sortDir.value = order === 'ascending' ? 'asc' : 'desc';
   }
-  loadList();
+  page.value = 1;
+  await syncListStateToUrl();
 }
 
 let pollId: ReturnType<typeof setInterval> | null = null;
 const POLL_INTERVAL_MS = 5_000;
 
 onMounted(() => {
-  readFiltersFromUrl();
+  readListStateFromUrl();
   loadList();
   loadLicense();
+  loadResourceGroups();
   pollId = setInterval(() => {
     if (isVisible.value) loadList();
   }, POLL_INTERVAL_MS);
@@ -888,14 +990,15 @@ onUnmounted(() => {
   if (pollId) clearInterval(pollId);
 });
 
-watch(() => props.viewKind, () => {
+watch(() => props.viewKind, async () => {
   page.value = 1;
   visibleCols.value = loadVisible();
-  loadList();
+  await syncListStateToUrl();
 });
 
 watch(() => route.query, () => {
-  readFiltersFromUrl();
+  readListStateFromUrl();
+  loadList();
 });
 </script>
 
@@ -915,6 +1018,36 @@ watch(() => route.query, () => {
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+.task-list__diagnostics {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid var(--el-color-danger-light-5);
+  border-radius: 8px;
+  background: var(--el-color-danger-light-9);
+}
+.task-list__diagnostics-title {
+  color: var(--el-color-danger);
+  font-weight: 600;
+}
+.task-list__diagnostics-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 16px;
+  margin: 0;
+}
+.task-list__diagnostics-grid dt {
+  color: var(--color-ink-muted);
+}
+.task-list__diagnostics-grid dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.task-list__diagnostics-actions {
+  display: flex;
+  gap: 8px;
 }
 .task-list__toolbar {
   display: flex;

@@ -1094,6 +1094,18 @@
       "loadFailed": "加载任务失败",
       "actionFailed": "操作失败"
     },
+    "diagnostics": {
+      "title": "任务列表请求失败",
+      "code": "后端错误码",
+      "message": "错误信息",
+      "httpStatus": "HTTP 状态",
+      "requestId": "请求 ID",
+      "lastRefresh": "最后刷新",
+      "retry": "重试",
+      "copy": "复制诊断信息",
+      "copied": "诊断信息已复制",
+      "copyFailed": "无法复制诊断信息"
+    },
     "cols": {
       "manage": "列",
       "title": "可见列",

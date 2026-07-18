@@ -193,6 +193,7 @@ impl TaskRepository {
         // Whitelist sort columns to prevent SQL injection. Defaults to created_at DESC.
         let sort_col = match sort.unwrap_or("") {
             "name" => "name",
+            "engine" => "db_type_source",
             "status" => "status",
             "kind" => "kind",
             "updatedAt" | "updated_at" => "updated_at",

@@ -1094,6 +1094,18 @@
       "loadFailed": "Failed to load tasks",
       "actionFailed": "Action failed"
     },
+    "diagnostics": {
+      "title": "Task list request failed",
+      "code": "Backend code",
+      "message": "Message",
+      "httpStatus": "HTTP status",
+      "requestId": "Request ID",
+      "lastRefresh": "Last refresh",
+      "retry": "Retry",
+      "copy": "Copy diagnostics",
+      "copied": "Diagnostics copied",
+      "copyFailed": "Could not copy diagnostics"
+    },
     "cols": {
       "manage": "Columns",
       "title": "Visible columns",

@@ -348,8 +348,19 @@ pub async fn list_tasks(
     {
         Ok(r) => r,
         Err(e) => {
-            return ApiError::new(codes::INTERNAL_ERROR, format!("task list failed: {e}"))
-                .error_response();
+            let request_id = uuid::Uuid::new_v4()
+                .simple()
+                .to_string()
+                .chars()
+                .take(8)
+                .collect::<String>();
+            tracing::error!(request_id = %request_id, error = %e, "task list failed");
+            return ApiError::with_details(
+                codes::INTERNAL_ERROR,
+                format!("task list failed: {e}"),
+                serde_json::json!({ "requestId": request_id }),
+            )
+            .error_response();
         }
     };
 
@@ -624,7 +635,6 @@ pub async fn check_no_active_run(pool: &SqlitePool, task_id: &str) -> Result<(),
 
 /// Query parameters for GET /api/tasks.
 #[derive(Debug, Clone, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct TaskListQuery {
     pub category: Option<String>,
     pub mode: Option<String>,

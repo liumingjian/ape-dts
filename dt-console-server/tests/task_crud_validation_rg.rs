@@ -586,6 +586,38 @@ async fn list_tasks_basic() {
 }
 
 #[actix_web::test]
+async fn list_tasks_uses_canonical_page_size() {
+    let pool = setup().await;
+    let app = test::init_service(build_test_app(pool.clone())).await;
+    let cookies = do_login!(app, "admin", "admin123");
+
+    for name in ["page-one", "page-two", "page-three"] {
+        let mut body = snapshot_task_body();
+        body["name"] = serde_json::json!(name);
+        let req = add_auth(
+            test::TestRequest::post().uri("/api/tasks").set_json(body),
+            &cookies,
+        )
+        .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+    }
+
+    let req = add_cookies(
+        test::TestRequest::get().uri("/api/tasks?page=1&page_size=2"),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = test::read_body_json(resp).await;
+
+    assert_eq!(body["total"], 3);
+    assert_eq!(body["pageSize"], 2);
+    assert_eq!(body["items"].as_array().unwrap().len(), 2);
+}
+
+#[actix_web::test]
 async fn list_tasks_filter_category() {
     let pool = setup().await;
     let app = test::init_service(build_test_app(pool.clone())).await;
