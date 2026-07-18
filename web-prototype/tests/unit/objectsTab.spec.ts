@@ -137,24 +137,24 @@ async function buildHarness(taskFixture: ApiTask = SNAPSHOT_FIXTURE, objectsResp
   });
 
   const mockRunId = taskFixture.id + '-run-1';
+  const aggregate = {
+    task: { ...taskFixture, configuredExtractType: 'snapshot', selectedObjects: [] },
+    currentRun: { id: mockRunId, status: 'running', currentPhase: 'snapshot', startedAt: null, stoppedAt: null, exitCode: null, checkpoint: null },
+    phases: {
+      snapshot: { status: 'running', startedAt: null, completedAt: null },
+      transitioning_to_cdc: { status: 'skipped', startedAt: null, completedAt: null },
+      cdc: { status: 'skipped', startedAt: null, completedAt: null },
+    },
+    metricsSnapshot: null,
+    progress: null,
+  };
   mockGet.mockImplementation((url: string) => {
-    if (url.includes('/tasks/') && !url.includes('/runs')) return Promise.resolve(taskFixture);
-    if (url.includes('/metrics/latest')) return Promise.resolve({});
+    if (url.endsWith(`/tasks/${taskFixture.id}/detail`)) return Promise.resolve(aggregate);
     if (url.includes('/runs') && url.includes('/objects')) {
       return Promise.resolve(objectsResponse ?? []);
     }
     if (url.includes('/runs') && url.includes('/logs')) return Promise.resolve('');
-    if (url.includes('/runs') && !url.includes('/metrics') && !url.includes('/objects')) {
-      return Promise.resolve({
-        items: [{
-          id: mockRunId, taskId: taskFixture.id, status: 'running',
-          startedAt: null, stoppedAt: null, exitCode: null,
-          logDir: null, iniPath: null, pid: null, position: null,
-          createdAt: '2026-05-07T06:00:00.000Z',
-        }],
-        total: 1,
-      });
-    }
+    if (url.includes('/runs')) return Promise.resolve({ items: [], total: 0 });
     if (url.includes('/alerts')) return Promise.resolve({ items: [] });
     return Promise.resolve({});
   });

@@ -5,7 +5,7 @@
 import { http, HttpResponse } from 'msw';
 import { pause, ok, notFound, badRequest, parsePage, paginate, q } from './_shared';
 import { db, findTask, tasksOf } from '../db';
-import type { Task, TaskCategory, TaskStatus, MetricSeries, Run } from '@/types/domain';
+import type { Task, TaskCategory, TaskStatus, MetricSeries, Run, TaskDetailAggregate } from '@/types/domain';
 import { legacyToCategory } from '@/types/domain';
 import { maskConnectionStringPw } from '@/utils/localizeError';
 import { id, intBetween, isoMinus, pick } from '../fake';
@@ -110,6 +110,70 @@ export const taskHandlers = [
     const total = items.length;
     const start = (page - 1) * pageSize;
     return ok({ items: items.slice(start, start + pageSize), total, page, pageSize });
+  }),
+
+  http.get('/api/tasks/:id/detail', async ({ params }) => {
+    await pause();
+    const task = findTask(String(params.id));
+    if (!task) return notFound();
+    const run = latestRunForTask(task);
+    const currentPhase = task.syncMode === 'cdc' ? 'cdc' : 'snapshot';
+    const aggregate: TaskDetailAggregate = {
+      task: {
+        id: task.id,
+        taskId: task.id,
+        name: task.name,
+        kind: task.category,
+        dbTypeSource: task.source.engine,
+        dbTypeTarget: task.target.engine,
+        sourceEndpoint: { url: task.sourceUrl },
+        targetEndpoint: { url: task.targetUrl },
+        extractor: { extract_type: task.extractType },
+        sinker: {}, filter: {}, router: {}, parallelizer: {}, pipeline: {}, resumer: {}, processor: {}, runtime: {}, metrics: {},
+        resourceGroupId: task.resourceGroup,
+        ownerUserId: '',
+        status: task.status,
+        createdAt: task.createdAt,
+        updatedAt: task.updatedAt,
+        configuredExtractType: task.extractType,
+        selectedObjects: [],
+      },
+      currentRun: {
+        id: run.id,
+        status: run.status === 'orphaned' ? 'failed' : run.status,
+        currentPhase,
+        startedAt: run.startedAt,
+        stoppedAt: run.stoppedAt,
+        exitCode: run.exitCode,
+        checkpoint: run.position,
+      },
+      phases: {
+        snapshot: { status: currentPhase === 'snapshot' ? 'running' : 'skipped', startedAt: run.startedAt, completedAt: null },
+        transitioning_to_cdc: { status: 'skipped', startedAt: null, completedAt: null },
+        cdc: { status: currentPhase === 'cdc' ? 'running' : 'skipped', startedAt: currentPhase === 'cdc' ? run.startedAt : null, completedAt: null },
+      },
+      metricsSnapshot: {
+        runId: run.id,
+        phase: currentPhase,
+        sampledAt: new Date().toISOString(),
+        values: {
+          extractor_rps_avg: task.metrics.rpsLatest,
+          sinker_rps_avg: task.metrics.sinkerRpsLatest,
+          pipeline_queue_size: task.metrics.pipelineQueueSize,
+          ...(currentPhase === 'cdc' ? { lag: task.metrics.lag } : {}),
+        },
+      },
+      progress: currentPhase === 'snapshot' ? {
+        runId: run.id,
+        phase: 'snapshot',
+        kind: 'snapshot',
+        percent: task.progressPercent,
+        copiedRecords: null,
+        estimatedTotalRecords: null,
+        totalIsEstimate: false,
+      } : null,
+    };
+    return ok(aggregate);
   }),
 
   http.get('/api/tasks/:id', async ({ params }) => {

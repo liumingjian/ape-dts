@@ -470,6 +470,7 @@ export type TableLoadState = {
 export type RunStatus =
   | "pending"
   | "running"
+  | "pausing"
   | "paused"
   | "stopping"
   | "stopped"
@@ -600,6 +601,49 @@ export interface ApiTask {
   updatedAt: string;
   startedAt?: string;
   completedAt?: string;
+}
+
+export type TaskDetailPhaseName = "snapshot" | "transitioning_to_cdc" | "cdc";
+export type TaskDetailPhaseState = "pending" | "running" | "completed" | "failed" | "skipped";
+
+export interface TaskDetailPhase {
+  status: TaskDetailPhaseState;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+export interface TaskDetailRun {
+  id: string;
+  status: "pending" | "running" | "pausing" | "paused" | "stopping" | "stopped" | "failed";
+  currentPhase: TaskDetailPhaseName | null;
+  startedAt: string | null;
+  stoppedAt: string | null;
+  exitCode: number | null;
+  checkpoint: RunPosition | null;
+}
+
+export interface TaskDetailAggregate {
+  task: ApiTask & {
+    configuredExtractType: ExtractType;
+    selectedObjects: string[];
+  };
+  currentRun: TaskDetailRun | null;
+  phases: Record<TaskDetailPhaseName, TaskDetailPhase>;
+  metricsSnapshot: {
+    runId: string;
+    phase: TaskDetailPhaseName;
+    sampledAt: string;
+    values: Record<string, number>;
+  } | null;
+  progress: {
+    runId: string;
+    phase: TaskDetailPhaseName;
+    kind: "snapshot" | "cdc";
+    percent: number | null;
+    copiedRecords: number | null;
+    estimatedTotalRecords: number | null;
+    totalIsEstimate: boolean;
+  } | null;
 }
 
 /** Parse a database connection URL string into its host/port/username/database parts. */

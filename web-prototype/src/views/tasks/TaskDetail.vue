@@ -62,15 +62,29 @@
       </div>
     </header>
 
-    <div v-if="task" class="detail__body ape-dts-console-page">
+    <div v-if="detailError" class="detail__diagnostic ape-dts-console-card" role="alert">
+      <h2>Task detail unavailable</h2>
+      <dl>
+        <dt>Code</dt><dd>{{ detailError.code ?? 'UNKNOWN_ERROR' }}</dd>
+        <dt>Message</dt><dd>{{ detailError.message }}</dd>
+        <dt>HTTP status</dt><dd>{{ detailError.status }}</dd>
+        <dt>Request ID</dt><dd>{{ detailError.requestId ?? '—' }}</dd>
+        <dt>Last refresh</dt><dd>{{ lastDetailRefresh ? dayjs(lastDetailRefresh).format('YYYY-MM-DD HH:mm:ss') : '—' }}</dd>
+      </dl>
+      <div class="detail__diagnostic-actions">
+        <el-button type="primary" @click="loadDetail">Retry</el-button>
+        <el-button @click="copyDetailDiagnostics">Copy diagnostics</el-button>
+      </div>
+    </div>
+
+    <div v-else-if="task" class="detail__body ape-dts-console-page">
       <!-- KPI strip + flow diagram -->
       <section class="detail__flow ape-dts-console-card">
         <div class="detail__kpi-row">
-          <KpiCard :label="t('taskDetail.kpi.status')" :value="0" :badge="t(`task.status.${task.status}`)" :icon-comp="IconActivity" />
-          <KpiCard :label="t('taskDetail.kpi.rps')" :value="task.metrics.rpsLatest" unit="rows/s" :icon-comp="IconBolt" />
+          <KpiCard :label="t('taskDetail.kpi.status')" :value="0" :badge="detail?.currentRun?.status ?? task.status" :icon-comp="IconActivity" />
+          <KpiCard :label="t('taskDetail.kpi.rps')" :value="rawLatestMetrics.extractor_rps_avg ?? 0" unit="rows/s" :icon-comp="IconBolt" :sentinel-text="rawLatestMetrics.extractor_rps_avg === undefined ? '—' : undefined" />
 
-          <!-- Snapshot mode: progress bar + 已完成/总表 -->
-          <template v-if="task.syncMode !== 'cdc'">
+          <template v-if="currentPhase !== 'cdc'">
             <div class="detail__kpi-progress-card kpi">
               <div class="kpi__head">
                 <div class="kpi__label">
@@ -79,18 +93,18 @@
                 </div>
               </div>
               <div class="kpi__value">
-                <el-progress :percentage="progressValue" :stroke-width="10" :show-text="true" />
+                <el-progress v-if="progressValue !== null" :percentage="progressValue" :stroke-width="10" :show-text="true" />
+                <span v-else>—</span>
               </div>
               <div class="detail__progress-counts">
-                已完成/总表 ({{ task.metrics.finishedProgressCount }}/{{ task.metrics.totalProgressCount }})
+                {{ progress?.copiedRecords ?? '—' }} / {{ progress?.estimatedTotalRecords ?? '—' }} rows
               </div>
             </div>
           </template>
 
-          <!-- CDC mode: Lag + 积压数 -->
-          <template v-if="task.syncMode === 'cdc'">
-            <KpiCard label="Lag" :value="lagHasValue ? (rawLatestMetrics.lag ?? task.metrics.lag) : 0" unit="秒" :icon-comp="IconClock" :sentinel-text="lagHasValue ? undefined : '—'" />
-            <KpiCard label="积压数" :value="rawLatestMetrics.pipeline_queue_size ?? task.metrics.pipelineQueueSize" :icon-comp="IconChartBar" />
+          <template v-if="currentPhase === 'cdc'">
+            <KpiCard label="Lag" :value="lagHasValue ? (rawLatestMetrics.lag ?? 0) : 0" unit="秒" :icon-comp="IconClock" :sentinel-text="lagHasValue ? undefined : '—'" />
+            <KpiCard label="积压数" :value="rawLatestMetrics.pipeline_queue_size ?? 0" :icon-comp="IconChartBar" :sentinel-text="rawLatestMetrics.pipeline_queue_size === undefined ? '—' : undefined" />
           </template>
         </div>
       </section>
@@ -101,11 +115,11 @@
           <v-chart v-if="rpsOption" :option="rpsOption" autoresize class="detail__chart" />
           <el-empty v-else :description="t('common.empty')" :image-size="40" />
         </ChartCard>
-        <ChartCard :title="'sinker_record_count_avg_by_sec'" :height="200">
+        <ChartCard :title="'sinker_rps_avg'" :height="200">
           <v-chart v-if="sinkRpsOption" :option="sinkRpsOption" autoresize class="detail__chart" />
           <el-empty v-else :description="t('common.empty')" :image-size="40" />
         </ChartCard>
-        <ChartCard :title="'pipeline_buffer_size_avg'" :height="200">
+        <ChartCard :title="'pipeline_queue_size'" :height="200">
           <v-chart v-if="bufferOption" :option="bufferOption" autoresize class="detail__chart" />
           <el-empty v-else :description="t('common.empty')" :image-size="40" />
         </ChartCard>
@@ -375,11 +389,11 @@ import { useRoute, useRouter } from 'vue-router';
 import type { RouteLocationRaw } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import dayjs from 'dayjs';
-import { api } from '@/api/client';
+import { api, type ApiError } from '@/api/client';
 import { useRbac } from '@/composables/useRbac';
 import { useDocumentVisibility } from '@/composables/useDocumentVisibility';
 import { useLogStream, type LogLine, type LogStreamHandle } from '@/composables/useLogStream';
-import type { Task, Alert, ApiAlert, MetricQueryResponse, Run, RunPosition, ApiTask, TableLoadState, TaskCategory } from '@/types/domain';
+import type { Task, Alert, ApiAlert, MetricQueryResponse, Run, RunPosition, TableLoadState, TaskCategory, TaskDetailAggregate, TaskDetailPhaseName } from '@/types/domain';
 import { mapApiTask, mapApiAlert } from '@/types/domain';
 import { listPathForTaskKind } from '@/utils/migrationMode';
 import KpiCard from '@/components/KpiCard.vue';
@@ -408,7 +422,10 @@ const taskCategory = computed<TaskCategory>(() => {
   return category === 'cdc' || category === 'check' || category === 'struct' ? category : 'snapshot';
 });
 
+const detail = ref<TaskDetailAggregate | null>(null);
 const task = ref<Task | null>(null);
+const detailError = ref<ApiError | null>(null);
+const lastDetailRefresh = ref<string | null>(null);
 const activeTab = ref<TabName>((route.query.tab as TabName) || 'config');
 const editorVisible = ref(Boolean(route.query.edit === '1'));
 const saving = ref(false);
@@ -444,15 +461,58 @@ watch(task, (v) => {
   editForm.config.resumeType = v.config.resumeType;
 }, { immediate: true });
 
-/* ---------- load task ---------- */
-async function loadTask() {
+/* ---------- load authoritative detail ---------- */
+async function loadDetail() {
   try {
-    const raw = await api.get<ApiTask>(`/tasks/${taskId.value}`);
-    task.value = mapApiTask(raw);
-  } catch {
-    ElMessage.error('任务不存在');
-    router.push(backToListPath());
+    const aggregate = await api.get<TaskDetailAggregate>(`/tasks/${taskId.value}/detail`);
+    detail.value = aggregate;
+    task.value = mapApiTask(aggregate.task);
+    latestRun.value = aggregate.currentRun ? {
+      id: aggregate.currentRun.id,
+      taskId: aggregate.task.id,
+      status: aggregate.currentRun.status,
+      startedAt: aggregate.currentRun.startedAt,
+      stoppedAt: aggregate.currentRun.stoppedAt,
+      exitCode: aggregate.currentRun.exitCode,
+      logDir: null,
+      iniPath: null,
+      pid: null,
+      position: aggregate.currentRun.checkpoint,
+      createdAt: aggregate.currentRun.startedAt ?? aggregate.task.createdAt,
+    } : null;
+    currentRunId.value = aggregate.currentRun?.id ?? '';
+    rawLatestMetrics.value = aggregate.metricsSnapshot?.values ?? {};
+    accumulateMetrics(aggregate.metricsSnapshot?.sampledAt);
+    detailError.value = null;
+  } catch (error) {
+    detailError.value = error as ApiError;
+  } finally {
+    lastDetailRefresh.value = new Date().toISOString();
   }
+}
+
+function accumulateMetrics(sampledAt?: string) {
+  const timestamp = sampledAt ? dayjs(sampledAt).valueOf() : Date.now();
+  for (const [metric, value] of Object.entries(rawLatestMetrics.value)) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) continue;
+    const arr = metricsHistory.value[metric] ?? [];
+    arr.push({ ts: timestamp, value });
+    if (arr.length > MAX_HISTORY_POINTS) arr.shift();
+    metricsHistory.value[metric] = arr;
+  }
+}
+
+async function copyDetailDiagnostics() {
+  if (!detailError.value) return;
+  await navigator.clipboard.writeText(JSON.stringify({
+    code: detailError.value.code,
+    message: detailError.value.message,
+    status: detailError.value.status,
+    requestId: detailError.value.requestId,
+    lastRefresh: lastDetailRefresh.value,
+    taskId: taskId.value,
+  }, null, 2));
+  ElMessage.success('Diagnostics copied');
 }
 
 function backToListPath(): RouteLocationRaw {
@@ -465,7 +525,7 @@ async function doLifecycle(action: string) {
   try {
     await api.post(`/tasks/${taskId.value}/${action}`);
     ElMessage.success('操作成功');
-    await loadTask();
+    await loadDetail();
   } catch (err: unknown) {
     const msg = (err as { message?: string })?.message ?? '操作失败';
     ElMessage.error(msg);
@@ -511,7 +571,7 @@ async function saveEdit() {
     });
     ElMessage.success('保存成功');
     editorVisible.value = false;
-    await loadTask();
+    await loadDetail();
   } finally { saving.value = false; }
 }
 
@@ -549,7 +609,7 @@ const rawLatestMetrics = ref<Record<string, number>>({});
 const metricsHistory = ref<Record<string, { ts: number; value: number }[]>>({});
 const MAX_HISTORY_POINTS = 720; // ~1 h at 5 s interval
 
-const DETAIL_METRIC_NAMES = ['extractor_rps_avg', 'sinker_record_count_avg_by_sec', 'pipeline_buffer_size_avg'];
+const DETAIL_METRIC_NAMES = ['extractor_rps_avg', 'sinker_rps_avg', 'pipeline_queue_size'];
 const detailMetricSeries = computed<MetricQueryResponse[]>(() =>
   DETAIL_METRIC_NAMES
     .filter(m => (metricsHistory.value[m]?.length ?? 0) > 0)
@@ -557,34 +617,17 @@ const detailMetricSeries = computed<MetricQueryResponse[]>(() =>
 );
 
 /* ---------- KPI computed helpers ---------- */
-const progressValue = computed(() => {
-  const p = rawLatestMetrics.value.progress ?? task.value?.progressPercent ?? 0;
-  return Math.round(Math.max(0, Math.min(100, Number.isFinite(p) ? p : 0)));
+const currentPhase = computed<TaskDetailPhaseName | null>(() => detail.value?.currentRun?.currentPhase ?? null);
+const progress = computed(() => detail.value?.progress ?? null);
+const progressValue = computed<number | null>(() => {
+  const percent = progress.value?.phase === 'snapshot' ? progress.value.percent : null;
+  if (percent === null || percent === undefined || !Number.isFinite(percent)) return null;
+  return Math.round(Math.max(0, Math.min(100, percent)));
 });
 
 const lagHasValue = computed(() => {
   return 'lag' in rawLatestMetrics.value;
 });
-
-async function loadLatestMetrics() {
-  if (!currentRunId.value) return;
-  try {
-    const res = await api.get<Record<string, number>>(`/runs/${currentRunId.value}/metrics/latest`);
-    rawLatestMetrics.value = res && typeof res === 'object' ? res : {};
-    // Accumulate time-series from latest values for chart rendering
-    const now = Date.now();
-    for (const [metric, value] of Object.entries(rawLatestMetrics.value)) {
-      if (typeof value === 'number' && Number.isFinite(value)) {
-        const arr = metricsHistory.value[metric] ?? [];
-        arr.push({ ts: now, value });
-        if (arr.length > MAX_HISTORY_POINTS) arr.shift();
-        metricsHistory.value[metric] = arr;
-      }
-    }
-  } catch {
-    rawLatestMetrics.value = {};
-  }
-}
 
 function baseLine(name: string, xs: string[], sData: { name: string; data: number[]; color: string }[]) {
   return {
@@ -613,17 +656,17 @@ const rpsOption = computed(() => {
 });
 
 const sinkRpsOption = computed(() => {
-  const ms = detailMetricSeries.value.find((s) => s.metric === 'sinker_record_count_avg_by_sec');
+  const ms = detailMetricSeries.value.find((s) => s.metric === 'sinker_rps_avg');
   if (!ms || ms.data.length === 0) return null;
   const xs = ms.data.map((p) => dayjs(p.ts).format('HH:mm'));
-  return baseLine('sinker_record_count_avg_by_sec', xs, [{ name: 'sinker_record_count_avg_by_sec', data: ms.data.map((p) => p.value), color: BRAND_PALETTE[1] }]);
+  return baseLine('sinker_rps_avg', xs, [{ name: 'sinker_rps_avg', data: ms.data.map((p) => p.value), color: BRAND_PALETTE[1] }]);
 });
 
 const bufferOption = computed(() => {
-  const ms = detailMetricSeries.value.find((s) => s.metric === 'pipeline_buffer_size_avg');
+  const ms = detailMetricSeries.value.find((s) => s.metric === 'pipeline_queue_size');
   if (!ms || ms.data.length === 0) return null;
   const xs = ms.data.map((p) => dayjs(p.ts).format('HH:mm'));
-  return baseLine('pipeline_buffer_size_avg', xs, [{ name: 'pipeline_buffer_size_avg', data: ms.data.map((p) => p.value), color: BRAND_PALETTE[4] }]);
+  return baseLine('pipeline_queue_size', xs, [{ name: 'pipeline_queue_size', data: ms.data.map((p) => p.value), color: BRAND_PALETTE[4] }]);
 });
 
 /* ---------- objects (per-table state from /runs/:id/objects) ---------- */
@@ -740,11 +783,11 @@ const monitorRanges = [
 const MONITOR_METRIC_NAMES = computed(() => {
   const base = [
     'extractor_rps_avg',
-    'sinker_record_count_avg_by_sec',
-    'pipeline_buffer_size_avg',
-    'sinker_rt_per_query_avg',
+    'sinker_rps_avg',
+    'pipeline_queue_size',
+    'sinker_rt_avg',
   ];
-  if (task.value?.syncMode === 'cdc') {
+  if (currentPhase.value === 'cdc') {
     base.push('lag');
   }
   return base;
@@ -845,43 +888,24 @@ function parseLogLine(line: string): LogLine {
   };
 }
 
-/* ---------- load current run ---------- */
-async function loadCurrentRunId() {
-  try {
-    const res = await api.get<{ items: Run[] }>(`/tasks/${taskId.value}/runs?page=1&size=1`);
-    const runs = res.items ?? [];
-    latestRun.value = runs[0] ?? null;
-    currentRunId.value = latestRun.value?.id ?? '';
-  } catch {
-    latestRun.value = null;
-    currentRunId.value = '';
-  }
-}
-
 /* ---------- lifecycle ---------- */
 let pollId: ReturnType<typeof setInterval> | null = null;
 const POLL_INTERVAL_MS = 5_000;
 
 onMounted(async () => {
-  await loadTask();
-  await loadCurrentRunId();
+  await loadDetail();
   if (latestRun.value?.status === 'failed') {
     await loadArchivedLogIntoPane(latestRun.value);
   }
-  loadLatestMetrics();
   loadAlerts();
   loadHistory();
 
-  // open SSE if on logs tab
   if (activeTab.value === 'logs' && currentRunId.value) reopenLogStream();
-  // load objects if on objects tab
   if (activeTab.value === 'objects') loadObjects();
 
   pollId = setInterval(() => {
     if (isVisible.value) {
-      loadTask();
-      loadCurrentRunId();
-      loadLatestMetrics();
+      loadDetail();
       if (activeTab.value === 'alerts') loadAlerts();
     }
   }, POLL_INTERVAL_MS);
@@ -915,6 +939,18 @@ function onBack() {
   flex-direction: column;
   min-height: 100%;
 }
+.detail__diagnostic {
+  margin: 24px;
+  padding: 20px;
+}
+.detail__diagnostic h2 { margin-top: 0; }
+.detail__diagnostic dl {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 8px 16px;
+}
+.detail__diagnostic dd { margin: 0; font-family: var(--font-mono); overflow-wrap: anywhere; }
+.detail__diagnostic-actions { display: flex; gap: 8px; margin-top: 16px; }
 .detail__header {
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);

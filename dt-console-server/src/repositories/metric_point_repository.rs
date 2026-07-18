@@ -137,6 +137,33 @@ impl MetricPointRepository {
         Ok(rows.into_iter().map(|r| r.0).collect())
     }
 
+    /// Return the latest raw point for each metric in a Task Run.
+    pub async fn latest_by_run(
+        pool: &SqlitePool,
+        task_id: &str,
+        run_id: &str,
+    ) -> Result<Vec<MetricPoint>, sqlx::Error> {
+        sqlx::query_as(
+            "SELECT mp.*
+             FROM metric_points mp
+             INNER JOIN (
+               SELECT metric_name, MAX(ts) AS max_ts
+               FROM metric_points
+               WHERE task_id = ? AND run_id = ?
+               GROUP BY metric_name
+             ) latest ON mp.metric_name = latest.metric_name AND mp.ts = latest.max_ts
+             WHERE mp.task_id = ? AND mp.run_id = ?
+             GROUP BY mp.metric_name
+             ORDER BY mp.metric_name",
+        )
+        .bind(task_id)
+        .bind(run_id)
+        .bind(task_id)
+        .bind(run_id)
+        .fetch_all(pool)
+        .await
+    }
+
     // ─── Downsample operations ─────────────────────────────────────────────
 
     /// Downsample raw metric points older than `cutoff_ts` into 60-second buckets.

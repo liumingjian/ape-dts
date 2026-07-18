@@ -71,6 +71,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(user_handlers::delete_user)
             .service(task_handlers::create_task)
             .service(task_handlers::list_tasks)
+            .service(task_handlers::get_task_detail)
             .service(task_handlers::get_task)
             .service(task_handlers::update_task)
             .service(task_handlers::delete_task)

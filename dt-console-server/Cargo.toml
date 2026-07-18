@@ -42,3 +42,6 @@ reqwest = { workspace = true }
 async-stream = { workspace = true }
 serde_urlencoded = { workspace = true }
 libc = "0.2"
+
+[dev-dependencies]
+actix-http = "3"

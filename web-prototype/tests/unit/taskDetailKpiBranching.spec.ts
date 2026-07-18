@@ -1,8 +1,8 @@
 /* eslint-disable vue/one-component-per-file -- test file with stub components */
 /**
  * TaskDetail KPI strip branching: snapshot vs CDC mode.
- * Validates that the KPI strip renders different tiles based on task.syncMode
- * and that sentinel states handle missing metric data correctly.
+ * Validates that the KPI strip renders different tiles based on the aggregate's
+ * current Run phase and that missing metric observations use sentinel states.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
@@ -156,13 +156,28 @@ async function buildHarness(taskFixture: ApiTask) {
     fallbackWarn: false,
   });
 
-  // Default mock responses — include a run so currentRunId is set
   const mockRunId = taskFixture.id + '-run-1';
+  const phase = taskFixture.kind === 'cdc' ? 'cdc' : 'snapshot';
+  const values = phase === 'cdc'
+    ? { extractor_rps_avg: 50, lag: 3, pipeline_queue_size: 12 }
+    : { extractor_rps_avg: 100, progress: 87, pipeline_queue_size: 1024 };
+  const aggregate = {
+    task: { ...taskFixture, configuredExtractType: phase, selectedObjects: [] },
+    currentRun: { id: mockRunId, status: 'running', currentPhase: phase, startedAt: null, stoppedAt: null, exitCode: null, checkpoint: null },
+    phases: {
+      snapshot: { status: phase === 'snapshot' ? 'running' : 'skipped', startedAt: null, completedAt: null },
+      transitioning_to_cdc: { status: 'skipped', startedAt: null, completedAt: null },
+      cdc: { status: phase === 'cdc' ? 'running' : 'skipped', startedAt: null, completedAt: null },
+    },
+    metricsSnapshot: { runId: mockRunId, phase, sampledAt: '2026-05-07T06:01:00.000Z', values },
+    progress: phase === 'snapshot'
+      ? { runId: mockRunId, phase, kind: 'snapshot', percent: 87, copiedRecords: 3, estimatedTotalRecords: 8, totalIsEstimate: true }
+      : { runId: mockRunId, phase, kind: 'cdc', percent: null, copiedRecords: null, estimatedTotalRecords: null, totalIsEstimate: false },
+  };
   mockGet.mockImplementation((url: string) => {
-    if (url.includes('/tasks/') && !url.includes('/runs')) return Promise.resolve(taskFixture);
-    if (url.includes('/runs') && url.includes('/metrics/latest')) return Promise.resolve({});
+    if (url.endsWith(`/tasks/${taskFixture.id}/detail`)) return Promise.resolve(aggregate);
     if (url.includes('/runs') && url.includes('/logs')) return Promise.resolve('');
-    if (url.includes('/runs') && !url.includes('/metrics')) return Promise.resolve({ items: [{ id: mockRunId, taskId: taskFixture.id, status: 'running', startedAt: null, stoppedAt: null, exitCode: null, logDir: null, iniPath: null, pid: null, position: null, createdAt: '2026-05-07T06:00:00.000Z' }], total: 1 });
+    if (url.includes('/runs')) return Promise.resolve({ items: [], total: 0 });
     if (url.includes('/alerts')) return Promise.resolve({ items: [] });
     return Promise.resolve({});
   });
@@ -252,15 +267,6 @@ describe('TaskDetail KPI branching', () => {
 
   it('CDC task shows Lag value with 秒 suffix', async () => {
     const { TaskDetail, router, i18n } = await buildHarness(CDC_FIXTURE);
-    // Override mock to return metrics with lag
-    mockGet.mockImplementation((url: string) => {
-      if (url.includes('/tasks/') && !url.includes('/runs')) return Promise.resolve(CDC_FIXTURE);
-      if (url.includes('/metrics/latest')) return Promise.resolve({ lag: 3, pipeline_queue_size: 12 });
-      if (url.includes('/runs') && url.includes('/logs')) return Promise.resolve('');
-      if (url.includes('/runs') && !url.includes('/metrics')) return Promise.resolve({ items: [{ id: 'cdc-1-run-1', taskId: CDC_FIXTURE.id, status: 'running', startedAt: null, stoppedAt: null, exitCode: null, logDir: null, iniPath: null, pid: null, position: null, createdAt: '2026-05-07T06:00:00.000Z' }], total: 1 });
-      if (url.includes('/alerts')) return Promise.resolve({ items: [] });
-      return Promise.resolve({});
-    });
     const wrapper = mount(TaskDetail, {
       global: {
         plugins: [router, i18n],
@@ -279,15 +285,6 @@ describe('TaskDetail KPI branching', () => {
 
   it('CDC task shows 积压数 value', async () => {
     const { TaskDetail, router, i18n } = await buildHarness(CDC_FIXTURE);
-    // Override mock to return metrics with pipeline_queue_size
-    mockGet.mockImplementation((url: string) => {
-      if (url.includes('/tasks/') && !url.includes('/runs')) return Promise.resolve(CDC_FIXTURE);
-      if (url.includes('/metrics/latest')) return Promise.resolve({ lag: 3, pipeline_queue_size: 12 });
-      if (url.includes('/runs') && url.includes('/logs')) return Promise.resolve('');
-      if (url.includes('/runs') && !url.includes('/metrics')) return Promise.resolve({ items: [{ id: 'cdc-1-run-1', taskId: CDC_FIXTURE.id, status: 'running', startedAt: null, stoppedAt: null, exitCode: null, logDir: null, iniPath: null, pid: null, position: null, createdAt: '2026-05-07T06:00:00.000Z' }], total: 1 });
-      if (url.includes('/alerts')) return Promise.resolve({ items: [] });
-      return Promise.resolve({});
-    });
     const wrapper = mount(TaskDetail, {
       global: {
         plugins: [router, i18n],
@@ -302,11 +299,20 @@ describe('TaskDetail KPI branching', () => {
     expect(text).toContain('12');
   });
 
-  it('CDC Lag shows sentinel when metrics/latest returns {}', async () => {
+  it('CDC Lag shows sentinel when the aggregate has no metrics snapshot', async () => {
     const { TaskDetail, router, i18n } = await buildHarness(CDC_FIXTURE);
     mockGet.mockImplementation((url: string) => {
-      if (url.includes('/tasks/')) return Promise.resolve(CDC_FIXTURE);
-      if (url.includes('/metrics/latest')) return Promise.resolve({});
+      if (url.endsWith('/tasks/cdc-1/detail')) return Promise.resolve({
+        task: { ...CDC_FIXTURE, configuredExtractType: 'cdc', selectedObjects: [] },
+        currentRun: { id: 'cdc-1-run-1', status: 'running', currentPhase: 'cdc', startedAt: null, stoppedAt: null, exitCode: null, checkpoint: null },
+        phases: {
+          snapshot: { status: 'skipped', startedAt: null, completedAt: null },
+          transitioning_to_cdc: { status: 'skipped', startedAt: null, completedAt: null },
+          cdc: { status: 'running', startedAt: null, completedAt: null },
+        },
+        metricsSnapshot: null,
+        progress: null,
+      });
       if (url.includes('/runs')) return Promise.resolve({ items: [], total: 0 });
       if (url.includes('/alerts')) return Promise.resolve({ items: [] });
       return Promise.resolve({});
@@ -325,15 +331,24 @@ describe('TaskDetail KPI branching', () => {
     expect(text).not.toContain('0 秒');
   });
 
-  it('snapshot progress bar renders at 0% when /metrics/latest returns {}', async () => {
+  it('snapshot progress is unknown when the aggregate has no progress observation', async () => {
     const fixtureNoProgress: ApiTask = {
       ...SNAPSHOT_FIXTURE,
       metrics: { extractor_pushed_rps_avg: 100, pipeline_buffer_size_avg: 1024 },
     };
     const { TaskDetail, router, i18n } = await buildHarness(fixtureNoProgress);
     mockGet.mockImplementation((url: string) => {
-      if (url.includes('/tasks/')) return Promise.resolve(fixtureNoProgress);
-      if (url.includes('/metrics/latest')) return Promise.resolve({});
+      if (url.endsWith('/tasks/snap-1/detail')) return Promise.resolve({
+        task: { ...fixtureNoProgress, configuredExtractType: 'snapshot', selectedObjects: [] },
+        currentRun: { id: 'snap-1-run-1', status: 'running', currentPhase: 'snapshot', startedAt: null, stoppedAt: null, exitCode: null, checkpoint: null },
+        phases: {
+          snapshot: { status: 'running', startedAt: null, completedAt: null },
+          transitioning_to_cdc: { status: 'skipped', startedAt: null, completedAt: null },
+          cdc: { status: 'skipped', startedAt: null, completedAt: null },
+        },
+        metricsSnapshot: null,
+        progress: null,
+      });
       if (url.includes('/runs')) return Promise.resolve({ items: [], total: 0 });
       if (url.includes('/alerts')) return Promise.resolve({ items: [] });
       return Promise.resolve({});
@@ -348,12 +363,10 @@ describe('TaskDetail KPI branching', () => {
     await flushPromises();
 
     const progress = wrapper.findComponent(ElProgress);
-    expect(progress.exists()).toBe(true);
-    const pct = progress.props('percentage');
-    expect(pct).toBe(0);
+    expect(progress.exists()).toBe(false);
   });
 
-  it('branching uses task.syncMode, not a new prop', async () => {
+  it('branching uses the aggregate current Run phase', async () => {
     const { TaskDetail, router, i18n } = await buildHarness(SNAPSHOT_FIXTURE);
     const wrapper = mount(TaskDetail, {
       global: {
