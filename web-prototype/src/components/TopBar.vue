@@ -104,8 +104,19 @@ const alertStream = auth.isAuthenticated && !isMockMode
 
 onBeforeUnmount(() => alertStream?.close());
 
+const TASK_BREADCRUMB_KEYS: Record<string, string> = {
+  migration: 'nav.tasks.migration',
+  check: 'nav.tasks.check',
+  struct: 'nav.tasks.struct',
+};
+
 const breadcrumb = computed<string[]>(() => {
   const b = (route.meta?.breadcrumb as string[] | undefined) ?? [];
+  const taskModule = String(route.params.category ?? route.params.type ?? '');
+  const taskModuleKey = TASK_BREADCRUMB_KEYS[taskModule];
+  if (route.meta?.module === 'tasks' && taskModuleKey) {
+    return [...b, taskModuleKey, route.meta?.title as string];
+  }
   return b.length ? b : [route.meta?.title as string ?? ''];
 });
 

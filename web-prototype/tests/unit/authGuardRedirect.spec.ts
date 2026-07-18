@@ -11,7 +11,7 @@ const Stub = defineComponent({ name: 'Stub', render: () => h('div') });
 const routes: RouteRecordRaw[] = [
   { path: '/login', name: 'Login', component: Stub, meta: { public: true } },
   { path: '/dashboard', name: 'Dashboard', component: Stub, meta: { roles: ['admin', 'operator', 'viewer'] } },
-  { path: '/tasks/sync', name: 'SyncTasks', component: Stub, meta: { roles: ['admin', 'operator', 'viewer'] } },
+  { path: '/tasks/migration', name: 'MigrationTasks', component: Stub, meta: { roles: ['admin', 'operator', 'viewer'] } },
   { path: '/forbidden', name: 'Forbidden', component: Stub, meta: { public: true } },
   { path: '/:pathMatch(.*)*', name: 'NotFound', component: Stub, meta: { public: true } },
 ];
@@ -59,20 +59,12 @@ describe('Auth guard redirect', () => {
     // cleanup — no need to navigate, just let the test router be GC'd
   });
 
-  it('anonymous visiting /tasks/sync gets redirected to /login with redirect param', async () => {
+  it('anonymous visiting a canonical deep link preserves its exact query and hash', async () => {
     const auth = useAuthStore();
     auth.user = null;
-    await router.push('/tasks/sync');
+    await router.push('/tasks/migration?mode=cdc&status=running#top');
     expect(router.currentRoute.value.path).toBe('/login');
-    expect(router.currentRoute.value.query.redirect).toBe('/tasks/sync');
-  });
-
-  it('anonymous visiting /tasks/sync?status=running preserves query in redirect', async () => {
-    const auth = useAuthStore();
-    auth.user = null;
-    await router.push('/tasks/sync?status=running');
-    expect(router.currentRoute.value.path).toBe('/login');
-    expect(router.currentRoute.value.query.redirect).toBe('/tasks/sync?status=running');
+    expect(router.currentRoute.value.query.redirect).toBe('/tasks/migration?mode=cdc&status=running#top');
   });
 
   it('authenticated user visiting /login gets redirected to /dashboard', async () => {
@@ -97,9 +89,8 @@ describe('Auth guard redirect', () => {
 describe('sanitizeRedirect (open redirect protection)', () => {
   it('allows same-origin paths', () => {
     expect(sanitizeRedirect('/dashboard')).toBe('/dashboard');
-    expect(sanitizeRedirect('/tasks/sync?status=running')).toBe('/tasks/sync?status=running');
-    expect(sanitizeRedirect('/tasks/sync?status=running&engine=mysql')).toBe(
-      '/tasks/sync?status=running&engine=mysql',
+    expect(sanitizeRedirect('/tasks/migration?mode=cdc&status=running#top')).toBe(
+      '/tasks/migration?mode=cdc&status=running#top',
     );
   });
 

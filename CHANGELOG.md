@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Unify Snapshot, CDC, and Snapshot+CDC under the Console migration task experience.
+- Canonicalize Console task routes, navigation, breadcrumbs, and compatibility redirects around Data Migration, Data Check, and Structure Migration.
 
 ### Added
 

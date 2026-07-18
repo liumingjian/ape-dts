@@ -6,13 +6,6 @@ export function isMigrationMode(value: unknown): value is MigrationMode {
   return value === 'snapshot' || value === 'snapshot_cdc' || value === 'cdc';
 }
 
-export function modeForLegacyTaskPath(path: string): MigrationMode | undefined {
-  if (path.includes('/snapshot')) return 'snapshot';
-  if (path.includes('/cdc')) return 'cdc';
-  if (path.includes('/sync')) return 'snapshot_cdc';
-  return undefined;
-}
-
 export function categoryForView(viewKind: TaskViewKind): TaskCategory | 'migration' {
   return viewKind === 'migration' ? 'migration' : viewKind;
 }

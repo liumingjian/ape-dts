@@ -72,7 +72,13 @@ const { visibleNav } = useRbac();
 const emit = defineEmits<{ navigate: [] }>();
 
 const collapsed = computed(() => appStore.sidebarCollapsed);
-const activeKey = computed(() => route.path);
+const activeKey = computed(() => {
+  if (route.meta?.module !== 'tasks') return route.path;
+  const taskModule = String(route.params.category ?? route.params.type ?? '');
+  return ['migration', 'check', 'struct'].includes(taskModule)
+    ? `/tasks/${taskModule}`
+    : route.path;
+});
 
 /** Filter menu items by RBAC — v-if ensures zero DOM presence for hidden items. */
 const visibleMenu = computed(() =>

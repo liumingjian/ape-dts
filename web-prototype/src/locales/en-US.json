@@ -50,11 +50,11 @@
     "dashboard": "Dashboard",
     "tasks": {
       "_label": "Tasks",
-      "migration": "Migration",
+      "migration": "Data Migration",
       "snapshot": "Snapshot Migration",
       "cdc": "CDC",
-      "check": "Check",
-      "struct": "Struct Migration",
+      "check": "Data Check",
+      "struct": "Structure Migration",
       "sync": "Sync tasks"
     },
     "alerts": {
