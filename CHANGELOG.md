@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add an opt-in real-backend Console MySQL-to-PostgreSQL Snapshot E2E test.
 - Add per-Run migration metrics, object state, phase-aware Console KPIs, and final metric capture.
+- Add structured live and persisted Run logs with fallback controls, diagnostics, and secret redaction.
 - Add the real MySQL-to-PostgreSQL Snapshot+CDC migration red-line.
 - Archive the dated Chinese project research snapshot under docs/research.
 - Document the migration task-detail observability remediation model and acceptance criteria.

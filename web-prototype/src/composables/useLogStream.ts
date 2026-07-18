@@ -1,7 +1,7 @@
 import { getCurrentInstance, onBeforeUnmount, ref, type Ref } from 'vue';
 import { registerSse, unregisterSse } from '@/composables/useSseRegistry';
 
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+export type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
 
 export interface LogLine {
   timestamp: string;
@@ -45,7 +45,7 @@ function isLogLine(value: unknown): value is LogLine {
   if (!value || typeof value !== 'object') return false;
   const line = value as Record<string, unknown>;
   return typeof line.timestamp === 'string'
-    && ['debug', 'info', 'warn', 'error'].includes(String(line.level))
+    && ['DEBUG', 'INFO', 'WARN', 'ERROR'].includes(String(line.level))
     && typeof line.source === 'string'
     && typeof line.file === 'string'
     && typeof line.message === 'string';

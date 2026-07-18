@@ -329,16 +329,40 @@ pub async fn get_log_file(
         }
     };
 
-    // Read file content
+    // Read persisted content. A known file may not exist yet for a new Run;
+    // other failures must remain diagnosable rather than looking like no logs.
     match tokio::fs::read_to_string(&log_path).await {
         Ok(content) => HttpResponse::Ok()
             .content_type("text/plain; charset=utf-8")
-            .body(content),
-        Err(_) => {
-            // File doesn't exist yet — return empty
-            HttpResponse::Ok()
-                .content_type("text/plain; charset=utf-8")
-                .body("")
+            .body(log_tailer::redact_log_text(&content)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => HttpResponse::Ok()
+            .content_type("text/plain; charset=utf-8")
+            .body(""),
+        Err(error) => {
+            let request_id = uuid::Uuid::new_v4()
+                .simple()
+                .to_string()
+                .chars()
+                .take(8)
+                .collect::<String>();
+            tracing::error!(
+                request_id,
+                run_id,
+                file = file_name,
+                path = ?log_path,
+                error = %error,
+                "failed to read persisted Run log"
+            );
+            ApiError::with_details(
+                codes::LOG_READ_FAILED,
+                "Failed to read log file",
+                serde_json::json!({
+                    "runId": run_id,
+                    "file": file_name,
+                    "requestId": request_id,
+                }),
+            )
+            .error_response()
         }
     }
 }
@@ -543,19 +567,18 @@ async fn produce_sse_events(
                             pending_lines.push(line.to_string());
                         }
 
-                        // Try to emit
-                        if rate_limit.check() {
-                            event_id += 1;
-                            let data = pending_lines.join("\n");
-                            let event =
-                                SseEvent::Data(Data::new(data).id(event_id.to_string()).event("log"));
-                            if event_tx.send(event).await.is_err() {
-                                break; // Client disconnected
-                            }
-                            pending_lines.clear();
+                        if rate_limit.check()
+                            && emit_pending_log_events(
+                                &file_name,
+                                &mut pending_lines,
+                                &mut event_id,
+                                &event_tx,
+                            )
+                            .await
+                            .is_err()
+                        {
+                            break;
                         }
-                        // If rate-limited, lines stay buffered for next emission
-                        // (burst coalescing)
                     }
                     Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(n))) => {
                         // We missed some events — emit replay-gap
@@ -588,15 +611,13 @@ async fn produce_sse_events(
             }
         }
 
-        // If we have pending lines and the rate window has reset, flush them
-        if !pending_lines.is_empty() && rate_limit.check() {
-            event_id += 1;
-            let data = pending_lines.join("\n");
-            let event = SseEvent::Data(Data::new(data).id(event_id.to_string()).event("log"));
-            if event_tx.send(event).await.is_err() {
-                break;
-            }
-            pending_lines.clear();
+        if !pending_lines.is_empty()
+            && rate_limit.check()
+            && emit_pending_log_events(&file_name, &mut pending_lines, &mut event_id, &event_tx)
+                .await
+                .is_err()
+        {
+            break;
         }
     }
 
@@ -610,6 +631,22 @@ async fn produce_sse_events(
             }
         }
     }
+}
+
+async fn emit_pending_log_events(
+    file_name: &str,
+    pending_lines: &mut Vec<String>,
+    event_id: &mut u64,
+    event_tx: &tokio::sync::mpsc::Sender<SseEvent>,
+) -> Result<(), ()> {
+    for raw_line in pending_lines.drain(..) {
+        *event_id += 1;
+        let payload = log_tailer::parse_log_line(file_name, &raw_line);
+        let data = serde_json::to_string(&payload).map_err(|_| ())?;
+        let event = SseEvent::Data(Data::new(data).id(event_id.to_string()).event("log"));
+        event_tx.send(event).await.map_err(|_| ())?;
+    }
+    Ok(())
 }
 
 /// Run a LogTailer and broadcast chunks to all subscribers.
@@ -654,6 +691,27 @@ async fn run_tailer_with_broadcast(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn test_named_log_event_uses_structured_json_contract() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel(4);
+        let mut pending =
+            vec!["2026-07-18 12:34:56 - INFO - [extractor] - snapshot started".to_string()];
+        let mut event_id = 0;
+
+        emit_pending_log_events("default", &mut pending, &mut event_id, &tx)
+            .await
+            .unwrap();
+
+        let event = rx.recv().await.unwrap();
+        let debug = format!("{event:?}");
+        assert!(debug.contains("log"));
+        assert!(debug.contains("timestamp"));
+        assert!(debug.contains("default.log"));
+        assert!(debug.contains("snapshot started"));
+        assert!(pending.is_empty());
+        assert_eq!(event_id, 1);
+    }
 
     #[test]
     fn test_subscriber_rate_limit_allows_under_cap() {

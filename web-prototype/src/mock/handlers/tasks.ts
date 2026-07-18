@@ -407,6 +407,31 @@ export const taskHandlers = [
     })));
   }),
 
+  http.get('/api/runs/:id/logs', async ({ params }) => {
+    await pause();
+    const runId = String(params.id);
+    const task = findTask(taskIdFromRunId(runId));
+    if (!task) return notFound();
+    const now = Date.now();
+    const templates = [
+      ['INFO', 'ape-dts-engine', 'snapshot batch finished, rows=1200 elapsed=84ms'],
+      ['INFO', 'ape-dts-resumer', 'checkpoint committed at offset=0x6f12ab'],
+      ['WARN', 'ape-dts-extractor', 'source table orders column charset mismatch, falling back to utf8'],
+      ['INFO', 'ape-dts-sinker', 'batched 480 records into target in 42ms'],
+      ['ERROR', 'ape-dts-sinker', 'retrying failed write for table payments attempt=2'],
+    ];
+    const content = Array.from({ length: 30 }, (_, index) => {
+      const [level, source, message] = templates[index % templates.length];
+      const timestamp = new Date(now - (30 - index) * 3_000).toISOString()
+        .replace('T', ' ')
+        .replace('Z', '');
+      return `${timestamp} - ${level} - [${source}] - ${message}`;
+    }).join('\n');
+    return new HttpResponse(content, {
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    });
+  }),
+
   http.get('/api/tasks/:id/logs', async ({ params, request }) => {
     await pause();
     const t = findTask(String(params.id));

@@ -1004,9 +1004,10 @@ async function loadPersistedLogs(runId: string): Promise<boolean> {
 }
 
 async function fallbackToPersistedLogs() {
+  const loaded = await loadPersistedLogs(currentRunId.value);
+  if (!loaded || persistedLogLines.value.length === 0) return;
   logNotice.value = FALLBACK_NOTICE;
   logLiveRegionText.value = FALLBACK_NOTICE;
-  await loadPersistedLogs(currentRunId.value);
 }
 
 async function reopenLogStream() {
@@ -1203,7 +1204,7 @@ function parseLogLine(line: string, file: string): LogLine {
   if (!match) {
     return {
       timestamp: new Date().toISOString(),
-      level: 'info',
+      level: 'INFO',
       source: 'dt-main',
       file: `${file}.log`,
       message: line,
@@ -1211,7 +1212,7 @@ function parseLogLine(line: string, file: string): LogLine {
   }
   return {
     timestamp: `${match[1].replace(' ', 'T')}Z`,
-    level: match[2].toLowerCase() as LogLine['level'],
+    level: match[2] as LogLine['level'],
     source: match[3] ?? 'dt-main',
     file: `${file}.log`,
     message: match[4],
