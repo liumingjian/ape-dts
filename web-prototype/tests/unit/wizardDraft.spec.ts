@@ -60,9 +60,29 @@ describe('useWizardDraftStore', () => {
     expect(loaded!.source.engine).toBe('mysql');
   });
 
-  it('returns null when no draft exists', () => {
+  it('does not persist endpoint passwords but keeps them in memory', () => {
     const store = useWizardDraftStore();
-    expect(store.load('cdc')).toBeNull();
+    const form = sampleForm();
+
+    store.save('snapshot', form);
+
+    expect(store.drafts['console.wizard.snapshot']?.source.password).toBe('pw');
+    expect(store.drafts['console.wizard.snapshot']?.target.password).toBe('pw');
+    expect(localStorageMock.getItem('console.wizard.snapshot')).not.toContain('"pw"');
+    expect(JSON.parse(localStorageMock.getItem('console.wizard.snapshot')!).source.password).toBe('');
+    expect(JSON.parse(localStorageMock.getItem('console.wizard.snapshot')!).target.password).toBe('');
+  });
+
+  it('scrubs passwords from legacy persisted drafts when loading', () => {
+    const form = sampleForm();
+    localStorageMock.setItem('console.wizard.snapshot', JSON.stringify(form));
+
+    const store = useWizardDraftStore();
+    const loaded = store.load('snapshot');
+
+    expect(loaded?.source.password).toBe('');
+    expect(loaded?.target.password).toBe('');
+    expect(localStorageMock.getItem('console.wizard.snapshot')).not.toContain('"pw"');
   });
 
   it('discards a draft and clears localStorage', () => {

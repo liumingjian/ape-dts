@@ -42,19 +42,24 @@ describe('Router task taxonomy redirects', () => {
     expect(router.currentRoute.value.query.mode).toBe('cdc');
   });
 
-  it('redirects /tasks/replay and /tasks/verify to supported modules', async () => {
-    await router.push('/tasks/replay');
+  it('redirects /tasks/replay and /tasks/verify to supported modules without losing state', async () => {
+    await router.push('/tasks/replay?status=running#top');
     expect(router.currentRoute.value.path).toBe('/tasks/migration');
+    expect(router.currentRoute.value.query.status).toBe('running');
+    expect(router.currentRoute.value.hash).toBe('#top');
 
-    await router.push('/tasks/verify');
+    await router.push('/tasks/verify?status=failed&engine=mysql#results');
     expect(router.currentRoute.value.path).toBe('/tasks/check');
+    expect(router.currentRoute.value.query.status).toBe('failed');
+    expect(router.currentRoute.value.query.engine).toBe('mysql');
+    expect(router.currentRoute.value.hash).toBe('#results');
   });
 
   it('redirects legacy detail paths to migration detail while preserving query and hash', async () => {
     await router.push('/tasks/cdc/abc-123?tab=alerts#tail');
     expect(router.currentRoute.value.path).toBe('/tasks/migration/abc-123');
     expect(router.currentRoute.value.query.mode).toBe('cdc');
-    expect(router.currentRoute.value.query.tab).toBe('alerts');
+    expect(router.currentRoute.value.query.tab).toBe('more');
     expect(router.currentRoute.value.hash).toBe('#tail');
   });
 
@@ -62,9 +67,39 @@ describe('Router task taxonomy redirects', () => {
     await router.push('/tasks/sync/abc-123?mode=cdc&tab=alerts#tail');
     expect(router.currentRoute.value.path).toBe('/tasks/migration/abc-123');
     expect(router.currentRoute.value.query.mode).toBe('cdc');
-    expect(router.currentRoute.value.query.tab).toBe('alerts');
+    expect(router.currentRoute.value.query.tab).toBe('more');
     expect(router.currentRoute.value.hash).toBe('#tail');
   });
+
+  it.each([
+    ['config', 'overview'],
+    ['objects', 'objects'],
+    ['logs', 'logs'],
+    ['monitor', 'monitoring'],
+    ['alerts', 'more'],
+    ['history', 'history'],
+  ])('maps legacy task-detail tab %s to %s without losing saved-link state', async (legacyTab, canonicalTab) => {
+    await router.push(`/tasks/cdc/abc-123?tab=${legacyTab}&edit=1&trace=keep#tail`);
+    expect(router.currentRoute.value.path).toBe('/tasks/migration/abc-123');
+    expect(router.currentRoute.value.query.mode).toBe('cdc');
+    expect(router.currentRoute.value.query.tab).toBe(canonicalTab);
+    expect(router.currentRoute.value.query.edit).toBe('1');
+    expect(router.currentRoute.value.query.trace).toBe('keep');
+    expect(router.currentRoute.value.hash).toBe('#tail');
+  });
+
+  it('normalizes legacy tab keys on canonical task-detail links', async () => {
+    await router.push('/tasks/migration/abc-123?mode=snapshot_cdc&tab=monitor#charts');
+    expect(router.currentRoute.value.fullPath).toBe('/tasks/migration/abc-123?mode=snapshot_cdc&tab=monitoring#charts');
+  });
+
+  it.each(['overview', 'objects', 'logs', 'monitoring', 'history', 'more'])(
+    'preserves canonical task-detail tab %s',
+    async (tab) => {
+      await router.push(`/tasks/migration/abc-123?mode=cdc&tab=${tab}`);
+      expect(router.currentRoute.value.query.tab).toBe(tab);
+    },
+  );
 
   it('redirects legacy create paths to migration create with mode defaults', async () => {
     await router.push('/tasks/create/snapshot');
@@ -84,6 +119,34 @@ describe('Router task taxonomy redirects', () => {
     await router.push('/tasks/create/sync?mode=cdc&template=fast#top');
     expect(router.currentRoute.value.path).toBe('/tasks/create/migration');
     expect(router.currentRoute.value.query.mode).toBe('cdc');
+    expect(router.currentRoute.value.query.template).toBe('fast');
+    expect(router.currentRoute.value.hash).toBe('#top');
+  });
+
+  it.each([
+    ['/tasks/snapshot/item-1?mode=cdc&tab=logs#tail', '/tasks/migration/item-1', 'snapshot'],
+    ['/tasks/cdc/item-1?mode=snapshot&tab=logs#tail', '/tasks/migration/item-1', 'cdc'],
+    ['/tasks/sync/item-1?mode=cdc&tab=logs#tail', '/tasks/migration/item-1', 'cdc'],
+    ['/tasks/replay/item-1?mode=cdc&tab=logs#tail', '/tasks/migration/item-1', 'snapshot'],
+    ['/tasks/verify/item-1?tab=logs#tail', '/tasks/check/item-1', undefined],
+  ])('redirects legacy detail %s with canonical mode and state', async (legacyPath, canonicalPath, expectedMode) => {
+    await router.push(legacyPath);
+    expect(router.currentRoute.value.path).toBe(canonicalPath);
+    expect(router.currentRoute.value.query.mode).toBe(expectedMode);
+    expect(router.currentRoute.value.query.tab).toBe('logs');
+    expect(router.currentRoute.value.hash).toBe('#tail');
+  });
+
+  it.each([
+    ['/tasks/create/snapshot?mode=cdc&template=fast#top', '/tasks/create/migration', 'snapshot'],
+    ['/tasks/create/cdc?mode=snapshot&template=fast#top', '/tasks/create/migration', 'cdc'],
+    ['/tasks/create/sync?mode=cdc&template=fast#top', '/tasks/create/migration', 'cdc'],
+    ['/tasks/create/replay?mode=cdc&template=fast#top', '/tasks/create/migration', 'snapshot'],
+    ['/tasks/create/verify?template=fast#top', '/tasks/create/check', undefined],
+  ])('redirects legacy create %s with canonical mode and state', async (legacyPath, canonicalPath, expectedMode) => {
+    await router.push(legacyPath);
+    expect(router.currentRoute.value.path).toBe(canonicalPath);
+    expect(router.currentRoute.value.query.mode).toBe(expectedMode);
     expect(router.currentRoute.value.query.template).toBe('fast');
     expect(router.currentRoute.value.hash).toBe('#top');
   });

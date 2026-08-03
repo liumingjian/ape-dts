@@ -223,17 +223,19 @@ const { can } = useRbac();
 
 const LEVELS: AlertLevel[] = ['critical', 'major', 'minor', 'info'];
 const METRIC_OPTIONS = [
+  'extractor_rps_avg',
   'extractor_pushed_rps_avg',
   'extractor_pushed_bps_avg',
-  'sinker_record_count_avg_by_sec',
-  'sinker_rt_per_query_avg',
-  'sinker_rt_per_query_max',
-  'sinker_records_per_query_avg',
-  'sinker_bps_avg_by_sec',
-  'pipeline_buffer_size_avg',
-  'pipeline_record_size_avg',
-  'pipeline_sinked_count_latest',
-  'latency_ms',
+  'extractor_plan_records',
+  'sinker_rps_avg',
+  'sinker_rt_avg',
+  'sinker_sinked_records',
+  'sinker_sinked_bytes',
+  'pipeline_queue_size',
+  'pipeline_queue_bytes',
+  'progress',
+  'lag',
+  'timestamp',
 ];
 
 const list = ref<MetricRule[]>([]);

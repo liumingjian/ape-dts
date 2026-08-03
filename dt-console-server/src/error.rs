@@ -94,6 +94,7 @@ pub mod codes {
 
     // Log / SSE
     pub const UNKNOWN_LOG_FILE: &str = "UNKNOWN_LOG_FILE";
+    pub const LOG_READ_FAILED: &str = "LOG_READ_FAILED";
     pub const REPLAY_GAP: &str = "REPLAY_GAP";
 
     // Schema / migration

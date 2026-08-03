@@ -21,9 +21,11 @@ const BASE: ApiTask = {
   runtime: null,
   metrics: {
     extractor_pushed_rps_avg: 120,
+    sinker_rps_avg: 95,
+    sinker_rt_avg: 2800,
     lag: 50,
-    pipeline_buffer_size_avg: 1024,
-    pipeline_sinked_count_latest: 5000,
+    pipeline_queue_size: 1024,
+    sinker_sinked_records: 5000,
     progress: 73,
   },
   resourceGroupId: 'rg-1',
@@ -53,6 +55,16 @@ describe('mapApiTask', () => {
     expect(t.source.database).toBe('src_db');
   });
 
+  it('normalizes PostgreSQL API aliases to postgres UI engine', () => {
+    const t = mapApiTask({
+      ...BASE,
+      dbTypeSource: 'pg',
+      dbTypeTarget: 'postgresql',
+    });
+    expect(t.source.engine).toBe('postgres');
+    expect(t.target.engine).toBe('postgres');
+  });
+
   it('parses targetEndpoint URL into target fields', () => {
     const t = mapApiTask(BASE);
     expect(t.target.engine).toBe('postgres');
@@ -70,12 +82,30 @@ describe('mapApiTask', () => {
     expect(t.target.engine).toBe('gaussdb');
   });
 
-  it('maps metrics when present', () => {
+  it('maps canonical engine metrics when present', () => {
     const t = mapApiTask(BASE);
     expect(t.metrics.rpsLatest).toBe(120);
+    expect(t.metrics.sinkerRpsLatest).toBe(95);
+    expect(t.metrics.queryRtUs).toBe(2800);
     expect(t.metrics.lag).toBe(50);
     expect(t.metrics.bufferSize).toBe(1024);
     expect(t.metrics.processedRecords).toBe(5000);
+  });
+
+  it('does not map prototype metric aliases', () => {
+    const t = mapApiTask({
+      ...BASE,
+      metrics: {
+        sinker_record_count_avg_by_sec: 95,
+        sinker_rt_per_query_avg: 2800,
+        pipeline_buffer_size_avg: 1024,
+        pipeline_sinked_count_latest: 5000,
+      } as ApiTask['metrics'],
+    });
+    expect(t.metrics.sinkerRpsLatest).toBe(0);
+    expect(t.metrics.queryRtUs).toBe(0);
+    expect(t.metrics.bufferSize).toBe(0);
+    expect(t.metrics.processedRecords).toBe(0);
   });
 
   it('defaults metrics to 0 when null', () => {
@@ -106,6 +136,27 @@ describe('mapApiTask', () => {
   it('progress passes through verbatim', () => {
     const t = mapApiTask(BASE);
     expect(t.progressPercent).toBe(73);
+  });
+
+  it('uses latest run status and nullable runtime progress when present', () => {
+    const t = mapApiTask({
+      ...BASE,
+      status: 'running',
+      metrics: {},
+      latestRun: { id: 'run-1', status: 'failed', currentPhase: 'cdc', exitCode: -1 },
+      progress: null,
+    });
+    expect(t.status).toBe('failed');
+    expect(t.progressPercent).toBeNull();
+  });
+
+  it('uses runtime progress over task metrics config progress when present', () => {
+    const t = mapApiTask({
+      ...BASE,
+      metrics: { progress: 0 },
+      progress: { runId: 'run-1', phase: 'snapshot', kind: 'snapshot', percent: 42, copiedRecords: 4, estimatedTotalRecords: 10, totalIsEstimate: true },
+    });
+    expect(t.progressPercent).toBe(42);
   });
 
   it('progress defaults to 0 when missing', () => {

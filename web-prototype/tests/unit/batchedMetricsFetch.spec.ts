@@ -1,8 +1,8 @@
 /* eslint-disable vue/one-component-per-file -- test file with stub components */
 /**
- * Batched metrics fetch: validates that loadDetailMetrics and loadMonitorMetrics
- * no longer make per-metric serial loops and instead rely on a single
- * GET /runs/:id/metrics/latest call per poll cycle.
+ * Batched metrics fetch: validates that TaskDetail polls one authoritative
+ * GET /tasks/:id/detail aggregate and loads canonical Run series concurrently
+ * once per Run rather than issuing serial requests on every poll.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
@@ -130,11 +130,21 @@ async function buildHarness(taskFixture: ApiTask = SNAPSHOT_FIXTURE) {
   });
 
   const mockRunId = taskFixture.id + '-run-1';
+  const aggregate = {
+    task: { ...taskFixture, configuredExtractType: 'snapshot', selectedObjects: [] },
+    currentRun: { id: mockRunId, status: 'running', currentPhase: 'snapshot', startedAt: null, stoppedAt: null, exitCode: null, checkpoint: null },
+    phases: {
+      snapshot: { status: 'running', startedAt: null, completedAt: null },
+      transitioning_to_cdc: { status: 'skipped', startedAt: null, completedAt: null },
+      cdc: { status: 'skipped', startedAt: null, completedAt: null },
+    },
+    metricsSnapshot: { runId: mockRunId, phase: 'snapshot', sampledAt: '2026-05-07T06:01:00.000Z', values: { extractor_rps_avg: 100, progress: 87, pipeline_queue_size: 1024 } },
+    progress: { runId: mockRunId, phase: 'snapshot', kind: 'snapshot', percent: 87, copiedRecords: null, estimatedTotalRecords: null, totalIsEstimate: false },
+  };
   mockGet.mockImplementation((url: string) => {
-    if (url.includes('/tasks/') && !url.includes('/runs')) return Promise.resolve(taskFixture);
-    if (url.includes('/metrics/latest')) return Promise.resolve({ extractor_rps_avg: 100, progress: 87, pipeline_buffer_size_avg: 1024 });
+    if (url.endsWith(`/tasks/${taskFixture.id}/detail`)) return Promise.resolve(aggregate);
     if (url.includes('/runs') && url.includes('/logs')) return Promise.resolve('');
-    if (url.includes('/runs') && !url.includes('/metrics')) return Promise.resolve({ items: [{ id: mockRunId, taskId: taskFixture.id, status: 'running', startedAt: null, stoppedAt: null, exitCode: null, logDir: null, iniPath: null, pid: null, position: null, createdAt: '2026-05-07T06:00:00.000Z' }], total: 1 });
+    if (url.includes('/runs')) return Promise.resolve({ items: [], total: 0 });
     if (url.includes('/alerts')) return Promise.resolve({ items: [] });
     return Promise.resolve({});
   });
@@ -162,9 +172,9 @@ function countPerMetricCalls(): number {
   ).length;
 }
 
-function countLatestCalls(): number {
+function countDetailCalls(): number {
   return mockGet.mock.calls.filter(
-    (call: unknown[]) => typeof call[0] === 'string' && (call[0] as string).includes('/metrics/latest'),
+    (call: unknown[]) => typeof call[0] === 'string' && (call[0] as string).endsWith('/detail'),
   ).length;
 }
 
@@ -179,31 +189,35 @@ describe('Batched metrics fetch', () => {
     vi.useRealTimers();
   });
 
-  it('loadDetailMetrics does not make per-metric serial fetches', async () => {
+  it('loads canonical Run metric series concurrently', async () => {
     const { TaskDetail, router, i18n } = await buildHarness();
     mount(TaskDetail, {
       global: { plugins: [router, i18n], stubs: GLOBAL_STUBS },
     });
     await flushPromises();
 
-    expect(countPerMetricCalls()).toBe(0);
+    expect(countPerMetricCalls()).toBe(7);
+    const calls = mockGet.mock.calls
+      .map(([url]) => String(url))
+      .filter((url) => url.includes('/metrics?metric='));
+    expect(calls.every((url) => url.includes('/runs/snap-1-run-1/metrics?metric='))).toBe(true);
   });
 
-  it('loadMonitorMetrics does not make per-metric serial fetches', async () => {
+  it('does not reload time series on each aggregate poll', async () => {
     const { TaskDetail, router, i18n } = await buildHarness();
     mount(TaskDetail, {
       global: { plugins: [router, i18n], stubs: GLOBAL_STUBS },
     });
     await flushPromises();
 
-    // Advance one poll cycle — monitor tab metrics should not trigger serial fetches
+    const initialCalls = countPerMetricCalls();
     vi.advanceTimersByTime(5_000);
     await flushPromises();
 
-    expect(countPerMetricCalls()).toBe(0);
+    expect(countPerMetricCalls()).toBe(initialCalls);
   });
 
-  it('exactly one /metrics/latest call per poll cycle', async () => {
+  it('polls exactly one task detail aggregate per cycle', async () => {
     const { TaskDetail, router, i18n } = await buildHarness();
     mount(TaskDetail, {
       global: { plugins: [router, i18n], stubs: GLOBAL_STUBS },
@@ -215,16 +229,24 @@ describe('Batched metrics fetch', () => {
     vi.advanceTimersByTime(5_000);
     await flushPromises();
 
-    expect(countLatestCalls()).toBe(1);
+    expect(countDetailCalls()).toBe(1);
   });
 
-  it('empty {} /metrics/latest response does not crash', async () => {
+  it('aggregate with no metrics snapshot does not crash', async () => {
     const { TaskDetail, router, i18n } = await buildHarness();
     mockGet.mockImplementation((url: string) => {
-      if (url.includes('/tasks/')) return Promise.resolve(SNAPSHOT_FIXTURE);
-      if (url.includes('/metrics/latest')) return Promise.resolve({});
-      if (url.includes('/runs') && url.includes('/logs')) return Promise.resolve('');
-      if (url.includes('/runs') && !url.includes('/metrics')) return Promise.resolve({ items: [], total: 0 });
+      if (url.endsWith('/tasks/snap-1/detail')) return Promise.resolve({
+        task: { ...SNAPSHOT_FIXTURE, configuredExtractType: 'snapshot', selectedObjects: [] },
+        currentRun: { id: 'snap-1-run-1', status: 'running', currentPhase: 'snapshot', startedAt: null, stoppedAt: null, exitCode: null, checkpoint: null },
+        phases: {
+          snapshot: { status: 'running', startedAt: null, completedAt: null },
+          transitioning_to_cdc: { status: 'skipped', startedAt: null, completedAt: null },
+          cdc: { status: 'skipped', startedAt: null, completedAt: null },
+        },
+        metricsSnapshot: null,
+        progress: null,
+      });
+      if (url.includes('/runs')) return Promise.resolve({ items: [], total: 0 });
       if (url.includes('/alerts')) return Promise.resolve({ items: [] });
       return Promise.resolve({});
     });
@@ -254,17 +276,17 @@ describe('Batched metrics fetch', () => {
     // First poll cycle
     vi.advanceTimersByTime(5_000);
     await flushPromises();
-    expect(countLatestCalls()).toBe(1);
+    expect(countDetailCalls()).toBe(1);
 
     // Second poll cycle
     vi.advanceTimersByTime(5_000);
     await flushPromises();
-    expect(countLatestCalls()).toBe(2);
+    expect(countDetailCalls()).toBe(2);
 
     // Third poll cycle
     vi.advanceTimersByTime(5_000);
     await flushPromises();
-    expect(countLatestCalls()).toBe(3);
+    expect(countDetailCalls()).toBe(3);
   });
 
   it('polling stops when component unmounts', async () => {
@@ -284,6 +306,6 @@ describe('Batched metrics fetch', () => {
     vi.advanceTimersByTime(20_000);
     await flushPromises();
 
-    expect(countLatestCalls()).toBe(0);
+    expect(countDetailCalls()).toBe(0);
   });
 });

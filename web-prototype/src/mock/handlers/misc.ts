@@ -9,7 +9,7 @@ import { id, isoMinus } from '../fake';
 
 async function listResourceGroups() {
   await pause();
-  return ok({ items: db.resourceGroups, total: db.resourceGroups.length, page: 1, size: 50 });
+  return ok(db.resourceGroups.map(({ id, name }) => ({ id, name })));
 }
 
 export const miscHandlers = [

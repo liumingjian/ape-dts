@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-// Reusable constants matching TaskDetail.vue
-const VALID_TABS = ['config', 'objects', 'logs', 'monitor', 'alerts', 'history'] as const;
+const VALID_TABS = ['overview', 'objects', 'logs', 'monitoring', 'history', 'more'] as const;
 
 describe('TaskDetail tabs — order and deep-link names', () => {
   it('has exactly 6 tabs', () => {
@@ -9,7 +8,7 @@ describe('TaskDetail tabs — order and deep-link names', () => {
   });
 
   it('tabs are in the documented order', () => {
-    expect(VALID_TABS).toEqual(['config', 'objects', 'logs', 'monitor', 'alerts', 'history']);
+    expect(VALID_TABS).toEqual(['overview', 'objects', 'logs', 'monitoring', 'history', 'more']);
   });
 
   it('every tab name is URL-safe for ?tab= deep links', () => {

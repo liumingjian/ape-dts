@@ -1,13 +1,13 @@
 /* eslint-disable vue/one-component-per-file -- test file with stub components */
 /**
  * Monitor lag gating: validates that the `lag` metric is only included
- * in the Monitor chart series for CDC tasks, not for snapshot tasks.
+ * in the Monitor chart series while the aggregate's current Run phase is CDC.
  *
  * Bug: the Monitor chart (and Dashboard latency chart) queried `lag` for
  * ALL task types, causing GET /runs/:id/metrics?metric=lag → 400
  * VALIDATION_FAILED for snapshot tasks.
  *
- * Fix: gate `lag` on syncMode === 'cdc' (TaskDetail.vue) and on
+ * Fix: gate `lag` on the aggregate current Run phase (TaskDetail.vue) and on
  * task kind (useDashboardData.ts).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -76,7 +76,7 @@ const CDC_FIXTURE: ApiTask = {
   taskId: 'cdc_mysql_mysql_cdc1',
   name: 'test-cdc',
   kind: 'cdc',
-  metrics: { extractor_pushed_rps_avg: 100, lag: 5, pipeline_buffer_size_avg: 1024 },
+  metrics: { extractor_pushed_rps_avg: 100, lag: 5, pipeline_queue_size: 1024 },
 };
 
 /* ---------- Stubs ---------- */
@@ -158,17 +158,27 @@ async function buildHarness(taskFixture: ApiTask = SNAPSHOT_FIXTURE) {
   });
 
   const mockRunId = taskFixture.id + '-run-1';
+  const phase = taskFixture.kind === 'cdc' ? 'cdc' : 'snapshot';
+  const values = phase === 'cdc'
+    ? { extractor_rps_avg: 100, lag: 5, pipeline_queue_size: 1024 }
+    : { extractor_rps_avg: 100, progress: 87, pipeline_queue_size: 1024 };
+  const aggregate = {
+    task: { ...taskFixture, configuredExtractType: phase, selectedObjects: [] },
+    currentRun: { id: mockRunId, status: 'running', currentPhase: phase, startedAt: null, stoppedAt: null, exitCode: null, checkpoint: null },
+    phases: {
+      snapshot: { status: phase === 'snapshot' ? 'running' : 'skipped', startedAt: null, completedAt: null },
+      transitioning_to_cdc: { status: 'skipped', startedAt: null, completedAt: null },
+      cdc: { status: phase === 'cdc' ? 'running' : 'skipped', startedAt: null, completedAt: null },
+    },
+    metricsSnapshot: { runId: mockRunId, phase, sampledAt: '2026-05-07T06:01:00.000Z', values },
+    progress: phase === 'snapshot'
+      ? { runId: mockRunId, phase, kind: 'snapshot', percent: 87, copiedRecords: null, estimatedTotalRecords: null, totalIsEstimate: false }
+      : null,
+  };
   mockGet.mockImplementation((url: string) => {
-    if (url.includes('/tasks/') && !url.includes('/runs')) return Promise.resolve(taskFixture);
-    if (url.includes('/metrics/latest')) {
-      // Return different metrics based on task kind
-      if (taskFixture.kind === 'cdc') {
-        return Promise.resolve({ extractor_rps_avg: 100, lag: 5, pipeline_buffer_size_avg: 1024 });
-      }
-      return Promise.resolve({ extractor_rps_avg: 100, progress: 87, pipeline_buffer_size_avg: 1024 });
-    }
+    if (url.endsWith(`/tasks/${taskFixture.id}/detail`)) return Promise.resolve(aggregate);
     if (url.includes('/runs') && url.includes('/logs')) return Promise.resolve('');
-    if (url.includes('/runs') && !url.includes('/metrics')) return Promise.resolve({ items: [{ id: mockRunId, taskId: taskFixture.id, status: 'running', startedAt: null, stoppedAt: null, exitCode: null, logDir: null, iniPath: null, pid: null, position: null, createdAt: '2026-05-07T06:00:00.000Z' }], total: 1 });
+    if (url.includes('/runs')) return Promise.resolve({ items: [], total: 0 });
     if (url.includes('/alerts')) return Promise.resolve({ items: [] });
     return Promise.resolve({});
   });
@@ -191,7 +201,7 @@ async function buildHarness(taskFixture: ApiTask = SNAPSHOT_FIXTURE) {
 
 /* ---------- Source-code assertions ---------- */
 describe('Monitor lag gating — source code', () => {
-  it('lag in MONITOR_METRIC_NAMES is gated on syncMode === "cdc"', () => {
+  it('lag in MONITOR_METRIC_NAMES is gated on the current Run phase', () => {
     const source = readFileSync(resolve(ROOT, 'views/tasks/TaskDetail.vue'), 'utf-8');
 
     // MONITOR_METRIC_NAMES must be a computed (not a plain const) that
@@ -205,8 +215,8 @@ describe('Monitor lag gating — source code', () => {
     // Must be a computed, not a plain const array
     expect(monitorSection).toContain('MONITOR_METRIC_NAMES = computed');
 
-    // Must reference syncMode and lag together
-    expect(monitorSection).toContain('syncMode');
+    // Must reference currentPhase and lag together
+    expect(monitorSection).toContain('currentPhase');
     expect(monitorSection).toContain('lag');
     expect(monitorSection).toContain('cdc');
   });
@@ -277,15 +287,15 @@ describe('Monitor lag gating — runtime', () => {
     vi.advanceTimersByTime(5_000);
     await flushPromises();
 
-    // Verify the batched endpoint was called and returns lag data
-    const latestCalls = mockGet.mock.calls.filter(
-      (call: unknown[]) => typeof call[0] === 'string' && (call[0] as string).includes('/metrics/latest'),
+    // Verify the aggregate endpoint was polled and supplied lag data
+    const detailCalls = mockGet.mock.calls.filter(
+      (call: unknown[]) => typeof call[0] === 'string' && (call[0] as string).endsWith('/detail'),
     );
-    expect(latestCalls.length).toBeGreaterThan(0);
+    expect(detailCalls.length).toBeGreaterThan(0);
 
     // The CDC KPI strip should show Lag tile (already tested in taskDetailKpiBranching)
     // Here we verify that the component renders without errors when lag data is present
     expect(wrapper.html()).toBeTruthy();
-    expect(wrapper.html()).toContain('Lag');
+    expect(wrapper.html()).toContain('Replication lag');
   });
 });

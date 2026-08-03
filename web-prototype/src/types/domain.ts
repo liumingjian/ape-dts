@@ -128,13 +128,13 @@ export interface Endpoint {
 export interface TaskMetricsSnapshot {
   rpsLatest: number; // extractor_pushed_rps_avg
   bpsLatest: number; // extractor_pushed_bps_avg
-  sinkerRpsLatest: number; // sinker_record_count_avg_by_sec
+  sinkerRpsLatest: number; // sinker_rps_avg
   latencyMs: number; // replication lag
   lag: number; // CDC lag (seconds)
-  queryRtUs: number; // sinker_rt_per_query_avg (μs)
-  bufferSize: number; // pipeline_buffer_size_avg
+  queryRtUs: number; // sinker_rt_avg (μs)
+  bufferSize: number; // pipeline_queue_size
   errorCount: number;
-  processedRecords: number; // pipeline_sinked_count_latest
+  processedRecords: number; // sinker_sinked_records
   pipelineQueueSize: number; // pipeline_queue_size
   finishedProgressCount: number; // finished_progress_count
   totalProgressCount: number; // total_progress_count
@@ -155,7 +155,7 @@ export interface Task {
   taskType: "standalone" | "primary_backup";
   resourceGroup: string;
   instanceIp: string;
-  progressPercent: number;
+  progressPercent: number | null;
   syncObjects: { totalTables: number; selectedTables: number };
   config: {
     parallelizer: ParallelType;
@@ -470,6 +470,7 @@ export type TableLoadState = {
 export type RunStatus =
   | "pending"
   | "running"
+  | "pausing"
   | "paused"
   | "stopping"
   | "stopped"
@@ -502,7 +503,7 @@ export type RunPosition =
 /* ----- Metrics query response from /api/runs/:id/metrics ----- */
 export interface MetricQueryResponse {
   metric: string;
-  data: { ts: number; value: number }[];
+  data: { ts: string | number; value: number }[];
   details?: { source?: string[]; hint?: string };
 }
 
@@ -526,8 +527,8 @@ export interface CreateTaskDto {
   extractor: { extract_type: ExtractType };
   sinker: Record<string, unknown>;
   filter?: {
-    do_dbs?: string;
-    do_tbs?: string;
+    do_dbs?: string | string[];
+    do_tbs?: string | string[];
     ignore_dbs?: string;
     ignore_tbs?: string;
     do_events?: string;
@@ -580,15 +581,19 @@ export interface ApiTask {
   processor: Record<string, unknown> | null;
   runtime: Record<string, unknown> | null;
   metrics: {
+    extractor_rps_avg?: number;
     extractor_pushed_rps_avg?: number;
     extractor_pushed_bps_avg?: number;
-    sinker_record_count_avg_by_sec?: number;
+    sinker_rps_avg?: number;
+    sinker_rt_avg?: number;
+    sinker_sinked_records?: number;
+    sinker_sinked_bytes?: number;
+    extractor_plan_records?: number;
     progress?: number;
     lag?: number;
-    sinker_rt_per_query_avg?: number;
-    pipeline_buffer_size_avg?: number;
-    pipeline_sinked_count_latest?: number;
+    timestamp?: number;
     pipeline_queue_size?: number;
+    pipeline_queue_bytes?: number;
     finished_progress_count?: number;
     total_progress_count?: number;
     error_count?: number;
@@ -596,10 +601,60 @@ export interface ApiTask {
   resourceGroupId: string;
   ownerUserId: string;
   status: string;
+  latestRun?: {
+    id: string;
+    status: string;
+    currentPhase?: TaskDetailPhaseName | null;
+    exitCode?: number | null;
+  } | null;
+  progress?: TaskDetailAggregate["progress"];
   createdAt: string;
   updatedAt: string;
   startedAt?: string;
   completedAt?: string;
+}
+
+export type TaskDetailPhaseName = "snapshot" | "transitioning_to_cdc" | "cdc";
+export type TaskDetailPhaseState = "pending" | "running" | "completed" | "failed" | "skipped";
+
+export interface TaskDetailPhase {
+  status: TaskDetailPhaseState;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+export interface TaskDetailRun {
+  id: string;
+  status: "pending" | "running" | "pausing" | "paused" | "stopping" | "stopped" | "failed";
+  currentPhase: TaskDetailPhaseName | null;
+  startedAt: string | null;
+  stoppedAt: string | null;
+  exitCode: number | null;
+  checkpoint: RunPosition | null;
+}
+
+export interface TaskDetailAggregate {
+  task: ApiTask & {
+    configuredExtractType: ExtractType;
+    selectedObjects: string[];
+  };
+  currentRun: TaskDetailRun | null;
+  phases: Record<TaskDetailPhaseName, TaskDetailPhase>;
+  metricsSnapshot: {
+    runId: string;
+    phase: TaskDetailPhaseName;
+    sampledAt: string;
+    values: Record<string, number>;
+  } | null;
+  progress: {
+    runId: string;
+    phase: TaskDetailPhaseName;
+    kind: "snapshot" | "cdc";
+    percent: number | null;
+    copiedRecords: number | null;
+    estimatedTotalRecords: number | null;
+    totalIsEstimate: boolean;
+  } | null;
 }
 
 /** Parse a database connection URL string into its host/port/username/database parts. */
@@ -623,6 +678,7 @@ function parseEndpointUrl(url: string): {
 }
 
 function normalizeEngineType(value: string | null | undefined): EngineType {
+  if (value === "pg" || value === "postgresql") return "postgres";
   if (value === "gaussdb_oracle") return "gaussdb";
   return (value || "mysql") as EngineType;
 }
@@ -789,13 +845,17 @@ export function mapApiTask(raw: ApiTask): Task {
   const tgt = parseEndpointUrl(tgtRaw);
   const m = raw.metrics;
   const extractType = resolveExtractType(raw);
+  const displayStatus = raw.latestRun?.status ?? raw.status ?? "draft";
+  const progressPercent = raw.progress === null
+    ? null
+    : raw.progress?.percent ?? m?.progress ?? 0;
   const syncMode: SyncMode =
     extractType === "snapshot_and_cdc" ? "snapshot_cdc" : extractType === "cdc" ? "cdc" : "snapshot";
   return {
     id: raw.id,
     name: raw.name,
     category: (raw.kind || "snapshot") as TaskCategory,
-    status: (raw.status || "draft") as TaskStatus,
+    status: displayStatus as TaskStatus,
     source: {
       engine: normalizeEngineType(raw.dbTypeSource),
       host: src.host,
@@ -819,7 +879,7 @@ export function mapApiTask(raw: ApiTask): Task {
     taskType: "standalone",
     resourceGroup: raw.resourceGroupId ?? "",
     instanceIp: src.host,
-    progressPercent: m?.progress ?? 0,
+    progressPercent,
     syncObjects: { totalTables: 0, selectedTables: 0 },
     config: {
       parallelizer: resolveParallelizer(raw.parallelizer),
@@ -846,13 +906,13 @@ export function mapApiTask(raw: ApiTask): Task {
     metrics: {
       rpsLatest: m?.extractor_pushed_rps_avg ?? 0,
       bpsLatest: m?.extractor_pushed_bps_avg ?? 0,
-      sinkerRpsLatest: m?.sinker_record_count_avg_by_sec ?? 0,
+      sinkerRpsLatest: m?.sinker_rps_avg ?? 0,
       latencyMs: 0,
       lag: m?.lag ?? 0,
-      queryRtUs: m?.sinker_rt_per_query_avg ?? 0,
-      bufferSize: m?.pipeline_buffer_size_avg ?? 0,
+      queryRtUs: m?.sinker_rt_avg ?? 0,
+      bufferSize: m?.pipeline_queue_size ?? 0,
       errorCount: m?.error_count ?? 0,
-      processedRecords: m?.pipeline_sinked_count_latest ?? 0,
+      processedRecords: m?.sinker_sinked_records ?? 0,
       pipelineQueueSize: m?.pipeline_queue_size ?? 0,
       finishedProgressCount: m?.finished_progress_count ?? 0,
       totalProgressCount: m?.total_progress_count ?? 0,

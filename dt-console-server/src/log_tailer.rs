@@ -4,6 +4,9 @@
 //! finished, task, http, commit. Uses polling to detect new content.
 //! Handles file rotation/truncation by restarting from offset 0.
 
+use chrono::Utc;
+use regex::{Captures, Regex};
+use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
@@ -15,6 +18,93 @@ pub const KNOWN_LOG_FILES: &[&str] = &[
 
 /// Default polling interval for log tailing.
 pub const DEFAULT_POLL_INTERVAL_MS: u64 = 250;
+
+/// Structured payload emitted for each named SSE `log` event.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct StructuredLogLine {
+    pub timestamp: String,
+    pub level: String,
+    pub source: String,
+    pub file: String,
+    pub message: String,
+}
+
+/// Parse one engine log line into the public Run-log wire contract.
+pub fn parse_log_line(file: &str, raw: &str) -> StructuredLogLine {
+    let pattern = Regex::new(
+        r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?) - (DEBUG|INFO|WARN|ERROR) - (?:\[([^\]]+)\] - )?(.*)$",
+    )
+    .expect("static log pattern");
+
+    let (timestamp, level, source, message) = if let Some(captures) = pattern.captures(raw) {
+        let timestamp = format!(
+            "{}Z",
+            captures
+                .get(1)
+                .expect("timestamp capture")
+                .as_str()
+                .replace(' ', "T")
+        );
+        let level = captures.get(2).expect("level capture").as_str().to_string();
+        let source = captures
+            .get(3)
+            .map_or("dt-main", |value| value.as_str())
+            .to_string();
+        let message = captures
+            .get(4)
+            .expect("message capture")
+            .as_str()
+            .to_string();
+        (timestamp, level, source, message)
+    } else {
+        (
+            Utc::now().to_rfc3339(),
+            infer_log_level(raw).to_string(),
+            "dt-main".to_string(),
+            raw.to_string(),
+        )
+    };
+
+    StructuredLogLine {
+        timestamp,
+        level,
+        source,
+        file: format!("{file}.log"),
+        message: redact_log_text(&message),
+    }
+}
+
+fn infer_log_level(line: &str) -> &'static str {
+    for (level, name) in [
+        (LogLevel::Error, "ERROR"),
+        (LogLevel::Warn, "WARN"),
+        (LogLevel::Debug, "DEBUG"),
+        (LogLevel::Info, "INFO"),
+    ] {
+        if level.matches_line(line) {
+            return name;
+        }
+    }
+    "INFO"
+}
+
+/// Redact common credential forms before log content leaves the server.
+pub fn redact_log_text(text: &str) -> String {
+    let url_credentials = Regex::new(r"(?i)([a-z][a-z0-9+.-]*://[^\s/:@]+:)[^\s@]+(@)")
+        .expect("static URL credential pattern");
+    let key_values = Regex::new(
+        r"(?i)\b(password|passwd|pwd|token|secret|access_key|secret_key)\s*=\s*([^\s,;]+)",
+    )
+    .expect("static key-value secret pattern");
+    let authorization = Regex::new(r"(?i)(authorization\s*[:=]\s*(?:bearer\s+)?)([^\s,;]+)")
+        .expect("static authorization pattern");
+
+    let redacted = url_credentials.replace_all(text, "$1***$2");
+    let redacted = key_values.replace_all(&redacted, |captures: &Captures<'_>| {
+        format!("{}=***", &captures[1])
+    });
+    authorization.replace_all(&redacted, "$1***").into_owned()
+}
 
 /// A chunk of log data read from a Run's log file.
 #[derive(Debug, Clone)]
@@ -250,6 +340,37 @@ impl LogLevel {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_structured_log_line_uses_wire_contract_and_redacts_secrets() {
+        let line = parse_log_line(
+            "default",
+            "2026-07-18 12:34:56.789 - ERROR - [extractor] - connect mysql://root:supersecret@db password=hunter2 token=abc123",
+        );
+
+        assert_eq!(line.timestamp, "2026-07-18T12:34:56.789Z");
+        assert_eq!(line.level, "ERROR");
+        assert_eq!(line.source, "extractor");
+        assert_eq!(line.file, "default.log");
+        assert_eq!(
+            line.message,
+            "connect mysql://root:***@db password=*** token=***"
+        );
+        let json = serde_json::to_string(&line).unwrap();
+        assert!(!json.contains("supersecret"));
+        assert!(!json.contains("hunter2"));
+        assert!(!json.contains("abc123"));
+    }
+
+    #[test]
+    fn test_structured_log_line_defaults_unknown_format() {
+        let line = parse_log_line("monitor", "replication is idle");
+        assert_eq!(line.level, "INFO");
+        assert_eq!(line.source, "dt-main");
+        assert_eq!(line.file, "monitor.log");
+        assert_eq!(line.message, "replication is idle");
+        assert!(!line.timestamp.is_empty());
+    }
 
     #[test]
     fn test_known_log_files() {

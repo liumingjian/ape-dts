@@ -9,13 +9,18 @@
 use actix_web::http::StatusCode;
 use actix_web::{delete, get, patch, post, web, HttpResponse, ResponseError};
 use sqlx::SqlitePool;
+use std::io::{Read as _, Seek, SeekFrom};
+use std::path::Path;
 
 use crate::error::{codes, ApiError};
 use crate::license_handlers::check_license_cap;
 use crate::middleware::rbac::{self, RbacAction};
 use crate::models::{
-    CreateTaskRequest, OperateLog, TaskListResponse, TaskResponse, UpdateTaskRequest, UserContext,
+    CreateTaskRequest, OperateLog, TaskDetailMetricsSnapshot, TaskDetailPhase, TaskDetailPhases,
+    TaskDetailProgress, TaskDetailResponse, TaskDetailRun, TaskDetailTask, TaskListResponse,
+    TaskListRun, TaskResponse, UpdateTaskRequest, UserContext,
 };
+use crate::repositories::metric_point_repository::MetricPointRepository;
 use crate::repositories::operate_log_repository::OperateLogRepository;
 use crate::repositories::resource_group_repository::ResourceGroupRepository;
 use crate::repositories::run_repository::RunRepository;
@@ -46,9 +51,47 @@ fn task_to_response(task: &crate::models::Task) -> TaskResponse {
         resource_group_id: task.resource_group_id.clone(),
         owner_user_id: task.owner_user_id.clone(),
         status: task.status.clone(),
+        latest_run: None,
+        progress: None,
         created_at: task.created_at.clone(),
         updated_at: task.updated_at.clone(),
     }
+}
+
+async fn task_to_list_response(
+    pool: &SqlitePool,
+    task: &crate::models::Task,
+) -> Result<TaskResponse, ApiError> {
+    let mut response = task_to_response(task);
+    let run = match RunRepository::find_active_by_task(pool, &task.id).await {
+        Ok(Some(run)) => Some(run),
+        Ok(None) => RunRepository::find_latest_by_task(pool, &task.id)
+            .await
+            .map_err(|e| ApiError::new(codes::INTERNAL_ERROR, format!("run query failed: {e}")))?,
+        Err(e) => {
+            return Err(ApiError::new(
+                codes::INTERNAL_ERROR,
+                format!("run query failed: {e}"),
+            ));
+        }
+    };
+    let Some(run) = run else {
+        return Ok(response);
+    };
+
+    let configured_extract_type = extract_type(task);
+    let current_phase = current_phase(&configured_extract_type, &run);
+    let points = latest_visible_points(pool, &task.id, &run)
+        .await
+        .map_err(|e| ApiError::new(codes::INTERNAL_ERROR, e))?;
+    response.latest_run = Some(TaskListRun {
+        id: run.id.clone(),
+        status: run.status.clone(),
+        current_phase: Some(current_phase.clone()),
+        exit_code: run.exit_code,
+    });
+    response.progress = progress_snapshot(&run.id, &current_phase, &points);
+    Ok(response)
 }
 
 /// Parse a JSON string or return empty object.
@@ -348,18 +391,389 @@ pub async fn list_tasks(
     {
         Ok(r) => r,
         Err(e) => {
-            return ApiError::new(codes::INTERNAL_ERROR, format!("task list failed: {e}"))
-                .error_response();
+            let request_id = uuid::Uuid::new_v4()
+                .simple()
+                .to_string()
+                .chars()
+                .take(8)
+                .collect::<String>();
+            tracing::error!(request_id = %request_id, error = %e, "task list failed");
+            return ApiError::with_details(
+                codes::INTERNAL_ERROR,
+                format!("task list failed: {e}"),
+                serde_json::json!({ "requestId": request_id }),
+            )
+            .error_response();
         }
     };
 
-    let items: Vec<TaskResponse> = tasks.iter().map(task_to_response).collect();
+    let mut items = Vec::with_capacity(tasks.len());
+    for task in &tasks {
+        match task_to_list_response(&pool, task).await {
+            Ok(item) => items.push(item),
+            Err(e) => return e.error_response(),
+        }
+    }
 
     HttpResponse::Ok().json(TaskListResponse {
         items,
         total,
         page,
         page_size,
+    })
+}
+
+/// GET /api/tasks/:id/detail — get Task configuration and current/latest Run observations.
+#[get("/tasks/{id}/detail")]
+pub async fn get_task_detail(
+    pool: web::Data<SqlitePool>,
+    user: UserContext,
+    path: web::Path<String>,
+) -> HttpResponse {
+    if let Err(e) = rbac::require_action(&user, RbacAction::TaskRead) {
+        return e.error_response();
+    }
+
+    let id = path.into_inner();
+    let task = match TaskRepository::find_by_id(&pool, &id).await {
+        Ok(task) => task,
+        Err(_) => {
+            return ApiError::with_details(
+                codes::TASK_NOT_FOUND,
+                "Task not found",
+                serde_json::json!({ "id": id }),
+            )
+            .error_response();
+        }
+    };
+
+    let run = match RunRepository::find_active_by_task(&pool, &id).await {
+        Ok(Some(run)) => Some(run),
+        Ok(None) => match RunRepository::find_latest_by_task(&pool, &id).await {
+            Ok(run) => run,
+            Err(e) => {
+                return ApiError::new(codes::INTERNAL_ERROR, format!("run query failed: {e}"))
+                    .error_response();
+            }
+        },
+        Err(e) => {
+            return ApiError::new(codes::INTERNAL_ERROR, format!("run query failed: {e}"))
+                .error_response();
+        }
+    };
+
+    let configured_extract_type = extract_type(&task);
+    let selected_objects = selected_objects(&task);
+    let (current_run, phases, metrics_snapshot, progress) = match run {
+        Some(run) => {
+            let current_phase = current_phase(&configured_extract_type, &run);
+            let phases = derive_phases(&configured_extract_type, &run, &current_phase);
+            let points = match latest_visible_points(&pool, &id, &run).await {
+                Ok(points) => points,
+                Err(e) => {
+                    return ApiError::new(codes::INTERNAL_ERROR, e).error_response();
+                }
+            };
+            let metrics = metrics_snapshot(&run.id, &current_phase, &points);
+            let progress = progress_snapshot(&run.id, &current_phase, &points);
+            let checkpoint = crate::run_handlers::run_to_response_public(&run).position;
+            (
+                Some(TaskDetailRun {
+                    id: run.id.clone(),
+                    status: run.status.clone(),
+                    current_phase: Some(current_phase),
+                    started_at: run.started_at.clone(),
+                    stopped_at: run.stopped_at.clone(),
+                    exit_code: run.exit_code,
+                    checkpoint,
+                }),
+                phases,
+                metrics,
+                progress,
+            )
+        }
+        None => (None, empty_phases(&configured_extract_type), None, None),
+    };
+
+    HttpResponse::Ok().json(TaskDetailResponse {
+        task: TaskDetailTask {
+            config: task_to_response(&task),
+            configured_extract_type,
+            selected_objects,
+        },
+        current_run,
+        phases,
+        metrics_snapshot,
+        progress,
+    })
+}
+
+fn extract_type(task: &crate::models::Task) -> String {
+    let extractor = parse_json_or_default(&task.extractor_config);
+    extractor
+        .get("extract_type")
+        .or_else(|| extractor.get("extractType"))
+        .and_then(|value| value.as_str())
+        .unwrap_or(task.kind.as_str())
+        .to_string()
+}
+
+fn selected_objects(task: &crate::models::Task) -> Vec<String> {
+    let filter = parse_json_or_default(&task.filter_config);
+    match filter.get("do_tbs").or_else(|| filter.get("doTbs")) {
+        Some(serde_json::Value::Array(items)) => items
+            .iter()
+            .filter_map(|item| item.as_str().map(str::to_string))
+            .collect(),
+        Some(serde_json::Value::String(items)) => items
+            .split(',')
+            .map(str::trim)
+            .filter(|item| !item.is_empty())
+            .map(str::to_string)
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn current_phase(configured_extract_type: &str, run: &crate::models::Run) -> String {
+    if configured_extract_type == "snapshot_and_cdc" {
+        let phase = run.log_dir.as_ref().and_then(|log_dir| {
+            let run_dir = std::path::PathBuf::from(log_dir)
+                .parent()
+                .map(std::path::Path::to_path_buf)?;
+            crate::two_phase::read_phase_state(&run_dir)
+        });
+        if phase.is_some_and(|state| state.current_phase == 2) {
+            return "cdc".to_string();
+        }
+        return "snapshot".to_string();
+    }
+    if configured_extract_type == "cdc" {
+        "cdc".to_string()
+    } else {
+        "snapshot".to_string()
+    }
+}
+
+async fn latest_visible_points(
+    pool: &SqlitePool,
+    task_id: &str,
+    run: &crate::models::Run,
+) -> Result<Vec<crate::models::MetricPoint>, String> {
+    let points = MetricPointRepository::latest_by_run(pool, task_id, &run.id)
+        .await
+        .map_err(|e| format!("metric query failed: {e}"))?;
+    if points.is_empty() {
+        Ok(latest_monitor_points(task_id, run).unwrap_or_default())
+    } else {
+        Ok(points)
+    }
+}
+
+fn latest_monitor_points(
+    task_id: &str,
+    run: &crate::models::Run,
+) -> Result<Vec<crate::models::MetricPoint>, std::io::Error> {
+    let Some(log_dir) = run.log_dir.as_deref() else {
+        return Ok(Vec::new());
+    };
+    let path = Path::new(log_dir).join("monitor.log");
+    let mut file = std::fs::File::open(path)?;
+    let len = file.metadata()?.len();
+    let start = len.saturating_sub(256 * 1024);
+    file.seek(SeekFrom::Start(start))?;
+    let mut text = String::new();
+    file.read_to_string(&mut text)?;
+
+    let mut latest = std::collections::BTreeMap::new();
+    for line in text.lines() {
+        if let Some((ts, name, value)) = parse_monitor_metric_line(line) {
+            latest.insert(name, (ts, value));
+        }
+    }
+
+    Ok(latest
+        .into_iter()
+        .map(|(name, (ts, value))| crate::models::MetricPoint {
+            id: 0,
+            task_id: task_id.to_string(),
+            run_id: run.id.clone(),
+            metric_name: name,
+            ts,
+            value,
+        })
+        .collect())
+}
+
+fn parse_monitor_metric_line(line: &str) -> Option<(String, String, f64)> {
+    let mut parts = line.split('|').map(str::trim);
+    let ts = parts.next()?;
+    parts.next()?;
+    parts.next()?;
+    let name = parts.next()?.to_string();
+    let value_part = parts.next()?;
+    let value = value_part.strip_prefix("latest=")?.parse::<f64>().ok()?;
+    let ts = format!("{}Z", ts.replace(' ', "T"));
+    Some((ts, normalize_monitor_metric_name(&name).to_string(), value))
+}
+
+fn normalize_monitor_metric_name(name: &str) -> &str {
+    match name {
+        "queued_records" => "pipeline_queue_size",
+        "sinked_records" => "sinker_sinked_records",
+        other => other,
+    }
+}
+
+fn phase(
+    status: &str,
+    started_at: Option<String>,
+    completed_at: Option<String>,
+) -> TaskDetailPhase {
+    TaskDetailPhase {
+        status: status.to_string(),
+        started_at,
+        completed_at,
+    }
+}
+
+fn empty_phases(configured_extract_type: &str) -> TaskDetailPhases {
+    let (snapshot, cdc) = if configured_extract_type == "cdc" {
+        ("skipped", "pending")
+    } else if configured_extract_type == "snapshot_and_cdc" {
+        ("pending", "pending")
+    } else {
+        ("pending", "skipped")
+    };
+    TaskDetailPhases {
+        snapshot: phase(snapshot, None, None),
+        transitioning_to_cdc: phase("pending", None, None),
+        cdc: phase(cdc, None, None),
+    }
+}
+
+fn derive_phases(
+    configured_extract_type: &str,
+    run: &crate::models::Run,
+    current_phase: &str,
+) -> TaskDetailPhases {
+    let active = matches!(
+        run.status.as_str(),
+        "pending" | "running" | "pausing" | "paused" | "stopping"
+    );
+    let terminal_phase_state = if run.status == "failed" {
+        "failed"
+    } else {
+        "completed"
+    };
+    let current_state = if active {
+        if run.status == "pending" {
+            "pending"
+        } else {
+            "running"
+        }
+    } else {
+        terminal_phase_state
+    };
+
+    if configured_extract_type == "snapshot_and_cdc" && current_phase == "cdc" {
+        return TaskDetailPhases {
+            snapshot: phase("completed", run.started_at.clone(), None),
+            transitioning_to_cdc: phase("completed", None, None),
+            cdc: phase(current_state, None, run.stopped_at.clone()),
+        };
+    }
+    if current_phase == "cdc" {
+        return TaskDetailPhases {
+            snapshot: phase("skipped", None, None),
+            transitioning_to_cdc: phase("skipped", None, None),
+            cdc: phase(
+                current_state,
+                run.started_at.clone(),
+                run.stopped_at.clone(),
+            ),
+        };
+    }
+    TaskDetailPhases {
+        snapshot: phase(
+            current_state,
+            run.started_at.clone(),
+            run.stopped_at.clone(),
+        ),
+        transitioning_to_cdc: phase(
+            if configured_extract_type == "snapshot_and_cdc" {
+                "pending"
+            } else {
+                "skipped"
+            },
+            None,
+            None,
+        ),
+        cdc: phase(
+            if configured_extract_type == "snapshot_and_cdc" {
+                "pending"
+            } else {
+                "skipped"
+            },
+            None,
+            None,
+        ),
+    }
+}
+
+fn metrics_snapshot(
+    run_id: &str,
+    current_phase: &str,
+    points: &[crate::models::MetricPoint],
+) -> Option<TaskDetailMetricsSnapshot> {
+    let sampled_at = points
+        .iter()
+        .map(|point| point.ts.as_str())
+        .max()?
+        .to_string();
+    let mut values = serde_json::Map::with_capacity(points.len());
+    for point in points {
+        if let Some(value) = serde_json::Number::from_f64(point.value) {
+            values.insert(point.metric_name.clone(), serde_json::Value::Number(value));
+        }
+    }
+    Some(TaskDetailMetricsSnapshot {
+        run_id: run_id.to_string(),
+        phase: current_phase.to_string(),
+        sampled_at,
+        values,
+    })
+}
+
+fn progress_snapshot(
+    run_id: &str,
+    current_phase: &str,
+    points: &[crate::models::MetricPoint],
+) -> Option<TaskDetailProgress> {
+    let value = |name: &str| {
+        points
+            .iter()
+            .find(|point| point.metric_name == name)
+            .map(|point| point.value)
+    };
+    let percent = if current_phase == "snapshot" {
+        value("progress")
+    } else {
+        None
+    };
+    let copied_records = value("sinker_sinked_records");
+    let estimated_total_records = value("extractor_plan_records");
+    if percent.is_none() && copied_records.is_none() && estimated_total_records.is_none() {
+        return None;
+    }
+    Some(TaskDetailProgress {
+        run_id: run_id.to_string(),
+        phase: current_phase.to_string(),
+        kind: current_phase.to_string(),
+        percent,
+        copied_records,
+        estimated_total_records,
+        total_is_estimate: estimated_total_records.is_some(),
     })
 }
 
@@ -624,7 +1038,6 @@ pub async fn check_no_active_run(pool: &SqlitePool, task_id: &str) -> Result<(),
 
 /// Query parameters for GET /api/tasks.
 #[derive(Debug, Clone, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct TaskListQuery {
     pub category: Option<String>,
     pub mode: Option<String>,

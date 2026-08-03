@@ -87,6 +87,14 @@ function draftKey(category: TaskViewKind): WizardDraftKey {
   return `console.wizard.${category}`;
 }
 
+function persistedDraft(form: WizardDraftForm): WizardDraftForm {
+  return {
+    ...form,
+    source: { ...form.source, password: '' },
+    target: { ...form.target, password: '' },
+  };
+}
+
 export const useWizardDraftStore = defineStore('wizardDraft', () => {
   /* ---- per-category draft ---- */
   const drafts = ref<Record<string, WizardDraftForm | null>>({});
@@ -99,12 +107,14 @@ export const useWizardDraftStore = defineStore('wizardDraft', () => {
       const raw = localStorage.getItem(key);
       if (!raw) return null;
       const parsed = JSON.parse(raw) as WizardDraftForm;
-      drafts.value[key] = parsed;
+      const safeDraft = persistedDraft(parsed);
+      drafts.value[key] = safeDraft;
+      localStorage.setItem(key, JSON.stringify(safeDraft));
       // snapshot original hash for dirty tracking
       if (!originalHash.value[key]) {
-        originalHash.value[key] = JSON.stringify(parsed);
+        originalHash.value[key] = JSON.stringify(safeDraft);
       }
-      return parsed;
+      return safeDraft;
     } catch {
       return null;
     }
@@ -113,7 +123,7 @@ export const useWizardDraftStore = defineStore('wizardDraft', () => {
   function save(category: TaskViewKind, form: WizardDraftForm): void {
     const key = draftKey(category);
     drafts.value[key] = form;
-    localStorage.setItem(key, JSON.stringify(form));
+    localStorage.setItem(key, JSON.stringify(persistedDraft(form)));
   }
 
   function discard(category: TaskViewKind): void {
@@ -127,7 +137,7 @@ export const useWizardDraftStore = defineStore('wizardDraft', () => {
     const key = draftKey(category);
     const current = drafts.value[key];
     if (!current && !originalHash.value[key]) return false;
-    const currentHash = current ? JSON.stringify(current) : '';
+    const currentHash = current ? JSON.stringify(persistedDraft(current)) : '';
     return currentHash !== (originalHash.value[key] ?? '');
   }
 
@@ -135,7 +145,7 @@ export const useWizardDraftStore = defineStore('wizardDraft', () => {
   function snapshotOriginal(category: TaskViewKind): void {
     const key = draftKey(category);
     const current = drafts.value[key];
-    originalHash.value[key] = current ? JSON.stringify(current) : null;
+    originalHash.value[key] = current ? JSON.stringify(persistedDraft(current)) : null;
   }
 
   const hasAnyDraft = computed(() =>

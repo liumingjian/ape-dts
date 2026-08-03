@@ -249,9 +249,9 @@ function buildEvent(_idx: number): SysEvent {
 function buildMetricRule(): MetricRule {
   const opts = [
     { name: '源端抽取速率过低', metric: 'extractor_pushed_rps_avg', operator: '<' as const, threshold: 100, level: 'major' as const, unit: 'rows/s' },
-    { name: '同步延迟过高', metric: 'sinker_rt_per_query_avg', operator: '>' as const, threshold: 5000, level: 'critical' as const, unit: 'μs' },
+    { name: '复制延迟过高', metric: 'sinker_rt_avg', operator: '>' as const, threshold: 5000, level: 'critical' as const, unit: 'μs' },
     { name: '写入批量过小', metric: 'sinker_records_per_query_avg', operator: '<' as const, threshold: 50, level: 'minor' as const, unit: 'rows' },
-    { name: '缓冲队列堆积', metric: 'pipeline_buffer_size_avg', operator: '>' as const, threshold: 500, level: 'major' as const, unit: 'records' },
+    { name: '缓冲队列堆积', metric: 'pipeline_queue_size', operator: '>' as const, threshold: 500, level: 'major' as const, unit: 'records' },
     { name: '写入带宽骤降', metric: 'sinker_bps_avg_by_sec', operator: '<' as const, threshold: 1024 * 1024, level: 'minor' as const, unit: 'B/s' },
     { name: '记录大小异常', metric: 'pipeline_record_size_avg', operator: '>' as const, threshold: 1024 * 50, level: 'info' as const, unit: 'B' },
     { name: '目标端查询延迟', metric: 'sinker_rt_per_query_max', operator: '>' as const, threshold: 10000, level: 'critical' as const, unit: 'μs' },
@@ -447,9 +447,9 @@ function seed(): Db {
   const metricsByTask: Record<string, Record<string, MetricSeries>> = {};
   const METRICS: { name: string; base: number; amp: number }[] = [
     { name: 'extractor_pushed_rps_avg', base: 600, amp: 180 },
-    { name: 'sinker_record_count_avg_by_sec', base: 580, amp: 180 },
-    { name: 'sinker_rt_per_query_avg', base: 2800, amp: 1200 },
-    { name: 'pipeline_buffer_size_avg', base: 30, amp: 20 },
+    { name: 'sinker_rps_avg', base: 580, amp: 180 },
+    { name: 'sinker_rt_avg', base: 2800, amp: 1200 },
+    { name: 'pipeline_queue_size', base: 30, amp: 20 },
     { name: 'extractor_pushed_bps_avg', base: 320_000, amp: 120_000 },
     { name: 'latency_ms', base: 900, amp: 500 },
   ];
@@ -507,7 +507,9 @@ export function tickRunningMetrics(): void {
       t.metrics.queryRtUs = Math.max(0, Math.round(jitter(t.metrics.queryRtUs || 2800, 0.2)));
       t.metrics.bufferSize = Math.max(0, Math.round(jitter(t.metrics.bufferSize || 20, 0.3)));
       t.metrics.processedRecords += t.metrics.sinkerRpsLatest || 0;
-      t.progressPercent = Math.min(99.5, t.progressPercent + (Math.random() * 0.05));
+      if (t.progressPercent !== null) {
+        t.progressPercent = Math.min(99.5, t.progressPercent + (Math.random() * 0.05));
+      }
     }
     t.lastHeartbeatAt = new Date().toISOString();
   }

@@ -5,7 +5,7 @@
 import { http, HttpResponse } from 'msw';
 import { pause, ok, notFound, badRequest, parsePage, paginate, q } from './_shared';
 import { db, findTask, tasksOf } from '../db';
-import type { Task, TaskCategory, TaskStatus, MetricSeries, Run } from '@/types/domain';
+import type { Task, TaskCategory, MetricSeries, Run, TaskDetailAggregate } from '@/types/domain';
 import { legacyToCategory } from '@/types/domain';
 import { maskConnectionStringPw } from '@/utils/localizeError';
 import { id, intBetween, isoMinus, pick } from '../fake';
@@ -71,12 +71,15 @@ function listByCategoryParam(catParam: string, url: URL): Task[] {
   }
   const status = q(url, 'status');
   const engine = q(url, 'engine');
-  const rg = q(url, 'resourceGroup');
+  const rg = q(url, 'resource_group');
   const mode = q(url, 'mode');
   const key = q(url, 'q')?.toLowerCase();
   if (status) items = items.filter((t) => t.status === status);
   if (engine) items = items.filter((t) => t.source.engine === engine || t.target.engine === engine);
-  if (rg) items = items.filter((t) => t.resourceGroup === rg);
+  if (rg) {
+    const groupName = db.resourceGroups.find((group) => group.id === rg)?.name;
+    items = items.filter((t) => t.resourceGroup === (groupName ?? rg));
+  }
   if (mode) items = items.filter((t) => t.syncMode === mode);
   if (key) items = items.filter((t) => t.name.toLowerCase().includes(key) || t.id.toLowerCase().includes(key));
   return items;
@@ -87,9 +90,90 @@ export const taskHandlers = [
     await pause();
     const url = new URL(request.url);
     const catParam = q(url, 'category') ?? 'snapshot';
-    const items = listByCategoryParam(catParam, url);
-    const { page, size } = parsePage(url);
-    return ok(paginate(items, page, size));
+    let items = listByCategoryParam(catParam, url);
+    const sort = q(url, 'sort');
+    const order = q(url, 'order') === 'asc' ? 1 : -1;
+    if (sort) {
+      const values: Record<string, (task: Task) => string> = {
+        name: (task) => task.name,
+        engine: (task) => task.source.engine,
+        status: (task) => task.status,
+        kind: (task) => task.category,
+        created_at: (task) => task.createdAt,
+        updated_at: (task) => task.updatedAt,
+      };
+      const value = values[sort];
+      if (value) items = [...items].sort((a, b) => value(a).localeCompare(value(b)) * order);
+    }
+    const page = Math.max(1, Number(url.searchParams.get('page') ?? 1));
+    const pageSize = Math.max(1, Math.min(100, Number(url.searchParams.get('page_size') ?? 20)));
+    const total = items.length;
+    const start = (page - 1) * pageSize;
+    return ok({ items: items.slice(start, start + pageSize), total, page, pageSize });
+  }),
+
+  http.get('/api/tasks/:id/detail', async ({ params }) => {
+    await pause();
+    const task = findTask(String(params.id));
+    if (!task) return notFound();
+    const run = latestRunForTask(task);
+    const currentPhase = task.syncMode === 'cdc' ? 'cdc' : 'snapshot';
+    const aggregate: TaskDetailAggregate = {
+      task: {
+        id: task.id,
+        taskId: task.id,
+        name: task.name,
+        kind: task.category,
+        dbTypeSource: task.source.engine,
+        dbTypeTarget: task.target.engine,
+        sourceEndpoint: { url: task.sourceUrl },
+        targetEndpoint: { url: task.targetUrl },
+        extractor: { extract_type: task.extractType },
+        sinker: {}, filter: {}, router: {}, parallelizer: {}, pipeline: {}, resumer: {}, processor: {}, runtime: {}, metrics: {},
+        resourceGroupId: task.resourceGroup,
+        ownerUserId: '',
+        status: task.status,
+        createdAt: task.createdAt,
+        updatedAt: task.updatedAt,
+        configuredExtractType: task.extractType,
+        selectedObjects: [],
+      },
+      currentRun: {
+        id: run.id,
+        status: run.status === 'orphaned' ? 'failed' : run.status,
+        currentPhase,
+        startedAt: run.startedAt,
+        stoppedAt: run.stoppedAt,
+        exitCode: run.exitCode,
+        checkpoint: run.position,
+      },
+      phases: {
+        snapshot: { status: currentPhase === 'snapshot' ? 'running' : 'skipped', startedAt: run.startedAt, completedAt: null },
+        transitioning_to_cdc: { status: 'skipped', startedAt: null, completedAt: null },
+        cdc: { status: currentPhase === 'cdc' ? 'running' : 'skipped', startedAt: currentPhase === 'cdc' ? run.startedAt : null, completedAt: null },
+      },
+      metricsSnapshot: {
+        runId: run.id,
+        phase: currentPhase,
+        sampledAt: new Date().toISOString(),
+        values: {
+          extractor_rps_avg: task.metrics.rpsLatest,
+          sinker_rps_avg: task.metrics.sinkerRpsLatest,
+          pipeline_queue_size: task.metrics.pipelineQueueSize,
+          ...(currentPhase === 'cdc' ? { lag: task.metrics.lag } : {}),
+        },
+      },
+      progress: currentPhase === 'snapshot' ? {
+        runId: run.id,
+        phase: 'snapshot',
+        kind: 'snapshot',
+        percent: task.progressPercent,
+        copiedRecords: null,
+        estimatedTotalRecords: null,
+        totalIsEstimate: false,
+      } : null,
+    };
+    return ok(aggregate);
   }),
 
   http.get('/api/tasks/:id', async ({ params }) => {
@@ -185,37 +269,41 @@ export const taskHandlers = [
     return notFound();
   }),
 
-  http.post('/api/tasks/:id/action', async ({ params, request }) => {
+  http.post('/api/tasks/:id/:action', async ({ params }) => {
     await pause();
-    const t = findTask(String(params.id));
-    if (!t) return notFound();
-    const body = (await request.json().catch(() => ({}))) as { action?: string };
-    const action = body.action;
-    const now = new Date().toISOString();
-    const transition: Record<string, TaskStatus> = {
-      start: 'running', resume: 'running', pause: 'paused', stop: 'stopped',
-      retry: 'running', fail: 'failed', complete: 'completed',
-    };
-    if (action && transition[action]) {
-      t.status = transition[action];
-      t.updatedAt = now;
-      if (transition[action] === 'running' && !t.startedAt) t.startedAt = now;
-      if (transition[action] === 'completed') {
-        t.completedAt = now;
-        t.progressPercent = 100;
-      }
+    const task = findTask(String(params.id));
+    if (!task) return notFound();
+    const action = String(params.action);
+    if (!['start', 'stop', 'pause', 'resume'].includes(action)) {
+      return badRequest('unsupported_lifecycle_action');
     }
+    const now = new Date().toISOString();
+    if (action === 'start') {
+      task.status = 'running';
+      task.startedAt ??= now;
+    } else if (action === 'pause' && task.status === 'running') {
+      task.status = 'paused';
+    } else if (action === 'resume' && task.status === 'paused') {
+      task.status = 'running';
+    } else if (action === 'stop' && ['running', 'paused', 'stopping'].includes(task.status)) {
+      task.status = 'stopping';
+      setTimeout(() => {
+        const current = findTask(task.id);
+        if (current?.status === 'stopping') current.status = 'stopped';
+      }, 100);
+    }
+    task.updatedAt = now;
     db.controlLogs.unshift({
       id: id('ctrl'),
       at: now,
-      taskId: t.id,
-      taskName: t.name,
-      action: (action as any) ?? 'edit',
+      taskId: task.id,
+      taskName: task.name,
+      action: action as 'start' | 'stop' | 'pause' | 'resume',
       operator: 'admin',
       result: 'success',
       detail: `action=${action}`,
     });
-    return ok(t);
+    return ok(task);
   }),
 
   /* Test source/target connectivity — ~85% success */
@@ -321,6 +409,31 @@ export const taskHandlers = [
       table: `table_${index + 1}`,
       state: t.status === 'completed' ? 'completed' : index === 0 ? 'loading' : 'pending',
     })));
+  }),
+
+  http.get('/api/runs/:id/logs', async ({ params }) => {
+    await pause();
+    const runId = String(params.id);
+    const task = findTask(taskIdFromRunId(runId));
+    if (!task) return notFound();
+    const now = Date.now();
+    const templates = [
+      ['INFO', 'ape-dts-engine', 'snapshot batch finished, rows=1200 elapsed=84ms'],
+      ['INFO', 'ape-dts-resumer', 'checkpoint committed at offset=0x6f12ab'],
+      ['WARN', 'ape-dts-extractor', 'source table orders column charset mismatch, falling back to utf8'],
+      ['INFO', 'ape-dts-sinker', 'batched 480 records into target in 42ms'],
+      ['ERROR', 'ape-dts-sinker', 'retrying failed write for table payments attempt=2'],
+    ];
+    const content = Array.from({ length: 30 }, (_, index) => {
+      const [level, source, message] = templates[index % templates.length];
+      const timestamp = new Date(now - (30 - index) * 3_000).toISOString()
+        .replace('T', ' ')
+        .replace('Z', '');
+      return `${timestamp} - ${level} - [${source}] - ${message}`;
+    }).join('\n');
+    return new HttpResponse(content, {
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    });
   }),
 
   http.get('/api/tasks/:id/logs', async ({ params, request }) => {

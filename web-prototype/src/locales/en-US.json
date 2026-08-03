@@ -50,11 +50,11 @@
     "dashboard": "Dashboard",
     "tasks": {
       "_label": "Tasks",
-      "migration": "Migration",
+      "migration": "Data Migration",
       "snapshot": "Snapshot Migration",
       "cdc": "CDC",
-      "check": "Check",
-      "struct": "Struct Migration",
+      "check": "Data Check",
+      "struct": "Structure Migration",
       "sync": "Sync tasks"
     },
     "alerts": {
@@ -195,12 +195,12 @@
   "taskDetail": {
     "back": "Back to list",
     "tab": {
-      "config": "Sync config",
+      "overview": "Overview",
       "objects": "Sync objects",
       "logs": "Logs",
-      "monitor": "Monitor",
-      "alerts": "Alerts",
-      "history": "Run history"
+      "monitoring": "Monitoring",
+      "history": "Run history",
+      "more": "More"
     },
     "kpi": {
       "status": "Status",
@@ -1093,6 +1093,18 @@
       "importFailed": "Import failed",
       "loadFailed": "Failed to load tasks",
       "actionFailed": "Action failed"
+    },
+    "diagnostics": {
+      "title": "Task list request failed",
+      "code": "Backend code",
+      "message": "Message",
+      "httpStatus": "HTTP status",
+      "requestId": "Request ID",
+      "lastRefresh": "Last refresh",
+      "retry": "Retry",
+      "copy": "Copy diagnostics",
+      "copied": "Diagnostics copied",
+      "copyFailed": "Could not copy diagnostics"
     },
     "cols": {
       "manage": "Columns",

@@ -177,44 +177,30 @@ fn cdc_task_body() -> serde_json::Value {
     })
 }
 
+fn wizard_payload_contract(kind: &str) -> serde_json::Value {
+    let contract: serde_json::Value = serde_json::from_str(include_str!(
+        "../../web-prototype/tests/fixtures/checkStructWizardPayloadContract.json"
+    ))
+    .unwrap();
+    contract[kind].clone()
+}
+
 fn check_task_body() -> serde_json::Value {
-    serde_json::json!({
-        "kind": "check",
-        "engineSource": "mysql",
-        "engineTarget": "mysql",
-        "sourceEndpoint": {"url": "mysql://203.0.113.1:3306/src_db"},
-        "targetEndpoint": {"url": "mysql://203.0.113.2:3306/dst_db"},
-        "extractor": {},
-        "sinker": {"check_log_dir": "./check"},
-        "filter": {},
-        "router": {},
-        "parallelizer": {},
-        "pipeline": {},
-        "resumer": {},
-        "processor": {},
-        "runtime": {},
-        "metrics": {}
-    })
+    let mut body = wizard_payload_contract("check");
+    body["engineSource"] = serde_json::json!("mysql");
+    body["engineTarget"] = serde_json::json!("mysql");
+    body["sourceEndpoint"] = serde_json::json!({"url": "mysql://203.0.113.1:3306/src_db"});
+    body["targetEndpoint"] = serde_json::json!({"url": "mysql://203.0.113.2:3306/dst_db"});
+    body
 }
 
 fn struct_task_body() -> serde_json::Value {
-    serde_json::json!({
-        "kind": "struct",
-        "engineSource": "mysql",
-        "engineTarget": "mysql",
-        "sourceEndpoint": {"url": "mysql://203.0.113.1:3306/src_db"},
-        "targetEndpoint": {"url": "mysql://203.0.113.2:3306/dst_db"},
-        "extractor": {"extract_type": "struct"},
-        "sinker": {},
-        "filter": {"do_dbs": ["mydb"]},
-        "router": {},
-        "parallelizer": {},
-        "pipeline": {},
-        "resumer": {},
-        "processor": {},
-        "runtime": {},
-        "metrics": {}
-    })
+    let mut body = wizard_payload_contract("struct");
+    body["engineSource"] = serde_json::json!("mysql");
+    body["engineTarget"] = serde_json::json!("mysql");
+    body["sourceEndpoint"] = serde_json::json!({"url": "mysql://203.0.113.1:3306/src_db"});
+    body["targetEndpoint"] = serde_json::json!({"url": "mysql://203.0.113.2:3306/dst_db"});
+    body
 }
 
 async fn seed_default_rg(pool: &SqlitePool) {
@@ -350,6 +336,7 @@ async fn create_task_check_201() {
 
     let body: serde_json::Value = test::read_body_json(resp).await;
     assert_eq!(body["kind"], "check");
+    assert_eq!(body["sinker"], wizard_payload_contract("check")["sinker"]);
 }
 
 #[actix_web::test]
@@ -370,6 +357,12 @@ async fn create_task_struct_201() {
 
     let body: serde_json::Value = test::read_body_json(resp).await;
     assert_eq!(body["kind"], "struct");
+    assert_eq!(
+        body["extractor"],
+        wizard_payload_contract("struct")["extractor"]
+    );
+    assert_eq!(body["sinker"], wizard_payload_contract("struct")["sinker"]);
+    assert_eq!(body["filter"], wizard_payload_contract("struct")["filter"]);
 }
 
 #[actix_web::test]
@@ -590,6 +583,38 @@ async fn list_tasks_basic() {
     let body: serde_json::Value = test::read_body_json(resp).await;
     assert!(body["items"].is_array());
     assert!(body["total"].is_number());
+}
+
+#[actix_web::test]
+async fn list_tasks_uses_canonical_page_size() {
+    let pool = setup().await;
+    let app = test::init_service(build_test_app(pool.clone())).await;
+    let cookies = do_login!(app, "admin", "admin123");
+
+    for name in ["page-one", "page-two", "page-three"] {
+        let mut body = snapshot_task_body();
+        body["name"] = serde_json::json!(name);
+        let req = add_auth(
+            test::TestRequest::post().uri("/api/tasks").set_json(body),
+            &cookies,
+        )
+        .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+    }
+
+    let req = add_cookies(
+        test::TestRequest::get().uri("/api/tasks?page=1&page_size=2"),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = test::read_body_json(resp).await;
+
+    assert_eq!(body["total"], 3);
+    assert_eq!(body["pageSize"], 2);
+    assert_eq!(body["items"].as_array().unwrap().len(), 2);
 }
 
 #[actix_web::test]

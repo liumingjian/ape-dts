@@ -1822,6 +1822,19 @@ function generateLocalIniPreview(): string {
   const srcScheme = endpointScheme(sourceDb);
   const tgtScheme = endpointScheme(targetDb);
 
+  const sinker = buildSinkerConfig(taskKind.value);
+  const sinkerLines = [
+    `[sinker]`,
+    `db_type=${targetDb}`,
+    `sink_type=${String(sinker.sink_type ?? "write")}`,
+    ...(typeof sinker.check_log_dir === "string"
+      ? [`check_log_dir=${sinker.check_log_dir}`]
+      : []),
+    `url=${tgtScheme}://${tgtHost}:${tgtPort}${tgtDb ? "/" + tgtDb : ""}${gaussDbUrlQuery(targetDb)}`,
+    `username=${tgtUser}`,
+    `password=***`,
+  ];
+
   const lines = [
     `[extractor]`,
     `db_type=${sourceDb}`,
@@ -1830,12 +1843,7 @@ function generateLocalIniPreview(): string {
     `username=${srcUser}`,
     `password=***`,
     ``,
-    `[sinker]`,
-    `db_type=${targetDb}`,
-    `sink_type=write`,
-    `url=${tgtScheme}://${tgtHost}:${tgtPort}${tgtDb ? "/" + tgtDb : ""}${gaussDbUrlQuery(targetDb)}`,
-    `username=${tgtUser}`,
-    `password=***`,
+    ...sinkerLines,
     ``,
     `[filter]`,
     `do_dbs=${normalizeDbFilter(form.filter.doDbs, form.filter.doTbs)}`,
@@ -1893,6 +1901,21 @@ function normalizeOptionalTableFilter(value?: string): string {
   return trimmed === "*" ? "*.*" : trimmed;
 }
 
+function splitFilterValues(value: string): string[] {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function buildSinkerConfig(kind: TaskCategory): Record<string, unknown> {
+  if (kind === "check") {
+    return { sink_type: "check", check_log_dir: "./check" };
+  }
+  if (kind === "struct") return { sink_type: "struct" };
+  return {};
+}
+
 function formToTaskDraft() {
   const extractType = syncModeToExtractType(
     form.syncMode,
@@ -1902,8 +1925,13 @@ function formToTaskDraft() {
   const kind = taskKind.value;
   const doDbs = normalizeDbFilter(form.filter.doDbs, form.filter.doTbs);
   const doTbs = normalizeTableFilter(form.filter.doTbs);
-  const ignoreDbs = form.filter.ignoreDbs?.trim() || "";
-  const ignoreTbs = normalizeOptionalTableFilter(form.filter.ignoreTbs);
+  const filter = {
+    do_dbs: kind === "struct" ? splitFilterValues(doDbs || "*") : doDbs,
+    do_tbs: kind === "struct" ? splitFilterValues(doTbs || "*.*") : doTbs,
+    ignore_dbs: form.filter.ignoreDbs?.trim() || "",
+    ignore_tbs: normalizeOptionalTableFilter(form.filter.ignoreTbs),
+    do_events: form.filter.doEvents?.join(",") || "",
+  };
 
   const sourceSubMode =
     form.source.engine === "gaussdb" ? form.source.subMode : undefined;
@@ -1939,14 +1967,8 @@ function formToTaskDraft() {
     sourceEndpoint: buildEndpoint(form.source, sourceDb),
     targetEndpoint: buildEndpoint(form.target, targetDb),
     extractor: buildExtractorConfig(extractType, sourceDb),
-    sinker: {},
-    filter: {
-      do_dbs: doDbs,
-      do_tbs: doTbs,
-      ignore_dbs: ignoreDbs,
-      ignore_tbs: ignoreTbs,
-      do_events: form.filter.doEvents?.join(",") || "",
-    },
+    sinker: buildSinkerConfig(kind),
+    filter,
     router: buildRouterConfig(
       form.router.dbMap,
       form.router.tbMap,
@@ -2324,10 +2346,12 @@ async function onSubmit() {
     // startMode=now: kick off the task immediately so the user lands on the
     // detail page already running. Failures here are non-fatal — the task
     // exists and the user can press Start manually from the detail page.
+    let startFailed = false;
     if (form.startMode === "now") {
       try {
         await api.post(`/tasks/${res.id}/start`, {});
       } catch (startErr: unknown) {
+        startFailed = true;
         const msg = (startErr as { message?: string }).message ?? "";
         ElMessage.warning(
           `${t("wizard.toast.created")}（${msg || t("wizard.toast.startFailed")}）`,
@@ -2335,11 +2359,13 @@ async function onSubmit() {
       }
     }
 
-    ElMessage.success(
-      form.startMode === "now"
-        ? t("wizard.toast.created")
-        : t("wizard.toast.createdLater"),
-    );
+    if (!startFailed) {
+      ElMessage.success(
+        form.startMode === "now"
+          ? t("wizard.toast.created")
+          : t("wizard.toast.createdLater"),
+      );
+    }
     router.push({ path: `${taskListPath.value}/${res.id}` });
   } catch (err: unknown) {
     const apiErr = err as { code?: string; message?: string };

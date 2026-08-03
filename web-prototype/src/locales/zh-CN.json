@@ -258,12 +258,12 @@
   "taskDetail": {
     "back": "返回列表",
     "tab": {
-      "config": "同步配置",
+      "overview": "概览",
       "objects": "同步对象",
-      "logs": "运行日志",
-      "monitor": "监控",
-      "alerts": "告警",
-      "history": "运行历史"
+      "logs": "日志",
+      "monitoring": "监控",
+      "history": "运行历史",
+      "more": "更多"
     },
     "kpi": {
       "status": "状态",
@@ -1093,6 +1093,18 @@
       "importFailed": "导入失败",
       "loadFailed": "加载任务失败",
       "actionFailed": "操作失败"
+    },
+    "diagnostics": {
+      "title": "任务列表请求失败",
+      "code": "后端错误码",
+      "message": "错误信息",
+      "httpStatus": "HTTP 状态",
+      "requestId": "请求 ID",
+      "lastRefresh": "最后刷新",
+      "retry": "重试",
+      "copy": "复制诊断信息",
+      "copied": "诊断信息已复制",
+      "copyFailed": "无法复制诊断信息"
     },
     "cols": {
       "manage": "列",

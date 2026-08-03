@@ -399,8 +399,20 @@ pub struct TaskResponse {
     pub resource_group_id: String,
     pub owner_user_id: Option<String>,
     pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latest_run: Option<TaskListRun>,
+    pub progress: Option<TaskDetailProgress>,
     pub created_at: String,
     pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskListRun {
+    pub id: String,
+    pub status: String,
+    pub current_phase: Option<String>,
+    pub exit_code: Option<i64>,
 }
 
 /// List response for GET /api/tasks.
@@ -411,6 +423,75 @@ pub struct TaskListResponse {
     pub total: i64,
     pub page: i64,
     pub page_size: i64,
+}
+
+/// Authoritative Task configuration and current/latest Run observations.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskDetailResponse {
+    pub task: TaskDetailTask,
+    pub current_run: Option<TaskDetailRun>,
+    pub phases: TaskDetailPhases,
+    pub metrics_snapshot: Option<TaskDetailMetricsSnapshot>,
+    pub progress: Option<TaskDetailProgress>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskDetailTask {
+    #[serde(flatten)]
+    pub config: TaskResponse,
+    pub configured_extract_type: String,
+    pub selected_objects: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskDetailRun {
+    pub id: String,
+    pub status: String,
+    pub current_phase: Option<String>,
+    pub started_at: Option<String>,
+    pub stopped_at: Option<String>,
+    pub exit_code: Option<i64>,
+    pub checkpoint: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskDetailPhases {
+    pub snapshot: TaskDetailPhase,
+    pub transitioning_to_cdc: TaskDetailPhase,
+    pub cdc: TaskDetailPhase,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskDetailPhase {
+    pub status: String,
+    pub started_at: Option<String>,
+    pub completed_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskDetailMetricsSnapshot {
+    pub run_id: String,
+    pub phase: String,
+    pub sampled_at: String,
+    pub values: serde_json::Map<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskDetailProgress {
+    pub run_id: String,
+    pub phase: String,
+    pub kind: String,
+    pub percent: Option<f64>,
+    pub copied_records: Option<f64>,
+    pub estimated_total_records: Option<f64>,
+    pub total_is_estimate: bool,
 }
 
 // ─── Resource Group DTOs ─────────────────────────────────────────────────

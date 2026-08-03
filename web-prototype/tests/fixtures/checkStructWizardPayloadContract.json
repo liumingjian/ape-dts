@@ -1,0 +1,22 @@
+{
+  "check": {
+    "kind": "check",
+    "sinker": {
+      "sink_type": "check",
+      "check_log_dir": "./check"
+    }
+  },
+  "struct": {
+    "kind": "struct",
+    "extractor": {
+      "extract_type": "struct"
+    },
+    "sinker": {
+      "sink_type": "struct"
+    },
+    "filter": {
+      "do_dbs": ["*"],
+      "do_tbs": ["*.*"]
+    }
+  }
+}

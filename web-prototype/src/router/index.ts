@@ -1,7 +1,7 @@
-import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
+import { createRouter, createWebHistory, type LocationQueryRaw, type RouteRecordRaw } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import type { Role } from '@/auth/permissions';
-import { isMigrationMode, modeForLegacyTaskPath } from '@/utils/migrationMode';
+import { isMigrationMode } from '@/utils/migrationMode';
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -20,10 +20,24 @@ const BlankLayout = () => import('@/layouts/BlankLayout.vue');
 const ALL_ROLES: Role[] = ['admin', 'operator', 'viewer'];
 
 function modeForLegacyRoute(legacy: string, explicitMode: unknown) {
-  if (isMigrationMode(explicitMode)) return explicitMode;
   if (legacy === 'cdc') return 'cdc';
+  if (legacy === 'sync' && isMigrationMode(explicitMode)) return explicitMode;
   if (legacy === 'sync') return 'snapshot_cdc';
   return 'snapshot';
+}
+
+function canonicalTaskDetailQuery(query: LocationQueryRaw): LocationQueryRaw {
+  const legacyTabs: Record<string, string> = {
+    config: 'overview',
+    objects: 'objects',
+    logs: 'logs',
+    monitor: 'monitoring',
+    alerts: 'more',
+    history: 'history',
+  };
+  const currentTab = typeof query.tab === 'string' ? query.tab : undefined;
+  const tab = currentTab ? legacyTabs[currentTab] : undefined;
+  return tab && tab !== currentTab ? { ...query, tab } : query;
 }
 
 export const routes: RouteRecordRaw[] = [
@@ -35,7 +49,7 @@ export const routes: RouteRecordRaw[] = [
         path: '',
         name: 'Login',
         component: () => import('@/views/auth/Login.vue'),
-        meta: { title: '登录', public: true },
+        meta: { title: 'auth.loginTitle', public: true, hideInMenu: true },
       },
     ],
   },
@@ -75,17 +89,17 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: 'nav.tasks.struct', module: 'tasks', breadcrumb: ['nav.tasks._label', 'nav.tasks.struct'], roles: ALL_ROLES },
       },
       { path: 'tasks/:legacy(snapshot|cdc|sync)', redirect: (to) => {
-        const existingMode = isMigrationMode(to.query.mode) ? to.query.mode : undefined;
-        const mode = existingMode ?? modeForLegacyTaskPath(to.path);
-        return { path: '/tasks/migration', query: { ...to.query, ...(mode ? { mode } : {}) }, hash: to.hash };
+        const legacy = String(to.params.legacy);
+        const mode = modeForLegacyRoute(legacy, to.query.mode);
+        return { path: '/tasks/migration', query: { ...to.query, mode }, hash: to.hash };
       }},
       { path: 'tasks/replay', redirect: (to) => ({ path: '/tasks/migration', query: to.query, hash: to.hash }) },
-      { path: 'tasks/verify', redirect: { path: '/tasks/check' } },
+      { path: 'tasks/verify', redirect: (to) => ({ path: '/tasks/check', query: to.query, hash: to.hash }) },
       {
         path: 'tasks/create/:type(migration|check|struct)',
         name: 'CreateTask',
         component: () => import('@/views/tasks/CreateTaskWizard.vue'),
-        meta: { title: 'task.action.create', module: 'tasks', hideInMenu: true, roles: ['admin', 'operator'] },
+        meta: { title: 'task.action.create', module: 'tasks', hideInMenu: true, breadcrumb: ['nav.tasks._label'], roles: ['admin', 'operator'] },
       },
       {
         path: 'tasks/create/:legacy(snapshot|cdc|sync|replay|verify)',
@@ -100,15 +114,19 @@ export const routes: RouteRecordRaw[] = [
         path: 'tasks/:category(migration|check|struct)/:id',
         name: 'TaskDetail',
         component: () => import('@/views/tasks/TaskDetail.vue'),
-        meta: { title: 'task.action.view', module: 'tasks', hideInMenu: true, roles: ALL_ROLES },
+        beforeEnter: (to) => {
+          const query = canonicalTaskDetailQuery(to.query);
+          return query === to.query ? true : { path: to.path, query, hash: to.hash, replace: true };
+        },
+        meta: { title: 'task.action.view', module: 'tasks', hideInMenu: true, breadcrumb: ['nav.tasks._label'], roles: ALL_ROLES },
       },
       {
         path: 'tasks/:legacy(snapshot|cdc|sync|replay|verify)/:id',
 	        redirect: (to) => {
 	          const legacy = String(to.params.legacy);
-	          if (legacy === 'verify') return { path: `/tasks/check/${to.params.id}`, query: to.query, hash: to.hash };
+	          if (legacy === 'verify') return { path: `/tasks/check/${to.params.id}`, query: canonicalTaskDetailQuery(to.query), hash: to.hash };
 	          const mode = modeForLegacyRoute(legacy, to.query.mode);
-	          return { path: `/tasks/migration/${to.params.id}`, query: { ...to.query, mode }, hash: to.hash };
+	          return { path: `/tasks/migration/${to.params.id}`, query: canonicalTaskDetailQuery({ ...to.query, mode }), hash: to.hash };
 	        },
 	      },
       // Alerts
