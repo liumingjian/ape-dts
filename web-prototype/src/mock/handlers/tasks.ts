@@ -5,7 +5,7 @@
 import { http, HttpResponse } from 'msw';
 import { pause, ok, notFound, badRequest, parsePage, paginate, q } from './_shared';
 import { db, findTask, tasksOf } from '../db';
-import type { Task, TaskCategory, TaskStatus, MetricSeries, Run, TaskDetailAggregate } from '@/types/domain';
+import type { Task, TaskCategory, MetricSeries, Run, TaskDetailAggregate } from '@/types/domain';
 import { legacyToCategory } from '@/types/domain';
 import { maskConnectionStringPw } from '@/utils/localizeError';
 import { id, intBetween, isoMinus, pick } from '../fake';
@@ -269,37 +269,41 @@ export const taskHandlers = [
     return notFound();
   }),
 
-  http.post('/api/tasks/:id/action', async ({ params, request }) => {
+  http.post('/api/tasks/:id/:action', async ({ params }) => {
     await pause();
-    const t = findTask(String(params.id));
-    if (!t) return notFound();
-    const body = (await request.json().catch(() => ({}))) as { action?: string };
-    const action = body.action;
-    const now = new Date().toISOString();
-    const transition: Record<string, TaskStatus> = {
-      start: 'running', resume: 'running', pause: 'paused', stop: 'stopped',
-      retry: 'running', fail: 'failed', complete: 'completed',
-    };
-    if (action && transition[action]) {
-      t.status = transition[action];
-      t.updatedAt = now;
-      if (transition[action] === 'running' && !t.startedAt) t.startedAt = now;
-      if (transition[action] === 'completed') {
-        t.completedAt = now;
-        t.progressPercent = 100;
-      }
+    const task = findTask(String(params.id));
+    if (!task) return notFound();
+    const action = String(params.action);
+    if (!['start', 'stop', 'pause', 'resume'].includes(action)) {
+      return badRequest('unsupported_lifecycle_action');
     }
+    const now = new Date().toISOString();
+    if (action === 'start') {
+      task.status = 'running';
+      task.startedAt ??= now;
+    } else if (action === 'pause' && task.status === 'running') {
+      task.status = 'paused';
+    } else if (action === 'resume' && task.status === 'paused') {
+      task.status = 'running';
+    } else if (action === 'stop' && ['running', 'paused', 'stopping'].includes(task.status)) {
+      task.status = 'stopping';
+      setTimeout(() => {
+        const current = findTask(task.id);
+        if (current?.status === 'stopping') current.status = 'stopped';
+      }, 100);
+    }
+    task.updatedAt = now;
     db.controlLogs.unshift({
       id: id('ctrl'),
       at: now,
-      taskId: t.id,
-      taskName: t.name,
-      action: (action as any) ?? 'edit',
+      taskId: task.id,
+      taskName: task.name,
+      action: action as 'start' | 'stop' | 'pause' | 'resume',
       operator: 'admin',
       result: 'success',
       detail: `action=${action}`,
     });
-    return ok(t);
+    return ok(task);
   }),
 
   /* Test source/target connectivity — ~85% success */

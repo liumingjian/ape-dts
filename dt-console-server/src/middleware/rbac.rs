@@ -22,6 +22,8 @@ pub enum RbacAction {
     TaskDelete,
     TaskStart,
     TaskStop,
+    TaskPause,
+    TaskResume,
 
     // User management
     UsersList,
@@ -82,6 +84,8 @@ impl std::fmt::Display for RbacAction {
             RbacAction::TaskDelete => "task.delete",
             RbacAction::TaskStart => "task.start",
             RbacAction::TaskStop => "task.stop",
+            RbacAction::TaskPause => "task.pause",
+            RbacAction::TaskResume => "task.resume",
             RbacAction::UsersList => "users.list",
             RbacAction::UsersCreate => "users.create",
             RbacAction::UsersRead => "users.read",
@@ -129,6 +133,8 @@ pub fn is_allowed(role: &str, action: RbacAction) -> bool {
                 | RbacAction::TaskUpdate
                 | RbacAction::TaskStart
                 | RbacAction::TaskStop
+                | RbacAction::TaskPause
+                | RbacAction::TaskResume
                 | RbacAction::AlertClear
                 | RbacAction::LicenseRead
                 | RbacAction::ResourceGroupRead
@@ -254,6 +260,8 @@ mod tests {
             RbacAction::TaskUpdate,
             RbacAction::TaskStart,
             RbacAction::TaskStop,
+            RbacAction::TaskPause,
+            RbacAction::TaskResume,
             RbacAction::AlertClear,
             RbacAction::LicenseRead,
             RbacAction::ResourceGroupRead,

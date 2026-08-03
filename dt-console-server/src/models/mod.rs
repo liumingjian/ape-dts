@@ -399,8 +399,20 @@ pub struct TaskResponse {
     pub resource_group_id: String,
     pub owner_user_id: Option<String>,
     pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latest_run: Option<TaskListRun>,
+    pub progress: Option<TaskDetailProgress>,
     pub created_at: String,
     pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskListRun {
+    pub id: String,
+    pub status: String,
+    pub current_phase: Option<String>,
+    pub exit_code: Option<i64>,
 }
 
 /// List response for GET /api/tasks.

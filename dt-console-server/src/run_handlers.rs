@@ -1059,7 +1059,7 @@ pub async fn pause_task(
     scraper_state: web::Data<ScraperState>,
     req: actix_web::HttpRequest,
 ) -> HttpResponse {
-    if let Err(e) = rbac::require_action(&user, RbacAction::TaskStart) {
+    if let Err(e) = rbac::require_action(&user, RbacAction::TaskPause) {
         return e.error_response();
     }
 
@@ -1110,10 +1110,20 @@ pub async fn pause_task(
     let _ = write_control_intent(&pool, &task_id, &run_id, "pause", &user.username).await;
 
     // Send SIGUSR1 to the child process (engine interprets as pause signal).
-    if let Some(pid) = run.pid {
-        if let Err(e) = send_pause_signal(pid as u32) {
-            tracing::warn!("pause signal failed for run {}: {e}", run_id);
-        }
+    let Some(pid) = run.pid else {
+        let _ =
+            write_control_result(&pool, &task_id, &run_id, "pause", "error", &user.username).await;
+        return ApiError::new(
+            codes::INTERNAL_ERROR,
+            "pause signal unavailable: run has no pid",
+        )
+        .error_response();
+    };
+    if let Err(e) = send_pause_signal(pid as u32) {
+        let _ =
+            write_control_result(&pool, &task_id, &run_id, "pause", "error", &user.username).await;
+        return ApiError::new(codes::INTERNAL_ERROR, format!("pause signal failed: {e}"))
+            .error_response();
     }
 
     // Transition to paused.
@@ -1136,6 +1146,8 @@ pub async fn pause_task(
     // Write control log result.
     let _ =
         write_control_result(&pool, &task_id, &run_id, "pause", "success", &user.username).await;
+
+    let _ = update_task_status(&pool, &task_id, "paused").await;
 
     // Write audit log.
     let _ = write_run_audit_log(
@@ -1164,7 +1176,7 @@ pub async fn resume_task(
     scraper_state: web::Data<ScraperState>,
     req: actix_web::HttpRequest,
 ) -> HttpResponse {
-    if let Err(e) = rbac::require_action(&user, RbacAction::TaskStart) {
+    if let Err(e) = rbac::require_action(&user, RbacAction::TaskResume) {
         return e.error_response();
     }
 
@@ -1215,10 +1227,20 @@ pub async fn resume_task(
     let _ = write_control_intent(&pool, &task_id, &run_id, "resume", &user.username).await;
 
     // Send SIGUSR2 to the child process (engine interprets as resume signal).
-    if let Some(pid) = run.pid {
-        if let Err(e) = send_resume_signal(pid as u32) {
-            tracing::warn!("resume signal failed for run {}: {e}", run_id);
-        }
+    let Some(pid) = run.pid else {
+        let _ =
+            write_control_result(&pool, &task_id, &run_id, "resume", "error", &user.username).await;
+        return ApiError::new(
+            codes::INTERNAL_ERROR,
+            "resume signal unavailable: run has no pid",
+        )
+        .error_response();
+    };
+    if let Err(e) = send_resume_signal(pid as u32) {
+        let _ =
+            write_control_result(&pool, &task_id, &run_id, "resume", "error", &user.username).await;
+        return ApiError::new(codes::INTERNAL_ERROR, format!("resume signal failed: {e}"))
+            .error_response();
     }
 
     // Transition to running.
@@ -1248,6 +1270,8 @@ pub async fn resume_task(
         &user.username,
     )
     .await;
+
+    let _ = update_task_status(&pool, &task_id, "running").await;
 
     // Write audit log.
     let _ = write_run_audit_log(
@@ -1619,8 +1643,17 @@ fn send_pause_signal(pid: u32) -> Result<(), String> {
     std::process::Command::new("kill")
         .args(["-s", "USR1", &pid.to_string()])
         .output()
-        .map_err(|e| format!("failed to send SIGUSR1 to pid {pid}: {e}"))?;
-    Ok(())
+        .map_err(|e| format!("failed to send SIGUSR1 to pid {pid}: {e}"))
+        .and_then(|output| {
+            if output.status.success() {
+                Ok(())
+            } else {
+                Err(format!(
+                    "SIGUSR1 rejected for pid {pid}: {}",
+                    String::from_utf8_lossy(&output.stderr).trim()
+                ))
+            }
+        })
 }
 
 /// Send a resume signal (SIGUSR2) to the engine process.
@@ -1629,8 +1662,17 @@ fn send_resume_signal(pid: u32) -> Result<(), String> {
     std::process::Command::new("kill")
         .args(["-s", "USR2", &pid.to_string()])
         .output()
-        .map_err(|e| format!("failed to send SIGUSR2 to pid {pid}: {e}"))?;
-    Ok(())
+        .map_err(|e| format!("failed to send SIGUSR2 to pid {pid}: {e}"))
+        .and_then(|output| {
+            if output.status.success() {
+                Ok(())
+            } else {
+                Err(format!(
+                    "SIGUSR2 rejected for pid {pid}: {}",
+                    String::from_utf8_lossy(&output.stderr).trim()
+                ))
+            }
+        })
 }
 
 #[cfg(not(unix))]

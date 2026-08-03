@@ -155,7 +155,7 @@ export interface Task {
   taskType: "standalone" | "primary_backup";
   resourceGroup: string;
   instanceIp: string;
-  progressPercent: number;
+  progressPercent: number | null;
   syncObjects: { totalTables: number; selectedTables: number };
   config: {
     parallelizer: ParallelType;
@@ -503,7 +503,7 @@ export type RunPosition =
 /* ----- Metrics query response from /api/runs/:id/metrics ----- */
 export interface MetricQueryResponse {
   metric: string;
-  data: { ts: number; value: number }[];
+  data: { ts: string | number; value: number }[];
   details?: { source?: string[]; hint?: string };
 }
 
@@ -601,6 +601,13 @@ export interface ApiTask {
   resourceGroupId: string;
   ownerUserId: string;
   status: string;
+  latestRun?: {
+    id: string;
+    status: string;
+    currentPhase?: TaskDetailPhaseName | null;
+    exitCode?: number | null;
+  } | null;
+  progress?: TaskDetailAggregate["progress"];
   createdAt: string;
   updatedAt: string;
   startedAt?: string;
@@ -671,6 +678,7 @@ function parseEndpointUrl(url: string): {
 }
 
 function normalizeEngineType(value: string | null | undefined): EngineType {
+  if (value === "pg" || value === "postgresql") return "postgres";
   if (value === "gaussdb_oracle") return "gaussdb";
   return (value || "mysql") as EngineType;
 }
@@ -837,13 +845,17 @@ export function mapApiTask(raw: ApiTask): Task {
   const tgt = parseEndpointUrl(tgtRaw);
   const m = raw.metrics;
   const extractType = resolveExtractType(raw);
+  const displayStatus = raw.latestRun?.status ?? raw.status ?? "draft";
+  const progressPercent = raw.progress === null
+    ? null
+    : raw.progress?.percent ?? m?.progress ?? 0;
   const syncMode: SyncMode =
     extractType === "snapshot_and_cdc" ? "snapshot_cdc" : extractType === "cdc" ? "cdc" : "snapshot";
   return {
     id: raw.id,
     name: raw.name,
     category: (raw.kind || "snapshot") as TaskCategory,
-    status: (raw.status || "draft") as TaskStatus,
+    status: displayStatus as TaskStatus,
     source: {
       engine: normalizeEngineType(raw.dbTypeSource),
       host: src.host,
@@ -867,7 +879,7 @@ export function mapApiTask(raw: ApiTask): Task {
     taskType: "standalone",
     resourceGroup: raw.resourceGroupId ?? "",
     instanceIp: src.host,
-    progressPercent: m?.progress ?? 0,
+    progressPercent,
     syncObjects: { totalTables: 0, selectedTables: 0 },
     config: {
       parallelizer: resolveParallelizer(raw.parallelizer),

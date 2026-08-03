@@ -316,12 +316,13 @@
             <template #default="{ row }">
               <div class="task-list__progress">
                 <el-progress
+                  v-if="row.progressPercent !== null"
                   :percentage="Number(row.progressPercent.toFixed(1))"
                   :stroke-width="6"
                   :status="progressStatus(row.status)"
                   :show-text="false"
                 />
-                <span class="task-list__progress-val tabular-nums">{{ row.progressPercent.toFixed(1) }}%</span>
+                <span class="task-list__progress-val tabular-nums">{{ row.progressPercent === null ? '—' : `${row.progressPercent.toFixed(1)}%` }}</span>
               </div>
             </template>
           </el-table-column>
@@ -394,7 +395,7 @@
                   {{ t('task.action.pause') }}
                 </el-button>
                 <el-button
-                  v-if="can('task.resume') && (row.status === 'paused' || row.status === 'failed')"
+                  v-if="can('task.resume') && row.status === 'paused'"
                   link
                   type="success"
                   @click="doAction(row, 'resume')"

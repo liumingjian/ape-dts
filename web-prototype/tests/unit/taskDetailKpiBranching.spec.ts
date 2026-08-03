@@ -314,7 +314,7 @@ describe('TaskDetail KPI branching', () => {
     expect(wrapper.text()).not.toContain('100%');
   });
 
-  it('CDC missing throughput renders an em dash with a reason', async () => {
+  it('CDC missing throughput renders an em dash without exposing metric internals', async () => {
     const { TaskDetail, router, i18n } = await buildHarness(CDC_FIXTURE);
     mockGet.mockImplementation((url: string) => {
       if (url.endsWith('/tasks/cdc-1/detail')) return Promise.resolve({
@@ -343,7 +343,70 @@ describe('TaskDetail KPI branching', () => {
 
     expect(wrapper.text()).toContain('Apply throughput');
     expect(wrapper.text()).toContain('—');
-    expect(wrapper.text()).toContain('No sample received');
+    expect(wrapper.text()).not.toContain('No sample received');
+  });
+
+  it('queries metric history with ISO-8601 bounds', async () => {
+    const { TaskDetail, router, i18n } = await buildHarness(CDC_FIXTURE);
+    const wrapper = mount(TaskDetail, {
+      global: {
+        plugins: [router, i18n],
+        components: { ElProgress },
+        stubs: GLOBAL_STUBS,
+      },
+    });
+    await flushPromises();
+
+    const request = mockGet.mock.calls
+      .map(([url]) => url)
+      .find((url) => typeof url === 'string' && url.includes('/runs/cdc-1-run-1/metrics?')) as string;
+    expect(request).toBeTruthy();
+    const query = new URL(request, 'http://localhost').searchParams;
+    expect(query.get('from')).toMatch(/^\d{4}-\d{2}-\d{2}T.*Z$/);
+    expect(query.get('to')).toMatch(/^\d{4}-\d{2}-\d{2}T.*Z$/);
+
+    wrapper.unmount();
+  });
+
+  it('does not render raw unknown checkpoint content', async () => {
+    const { TaskDetail, router, i18n } = await buildHarness(CDC_FIXTURE);
+    mockGet.mockImplementation((url: string) => {
+      if (url.endsWith('/tasks/cdc-1/detail')) return Promise.resolve({
+        task: { ...CDC_FIXTURE, configuredExtractType: 'cdc', selectedObjects: [] },
+        currentRun: {
+          id: 'cdc-1-run-1',
+          status: 'running',
+          currentPhase: 'cdc',
+          startedAt: null,
+          stoppedAt: null,
+          exitCode: null,
+          checkpoint: { kind: 'unknown', raw: 'checkpoint.position internal payload' },
+        },
+        phases: {
+          snapshot: { status: 'skipped', startedAt: null, completedAt: null },
+          transitioning_to_cdc: { status: 'skipped', startedAt: null, completedAt: null },
+          cdc: { status: 'running', startedAt: null, completedAt: null },
+        },
+        metricsSnapshot: { runId: 'cdc-1-run-1', phase: 'cdc', sampledAt: new Date().toISOString(), values: {} },
+        progress: null,
+      });
+      if (url.includes('/runs')) return Promise.resolve({ items: [], total: 0 });
+      if (url.includes('/alerts')) return Promise.resolve({ items: [] });
+      return Promise.resolve({});
+    });
+    const wrapper = mount(TaskDetail, {
+      global: {
+        plugins: [router, i18n],
+        components: { ElProgress },
+        stubs: GLOBAL_STUBS,
+      },
+    });
+    await flushPromises();
+
+    expect(wrapper.text()).toMatch(/Checkpoint:\s*—/);
+    expect(wrapper.text()).not.toContain('checkpoint.position internal payload');
+
+    wrapper.unmount();
   });
 
   it('renders Run-scoped metric query diagnostics with retry context', async () => {

@@ -9,6 +9,8 @@
 use actix_web::http::StatusCode;
 use actix_web::{delete, get, patch, post, web, HttpResponse, ResponseError};
 use sqlx::SqlitePool;
+use std::io::{Read as _, Seek, SeekFrom};
+use std::path::Path;
 
 use crate::error::{codes, ApiError};
 use crate::license_handlers::check_license_cap;
@@ -16,7 +18,7 @@ use crate::middleware::rbac::{self, RbacAction};
 use crate::models::{
     CreateTaskRequest, OperateLog, TaskDetailMetricsSnapshot, TaskDetailPhase, TaskDetailPhases,
     TaskDetailProgress, TaskDetailResponse, TaskDetailRun, TaskDetailTask, TaskListResponse,
-    TaskResponse, UpdateTaskRequest, UserContext,
+    TaskListRun, TaskResponse, UpdateTaskRequest, UserContext,
 };
 use crate::repositories::metric_point_repository::MetricPointRepository;
 use crate::repositories::operate_log_repository::OperateLogRepository;
@@ -49,9 +51,47 @@ fn task_to_response(task: &crate::models::Task) -> TaskResponse {
         resource_group_id: task.resource_group_id.clone(),
         owner_user_id: task.owner_user_id.clone(),
         status: task.status.clone(),
+        latest_run: None,
+        progress: None,
         created_at: task.created_at.clone(),
         updated_at: task.updated_at.clone(),
     }
+}
+
+async fn task_to_list_response(
+    pool: &SqlitePool,
+    task: &crate::models::Task,
+) -> Result<TaskResponse, ApiError> {
+    let mut response = task_to_response(task);
+    let run = match RunRepository::find_active_by_task(pool, &task.id).await {
+        Ok(Some(run)) => Some(run),
+        Ok(None) => RunRepository::find_latest_by_task(pool, &task.id)
+            .await
+            .map_err(|e| ApiError::new(codes::INTERNAL_ERROR, format!("run query failed: {e}")))?,
+        Err(e) => {
+            return Err(ApiError::new(
+                codes::INTERNAL_ERROR,
+                format!("run query failed: {e}"),
+            ));
+        }
+    };
+    let Some(run) = run else {
+        return Ok(response);
+    };
+
+    let configured_extract_type = extract_type(task);
+    let current_phase = current_phase(&configured_extract_type, &run);
+    let points = latest_visible_points(pool, &task.id, &run)
+        .await
+        .map_err(|e| ApiError::new(codes::INTERNAL_ERROR, e))?;
+    response.latest_run = Some(TaskListRun {
+        id: run.id.clone(),
+        status: run.status.clone(),
+        current_phase: Some(current_phase.clone()),
+        exit_code: run.exit_code,
+    });
+    response.progress = progress_snapshot(&run.id, &current_phase, &points);
+    Ok(response)
 }
 
 /// Parse a JSON string or return empty object.
@@ -367,7 +407,13 @@ pub async fn list_tasks(
         }
     };
 
-    let items: Vec<TaskResponse> = tasks.iter().map(task_to_response).collect();
+    let mut items = Vec::with_capacity(tasks.len());
+    for task in &tasks {
+        match task_to_list_response(&pool, task).await {
+            Ok(item) => items.push(item),
+            Err(e) => return e.error_response(),
+        }
+    }
 
     HttpResponse::Ok().json(TaskListResponse {
         items,
@@ -422,14 +468,10 @@ pub async fn get_task_detail(
         Some(run) => {
             let current_phase = current_phase(&configured_extract_type, &run);
             let phases = derive_phases(&configured_extract_type, &run, &current_phase);
-            let points = match MetricPointRepository::latest_by_run(&pool, &id, &run.id).await {
+            let points = match latest_visible_points(&pool, &id, &run).await {
                 Ok(points) => points,
                 Err(e) => {
-                    return ApiError::new(
-                        codes::INTERNAL_ERROR,
-                        format!("metric query failed: {e}"),
-                    )
-                    .error_response();
+                    return ApiError::new(codes::INTERNAL_ERROR, e).error_response();
                 }
             };
             let metrics = metrics_snapshot(&run.id, &current_phase, &points);
@@ -510,6 +552,76 @@ fn current_phase(configured_extract_type: &str, run: &crate::models::Run) -> Str
         "cdc".to_string()
     } else {
         "snapshot".to_string()
+    }
+}
+
+async fn latest_visible_points(
+    pool: &SqlitePool,
+    task_id: &str,
+    run: &crate::models::Run,
+) -> Result<Vec<crate::models::MetricPoint>, String> {
+    let points = MetricPointRepository::latest_by_run(pool, task_id, &run.id)
+        .await
+        .map_err(|e| format!("metric query failed: {e}"))?;
+    if points.is_empty() {
+        Ok(latest_monitor_points(task_id, run).unwrap_or_default())
+    } else {
+        Ok(points)
+    }
+}
+
+fn latest_monitor_points(
+    task_id: &str,
+    run: &crate::models::Run,
+) -> Result<Vec<crate::models::MetricPoint>, std::io::Error> {
+    let Some(log_dir) = run.log_dir.as_deref() else {
+        return Ok(Vec::new());
+    };
+    let path = Path::new(log_dir).join("monitor.log");
+    let mut file = std::fs::File::open(path)?;
+    let len = file.metadata()?.len();
+    let start = len.saturating_sub(256 * 1024);
+    file.seek(SeekFrom::Start(start))?;
+    let mut text = String::new();
+    file.read_to_string(&mut text)?;
+
+    let mut latest = std::collections::BTreeMap::new();
+    for line in text.lines() {
+        if let Some((ts, name, value)) = parse_monitor_metric_line(line) {
+            latest.insert(name, (ts, value));
+        }
+    }
+
+    Ok(latest
+        .into_iter()
+        .map(|(name, (ts, value))| crate::models::MetricPoint {
+            id: 0,
+            task_id: task_id.to_string(),
+            run_id: run.id.clone(),
+            metric_name: name,
+            ts,
+            value,
+        })
+        .collect())
+}
+
+fn parse_monitor_metric_line(line: &str) -> Option<(String, String, f64)> {
+    let mut parts = line.split('|').map(str::trim);
+    let ts = parts.next()?;
+    parts.next()?;
+    parts.next()?;
+    let name = parts.next()?.to_string();
+    let value_part = parts.next()?;
+    let value = value_part.strip_prefix("latest=")?.parse::<f64>().ok()?;
+    let ts = format!("{}Z", ts.replace(' ', "T"));
+    Some((ts, normalize_monitor_metric_name(&name).to_string(), value))
+}
+
+fn normalize_monitor_metric_name(name: &str) -> &str {
+    match name {
+        "queued_records" => "pipeline_queue_size",
+        "sinked_records" => "sinker_sinked_records",
+        other => other,
     }
 }
 

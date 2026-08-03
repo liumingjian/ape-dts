@@ -53,6 +53,7 @@ context_portal
 .omo/**/run-data/
 
 ## Local generated artifacts
+/.vite/
 dt-console-server/data/
 dt-tests/.playwright-cli/
 web-prototype/.playwright-cli/

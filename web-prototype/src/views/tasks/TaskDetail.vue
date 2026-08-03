@@ -84,7 +84,7 @@
       <!-- KPI strip + flow diagram -->
       <section class="detail__flow ape-dts-console-card">
         <div class="detail__kpi-row">
-          <KpiCard :label="t('taskDetail.kpi.status')" :value="0" :badge="detail?.currentRun?.status ?? task.status" :icon-comp="IconActivity" />
+          <KpiCard :label="t('taskDetail.kpi.status')" :value="0" :badge="detail?.currentRun?.status ?? task.status" :icon-comp="IconActivity" :sentinel-text="detail?.currentRun?.status ?? task.status" />
           <KpiCard :label="currentPhase === 'cdc' ? 'Apply throughput' : 'Copy throughput'" :value="throughputValue ?? 0" unit="rows/s" :icon-comp="IconBolt" :sentinel-text="throughputValue === null ? '—' : undefined" />
 
           <template v-if="currentPhase !== 'cdc'">
@@ -142,7 +142,7 @@
         </div>
         <div v-if="currentPhase === 'cdc'" class="detail__metric-context">
           <span v-if="throughputValue === 0">No new changes</span>
-          <span v-else-if="throughputValue === null">No sample received for sinker_rps_avg</span>
+          <span v-else-if="throughputValue === null">—</span>
           <span v-if="detail?.currentRun?.checkpoint">Checkpoint: {{ formatPosition(detail.currentRun.checkpoint) }}</span>
           <span v-else>Checkpoint: —</span>
           <span>Last event: {{ lastEventText }}</span>
@@ -153,15 +153,15 @@
       <section class="detail__charts ape-dts-console-card">
         <ChartCard title="Source read throughput · rows/s" :height="200">
           <v-chart v-if="rpsOption" :option="rpsOption" autoresize class="detail__chart" />
-          <div v-else class="detail__chart-state">No sample received for extractor_rps_avg</div>
+          <div v-else class="detail__chart-state">—</div>
         </ChartCard>
         <ChartCard title="Target apply throughput · rows/s" :height="200">
           <v-chart v-if="sinkRpsOption" :option="sinkRpsOption" autoresize class="detail__chart" />
-          <div v-else class="detail__chart-state">No sample received for sinker_rps_avg</div>
+          <div v-else class="detail__chart-state">—</div>
         </ChartCard>
         <ChartCard title="Queue backlog · records" :height="200">
           <v-chart v-if="bufferOption" :option="bufferOption" autoresize class="detail__chart" />
-          <div v-else class="detail__chart-state">No sample received for pipeline_queue_size</div>
+          <div v-else class="detail__chart-state">—</div>
         </ChartCard>
       </section>
 
@@ -765,12 +765,18 @@ const activeMetricNames = computed(() => {
 
 async function loadMetricSeries() {
   if (!currentRunId.value) return;
-  const to = Date.now();
-  const from = to - 3600_000;
+  const to = new Date();
+  const from = new Date(to.getTime() - 3600_000);
   const results = await Promise.all(activeMetricNames.value.map(async (metric) => {
     try {
+      const query = new URLSearchParams({
+        metric,
+        from: from.toISOString(),
+        to: to.toISOString(),
+        step: '60',
+      });
       const response = await api.get<MetricQueryResponse>(
-        `/runs/${currentRunId.value}/metrics?metric=${metric}&from=${from}&to=${to}&step=60`,
+        `/runs/${currentRunId.value}/metrics?${query.toString()}`,
       );
       return { metric, response } as const;
     } catch (error) {
@@ -793,7 +799,9 @@ async function loadMetricSeries() {
     }
     const response = 'response' in result ? result.response : undefined;
     if (response) {
-      metricsHistory.value[result.metric] = response.data ?? [];
+      metricsHistory.value[result.metric] = (response.data ?? [])
+        .map(point => ({ ts: dayjs(point.ts).valueOf(), value: point.value }))
+        .filter(point => Number.isFinite(point.ts) && Number.isFinite(point.value));
     }
   }
   metricErrors.value = errors;
@@ -1173,8 +1181,8 @@ function formatPosition(pos: RunPosition): string {
   if (pos.kind === 'lsn') return `LSN ${pos.lsn}${pos.slot ? ` slot=${pos.slot}` : ''}`;
   if (pos.kind === 'scn') return `SCN ${pos.scn}`;
   if (pos.kind === 'resume_token') return `token=${pos.token}`;
-  if (pos.kind === 'unknown') return pos.raw ?? '—';
-  return JSON.stringify(pos);
+  if (pos.kind === 'unknown') return '—';
+  return '—';
 }
 
 /* archived logs dialog */

@@ -229,6 +229,52 @@ fn get(uri: &str, cookies: &[Cookie<'static>]) -> actix_http::Request {
 }
 
 #[actix_web::test]
+async fn list_tasks_includes_latest_run_and_nullable_progress() {
+    let pool = test_pool().await;
+    setup(&pool).await;
+    seed_task(&pool, "list-failed", "snapshot_and_cdc").await;
+    seed_run(&pool, "list-failed", "failed", None).await;
+    let app = test::init_service(build_test_app(pool)).await;
+    let cookies = login(&app).await;
+    let response = test::call_service(&app, get("/api/tasks?category=snapshot", &cookies)).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: serde_json::Value = test::read_body_json(response).await;
+    let item = body["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == "list-failed")
+        .unwrap();
+    assert_eq!(item["dbTypeTarget"], "pg");
+    assert_eq!(item["latestRun"]["id"], "run-list-failed");
+    assert_eq!(item["latestRun"]["status"], "failed");
+    assert_eq!(item["latestRun"]["currentPhase"], "snapshot");
+    assert!(item["progress"].is_null());
+}
+
+#[actix_web::test]
+async fn list_tasks_includes_runtime_progress() {
+    let pool = test_pool().await;
+    setup(&pool).await;
+    seed_task(&pool, "list-progress", "snapshot").await;
+    seed_run(&pool, "list-progress", "running", None).await;
+    metric(&pool, "list-progress", "progress", 42.0).await;
+    let app = test::init_service(build_test_app(pool)).await;
+    let cookies = login(&app).await;
+    let response = test::call_service(&app, get("/api/tasks?category=snapshot", &cookies)).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: serde_json::Value = test::read_body_json(response).await;
+    let item = body["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == "list-progress")
+        .unwrap();
+    assert_eq!(item["latestRun"]["status"], "running");
+    assert_eq!(item["progress"]["percent"], 42.0);
+}
+
+#[actix_web::test]
 async fn detail_separates_snapshot_run_metrics_and_progress() {
     let pool = test_pool().await;
     setup(&pool).await;
@@ -341,6 +387,47 @@ async fn detail_scopes_metrics_to_both_task_and_run() {
     let response = test::call_service(&app, get("/api/tasks/snapshot/detail", &cookies)).await;
     let body: serde_json::Value = test::read_body_json(response).await;
     assert_eq!(body["metricsSnapshot"]["values"]["extractor_rps_avg"], 9.0);
+}
+
+#[actix_web::test]
+async fn detail_uses_monitor_log_when_metric_points_are_missing() {
+    let pool = test_pool().await;
+    setup(&pool).await;
+    seed_task(&pool, "monitor-fallback", "snapshot_and_cdc").await;
+    let dir = std::env::temp_dir().join(format!("task-detail-monitor-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("phase_state.json"), r#"{"current_phase":2,"start_time_utc":"2026-07-18 00:00:00.000","start_scn":null,"phase2_ini_path":"phase2.ini"}"#).unwrap();
+    let log_dir = dir.join("logs");
+    std::fs::create_dir_all(&log_dir).unwrap();
+    std::fs::write(
+        log_dir.join("monitor.log"),
+        "2026-08-01 07:51:07.822095 | pipeline |  | queued_records | latest=3\n2026-08-01 07:51:07.822136 | pipeline |  | sinked_records | latest=65\n",
+    )
+    .unwrap();
+    seed_run(
+        &pool,
+        "monitor-fallback",
+        "running",
+        Some(log_dir.to_string_lossy().into()),
+    )
+    .await;
+
+    let app = test::init_service(build_test_app(pool)).await;
+    let cookies = login(&app).await;
+    let response =
+        test::call_service(&app, get("/api/tasks/monitor-fallback/detail", &cookies)).await;
+    let body: serde_json::Value = test::read_body_json(response).await;
+    assert_eq!(body["currentRun"]["currentPhase"], "cdc");
+    assert_eq!(body["metricsSnapshot"]["phase"], "cdc");
+    assert_eq!(
+        body["metricsSnapshot"]["values"]["pipeline_queue_size"],
+        3.0
+    );
+    assert_eq!(
+        body["metricsSnapshot"]["values"]["sinker_sinked_records"],
+        65.0
+    );
+    assert_eq!(body["progress"]["copiedRecords"], 65.0);
 }
 
 #[actix_web::test]

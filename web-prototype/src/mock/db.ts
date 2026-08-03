@@ -507,7 +507,9 @@ export function tickRunningMetrics(): void {
       t.metrics.queryRtUs = Math.max(0, Math.round(jitter(t.metrics.queryRtUs || 2800, 0.2)));
       t.metrics.bufferSize = Math.max(0, Math.round(jitter(t.metrics.bufferSize || 20, 0.3)));
       t.metrics.processedRecords += t.metrics.sinkerRpsLatest || 0;
-      t.progressPercent = Math.min(99.5, t.progressPercent + (Math.random() * 0.05));
+      if (t.progressPercent !== null) {
+        t.progressPercent = Math.min(99.5, t.progressPercent + (Math.random() * 0.05));
+      }
     }
     t.lastHeartbeatAt = new Date().toISOString();
   }

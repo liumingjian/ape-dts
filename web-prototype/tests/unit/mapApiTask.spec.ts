@@ -55,6 +55,16 @@ describe('mapApiTask', () => {
     expect(t.source.database).toBe('src_db');
   });
 
+  it('normalizes PostgreSQL API aliases to postgres UI engine', () => {
+    const t = mapApiTask({
+      ...BASE,
+      dbTypeSource: 'pg',
+      dbTypeTarget: 'postgresql',
+    });
+    expect(t.source.engine).toBe('postgres');
+    expect(t.target.engine).toBe('postgres');
+  });
+
   it('parses targetEndpoint URL into target fields', () => {
     const t = mapApiTask(BASE);
     expect(t.target.engine).toBe('postgres');
@@ -126,6 +136,27 @@ describe('mapApiTask', () => {
   it('progress passes through verbatim', () => {
     const t = mapApiTask(BASE);
     expect(t.progressPercent).toBe(73);
+  });
+
+  it('uses latest run status and nullable runtime progress when present', () => {
+    const t = mapApiTask({
+      ...BASE,
+      status: 'running',
+      metrics: {},
+      latestRun: { id: 'run-1', status: 'failed', currentPhase: 'cdc', exitCode: -1 },
+      progress: null,
+    });
+    expect(t.status).toBe('failed');
+    expect(t.progressPercent).toBeNull();
+  });
+
+  it('uses runtime progress over task metrics config progress when present', () => {
+    const t = mapApiTask({
+      ...BASE,
+      metrics: { progress: 0 },
+      progress: { runId: 'run-1', phase: 'snapshot', kind: 'snapshot', percent: 42, copiedRecords: 4, estimatedTotalRecords: 10, totalIsEstimate: true },
+    });
+    expect(t.progressPercent).toBe(42);
   });
 
   it('progress defaults to 0 when missing', () => {
