@@ -108,7 +108,7 @@ impl<'r> RdbSnapshotExtractStatement<'r> {
         let mut predicates: Vec<String> = Vec::new();
         match self.where_condition {
             Some(where_condition) if !where_condition.is_empty() => {
-                predicates.push(where_condition.clone());
+                predicates.push(format!("({})", where_condition));
             }
             _ => (),
         }
@@ -635,7 +635,7 @@ mod tests {
         let sql = stmt.build().unwrap();
         assert_eq!(
             sql,
-            r#"SELECT `id`,`price`,`username`,`bio`,`large_blob` FROM `test_schema`.`test_table` WHERE id > 100 AND (`price` IS NULL OR `bio` IS NULL OR `large_blob` IS NULL) ORDER BY `test_schema`.`test_table`.`id` ASC, `test_schema`.`test_table`.`price` ASC, `test_schema`.`test_table`.`username` ASC, `test_schema`.`test_table`.`bio` ASC, `test_schema`.`test_table`.`large_blob` ASC LIMIT 100"#
+            r#"SELECT `id`,`price`,`username`,`bio`,`large_blob` FROM `test_schema`.`test_table` WHERE (id > 100) AND (`price` IS NULL OR `bio` IS NULL OR `large_blob` IS NULL) ORDER BY `test_schema`.`test_table`.`id` ASC, `test_schema`.`test_table`.`price` ASC, `test_schema`.`test_table`.`username` ASC, `test_schema`.`test_table`.`bio` ASC, `test_schema`.`test_table`.`large_blob` ASC LIMIT 100"#
         );
     }
 
@@ -782,7 +782,7 @@ mod tests {
         let sql = stmt.build().unwrap();
         assert_eq!(
             sql,
-            r#"SELECT "id"::int8,"price"::float8,"username"::text,"bio"::text,"large_blob"::bytea FROM "test_schema"."test_table" WHERE id > 100 AND ("price" IS NULL OR "bio" IS NULL OR "large_blob" IS NULL) ORDER BY "test_schema"."test_table"."id" ASC, "test_schema"."test_table"."price" ASC, "test_schema"."test_table"."username" ASC, "test_schema"."test_table"."bio" ASC, "test_schema"."test_table"."large_blob" ASC LIMIT 100"#
+            r#"SELECT "id"::int8,"price"::float8,"username"::text,"bio"::text,"large_blob"::bytea FROM "test_schema"."test_table" WHERE (id > 100) AND ("price" IS NULL OR "bio" IS NULL OR "large_blob" IS NULL) ORDER BY "test_schema"."test_table"."id" ASC, "test_schema"."test_table"."price" ASC, "test_schema"."test_table"."username" ASC, "test_schema"."test_table"."bio" ASC, "test_schema"."test_table"."large_blob" ASC LIMIT 100"#
         );
     }
 
@@ -800,7 +800,25 @@ mod tests {
         let sql = stmt.build().unwrap();
         assert_eq!(
             sql,
-            r#"SELECT `id`,`price`,`username`,`bio`,`large_blob` FROM `test_schema`.`test_table` WHERE id > 1000 AND `id` > ? ORDER BY `test_schema`.`test_table`.`id` ASC"#
+            r#"SELECT `id`,`price`,`username`,`bio`,`large_blob` FROM `test_schema`.`test_table` WHERE (id > 1000) AND `id` > ? ORDER BY `test_schema`.`test_table`.`id` ASC"#
+        );
+    }
+
+    #[test]
+    fn test_mysql_parenthesizes_or_where_condition_before_split_predicate() {
+        let mysql_meta = create_mysql_tb_meta();
+        let stmt = RdbSnapshotExtractStatement::from(&mysql_meta);
+        let order_cols = vec!["id".to_string()];
+        let where_condition = "id = 1 OR price = 2".to_string();
+        let stmt = stmt
+            .with_order_cols(&order_cols)
+            .with_where_condition(&where_condition)
+            .with_predicate_type(OrderKeyPredicateType::GreaterThan);
+
+        let sql = stmt.build().unwrap();
+        assert_eq!(
+            sql,
+            r#"SELECT `id`,`price`,`username`,`bio`,`large_blob` FROM `test_schema`.`test_table` WHERE (id = 1 OR price = 2) AND `id` > ? ORDER BY `test_schema`.`test_table`.`id` ASC"#
         );
     }
 
@@ -818,7 +836,7 @@ mod tests {
         let sql = stmt.build().unwrap();
         assert_eq!(
             sql,
-            r#"SELECT "id"::int8,"price"::float8,"username"::text,"bio"::text,"large_blob"::bytea FROM "test_schema"."test_table" WHERE id > 1000 AND "id" > $1::int8 ORDER BY "test_schema"."test_table"."id" ASC"#
+            r#"SELECT "id"::int8,"price"::float8,"username"::text,"bio"::text,"large_blob"::bytea FROM "test_schema"."test_table" WHERE (id > 1000) AND "id" > $1::int8 ORDER BY "test_schema"."test_table"."id" ASC"#
         );
     }
 
@@ -873,7 +891,7 @@ mod tests {
         let sql = stmt.build().unwrap();
         assert_eq!(
             sql,
-            r#"SELECT `id`,`price`,`username`,`bio`,`large_blob` FROM `test_schema`.`test_table` WHERE price > 100.0"#
+            r#"SELECT `id`,`price`,`username`,`bio`,`large_blob` FROM `test_schema`.`test_table` WHERE (price > 100.0)"#
         );
     }
 
@@ -887,7 +905,7 @@ mod tests {
         let sql = stmt.build().unwrap();
         assert_eq!(
             sql,
-            r#"SELECT "id"::int8,"price"::float8,"username"::text,"bio"::text,"large_blob"::bytea FROM "test_schema"."test_table" WHERE price > 100.0"#
+            r#"SELECT "id"::int8,"price"::float8,"username"::text,"bio"::text,"large_blob"::bytea FROM "test_schema"."test_table" WHERE (price > 100.0)"#
         );
     }
 
@@ -1111,7 +1129,7 @@ mod tests {
         let sql = stmt.build().unwrap();
         assert_eq!(
             sql,
-            r#"SELECT `id`,`price`,`username`,`bio`,`large_blob` FROM `test_schema`.`test_table` WHERE id > 100 AND `price` IS NOT NULL AND `bio` IS NOT NULL ORDER BY `test_schema`.`test_table`.`id` ASC, `test_schema`.`test_table`.`price` ASC, `test_schema`.`test_table`.`bio` ASC LIMIT 100"#
+            r#"SELECT `id`,`price`,`username`,`bio`,`large_blob` FROM `test_schema`.`test_table` WHERE (id > 100) AND `price` IS NOT NULL AND `bio` IS NOT NULL ORDER BY `test_schema`.`test_table`.`id` ASC, `test_schema`.`test_table`.`price` ASC, `test_schema`.`test_table`.`bio` ASC LIMIT 100"#
         );
     }
 }
