@@ -321,27 +321,55 @@ dump_postgres() {
   postgres_sql -tA -c "$(postgres_dump_query)" | tr -d '\r'
 }
 
-assert_phase() {
+phase_mismatch_reason() {
   local phase="$1"
-  local expected mysql_dump postgres_dump diff_file
-  expected="$(expected_rows "$phase")"
-  mysql_dump="$RUN_DIR/dumps/${phase}-mysql.tsv"
-  postgres_dump="$RUN_DIR/dumps/${phase}-postgresql.tsv"
-  diff_file="$RUN_DIR/diffs/${phase}.diff"
-
-  dump_mysql >"$mysql_dump"
-  dump_postgres >"$postgres_dump"
+  local mysql_dump="$2"
+  local postgres_dump="$3"
+  local diff_file="$4"
+  local expected
+  expected="$(expected_rows "$phase")" || { printf '%s' "unknown phase: $phase"; return 1; }
   : >"$diff_file"
 
   if ! diff -u <(printf '%s\n' "$expected") "$mysql_dump" >>"$diff_file"; then
-    die "$phase source rows differ from fixed expectation"
+    printf '%s' "$phase source rows differ from fixed expectation"
+    return 1
   fi
   if ! diff -u <(printf '%s\n' "$expected") "$postgres_dump" >>"$diff_file"; then
-    die "$phase target rows differ from fixed expectation"
+    printf '%s' "$phase target rows differ from fixed expectation"
+    return 1
   fi
   if ! diff -u "$mysql_dump" "$postgres_dump" >>"$diff_file"; then
-    die "$phase source and target rows differ"
+    printf '%s' "$phase source and target rows differ"
+    return 1
   fi
+  return 0
+}
+
+# Dumps both sides into artifacts and records the mismatch reason; never exits.
+# Callers decide what a mismatch means: assert_phase treats it as a failure,
+# wait_for_phase's timeout branch only wants the artifacts and the last reason.
+dump_phase() {
+  local phase="$1"
+  local mysql_dump="$RUN_DIR/dumps/${phase}-mysql.tsv"
+  local postgres_dump="$RUN_DIR/dumps/${phase}-postgresql.tsv"
+  PHASE_DIFF_FILE="$RUN_DIR/diffs/${phase}.diff"
+  PHASE_MISMATCH_REASON=""
+
+  if ! dump_mysql >"$mysql_dump"; then
+    PHASE_MISMATCH_REASON="$phase source dump failed (mysql unreachable)"
+    return 1
+  fi
+  if ! dump_postgres >"$postgres_dump"; then
+    PHASE_MISMATCH_REASON="$phase target dump failed (postgresql unreachable)"
+    return 1
+  fi
+  PHASE_MISMATCH_REASON="$(phase_mismatch_reason "$phase" "$mysql_dump" "$postgres_dump" "$PHASE_DIFF_FILE")" || return 1
+  return 0
+}
+
+assert_phase() {
+  local phase="$1"
+  dump_phase "$phase" || die "${PHASE_MISMATCH_REASON:-$phase verification failed} (diff: ${PHASE_DIFF_FILE:-none})"
   log "$phase verified"
 }
 
@@ -366,8 +394,8 @@ wait_for_phase() {
     fi
     sleep 1
   done
-  assert_phase "$phase" || true
-  die "$phase did not converge within ${timeout_secs}s"
+  dump_phase "$phase" || true
+  die "$phase did not converge within ${timeout_secs}s (last observed: ${PHASE_MISMATCH_REASON:-no mismatch at timeout}; diff: ${PHASE_DIFF_FILE:-none})"
 }
 
 wait_for_probe() {
