@@ -68,6 +68,35 @@ struct Context {
     binlog_filename: String,
     table_map_event_map: HashMap<u64, TableMapEvent>,
     gtid_set: Option<GtidSet>,
+    pending_gtid: Option<String>,
+}
+
+impl Context {
+    fn record_gtid(&mut self, gtid: &str) {
+        self.pending_gtid = Some(gtid.to_string());
+    }
+
+    fn commit_gtid(&mut self) -> anyhow::Result<()> {
+        if let (Some(gtid_set), Some(gtid)) = (&mut self.gtid_set, &self.pending_gtid) {
+            gtid_set.add(gtid)?;
+        }
+        self.pending_gtid = None;
+        Ok(())
+    }
+
+    fn checkpoint_position(&self, next_event_position: u32, timestamp: String) -> Position {
+        let gtid_set = self
+            .gtid_set
+            .as_ref()
+            .map_or_else(String::new, ToString::to_string);
+        Position::MysqlCdc {
+            server_id: String::new(),
+            binlog_filename: self.binlog_filename.clone(),
+            next_event_position,
+            gtid_set,
+            timestamp,
+        }
+    }
 }
 
 const QUERY_BEGIN: &str = "BEGIN";
@@ -162,6 +191,7 @@ impl MysqlCdcExtractor {
             binlog_filename: self.binlog_filename.clone(),
             table_map_event_map: HashMap::new(),
             gtid_set: None,
+            pending_gtid: None,
         };
         if self.gtid_enabled {
             ctx.gtid_set = Some(GtidSet::new(self.gtid_set.as_str())?);
@@ -200,26 +230,12 @@ impl MysqlCdcExtractor {
             data
         );
 
-        // TODO, get server_id from source mysql
-        let server_id = String::new();
         let timestamp = Position::format_timestamp_millis(header.timestamp as i64 * 1000);
-        let mut gtid_set_str = String::new();
-        if let Some(gtid_set) = &ctx.gtid_set {
-            gtid_set_str = gtid_set.to_string();
-        }
-        let position = Position::MysqlCdc {
-            server_id,
-            binlog_filename: ctx.binlog_filename.clone(),
-            next_event_position: header.next_event_position,
-            gtid_set: gtid_set_str,
-            timestamp,
-        };
+        let mut position = ctx.checkpoint_position(header.next_event_position, timestamp.clone());
 
         match data {
             EventData::Gtid(g) => {
-                if let Some(gtid_set) = ctx.gtid_set.as_mut() {
-                    gtid_set.add(&g.gtid)?;
-                }
+                ctx.record_gtid(&g.gtid);
             }
 
             EventData::TableMap(d) => {
@@ -320,6 +336,8 @@ impl MysqlCdcExtractor {
             }
 
             EventData::Xid(xid) => {
+                ctx.commit_gtid()?;
+                position = ctx.checkpoint_position(header.next_event_position, timestamp);
                 let commit = DtData::Commit {
                     xid: xid.xid.to_string(),
                 };
@@ -560,5 +578,68 @@ impl MysqlCdcExtractor {
             log_error!("heartbeat failed: {:?}", err);
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const GTID: &str = "3E11FA47-71CA-11E1-9E33-C80AA9429562:23";
+    const NORMALIZED_GTID: &str = "3E11FA47-71CA-11E1-9E33-C80AA9429562:23-23";
+
+    #[test]
+    fn checkpoint_gtid_advances_only_after_transaction_commit() {
+        let mut ctx = Context {
+            binlog_filename: "mysql-bin.000001".to_string(),
+            table_map_event_map: HashMap::new(),
+            gtid_set: Some(GtidSet::new("").unwrap()),
+            pending_gtid: None,
+        };
+
+        ctx.record_gtid(GTID);
+        let row_position = ctx.checkpoint_position(120, "2026-08-11 00:00:00.000".to_string());
+        assert!(matches!(
+            row_position,
+            Position::MysqlCdc { ref gtid_set, .. } if gtid_set.is_empty()
+        ));
+
+        ctx.commit_gtid().unwrap();
+        let commit_position = ctx.checkpoint_position(140, "2026-08-11 00:00:01.000".to_string());
+        assert!(matches!(
+            commit_position,
+            Position::MysqlCdc { ref gtid_set, .. } if gtid_set == NORMALIZED_GTID
+        ));
+        assert_eq!(ctx.pending_gtid, None);
+    }
+
+    #[test]
+    fn commit_clears_pending_gtid_when_gtid_tracking_is_disabled() {
+        let mut ctx = Context {
+            binlog_filename: "mysql-bin.000001".to_string(),
+            table_map_event_map: HashMap::new(),
+            gtid_set: None,
+            pending_gtid: None,
+        };
+
+        ctx.record_gtid(GTID);
+        ctx.commit_gtid().unwrap();
+
+        assert_eq!(ctx.pending_gtid, None);
+    }
+
+    #[test]
+    fn commit_rejects_invalid_pending_gtid() {
+        let mut ctx = Context {
+            binlog_filename: "mysql-bin.000001".to_string(),
+            table_map_event_map: HashMap::new(),
+            gtid_set: Some(GtidSet::new("").unwrap()),
+            pending_gtid: None,
+        };
+
+        ctx.record_gtid("invalid-gtid");
+
+        assert!(ctx.commit_gtid().is_err());
+        assert_eq!(ctx.pending_gtid.as_deref(), Some("invalid-gtid"));
     }
 }
