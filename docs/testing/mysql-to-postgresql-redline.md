@@ -63,6 +63,19 @@ CDC 按顺序执行：
 
 相应环境变量可临时调整：`DOCKER_TIMEOUT_SECS`、`SNAPSHOT_TIMEOUT_SECS`、`CDC_PROBE_TIMEOUT_SECS`、`CRUD_TIMEOUT_SECS`、`FINAL_TIMEOUT_SECS`、`STOP_TIMEOUT_SECS`。
 
+## 数据库就绪判定
+
+MySQL 官方镜像在初始化期间会先起一个临时服务端、随后重启它。只探测一次 `SELECT 1` 会撞进重启前的窗口：探测成功、下一条建表语句却挂在 `ERROR 2002 ... through socket`。因此就绪同时要求两件事：
+
+1. Compose healthcheck（`mysqladmin ping` / `pg_isready`）报 `healthy`（镜像未声明 healthcheck 时该项自动跳过）；
+2. 两端连续 `DB_READY_STREAK_REQUIRED` 次（默认 3 次，间隔 `DB_READY_PROBE_INTERVAL_SECS`，默认 1 秒）探测均成功——重启会打断连击，从而不会被误判为就绪。
+
+超时失败会把最后一次未通过的原因带进 `summary.md`（healthcheck 未 healthy / MySQL 未接受连接 / PostgreSQL 未接受连接），而不是笼统的一句「就绪超时」。
+
+## 失败原因兜底
+
+`die` 之外，脚本还挂了 `ERR` trap：任何被 `set -e` 直接带走的语句（裸的 `mysql_sql` heredoc、`compose` 调用、命令替换赋值）都会记录「阶段 + 失败命令 + 退出码 + 行号」。`summary.md` 的 `Reason` 在失败运行中优先取 `die` 的显式原因，其次取 trap 记录，绝不再出现空白或 `none`。
+
 ## 隔离、产物与清理
 
 每次运行使用唯一 Compose Project，MySQL 和 PostgreSQL 只绑定 `127.0.0.1` 动态端口，不声明固定容器名、网络名或持久卷。默认退出时先采集诊断并停止 CDC，再执行 `docker compose down -v --remove-orphans`。
