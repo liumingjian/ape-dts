@@ -520,7 +520,7 @@ mod tests {
         assert_eq!(runs.len(), 1);
 
         // Check if the PID is alive (it won't be).
-        let pid_alive = unsafe { libc::kill(dead_pid as i32, 0) == 0 };
+        let pid_alive = crate::signal::is_alive(dead_pid as u32);
         assert!(!pid_alive, "Dead PID should not be alive");
 
         // Mark the orphaned Run as failed.

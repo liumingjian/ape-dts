@@ -991,19 +991,25 @@ pub async fn stop_task(
                     }
                 },
                 None => {
-                    // Slot was in Starting state — no child process to kill.
-                    tracing::warn!(
-                        "stop requested for task {} but slot was Starting (no child)",
-                        task_id
-                    );
-                    Ok(None)
+                    // Slot was in Starting state: the engine is mid-spawn, so
+                    // there is nothing to signal *yet* — and releasing the slot
+                    // would let a second start race the one in flight. Put it
+                    // back and make the caller retry.
+                    active.insert(task_id.clone(), RunSlot::Starting);
+                    Err("the run is still starting; retry the stop once it is running".to_string())
                 }
             },
             None => {
-                // Handle not in memory — send SIGTERM directly via PID.
+                // No handle in memory — stop by pid, with the same graceful
+                // escalation, so "stopped" still means the process is gone.
                 match run.pid {
-                    Some(pid) => kill_process_by_pid(pid as u32).await.map(|_| None),
-                    None => Ok(None),
+                    Some(pid) if pid > 0 => {
+                        let grace = executor::grace_window_secs();
+                        executor::LocalExecutor::kill_by_pid(pid as u32, grace)
+                            .await
+                            .map(Some)
+                    }
+                    _ => Ok(None),
                 }
             }
         }
@@ -1147,10 +1153,28 @@ pub async fn pause_task(
         match send_pause_signal(pid as u32) {
             Ok(crate::signal::SignalOutcome::Delivered) => {}
             Ok(crate::signal::SignalOutcome::ProcessGone) => {
+                // Nothing is running to pause. Claiming `paused` would be the
+                // same lie as claiming `stopped` after a failed kill; the
+                // supervisor will finalise the Run on its next sweep.
                 tracing::warn!(
                     "pause: engine process {pid} for run {} is already gone",
                     run_id
                 );
+                let _ = write_control_result(
+                    &pool,
+                    &task_id,
+                    &run_id,
+                    "pause",
+                    "error",
+                    &user.username,
+                )
+                .await;
+                return ApiError::with_details(
+                    codes::ILLEGAL_TRANSITION,
+                    "Cannot pause a run whose engine process is gone",
+                    serde_json::json!({ "from": run.status, "to": "paused", "pid": pid }),
+                )
+                .error_response();
             }
             Err(e) => {
                 let _ = write_control_result(
@@ -1272,10 +1296,26 @@ pub async fn resume_task(
         match send_resume_signal(pid as u32) {
             Ok(crate::signal::SignalOutcome::Delivered) => {}
             Ok(crate::signal::SignalOutcome::ProcessGone) => {
+                // As with pause: there is no engine left to resume.
                 tracing::warn!(
                     "resume: engine process {pid} for run {} is already gone",
                     run_id
                 );
+                let _ = write_control_result(
+                    &pool,
+                    &task_id,
+                    &run_id,
+                    "resume",
+                    "error",
+                    &user.username,
+                )
+                .await;
+                return ApiError::with_details(
+                    codes::ILLEGAL_TRANSITION,
+                    "Cannot resume a run whose engine process is gone",
+                    serde_json::json!({ "from": run.status, "to": "running", "pid": pid }),
+                )
+                .error_response();
             }
             Err(e) => {
                 let _ = write_control_result(
@@ -1673,14 +1713,6 @@ async fn update_task_status(
     Ok(())
 }
 
-/// Send SIGTERM to a process by PID when the RunHandle is not available.
-///
-/// `Ok(())` means the process is no longer running as far as we can tell:
-/// either the signal was delivered, or the process had already exited.
-async fn kill_process_by_pid(pid: u32) -> Result<(), String> {
-    crate::signal::send(pid, crate::signal::EngineSignal::Term).map(|_| ())
-}
-
 /// Send a pause signal (SIGUSR1) to the engine process.
 fn send_pause_signal(pid: u32) -> Result<crate::signal::SignalOutcome, String> {
     crate::signal::send(pid, crate::signal::EngineSignal::Pause)
@@ -1721,7 +1753,7 @@ mod tests {
     fn test_signals_to_dead_pid_report_process_gone() {
         use crate::signal::SignalOutcome;
 
-        let dead = 4_194_303;
+        let dead = crate::signal::reaped_pid();
         assert_eq!(send_pause_signal(dead).unwrap(), SignalOutcome::ProcessGone);
         assert_eq!(
             send_resume_signal(dead).unwrap(),

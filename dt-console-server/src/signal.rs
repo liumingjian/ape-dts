@@ -68,11 +68,9 @@ pub enum SignalOutcome {
 /// a process that may still be running (`EPERM` and friends).
 #[cfg(unix)]
 pub fn send(pid: u32, sig: EngineSignal) -> Result<SignalOutcome, String> {
-    if pid == 0 {
-        // kill(0, sig) signals the whole process group — never what we mean.
-        return Err(format!("refusing to send {} to pid 0", sig.name()));
-    }
-    let rc = unsafe { libc::kill(pid as libc::pid_t, sig.as_libc()) };
+    let pid =
+        checked_pid(pid).map_err(|reason| format!("refusing to send {}: {reason}", sig.name()))?;
+    let rc = unsafe { libc::kill(pid, sig.as_libc()) };
     if rc == 0 {
         return Ok(SignalOutcome::Delivered);
     }
@@ -96,25 +94,57 @@ pub fn send(pid: u32, sig: EngineSignal) -> Result<SignalOutcome, String> {
     ))
 }
 
-/// Check whether `pid` is alive, via the null signal.
+/// Narrow a stored pid to one that is safe to pass to `kill`.
+///
+/// `kill` reads negative pids as "a process group" and `0` as "my whole
+/// process group", so a pid that arrives corrupted — a negative or oversized
+/// `run.pid` column, a bad migration — must never reach the syscall. The old
+/// shell-out was accidentally safe here (`kill -s TERM 4294967295` just
+/// errored); the syscall is not.
+#[cfg(unix)]
+fn checked_pid(pid: u32) -> Result<libc::pid_t, String> {
+    if pid == 0 || pid > i32::MAX as u32 {
+        return Err(format!("{pid} is not a valid process id"));
+    }
+    Ok(pid as libc::pid_t)
+}
+
+/// Check whether `pid` is a live process **we can signal**.
+///
+/// Uses the null signal, which performs the existence and permission checks
+/// without sending anything. A process we are not permitted to signal
+/// (`EPERM`) counts as not alive: it cannot be ours, so it is either a
+/// recycled pid or a foreign process, and treating it as a live engine would
+/// leave a Run that can neither finish nor be stopped.
 #[cfg(unix)]
 pub fn is_alive(pid: u32) -> bool {
-    if pid == 0 {
-        return false;
+    match checked_pid(pid) {
+        Ok(pid) => unsafe { libc::kill(pid, 0) == 0 },
+        Err(_) => false,
     }
-    // Signal 0 performs the permission and existence checks without sending.
-    // EPERM means the process exists but is not ours — still "alive".
-    let rc = unsafe { libc::kill(pid as libc::pid_t, 0) };
-    if rc == 0 {
-        return true;
-    }
-    std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
 }
 
 /// Check whether `pid` is alive (non-Unix fallback).
 #[cfg(not(unix))]
 pub fn is_alive(_pid: u32) -> bool {
     false
+}
+
+/// A pid that is genuinely dead: spawn a child, kill it, reap it.
+///
+/// Test-only. Picking a large constant instead would be a slow-burning flake —
+/// the kernel is free to hand that number to somebody else's process, and the
+/// test would then signal a stranger.
+#[cfg(all(test, unix))]
+pub(crate) fn reaped_pid() -> u32 {
+    let mut child = std::process::Command::new("sleep")
+        .arg("30")
+        .spawn()
+        .expect("spawn sleep");
+    let pid = child.id();
+    let _ = child.kill();
+    let _ = child.wait();
+    pid
 }
 
 #[cfg(test)]
@@ -133,30 +163,47 @@ mod tests {
     fn test_send_to_pid_zero_is_rejected() {
         // pid 0 means "the whole process group" — never the intent here.
         let err = send(0, EngineSignal::Term).unwrap_err();
-        assert!(err.contains("pid 0"), "unexpected error: {err}");
+        assert!(err.contains("not a valid process id"), "unexpected: {err}");
+    }
+
+    #[test]
+    fn test_send_to_out_of_range_pid_is_rejected() {
+        // `as i32` would make this negative — a whole process group.
+        let err = send(u32::MAX, EngineSignal::Term).unwrap_err();
+        assert!(err.contains("not a valid process id"), "unexpected: {err}");
+        assert!(!is_alive(u32::MAX));
     }
 
     #[cfg(unix)]
     #[test]
     fn test_send_to_dead_pid_reports_process_gone() {
-        // A pid this high is not in use; ESRCH must map to success.
-        let outcome = send(4_194_303, EngineSignal::Term).expect("ESRCH must not be an error");
+        let outcome = send(reaped_pid(), EngineSignal::Term).expect("ESRCH must not be an error");
         assert_eq!(outcome, SignalOutcome::ProcessGone);
     }
 
     #[cfg(unix)]
     #[test]
-    fn test_send_signal_zero_equivalent_to_self_is_delivered() {
-        let me = std::process::id();
-        // SIGUSR1/2 would actually be delivered; use is_alive (signal 0) for self.
-        assert!(is_alive(me), "the test process must be alive");
+    fn test_is_alive_true_for_self() {
+        assert!(is_alive(std::process::id()), "the test process is alive");
     }
 
     #[cfg(unix)]
     #[test]
     fn test_is_alive_false_for_dead_pid() {
-        assert!(!is_alive(4_194_303));
+        assert!(!is_alive(reaped_pid()));
         assert!(!is_alive(0));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_is_alive_false_for_a_process_we_cannot_signal() {
+        // pid 1 is init: it exists, but an unprivileged process gets EPERM.
+        // "Alive but not ours" must read as not alive — a recycled pid must
+        // never keep a Run pinned in `running` forever.
+        if unsafe { libc::geteuid() } == 0 {
+            return;
+        }
+        assert!(!is_alive(1));
     }
 
     #[cfg(unix)]

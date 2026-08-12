@@ -2100,6 +2100,20 @@ macro_rules! create_task {
     }};
 }
 
+/// A pid that is genuinely dead: spawn a child, kill it, reap it. A large
+/// constant would be a slow-burning flake — the kernel may hand that number
+/// to somebody else, and the test would signal a stranger.
+fn reaped_pid() -> u32 {
+    let mut child = std::process::Command::new("sleep")
+        .arg("30")
+        .spawn()
+        .expect("spawn sleep");
+    let pid = child.id();
+    let _ = child.kill();
+    let _ = child.wait();
+    pid
+}
+
 /// Seed a `running` Run for `task_id` with the given pid and log dir.
 async fn seed_running_run(
     pool: &SqlitePool,
@@ -2136,7 +2150,7 @@ async fn test_stop_of_already_exited_process_succeeds() {
 
     // A pid that is not in use: `kill` reports ESRCH, which means the process
     // is already gone — the caller's intent already holds, so stop succeeds.
-    let run_id = seed_running_run(&pool, &task_id, Some(4_194_303), None).await;
+    let run_id = seed_running_run(&pool, &task_id, Some(reaped_pid() as i64), None).await;
 
     let req = add_auth(
         test::TestRequest::post().uri(&format!("/api/tasks/{task_id}/stop")),
@@ -2201,7 +2215,7 @@ async fn test_same_idempotency_key_on_a_different_task_is_not_replayed() {
 
     let task_a = create_task!(app, &cookies);
     let task_b = create_task!(app, &cookies);
-    seed_running_run(&pool, &task_a, Some(4_194_303), None).await;
+    seed_running_run(&pool, &task_a, Some(reaped_pid() as i64), None).await;
     // Task B has no active Run at all.
 
     let key = "one-key-for-everything";
@@ -2238,7 +2252,7 @@ async fn test_replayed_idempotency_key_on_the_same_endpoint_is_still_cached() {
     let cookies = do_login!(app, "admin", "admin123");
 
     let task_id = create_task!(app, &cookies);
-    seed_running_run(&pool, &task_id, Some(4_194_303), None).await;
+    seed_running_run(&pool, &task_id, Some(reaped_pid() as i64), None).await;
 
     let key = "retry-the-same-stop";
     let mut statuses = Vec::new();
@@ -2286,7 +2300,7 @@ async fn test_log_endpoint_serves_child_stdout_and_stderr() {
     let run_id = seed_running_run(
         &pool,
         &task_id,
-        Some(4_194_303),
+        Some(reaped_pid() as i64),
         Some(log_dir.to_string_lossy().to_string()),
     )
     .await;
@@ -2323,4 +2337,32 @@ async fn test_log_endpoint_serves_child_stdout_and_stderr() {
     assert_ne!(resp.status(), StatusCode::OK, "unknown files stay rejected");
 
     let _ = std::fs::remove_dir_all(&log_dir);
+}
+
+#[actix_web::test]
+async fn test_pause_of_a_dead_engine_is_refused() {
+    let (pool, active_runs) = setup().await;
+    let app = test::init_service(build_test_app(pool.clone(), active_runs)).await;
+    let cookies = do_login!(app, "admin", "admin123");
+    let task_id = create_task!(app, &cookies);
+
+    let run_id = seed_running_run(&pool, &task_id, Some(reaped_pid() as i64), None).await;
+
+    let req = add_auth(
+        test::TestRequest::post().uri(&format!("/api/tasks/{task_id}/pause")),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(
+        resp.status(),
+        StatusCode::CONFLICT,
+        "there is no engine left to pause"
+    );
+
+    let run = RunRepository::find_by_id(&pool, &run_id).await.unwrap();
+    assert_eq!(
+        run.status, "running",
+        "the run must not be recorded as paused when nothing was paused"
+    );
 }

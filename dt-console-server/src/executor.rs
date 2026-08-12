@@ -399,6 +399,17 @@ impl LocalExecutor {
         }
     }
 
+    /// Stop a process we only know by pid, with the same graceful escalation
+    /// as [`Self::kill`]: SIGTERM, poll for the grace window, then SIGKILL.
+    ///
+    /// Used when the orchestrator has no `RunHandle` for a Run — after a
+    /// restart, or when the in-memory slot was lost. A single SIGTERM would
+    /// not do: the caller marks the Run stopped on success, so it must know
+    /// the process is actually gone.
+    pub async fn kill_by_pid(pid: u32, grace_secs: u64) -> Result<KillResult, String> {
+        kill_reattached(pid, grace_secs).await
+    }
+
     /// Re-attach to an already-running engine subprocess after orchestrator restart.
     ///
     /// Creates a `RunHandle` that tracks the process by PID without a `Child`
