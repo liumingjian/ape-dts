@@ -186,6 +186,16 @@ impl TaskRunner {
     }
 
     pub async fn start_task(&self) -> anyhow::Result<()> {
+        self.start_task_with_cancel(CancellationToken::new()).await
+    }
+
+    /// Same as [`Self::start_task`], but driven by a caller-owned token: cancelling it asks the
+    /// whole task tree to stop draining, record its final position and return. `dt-main` owns such
+    /// a token so that SIGINT/SIGTERM become a cooperative shutdown instead of a hard kill.
+    pub async fn start_task_with_cancel(
+        &self,
+        cancel_token: CancellationToken,
+    ) -> anyhow::Result<()> {
         self.init_log4rs().await?;
 
         panic::set_hook(Box::new(|panic_info| {
@@ -253,7 +263,7 @@ impl TaskRunner {
             check_summary: check_summary.clone(),
             enqueue_limiter,
             dequeue_limiter,
-            cancel_token: CancellationToken::new(),
+            cancel_token,
         };
 
         #[cfg(feature = "metrics")]

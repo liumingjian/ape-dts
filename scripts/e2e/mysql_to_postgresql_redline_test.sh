@@ -294,6 +294,76 @@ assert_eq "shutdown path preserves the failure reason in summary.md" \
   "- Reason: schema and fixture preparation failed" \
   "$(summary_survives_shutdown)"
 
+# Graceful stop (SIGTERM): the acceptance is "kept its data + position recorded + non-zero exit",
+# and each failure mode must name itself instead of collapsing into one vague message.
+printf 'checkpoint_position | mysql-bin.000003:100\n' >"$tmp_dir/position.log"
+printf 'checkpoint_position | mysql-bin.000003:842\n' >>"$tmp_dir/position.log"
+printf 'other line\n' >>"$tmp_dir/position.log"
+assert_eq "last_checkpoint_position reads the newest recorded position" \
+  "mysql-bin.000003:842" "$(last_checkpoint_position "$tmp_dir/position.log")"
+assert_eq "last_checkpoint_position is empty when nothing was recorded" \
+  "" "$(last_checkpoint_position "$tmp_dir/missing-position.log")"
+
+assert_eq "graceful_stop_reason accepts a clean shutdown" "" \
+  "$(graceful_stop_reason 143 "$GRACEFUL_PROBE_ROW" "$GRACEFUL_PROBE_ROW" "$GRACEFUL_PROBE_ROW" "mysql-bin.000003:100" "mysql-bin.000003:842")"
+assert_eq "graceful_stop_reason accepts the drain engine's first ever checkpoint" "" \
+  "$(graceful_stop_reason 143 "$DRAIN_PROBE_ROW" "$DRAIN_PROBE_ROW" "$DRAIN_PROBE_ROW" "" "mysql-bin.000003:842")"
+assert_eq "graceful_stop_reason rejects a zero exit code after SIGTERM" \
+  "cdc dt-main exited with code 0 after SIGTERM, expected 143" \
+  "$(graceful_stop_reason 0 "$GRACEFUL_PROBE_ROW" "$GRACEFUL_PROBE_ROW" "$GRACEFUL_PROBE_ROW" "mysql-bin.000003:100" "mysql-bin.000003:842")"
+assert_eq "graceful_stop_reason rejects a hard kill exit code" \
+  "cdc dt-main exited with code 137 after SIGTERM, expected 143" \
+  "$(graceful_stop_reason 137 "$GRACEFUL_PROBE_ROW" "$GRACEFUL_PROBE_ROW" "$GRACEFUL_PROBE_ROW" "mysql-bin.000003:100" "mysql-bin.000003:842")"
+assert_eq "graceful_stop_reason blames the fixture when the probe never reached mysql" \
+  "the probe row never landed in mysql, so the shutdown was not exercised" \
+  "$(graceful_stop_reason 143 "$GRACEFUL_PROBE_ROW" "" "" "mysql-bin.000003:100" "mysql-bin.000003:842")"
+assert_eq "graceful_stop_reason reports data dropped by the shutdown" \
+  "the row written before SIGTERM never reached postgresql: the shutdown dropped buffered data" \
+  "$(graceful_stop_reason 143 "$GRACEFUL_PROBE_ROW" "$GRACEFUL_PROBE_ROW" "" "mysql-bin.000003:100" "mysql-bin.000003:842")"
+assert_eq "graceful_stop_reason reports a missing resume point" \
+  "no checkpoint position was recorded, the shutdown left no resume point" \
+  "$(graceful_stop_reason 143 "$GRACEFUL_PROBE_ROW" "$GRACEFUL_PROBE_ROW" "$GRACEFUL_PROBE_ROW" "" "")"
+assert_eq "graceful_stop_reason reports a position that never advanced" \
+  "the checkpoint position did not advance past the pre-shutdown position (mysql-bin.000003:100): the final position was not recorded" \
+  "$(graceful_stop_reason 143 "$GRACEFUL_PROBE_ROW" "$GRACEFUL_PROBE_ROW" "$GRACEFUL_PROBE_ROW" "mysql-bin.000003:100" "mysql-bin.000003:100")"
+
+# The drain check must fail loudly when its precondition is gone, instead of passing vacuously.
+assert_eq "drain_precondition_reason accepts data still held inside the engine" "" \
+  "$(drain_precondition_reason "")"
+assert_eq "drain_precondition_reason rejects a vacuous drain check" \
+  "the probe row reached postgresql before SIGTERM (batch_sink_interval_secs did not hold it back), so the drain assertion would be vacuous" \
+  "$(drain_precondition_reason "$DRAIN_PROBE_ROW")"
+
+# The drain engine's config must actually hold data back and never checkpoint on a clock.
+drain_config_body() {
+  (
+    RUN_DIR="$tmp_dir"
+    REPO_ROOT="$tmp_dir"
+    MYSQL_PORT=3306
+    POSTGRES_PORT=5432
+    write_cdc_config mysql-bin.000003 1484 "$tmp_dir/drain.ini" "$tmp_dir/drain-logs" 120 3600
+    grep -E '^(batch_sink_interval_secs|checkpoint_interval_secs|log_dir)=' "$tmp_dir/drain.ini"
+  )
+}
+assert_eq "write_cdc_config honours the drain knobs and log dir" \
+  "$(printf 'checkpoint_interval_secs=3600\nbatch_sink_interval_secs=120\nlog_dir=%s/drain-logs' "$tmp_dir")" \
+  "$(drain_config_body)"
+
+default_cdc_config_body() {
+  (
+    RUN_DIR="$tmp_dir"
+    REPO_ROOT="$tmp_dir"
+    MYSQL_PORT=3306
+    POSTGRES_PORT=5432
+    CDC_CONFIG="$tmp_dir/cdc.ini"
+    write_cdc_config mysql-bin.000003 1484
+    grep -E '^(batch_sink_interval_secs|checkpoint_interval_secs|log_dir)=' "$tmp_dir/cdc.ini"
+  )
+}
+assert_eq "write_cdc_config keeps the normal cdc run unchanged by default" \
+  "$(printf 'checkpoint_interval_secs=1\nbatch_sink_interval_secs=0\nlog_dir=%s/engine-logs/cdc' "$tmp_dir")" \
+  "$(default_cdc_config_body)"
+
 if (( failures > 0 )); then
   printf '%d test(s) failed\n' "$failures" >&2
   exit 1

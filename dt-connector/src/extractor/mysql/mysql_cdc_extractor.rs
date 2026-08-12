@@ -194,13 +194,31 @@ impl MysqlCdcExtractor {
         // start heartbeat
         self.start_heartbeat(self.base_extractor.cancel_token.clone())?;
 
+        // Pinned once and reused across events: creating a WaitForCancellationFuture per binlog
+        // event would cost two mutex ops per event in the hottest loop of the extractor.
+        let cancelled = self.base_extractor.cancel_token.clone().cancelled_owned();
+        tokio::pin!(cancelled);
+
         loop {
             if self.base_extractor.time_filter.ended {
                 stream.close().await?;
                 return Ok(());
             }
 
-            let (header, data) = stream.read().await?;
+            // An idle binlog stream never returns, so the read must be racing the token:
+            // without this arm a cancelled CDC task hangs until something is written upstream.
+            let (header, data) = tokio::select! {
+                biased;
+                _ = &mut cancelled => {
+                    // Best effort: the read future was dropped mid-message, so a failing close
+                    // is expected noise and must not turn a clean shutdown into a task error.
+                    if let Err(e) = stream.close().await {
+                        log_warn!("failed to close the binlog stream on shutdown: {}", e);
+                    }
+                    return Ok(());
+                }
+                read = stream.read() => read?,
+            };
             match data {
                 EventData::Rotate(r) => {
                     ctx.binlog_filename = r.binlog_filename;
