@@ -97,8 +97,11 @@ async fn main() -> std::io::Result<()> {
     // Create the alert engine state.
     let alert_engine_state = alert_engine::AlertEngineState::new();
 
-    // Create the idempotency cache for lifecycle/clear dedup.
+    // Create the idempotency cache for lifecycle/clear dedup, and start the
+    // background sweep — `get` alone only evicts keys someone asks about, so
+    // the map would otherwise grow for the process's whole lifetime.
     let idempotency_cache = IdempotencyCache::new();
+    dt_console_server::idempotency::spawn_evictor(idempotency_cache.clone());
 
     // Create the SSE session tracker for closing connections on session invalidation.
     let sse_session_tracker = SseSessionTracker::new();

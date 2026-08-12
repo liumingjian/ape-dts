@@ -2066,3 +2066,261 @@ async fn test_start_task_blocked_by_license_cap() {
     std::env::remove_var("APE_DTS_BINARY_PATH");
     cleanup_run_dirs(&pool, &task_id).await;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SIGNAL DELIVERY AND IDEMPOTENCY NAMESPACING
+//
+// These exercise the stop endpoint against Runs seeded directly into the DB,
+// with no in-memory handle — the path that signals the engine by PID. That is
+// deliberate: it needs no engine process, so it does not depend on precheck
+// being able to reach the task's endpoints.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Create a task through the API and evaluate to its id.
+macro_rules! create_task {
+    ($app:expr, $cookies:expr) => {{
+        let req = add_auth(
+            test::TestRequest::post()
+                .uri("/api/tasks")
+                .set_json(serde_json::json!({
+                    "kind": "snapshot",
+                    "engineSource": "mysql",
+                    "engineTarget": "mysql",
+                    "sourceEndpoint": { "url": "mysql://db-src.example.com:3307/testdb" },
+                    "targetEndpoint": { "url": "mysql://db-dst.example.com:3308/testdb" },
+                    "filter": { "doDbs": ["testdb"] }
+                })),
+            $cookies,
+        )
+        .to_request();
+        let resp = test::call_service(&$app, req).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let body: serde_json::Value = test::read_body_json(resp).await;
+        body["id"].as_str().unwrap().to_string()
+    }};
+}
+
+/// Seed a `running` Run for `task_id` with the given pid and log dir.
+async fn seed_running_run(
+    pool: &SqlitePool,
+    task_id: &str,
+    pid: Option<i64>,
+    log_dir: Option<String>,
+) -> String {
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let run = dt_console_server::models::Run {
+        id: uuid::Uuid::new_v4().to_string(),
+        task_id: Some(task_id.to_string()),
+        status: "running".to_string(),
+        pid,
+        ini_path: None,
+        log_dir,
+        started_at: Some(now.clone()),
+        stopped_at: None,
+        exit_code: None,
+        stop_method: None,
+        metrics_port: None,
+        created_at: now.clone(),
+        updated_at: now,
+    };
+    RunRepository::create(pool, &run).await.unwrap();
+    run.id
+}
+
+#[actix_web::test]
+async fn test_stop_of_already_exited_process_succeeds() {
+    let (pool, active_runs) = setup().await;
+    let app = test::init_service(build_test_app(pool.clone(), active_runs)).await;
+    let cookies = do_login!(app, "admin", "admin123");
+    let task_id = create_task!(app, &cookies);
+
+    // A pid that is not in use: `kill` reports ESRCH, which means the process
+    // is already gone — the caller's intent already holds, so stop succeeds.
+    let run_id = seed_running_run(&pool, &task_id, Some(4_194_303), None).await;
+
+    let req = add_auth(
+        test::TestRequest::post().uri(&format!("/api/tasks/{task_id}/stop")),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::ACCEPTED);
+
+    let run = RunRepository::find_by_id(&pool, &run_id).await.unwrap();
+    assert_eq!(run.status, "stopped");
+}
+
+#[actix_web::test]
+async fn test_stop_leaves_run_running_when_signal_cannot_be_delivered() {
+    // pid 1 belongs to root; an unprivileged process gets EPERM. As root every
+    // signal lands, so there is no undeliverable pid to test with — and we are
+    // certainly not SIGTERM-ing init to find out.
+    #[cfg(unix)]
+    if unsafe { libc::geteuid() } == 0 {
+        eprintln!("skipped: running as root, no undeliverable pid available");
+        return;
+    }
+
+    let (pool, active_runs) = setup().await;
+    let app = test::init_service(build_test_app(pool.clone(), active_runs)).await;
+    let cookies = do_login!(app, "admin", "admin123");
+    let task_id = create_task!(app, &cookies);
+
+    let run_id = seed_running_run(&pool, &task_id, Some(1), None).await;
+
+    let req = add_auth(
+        test::TestRequest::post().uri(&format!("/api/tasks/{task_id}/stop")),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(
+        resp.status(),
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "an undeliverable signal must surface as an error"
+    );
+
+    let run = RunRepository::find_by_id(&pool, &run_id).await.unwrap();
+    assert_eq!(
+        run.status, "running",
+        "the run must not be marked stopped while its process is still alive"
+    );
+}
+
+// ─── Idempotency-Key namespacing ────────────────────────────────────────
+//
+// The cache key is `user_id:method:path:key`. With a bare key, one key reused
+// across two endpoints replayed the first call's cached 202 for the second —
+// the second action never ran, while the API reported success.
+
+#[actix_web::test]
+async fn test_same_idempotency_key_on_a_different_task_is_not_replayed() {
+    let (pool, active_runs) = setup().await;
+    let app = test::init_service(build_test_app(pool.clone(), active_runs)).await;
+    let cookies = do_login!(app, "admin", "admin123");
+
+    let task_a = create_task!(app, &cookies);
+    let task_b = create_task!(app, &cookies);
+    seed_running_run(&pool, &task_a, Some(4_194_303), None).await;
+    // Task B has no active Run at all.
+
+    let key = "one-key-for-everything";
+
+    let req = add_auth(
+        test::TestRequest::post()
+            .uri(&format!("/api/tasks/{task_a}/stop"))
+            .insert_header(("Idempotency-Key", key)),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::ACCEPTED);
+
+    let req = add_auth(
+        test::TestRequest::post()
+            .uri(&format!("/api/tasks/{task_b}/stop"))
+            .insert_header(("Idempotency-Key", key)),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(
+        resp.status(),
+        StatusCode::CONFLICT,
+        "task B must be judged on its own state, not replay task A's 202"
+    );
+}
+
+#[actix_web::test]
+async fn test_replayed_idempotency_key_on_the_same_endpoint_is_still_cached() {
+    let (pool, active_runs) = setup().await;
+    let app = test::init_service(build_test_app(pool.clone(), active_runs)).await;
+    let cookies = do_login!(app, "admin", "admin123");
+
+    let task_id = create_task!(app, &cookies);
+    seed_running_run(&pool, &task_id, Some(4_194_303), None).await;
+
+    let key = "retry-the-same-stop";
+    let mut statuses = Vec::new();
+    for _ in 0..2 {
+        let req = add_auth(
+            test::TestRequest::post()
+                .uri(&format!("/api/tasks/{task_id}/stop"))
+                .insert_header(("Idempotency-Key", key)),
+            &cookies,
+        )
+        .to_request();
+        statuses.push(test::call_service(&app, req).await.status());
+    }
+
+    // Without the cache the second call would be a 409: the run is no longer
+    // active. Dedup within the namespace still has to work.
+    assert_eq!(statuses[0], StatusCode::ACCEPTED);
+    assert_eq!(
+        statuses[1],
+        StatusCode::ACCEPTED,
+        "a retried stop with the same key must replay the cached 202"
+    );
+}
+
+// ─── Log file whitelist ─────────────────────────────────────────────────
+
+#[actix_web::test]
+async fn test_log_endpoint_serves_child_stdout_and_stderr() {
+    let (pool, active_runs) = setup().await;
+    let app = test::init_service(build_test_app(pool.clone(), active_runs)).await;
+    let cookies = do_login!(app, "admin", "admin123");
+    let task_id = create_task!(app, &cookies);
+
+    // Stand in for the child-output capture the executor sets up: when the
+    // engine dies before log4rs is up, this is the only record of why.
+    let log_dir = std::env::temp_dir().join(format!("dt-log-whitelist-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&log_dir).unwrap();
+    std::fs::write(log_dir.join("stdout.log"), "engine says hello\n").unwrap();
+    std::fs::write(
+        log_dir.join("stderr.log"),
+        "init failed: cannot connect to source\n",
+    )
+    .unwrap();
+
+    let run_id = seed_running_run(
+        &pool,
+        &task_id,
+        Some(4_194_303),
+        Some(log_dir.to_string_lossy().to_string()),
+    )
+    .await;
+
+    for (file, expected) in [
+        ("stdout", "engine says hello"),
+        ("stderr", "init failed: cannot connect to source"),
+    ] {
+        let req = add_auth(
+            test::TestRequest::get().uri(&format!("/api/runs/{run_id}/logs?file={file}")),
+            &cookies,
+        )
+        .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(
+            resp.status(),
+            StatusCode::OK,
+            "{file} must be a readable log file"
+        );
+        let body = test::read_body(resp).await;
+        assert!(
+            String::from_utf8_lossy(&body).contains(expected),
+            "{file} content should be served verbatim"
+        );
+    }
+
+    // The whitelist still holds against everything else.
+    let req = add_auth(
+        test::TestRequest::get().uri(&format!("/api/runs/{run_id}/logs?file=passwd")),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_ne!(resp.status(), StatusCode::OK, "unknown files stay rejected");
+
+    let _ = std::fs::remove_dir_all(&log_dir);
+}

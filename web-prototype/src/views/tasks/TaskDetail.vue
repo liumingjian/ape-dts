@@ -651,7 +651,7 @@ async function loadObjects() {
 
 /* ---------- Logs tab (SSE) ---------- */
 const logFile = ref('default');
-const logFiles = ['task', 'default', 'position', 'monitor', 'commit', 'finished', 'http'];
+const logFiles = ['task', 'default', 'position', 'monitor', 'commit', 'finished', 'http', 'stdout', 'stderr'];
 const logLevelFilter = ref('ALL');
 const logPaused = ref(false);
 const logPaneRef = ref<HTMLElement | null>(null);

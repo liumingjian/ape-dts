@@ -19,7 +19,7 @@ use tokio::sync::Mutex;
 use crate::alarm_dispatcher;
 use crate::alert_engine::AlertEvent;
 use crate::error::{codes, ApiError};
-use crate::idempotency::{extract_key, IdempotencyCache};
+use crate::idempotency::{extract_scoped_key, IdempotencyCache};
 use crate::middleware::rbac::{self, RbacAction};
 use crate::models::{Alert, UserContext};
 use crate::repositories::alarm_channel_repository::AlarmChannelRepository;
@@ -239,7 +239,7 @@ pub async fn clear_alert(
     }
 
     // Idempotency-Key check: if the key was seen before, return the cached result.
-    let idem_key = extract_key(&req);
+    let idem_key = extract_scoped_key(&req, &user.user_id);
     if let Some(ref key) = idem_key {
         if let Some(cached) = idempotency_cache.get(key).await {
             return HttpResponse::build(
@@ -334,7 +334,7 @@ pub async fn clear_batch(
     }
 
     // Idempotency-Key check: if the key was seen before, return the cached result.
-    let idem_key = extract_key(&req);
+    let idem_key = extract_scoped_key(&req, &user.user_id);
     if let Some(ref key) = idem_key {
         if let Some(cached) = idempotency_cache.get(key).await {
             return HttpResponse::build(

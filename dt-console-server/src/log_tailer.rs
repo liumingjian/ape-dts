@@ -1,16 +1,21 @@
 //! LogTailer — tails per-Run log files and emits chunks.
 //!
-//! Supports the seven known log file names: default, position, monitor,
-//! finished, task, http, commit. Uses polling to detect new content.
-//! Handles file rotation/truncation by restarting from offset 0.
+//! Supports the seven engine log files (default, position, monitor, finished,
+//! task, http, commit) plus the child's captured `stdout`/`stderr`. The latter
+//! two matter when `dt-main` dies before log4rs is up: the reason is then only
+//! in the `eprintln!` output, and exit code 2/3 would otherwise be all the UI
+//! can show. Uses polling to detect new content. Handles file
+//! rotation/truncation by restarting from offset 0.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
-/// The seven known log file names produced by the engine.
+/// The log file names a Run can expose: the seven produced by the engine's
+/// logger, plus the `stdout.log`/`stderr.log` the orchestrator redirects the
+/// child's own output into (see `executor::LocalExecutor::spawn`).
 pub const KNOWN_LOG_FILES: &[&str] = &[
-    "default", "position", "monitor", "finished", "task", "http", "commit",
+    "default", "position", "monitor", "finished", "task", "http", "commit", "stdout", "stderr",
 ];
 
 /// Default polling interval for log tailing.
@@ -260,6 +265,10 @@ mod tests {
         assert!(is_known_log_file("task"));
         assert!(is_known_log_file("http"));
         assert!(is_known_log_file("commit"));
+        // The child's own output — the only place an early `eprintln!` exit
+        // reason shows up.
+        assert!(is_known_log_file("stdout"));
+        assert!(is_known_log_file("stderr"));
         assert!(!is_known_log_file("nope"));
         assert!(!is_known_log_file(""));
     }
@@ -283,6 +292,7 @@ mod tests {
         // Valid
         assert_eq!(sanitise_log_file_name("default").unwrap(), "default");
         assert_eq!(sanitise_log_file_name("position").unwrap(), "position");
+        assert_eq!(sanitise_log_file_name("stderr").unwrap(), "stderr");
     }
 
     #[test]

@@ -8,6 +8,12 @@
 //! The cache is in-memory and per-process. Keys expire after 60 seconds.
 //! This is sufficient to deduplicate retries from network blips or
 //! client-side retries.
+//!
+//! Keys are **namespaced** as `user_id:method:path:key` (see
+//! [`extract_scoped_key`]). A bare header value would be shared across every
+//! endpoint, so a client that reuses one key for a "restart" — stop, then
+//! start — would get the stop's cached 202 replayed for the start, and the
+//! task would never actually start while the API reported success.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -88,10 +94,58 @@ impl IdempotencyCache {
     }
 }
 
+/// How often the background evictor sweeps expired entries.
+const EVICTION_INTERVAL: Duration = Duration::from_secs(60);
+
+/// Spawn the background evictor for `cache`.
+///
+/// `get` only evicts the key it is asked about, so without this sweep the map
+/// grows for the process's whole lifetime — every key ever seen stays resident
+/// long after its TTL.
+pub fn spawn_evictor(cache: IdempotencyCache) -> tokio::task::JoinHandle<()> {
+    spawn_evictor_every(cache, EVICTION_INTERVAL)
+}
+
+/// Spawn the background evictor with an explicit sweep interval (for tests).
+pub fn spawn_evictor_every(
+    cache: IdempotencyCache,
+    interval: Duration,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(interval);
+        // The first tick fires immediately; skip it, nothing can be stale yet.
+        ticker.tick().await;
+        loop {
+            ticker.tick().await;
+            cache.evict_expired().await;
+        }
+    })
+}
+
 /// Header name for the idempotency key.
 pub const IDEMPOTENCY_KEY_HEADER: &str = "Idempotency-Key";
 
-/// Extract the Idempotency-Key from a request, if present.
+/// Build the namespaced cache key for an idempotency key.
+///
+/// The namespace is `user_id:method:path:key`, so the same header value
+/// reused across users, verbs, or routes never collides. `path` carries the
+/// resource id, so start-task-A and start-task-B are distinct too.
+pub fn scoped_key(user_id: &str, method: &str, path: &str, key: &str) -> String {
+    format!("{user_id}:{method}:{path}:{key}")
+}
+
+/// Extract the Idempotency-Key from a request and namespace it for `user_id`.
+///
+/// Handlers should use this rather than [`extract_key`]: it is the only form
+/// that is safe to hand to [`IdempotencyCache`].
+pub fn extract_scoped_key(req: &actix_web::HttpRequest, user_id: &str) -> Option<String> {
+    extract_key(req).map(|key| scoped_key(user_id, req.method().as_str(), req.path(), &key))
+}
+
+/// Extract the raw Idempotency-Key from a request, if present.
+///
+/// The raw value is *not* a cache key — namespace it with [`scoped_key`]
+/// (or use [`extract_scoped_key`]) before touching the cache.
 pub fn extract_key(req: &actix_web::HttpRequest) -> Option<String> {
     req.headers()
         .get(IDEMPOTENCY_KEY_HEADER)
@@ -192,6 +246,101 @@ mod tests {
         assert!(cache.get("fresh-key").await.is_some());
         // Old key should be gone.
         assert!(cache.get("old-key").await.is_none());
+    }
+
+    #[test]
+    fn test_scoped_key_namespaces_user_method_and_path() {
+        assert_eq!(
+            scoped_key("u1", "POST", "/api/tasks/t1/start", "k"),
+            "u1:POST:/api/tasks/t1/start:k"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_same_raw_key_on_start_and_stop_does_not_collide() {
+        // The bug this namespacing fixes: a client reusing one key for
+        // "restart" (stop then start) used to get the stop's cached response
+        // replayed for the start, so the start never ran.
+        let cache = IdempotencyCache::new();
+        let stop = scoped_key("u1", "POST", "/api/tasks/t1/stop", "restart-1");
+        let start = scoped_key("u1", "POST", "/api/tasks/t1/start", "restart-1");
+
+        cache
+            .put(&stop, 202, serde_json::json!({"run_id": "old"}))
+            .await;
+
+        assert!(
+            cache.get(&start).await.is_none(),
+            "start must not read the stop's cached response"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_same_raw_key_across_users_does_not_collide() {
+        let cache = IdempotencyCache::new();
+        let a = scoped_key("user-a", "POST", "/api/tasks/t1/start", "k");
+        let b = scoped_key("user-b", "POST", "/api/tasks/t1/start", "k");
+        cache.put(&a, 202, serde_json::json!({"run_id": "a"})).await;
+        assert!(cache.get(&b).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_same_raw_key_across_tasks_does_not_collide() {
+        let cache = IdempotencyCache::new();
+        let t1 = scoped_key("u1", "POST", "/api/tasks/t1/start", "k");
+        let t2 = scoped_key("u1", "POST", "/api/tasks/t2/start", "k");
+        cache
+            .put(&t1, 202, serde_json::json!({"run_id": "r1"}))
+            .await;
+        assert!(cache.get(&t2).await.is_none());
+    }
+
+    #[test]
+    fn test_extract_scoped_key_uses_request_method_and_path() {
+        let req = actix_web::test::TestRequest::post()
+            .uri("/api/tasks/t1/start")
+            .insert_header(("Idempotency-Key", "abc-123"))
+            .to_http_request();
+        assert_eq!(
+            extract_scoped_key(&req, "u1"),
+            Some("u1:POST:/api/tasks/t1/start:abc-123".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_scoped_key_absent_stays_none() {
+        let req = actix_web::test::TestRequest::post()
+            .uri("/api/tasks/t1/start")
+            .to_http_request();
+        assert!(extract_scoped_key(&req, "u1").is_none());
+    }
+
+    #[tokio::test]
+    async fn test_spawn_evictor_sweeps_expired_entries() {
+        let cache = IdempotencyCache::new();
+        // Insert an already-expired entry: the sweep, not the TTL, is the
+        // thing under test, so the interval is what we shorten.
+        {
+            let mut map = cache.inner.lock().await;
+            map.insert(
+                "k".to_string(),
+                CachedResponse {
+                    status: 202,
+                    body: serde_json::json!({"run_id": "r"}),
+                    cached_at: Instant::now() - Duration::from_secs(120),
+                },
+            );
+        }
+        let handle = spawn_evictor_every(cache.clone(), Duration::from_millis(20));
+
+        // Two ticks' worth: the first tick is consumed at startup.
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        assert!(
+            cache.inner.lock().await.is_empty(),
+            "the evictor must drop expired entries without anyone reading them"
+        );
+        handle.abort();
     }
 
     #[test]

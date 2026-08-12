@@ -530,27 +530,15 @@ fn parse_position_kv(s: &str) -> serde_json::Value {
     }
 }
 
-/// Check process liveness by PID using `kill(pid, 0)`.
+/// Check process liveness by PID.
 ///
-/// Returns `ChildStatus::Running` if the process exists,
-/// or `ChildStatus::Exited` if it does not.
-#[cfg(unix)]
+/// Uses the null signal (`kill(pid, 0)`) via [`crate::signal::is_alive`].
 fn pid_status(pid: u32) -> ChildStatus {
-    if pid > 0 && unsafe { libc::kill(pid as i32, 0) == 0 } {
+    if crate::signal::is_alive(pid) {
         ChildStatus::Running
     } else {
         ChildStatus::Exited(ExitStatus::Exited { code: -1 })
     }
-}
-
-/// Check process liveness by PID (non-Unix fallback).
-///
-/// Always returns `Exited` on non-Unix platforms since we cannot
-/// reliably check PID liveness without `kill(pid, 0)`.
-#[cfg(not(unix))]
-fn pid_status(pid: u32) -> ChildStatus {
-    let _ = pid;
-    ChildStatus::Exited(ExitStatus::Exited { code: -1 })
 }
 
 /// Kill a re-attached process by PID with graceful shutdown.
@@ -566,7 +554,7 @@ async fn kill_reattached(pid: u32, grace_secs: u64) -> Result<KillResult, String
     let mut stop_method = "sigterm".to_string();
 
     loop {
-        if unsafe { libc::kill(pid as i32, 0) != 0 } {
+        if !crate::signal::is_alive(pid) {
             return Ok(KillResult {
                 stop_method,
                 exit_status: ExitStatus::Exited { code: -1 },
@@ -579,7 +567,7 @@ async fn kill_reattached(pid: u32, grace_secs: u64) -> Result<KillResult, String
             // Wait for SIGKILL to take effect.
             let kill_deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(2);
             loop {
-                if unsafe { libc::kill(pid as i32, 0) != 0 } {
+                if !crate::signal::is_alive(pid) {
                     return Ok(KillResult {
                         stop_method,
                         exit_status: ExitStatus::Signaled { signal: 9 },
@@ -607,37 +595,16 @@ async fn kill_reattached(pid: u32, _grace_secs: u64) -> Result<KillResult, Strin
 }
 
 /// Send SIGTERM to a process by PID.
-#[cfg(unix)]
+///
+/// Delegates to [`crate::signal`], so an undeliverable signal (`EPERM`) is an
+/// error rather than a silent success; an already-exited process is success.
 fn send_sigterm(pid: u32) -> Result<(), String> {
-    use std::process::Command;
-    Command::new("kill")
-        .args(["-s", "TERM", &pid.to_string()])
-        .output()
-        .map_err(|e| format!("failed to send SIGTERM to pid {pid}: {e}"))?;
-    Ok(())
+    crate::signal::send(pid, crate::signal::EngineSignal::Term).map(|_| ())
 }
 
 /// Send SIGKILL to a process by PID.
-#[cfg(unix)]
 fn send_sigkill(pid: u32) -> Result<(), String> {
-    use std::process::Command;
-    Command::new("kill")
-        .args(["-s", "KILL", &pid.to_string()])
-        .output()
-        .map_err(|e| format!("failed to send SIGKILL to pid {pid}: {e}"))?;
-    Ok(())
-}
-
-/// Send SIGTERM to a process by PID (non-Unix fallback).
-#[cfg(not(unix))]
-fn send_sigterm(pid: u32) -> Result<(), String> {
-    Err("SIGTERM is not supported on this platform".to_string())
-}
-
-/// Send SIGKILL to a process by PID (non-Unix fallback).
-#[cfg(not(unix))]
-fn send_sigkill(pid: u32) -> Result<(), String> {
-    Err("SIGKILL is not supported on this platform".to_string())
+    crate::signal::send(pid, crate::signal::EngineSignal::Kill).map(|_| ())
 }
 
 /// Convert `std::process::ExitStatus` to our `ExitStatus`.
@@ -972,17 +939,11 @@ mod tests {
         );
 
         // Verify process is gone.
-        // On Unix, kill -0 checks if a process exists.
         #[cfg(unix)]
-        {
-            let check = std::process::Command::new("kill")
-                .args(["-0", &pid.to_string()])
-                .output();
-            assert!(
-                check.is_err() || !check.unwrap().status.success(),
-                "process {pid} should be gone after kill"
-            );
-        }
+        assert!(
+            !crate::signal::is_alive(pid),
+            "process {pid} should be gone after kill"
+        );
 
         let _ = std::fs::remove_dir_all(&handle.run_dir);
     }
@@ -1148,8 +1109,10 @@ mod tests {
         #[cfg(unix)]
         {
             tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-            let alive = unsafe { libc::kill(pid as i32, 0) == 0 };
-            assert!(!alive, "process {pid} should be gone after kill");
+            assert!(
+                !crate::signal::is_alive(pid),
+                "process {pid} should be gone after kill"
+            );
         }
 
         let _ = std::fs::remove_dir_all(&spawned.run_dir);
