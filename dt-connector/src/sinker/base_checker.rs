@@ -20,7 +20,7 @@ use crate::{
 use dt_common::meta::{
     col_value::ColValue, mongo::mongo_constant::MongoConstants, mysql::mysql_tb_meta::MysqlTbMeta,
     pg::pg_tb_meta::PgTbMeta, rdb_meta_manager::RdbMetaManager, rdb_tb_meta::RdbTbMeta,
-    row_data::RowData, row_type::RowType,
+    row_data::RowData, row_key::RowKey, row_type::RowType,
     struct_meta::statement::struct_statement::StructStatement,
     struct_meta::struct_data::StructData,
 };
@@ -276,11 +276,11 @@ impl BaseChecker {
     async fn resolve_inconsistencies_with_retry<B: Checker>(
         checker: &B,
         src_data: &[RowData],
-        src_keys: &[u128],
-        mut dst_row_data_map: HashMap<u128, RowData>,
+        src_keys: &[RowKey],
+        mut dst_row_data_map: HashMap<RowKey, RowData>,
         recheck_settings: (u64, u32),
         tb_meta: &CheckerTbMeta,
-    ) -> anyhow::Result<HashMap<u128, RowData>> {
+    ) -> anyhow::Result<HashMap<RowKey, RowData>> {
         let (retry_interval_secs, max_retries) = recheck_settings;
         if max_retries == 0 {
             return Ok(dst_row_data_map);
@@ -308,7 +308,7 @@ impl BaseChecker {
             let new_dst_rows = checker.fetch_batch(tb_meta, &retry_rows).await?;
 
             for row in new_dst_rows {
-                let key = row.get_hash_code(tb_meta.basic())?;
+                let key = RowKey::from_row_data(&row, tb_meta.basic())?;
                 dst_row_data_map.insert(key, row);
             }
 
@@ -411,8 +411,8 @@ impl BaseChecker {
 
     async fn check_and_generate_logs(
         src_data: &[RowData],
-        src_keys: &[u128],
-        mut dst_row_data_map: HashMap<u128, RowData>,
+        src_keys: &[RowKey],
+        mut dst_row_data_map: HashMap<RowKey, RowData>,
         common: &mut CheckerCommon,
         tb_meta: &CheckerTbMeta,
     ) -> anyhow::Result<(Vec<CheckLog>, Vec<CheckLog>, usize)> {
@@ -935,7 +935,7 @@ impl BaseChecker {
         let dst_rows = checker.fetch_batch(&tb_meta, &data_refs).await?;
         let mut dst_row_data_map = HashMap::with_capacity(dst_rows.len());
         for row in dst_rows {
-            let key = row.get_hash_code(tb_meta.basic())?;
+            let key = RowKey::from_row_data(&row, tb_meta.basic())?;
             dst_row_data_map.insert(key, row);
         }
         let mut rts = LimitedQueue::new(1);
@@ -946,9 +946,9 @@ impl BaseChecker {
         };
 
         // 2. compute src keys
-        let src_keys: Vec<u128> = data
+        let src_keys: Vec<RowKey> = data
             .iter()
-            .map(|row| row.get_hash_code(tb_meta.basic()))
+            .map(|row| RowKey::from_row_data(row, tb_meta.basic()))
             .collect::<anyhow::Result<_>>()?;
 
         // 3. resolve inconsistencies with retry

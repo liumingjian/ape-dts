@@ -19,6 +19,7 @@ pub mod rdb_meta_manager;
 pub mod rdb_tb_meta;
 pub mod redis;
 pub mod row_data;
+pub mod row_key;
 pub mod row_type;
 pub mod struct_meta;
 pub mod syncer;
