@@ -8,7 +8,8 @@ use url::Url;
 
 const DEFAULT_ORACLE_PORT: u16 = 1521;
 const ORACLE_HOME: &str = "/u01/app/oracle/product/11.2.0/xe";
-const CONNECTED_BANNER: &str = "Connected.";
+/// Echoed by the script right after CONNECT; its absence in stdout means "not connected".
+const CONNECT_MARKER: &str = "APE_DTS_SQLPLUS_CONNECTED";
 
 fn has_sqlplus_error(text: &str) -> bool {
     text.lines().any(|line| {
@@ -76,15 +77,40 @@ impl OracleSqlPlusClient {
         Ok(format!("\"{}\"", password))
     }
 
+    /// The username lands in the script body, where a newline would start a second SQL*Plus
+    /// command (`HOST ...` runs a shell), so it is restricted to what an Oracle identifier can
+    /// hold. Quoting is not an option here: `CONNECT "x"` is a case-sensitive identifier and
+    /// would break every existing lowercase-in-config user.
+    fn check_connect_username(username: &str) -> anyhow::Result<()> {
+        if username.is_empty() {
+            bail!("oracle connection_auth username is empty");
+        }
+        if let Some(bad) = username
+            .chars()
+            .find(|c| !(c.is_ascii_alphanumeric() || matches!(c, '_' | '$' | '#')))
+        {
+            bail!(
+                "oracle username contains a character that is not allowed in a sqlplus CONNECT: {:?}. Allowed: letters, digits, '_', '$', '#'.",
+                bad
+            );
+        }
+        Ok(())
+    }
+
     /// The connect identifier, fed to sqlplus through the script (stdin) rather than argv so the
     /// password never shows up in the process list (`ps`, and `docker exec bash -lc` alike).
     fn build_connect_command(&self) -> anyhow::Result<String> {
-        let (username, password) = self.get_basic_auth()?;
-        let (_host, _port, service) = self.parse_url()?;
-
         // For local dt-tests we run `sqlplus` inside the Oracle XE container. In that mode,
         // connect to the in-container listener (`127.0.0.1:1521`) and reuse the service name.
-        let (host, port) = if Self::docker_container().is_some() {
+        self.build_connect_command_inner(Self::docker_container().is_some())
+    }
+
+    fn build_connect_command_inner(&self, in_docker: bool) -> anyhow::Result<String> {
+        let (username, password) = self.get_basic_auth()?;
+        Self::check_connect_username(&username)?;
+        let (_host, _port, service) = self.parse_url()?;
+
+        let (host, port) = if in_docker {
             ("127.0.0.1".to_string(), DEFAULT_ORACLE_PORT)
         } else {
             let (host, port, _service) = self.parse_url()?;
@@ -125,6 +151,11 @@ impl OracleSqlPlusClient {
         }
         out.push_str(connect);
         out.push('\n');
+        // `WHENEVER SQLERROR` does not cover SQL*Plus commands, so a failed CONNECT would let the
+        // rest of the script run unconnected and still `EXIT` with 0 (and, on the stdin path,
+        // sqlplus would eat the following lines as an interactive user-name/password prompt).
+        // The marker is the proof that the session is connected; run_sqlplus fails without it.
+        out.push_str(&format!("SELECT '{}' FROM DUAL;\n", CONNECT_MARKER));
         out.push_str(sql);
         let trimmed = sql.trim_end();
         // Allow callers to pass fully-terminated multi-statement scripts (including PL/SQL blocks
@@ -138,15 +169,13 @@ impl OracleSqlPlusClient {
         out
     }
 
-    /// `sqlplus -s` normally stays quiet about CONNECT, but some releases still echo
-    /// `Connected.` before the query output. Drop it when it is the first line so it cannot be
-    /// mistaken for a result row.
-    fn strip_connected_banner(lines: Vec<String>) -> Vec<String> {
-        let mut lines = lines;
-        if lines.first().map(|l| l.as_str()) == Some(CONNECTED_BANNER) {
-            lines.remove(0);
-        }
-        lines
+    /// Splits sqlplus stdout at the connect marker, dropping everything up to and including it -
+    /// the `Connected.` banner some releases print, and any CONNECT diagnostics. `None` means the
+    /// session never got connected.
+    fn split_at_connect_marker(stdout: &str) -> Option<String> {
+        let mut lines = stdout.lines();
+        lines.by_ref().find(|line| line.trim() == CONNECT_MARKER)?;
+        Some(lines.collect::<Vec<_>>().join("\n"))
     }
 
     async fn run_sqlplus(&self, script: &str) -> anyhow::Result<(String, String)> {
@@ -155,7 +184,7 @@ impl OracleSqlPlusClient {
             // The script (carrying CONNECT, hence the password) arrives on stdin and lands in a
             // `mktemp` file, which is created 0600 - never on the command line.
             let command = format!(
-                "export ORACLE_HOME={}; export PATH=$ORACLE_HOME/bin:$PATH; export LD_LIBRARY_PATH=$ORACLE_HOME/lib; umask 077; tmp=$(mktemp /tmp/ape-dts-sql.XXXXXX) || exit 1; cat > \"$tmp\"; sqlplus -s /nolog @\"$tmp\"; rc=$?; rm -f \"$tmp\"; exit $rc",
+                "export ORACLE_HOME={}; export PATH=$ORACLE_HOME/bin:$PATH; export LD_LIBRARY_PATH=$ORACLE_HOME/lib; umask 077; tmp=$(mktemp /tmp/ape-dts-sql.XXXXXX) || exit 1; trap 'rm -f \"$tmp\"' EXIT HUP INT TERM; cat > \"$tmp\"; sqlplus -s /nolog @\"$tmp\"",
                 ORACLE_HOME
             );
             let mut c = Command::new("docker");
@@ -200,6 +229,15 @@ impl OracleSqlPlusClient {
                 stdout.trim()
             );
         }
+
+        let Some(stdout) = Self::split_at_connect_marker(&stdout) else {
+            bail!(
+                "sqlplus never connected (exit={:?}); the script ran unconnected or the login was rejected. stderr: {}\nstdout: {}",
+                output.status.code(),
+                stderr.trim(),
+                stdout.trim()
+            );
+        };
         Ok((stdout, stderr))
     }
 
@@ -212,13 +250,11 @@ impl OracleSqlPlusClient {
     pub async fn query_lines(&self, sql: &str) -> anyhow::Result<Vec<String>> {
         let script = Self::build_sqlplus_script(&self.build_connect_command()?, sql, true);
         let (stdout, _stderr) = self.run_sqlplus(&script).await?;
-        Ok(Self::strip_connected_banner(
-            stdout
-                .lines()
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect(),
-        ))
+        Ok(stdout
+            .lines()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect())
     }
 }
 
@@ -262,7 +298,9 @@ mod tests {
             "INSERT INTO t VALUES ('A&B')",
             false,
         );
-        let define_off = script.find("SET DEFINE OFF;").expect("SET DEFINE OFF missing");
+        let define_off = script
+            .find("SET DEFINE OFF;")
+            .expect("SET DEFINE OFF missing");
         let connect = script.find("CONNECT ").expect("CONNECT missing");
         assert!(
             define_off < connect,
@@ -306,7 +344,12 @@ mod tests {
 
     #[test]
     fn quotes_password_in_connect_command() {
-        let connect = client(Some("p@ss/word 1")).build_connect_command().unwrap();
+        // `build_connect_command_inner` takes the docker flag explicitly: reading
+        // ORACLE_SQLPLUS_DOCKER_CONTAINER here would make these assertions depend on the ambient
+        // env, which the Oracle e2e setup does export.
+        let connect = client(Some("p@ss/word 1"))
+            .build_connect_command_inner(false)
+            .unwrap();
         assert_eq!(
             connect,
             "CONNECT ape_dts/\"p@ss/word 1\"@//db.example.com:1522/XE"
@@ -315,14 +358,16 @@ mod tests {
 
     #[test]
     fn keeps_empty_password_unquoted() {
-        let connect = client(None).build_connect_command().unwrap();
+        let connect = client(None).build_connect_command_inner(false).unwrap();
         assert_eq!(connect, "CONNECT ape_dts/@//db.example.com:1522/XE");
     }
 
     #[test]
     fn rejects_passwords_sqlplus_connect_cannot_express() {
         for password in ["pa\"ss", "pa\nss", "pa\rss"] {
-            let err = client(Some(password)).build_connect_command().unwrap_err();
+            let err = client(Some(password))
+                .build_connect_command_inner(false)
+                .unwrap_err();
             assert!(
                 err.to_string().contains("sqlplus CONNECT cannot express"),
                 "unexpected error for {:?}: {}",
@@ -333,20 +378,70 @@ mod tests {
     }
 
     #[test]
-    fn strips_leading_connected_banner_only() {
-        let lines = vec![
-            "Connected.".to_string(),
-            "APE_DTS".to_string(),
-            "Connected.".to_string(),
-        ];
-        assert_eq!(
-            OracleSqlPlusClient::strip_connected_banner(lines),
-            vec!["APE_DTS".to_string(), "Connected.".to_string()]
+    fn redirects_to_the_container_listener_in_docker_mode() {
+        let connect = client(Some("pw"))
+            .build_connect_command_inner(true)
+            .unwrap();
+        assert_eq!(connect, "CONNECT ape_dts/\"pw\"@//127.0.0.1:1521/XE");
+    }
+
+    #[test]
+    fn rejects_usernames_that_could_inject_a_second_sqlplus_command() {
+        for username in [
+            "ape_dts\nHOST rm -rf /",
+            "ape\"dts",
+            "ape dts",
+            "ape/dts",
+            "",
+        ] {
+            let client = OracleSqlPlusClient::new(
+                "oracle://db.example.com:1522/XE".to_string(),
+                ConnectionAuthConfig::Basic {
+                    username: username.to_string(),
+                    password: Some("pw".to_string()),
+                },
+            );
+            assert!(
+                client.build_connect_command_inner(false).is_err(),
+                "username {:?} should have been rejected",
+                username
+            );
+        }
+        let client = OracleSqlPlusClient::new(
+            "oracle://db.example.com:1522/XE".to_string(),
+            ConnectionAuthConfig::Basic {
+                username: "APE_DTS$1#".to_string(),
+                password: Some("pw".to_string()),
+            },
         );
-        assert_eq!(
-            OracleSqlPlusClient::strip_connected_banner(vec!["APE_DTS".to_string()]),
-            vec!["APE_DTS".to_string()]
+        assert!(client.build_connect_command_inner(false).is_ok());
+    }
+
+    #[test]
+    fn proves_the_session_connected_before_the_caller_sql() {
+        let script = OracleSqlPlusClient::build_sqlplus_script(
+            "CONNECT ape_dts@//db:1521/XE",
+            "SELECT 1 FROM DUAL",
+            true,
         );
-        assert!(OracleSqlPlusClient::strip_connected_banner(vec![]).is_empty());
+        let connect = script.find("CONNECT ").unwrap();
+        let marker = script.find(CONNECT_MARKER).expect("connect marker missing");
+        let sql = script.find("SELECT 1 FROM DUAL").unwrap();
+        assert!(connect < marker && marker < sql);
+    }
+
+    #[test]
+    fn drops_everything_up_to_the_connect_marker() {
+        let stdout = format!("Connected.\n{}\nAPE_DTS\n11.2.0.2.0\n", CONNECT_MARKER);
+        assert_eq!(
+            OracleSqlPlusClient::split_at_connect_marker(&stdout).unwrap(),
+            "APE_DTS\n11.2.0.2.0"
+        );
+    }
+
+    #[test]
+    fn reports_a_session_that_never_connected() {
+        assert!(OracleSqlPlusClient::split_at_connect_marker("Connected.\nAPE_DTS\n").is_none());
+        assert!(OracleSqlPlusClient::split_at_connect_marker("").is_none());
     }
 }
