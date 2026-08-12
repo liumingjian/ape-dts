@@ -8,10 +8,7 @@ use url::Url;
 
 const DEFAULT_ORACLE_PORT: u16 = 1521;
 const ORACLE_HOME: &str = "/u01/app/oracle/product/11.2.0/xe";
-
-fn shell_quote_single(s: &str) -> String {
-    format!("'{}'", s.replace('\'', "'\\''"))
-}
+const CONNECTED_BANNER: &str = "Connected.";
 
 fn has_sqlplus_error(text: &str) -> bool {
     text.lines().any(|line| {
@@ -65,7 +62,23 @@ impl OracleSqlPlusClient {
         }
     }
 
-    fn build_login(&self) -> anyhow::Result<String> {
+    /// SQL*Plus `CONNECT` parses the password itself, so wrap it in double quotes to keep
+    /// separators (`/`, `@`, spaces) inside the password. `"` has no escape form there, and a
+    /// newline would split the CONNECT command, so both are rejected instead of silently
+    /// producing a different connect string.
+    fn quote_connect_password(password: &str) -> anyhow::Result<String> {
+        if password.is_empty() {
+            return Ok(String::new());
+        }
+        if password.contains('"') || password.contains('\n') || password.contains('\r') {
+            bail!("oracle password contains characters sqlplus CONNECT cannot express: '\"' or newline. Use a password without them, or connect through a wallet.");
+        }
+        Ok(format!("\"{}\"", password))
+    }
+
+    /// The connect identifier, fed to sqlplus through the script (stdin) rather than argv so the
+    /// password never shows up in the process list (`ps`, and `docker exec bash -lc` alike).
+    fn build_connect_command(&self) -> anyhow::Result<String> {
         let (username, password) = self.get_basic_auth()?;
         let (_host, _port, service) = self.parse_url()?;
 
@@ -79,14 +92,25 @@ impl OracleSqlPlusClient {
         };
 
         Ok(format!(
-            "{}/{}@//{}:{}/{}",
-            username, password, host, port, service
+            "CONNECT {}/{}@//{}:{}/{}",
+            username,
+            Self::quote_connect_password(&password)?,
+            host,
+            port,
+            service
         ))
     }
 
-    fn build_sqlplus_script(sql: &str, with_query_format: bool) -> String {
+    fn build_sqlplus_script(connect: &str, sql: &str, with_query_format: bool) -> String {
         let mut out = String::new();
         out.push_str("WHENEVER SQLERROR EXIT SQL.SQLCODE;\n");
+        // Must precede CONNECT: without it SQL*Plus treats `&` in *any* text - including the
+        // password and string literals such as 'A&B' - as a substitution variable, silently
+        // rewriting the value or swallowing the rest of the script while it waits for input.
+        out.push_str("SET DEFINE OFF;\n");
+        // Blank lines inside a statement (multi-line text values) would otherwise end it early,
+        // truncating the value. Every statement we emit is terminated with `;` or `/`.
+        out.push_str("SET SQLBLANKLINES ON;\n");
         out.push_str("SET PAGESIZE 0;\n");
         out.push_str("SET FEEDBACK OFF;\n");
         out.push_str("SET VERIFY OFF;\n");
@@ -99,6 +123,8 @@ impl OracleSqlPlusClient {
             out.push_str("SET COLSEP '|';\n");
             out.push_str("SET NULL '<NULL>';\n");
         }
+        out.push_str(connect);
+        out.push('\n');
         out.push_str(sql);
         let trimmed = sql.trim_end();
         // Allow callers to pass fully-terminated multi-statement scripts (including PL/SQL blocks
@@ -112,15 +138,25 @@ impl OracleSqlPlusClient {
         out
     }
 
-    async fn run_sqlplus(&self, script: &str) -> anyhow::Result<(String, String)> {
-        let login = self.build_login()?;
+    /// `sqlplus -s` normally stays quiet about CONNECT, but some releases still echo
+    /// `Connected.` before the query output. Drop it when it is the first line so it cannot be
+    /// mistaken for a result row.
+    fn strip_connected_banner(lines: Vec<String>) -> Vec<String> {
+        let mut lines = lines;
+        if lines.first().map(|l| l.as_str()) == Some(CONNECTED_BANNER) {
+            lines.remove(0);
+        }
+        lines
+    }
 
+    async fn run_sqlplus(&self, script: &str) -> anyhow::Result<(String, String)> {
         let docker_container = Self::docker_container();
         let mut cmd = if let Some(container) = docker_container {
-            let quoted_login = shell_quote_single(&login);
+            // The script (carrying CONNECT, hence the password) arrives on stdin and lands in a
+            // `mktemp` file, which is created 0600 - never on the command line.
             let command = format!(
-                "export ORACLE_HOME={}; export PATH=$ORACLE_HOME/bin:$PATH; export LD_LIBRARY_PATH=$ORACLE_HOME/lib; tmp=$(mktemp /tmp/ape-dts-sql.XXXXXX); cat > \"$tmp\"; sqlplus -s {} @\"$tmp\"; rc=$?; rm -f \"$tmp\"; exit $rc",
-                ORACLE_HOME, quoted_login
+                "export ORACLE_HOME={}; export PATH=$ORACLE_HOME/bin:$PATH; export LD_LIBRARY_PATH=$ORACLE_HOME/lib; umask 077; tmp=$(mktemp /tmp/ape-dts-sql.XXXXXX) || exit 1; cat > \"$tmp\"; sqlplus -s /nolog @\"$tmp\"; rc=$?; rm -f \"$tmp\"; exit $rc",
+                ORACLE_HOME
             );
             let mut c = Command::new("docker");
             c.arg("exec")
@@ -132,7 +168,7 @@ impl OracleSqlPlusClient {
             c
         } else {
             let mut c = Command::new("sqlplus");
-            c.arg("-s").arg(login);
+            c.arg("-s").arg("/nolog");
             c
         };
 
@@ -168,25 +204,38 @@ impl OracleSqlPlusClient {
     }
 
     pub async fn exec(&self, sql: &str) -> anyhow::Result<()> {
-        let script = Self::build_sqlplus_script(sql, false);
+        let script = Self::build_sqlplus_script(&self.build_connect_command()?, sql, false);
         let _ = self.run_sqlplus(&script).await?;
         Ok(())
     }
 
     pub async fn query_lines(&self, sql: &str) -> anyhow::Result<Vec<String>> {
-        let script = Self::build_sqlplus_script(sql, true);
+        let script = Self::build_sqlplus_script(&self.build_connect_command()?, sql, true);
         let (stdout, _stderr) = self.run_sqlplus(&script).await?;
-        Ok(stdout
-            .lines()
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect())
+        Ok(Self::strip_connected_banner(
+            stdout
+                .lines()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect(),
+        ))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::has_sqlplus_error;
+    use super::*;
+    use dt_common::config::connection_auth_config::ConnectionAuthConfig;
+
+    fn client(password: Option<&str>) -> OracleSqlPlusClient {
+        OracleSqlPlusClient::new(
+            "oracle://db.example.com:1522/XE".to_string(),
+            ConnectionAuthConfig::Basic {
+                username: "ape_dts".to_string(),
+                password: password.map(|p| p.to_string()),
+            },
+        )
+    }
 
     #[test]
     fn detects_oracle_error_in_sqlplus_stdout() {
@@ -204,5 +253,100 @@ mod tests {
     fn allows_normal_sqlplus_query_output() {
         let stdout = "APE_DTS\n11.2.0.2.0\n";
         assert!(!has_sqlplus_error(stdout));
+    }
+
+    #[test]
+    fn disables_substitution_variables_before_connecting() {
+        let script = OracleSqlPlusClient::build_sqlplus_script(
+            "CONNECT ape_dts/\"pa&ss\"@//db:1521/XE",
+            "INSERT INTO t VALUES ('A&B')",
+            false,
+        );
+        let define_off = script.find("SET DEFINE OFF;").expect("SET DEFINE OFF missing");
+        let connect = script.find("CONNECT ").expect("CONNECT missing");
+        assert!(
+            define_off < connect,
+            "SET DEFINE OFF must precede CONNECT, script was:\n{}",
+            script
+        );
+        assert!(script.contains("'A&B'"));
+    }
+
+    #[test]
+    fn keeps_blank_lines_inside_statements() {
+        let script = OracleSqlPlusClient::build_sqlplus_script(
+            "CONNECT ape_dts@//db:1521/XE",
+            "INSERT INTO t VALUES ('line1\n\nline3')",
+            false,
+        );
+        assert!(script.contains("SET SQLBLANKLINES ON;"));
+        assert!(script.contains("'line1\n\nline3')"));
+    }
+
+    #[test]
+    fn terminates_script_after_connect_and_sql() {
+        let script = OracleSqlPlusClient::build_sqlplus_script(
+            "CONNECT ape_dts@//db:1521/XE",
+            "SELECT 1 FROM DUAL",
+            true,
+        );
+        assert!(script.contains("SET COLSEP '|';"));
+        assert!(script.ends_with("SELECT 1 FROM DUAL;\nEXIT;\n"));
+    }
+
+    #[test]
+    fn does_not_double_terminate_plsql_blocks() {
+        let script = OracleSqlPlusClient::build_sqlplus_script(
+            "CONNECT ape_dts@//db:1521/XE",
+            "BEGIN NULL; END;\n/",
+            false,
+        );
+        assert!(script.ends_with("BEGIN NULL; END;\n/\nEXIT;\n"));
+    }
+
+    #[test]
+    fn quotes_password_in_connect_command() {
+        let connect = client(Some("p@ss/word 1")).build_connect_command().unwrap();
+        assert_eq!(
+            connect,
+            "CONNECT ape_dts/\"p@ss/word 1\"@//db.example.com:1522/XE"
+        );
+    }
+
+    #[test]
+    fn keeps_empty_password_unquoted() {
+        let connect = client(None).build_connect_command().unwrap();
+        assert_eq!(connect, "CONNECT ape_dts/@//db.example.com:1522/XE");
+    }
+
+    #[test]
+    fn rejects_passwords_sqlplus_connect_cannot_express() {
+        for password in ["pa\"ss", "pa\nss", "pa\rss"] {
+            let err = client(Some(password)).build_connect_command().unwrap_err();
+            assert!(
+                err.to_string().contains("sqlplus CONNECT cannot express"),
+                "unexpected error for {:?}: {}",
+                password,
+                err
+            );
+        }
+    }
+
+    #[test]
+    fn strips_leading_connected_banner_only() {
+        let lines = vec![
+            "Connected.".to_string(),
+            "APE_DTS".to_string(),
+            "Connected.".to_string(),
+        ];
+        assert_eq!(
+            OracleSqlPlusClient::strip_connected_banner(lines),
+            vec!["APE_DTS".to_string(), "Connected.".to_string()]
+        );
+        assert_eq!(
+            OracleSqlPlusClient::strip_connected_banner(vec!["APE_DTS".to_string()]),
+            vec!["APE_DTS".to_string()]
+        );
+        assert!(OracleSqlPlusClient::strip_connected_banner(vec![]).is_empty());
     }
 }
