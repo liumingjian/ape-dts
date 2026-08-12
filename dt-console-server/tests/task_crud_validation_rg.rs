@@ -1688,9 +1688,292 @@ async fn preview_ini_matches_renderer_output() {
     let actual_ini = String::from_utf8(body.to_vec()).unwrap();
 
     assert_eq!(
-        actual_ini, expected_ini,
-        "preview_ini must match IniRenderer::render output byte-for-byte"
+        actual_ini,
+        dt_console_server::redaction::redact_ini(&expected_ini),
+        "preview_ini must match IniRenderer::render output byte-for-byte, minus secrets"
     );
+}
+
+// ─── Secret redaction across read surfaces ──────────────────────────────────
+
+const SRC_SECRET: &str = "src_s3cr3t";
+const DST_SECRET: &str = "dst_s3cr3t";
+
+/// A task whose every secret-bearing slot is populated: endpoint passwords,
+/// credentialed URLs, and extractor/sinker passwords.
+fn secretful_task_body() -> serde_json::Value {
+    serde_json::json!({
+        "kind": "snapshot",
+        "engineSource": "mysql",
+        "engineTarget": "mysql",
+        "sourceEndpoint": {
+            "url": format!("mysql://root:{SRC_SECRET}@203.0.113.1:3306/src_db"),
+            "username": "root",
+            "password": SRC_SECRET,
+        },
+        "targetEndpoint": {
+            "url": format!("mysql://root:{DST_SECRET}@203.0.113.2:3306/dst_db"),
+            "username": "root",
+            "password": DST_SECRET,
+        },
+        "extractor": {"extractType": "snapshot", "password": SRC_SECRET},
+        "sinker": {"sinkType": "write", "password": DST_SECRET},
+        "filter": {},
+        "router": {},
+        "parallelizer": {"parallelSize": 2},
+        "pipeline": {"bufferSize": 4},
+        "resumer": {},
+        "processor": {},
+        "runtime": {},
+        "metrics": {}
+    })
+}
+
+macro_rules! create_secretful_task {
+    ($app:expr, $cookies:expr) => {{
+        let req = add_auth(
+            test::TestRequest::post()
+                .uri("/api/tasks")
+                .set_json(secretful_task_body()),
+            $cookies,
+        )
+        .to_request();
+        let resp = test::call_service(&$app, req).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let task: serde_json::Value = test::read_body_json(resp).await;
+        task["id"].as_str().unwrap().to_string()
+    }};
+}
+
+/// Every surface a viewer can reach must be free of plaintext secrets — that is
+/// the whole point of the ticket: `export?format=json` used to be the only one
+/// redacted, so `GET /tasks/:id`, `GET /tasks`, `preview_ini` and the INI export
+/// all handed live database passwords to a read-only role.
+#[actix_web::test]
+async fn viewer_read_surfaces_carry_no_plaintext_secret() {
+    let pool = setup().await;
+    let app = test::init_service(build_test_app(pool.clone())).await;
+
+    let admin_cookies = do_login!(app, "admin", "admin123");
+    let task_id = create_secretful_task!(app, &admin_cookies);
+
+    seed_user(&pool, "viewer1", "view123", "viewer", false).await;
+    let viewer_cookies = do_login!(app, "viewer1", "view123");
+
+    for uri in [
+        format!("/api/tasks/{task_id}"),
+        "/api/tasks".to_string(),
+        format!("/api/tasks/{task_id}/preview_ini"),
+        format!("/api/tasks/{task_id}/export?format=json"),
+        format!("/api/tasks/{task_id}/export?format=ini"),
+    ] {
+        let req = add_auth(test::TestRequest::get().uri(&uri), &viewer_cookies).to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK, "GET {uri}");
+        let body = String::from_utf8(test::read_body(resp).await.to_vec()).unwrap();
+        assert!(
+            !body.contains(SRC_SECRET) && !body.contains(DST_SECRET),
+            "GET {uri} leaked a plaintext secret: {body}"
+        );
+        // Redacted, not merely absent — the field is still there.
+        assert!(
+            body.contains("<redacted>") || body.contains("******"),
+            "GET {uri} should carry a redaction placeholder: {body}"
+        );
+        // The non-secret half of a URL survives, so the task stays identifiable.
+        assert!(body.contains("203.0.113.1"), "GET {uri} dropped the host");
+    }
+}
+
+/// Plaintext is reachable, but only by an admin and never silently.
+#[actix_web::test]
+async fn reveal_ini_is_admin_only_and_audited() {
+    let pool = setup().await;
+    let app = test::init_service(build_test_app(pool.clone())).await;
+
+    let admin_cookies = do_login!(app, "admin", "admin123");
+    let task_id = create_secretful_task!(app, &admin_cookies);
+
+    // Viewer: denied, and the denial is recorded.
+    seed_user(&pool, "viewer1", "view123", "viewer", false).await;
+    let viewer_cookies = do_login!(app, "viewer1", "view123");
+    let req = add_auth(
+        test::TestRequest::get().uri(&format!("/api/tasks/{task_id}/reveal_ini")),
+        &viewer_cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+
+    // Operator too — reveal is not part of the day-to-day task permissions.
+    seed_user(&pool, "operator1", "oper123", "operator", false).await;
+    let operator_cookies = do_login!(app, "operator1", "oper123");
+    let req = add_auth(
+        test::TestRequest::get().uri(&format!("/api/tasks/{task_id}/reveal_ini")),
+        &operator_cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+
+    // Admin: gets the real INI.
+    let req = add_auth(
+        test::TestRequest::get().uri(&format!("/api/tasks/{task_id}/reveal_ini")),
+        &admin_cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let ini = String::from_utf8(test::read_body(resp).await.to_vec()).unwrap();
+    assert!(ini.contains(SRC_SECRET) && ini.contains(DST_SECRET));
+
+    // Audit trail: one denial per rejected role, one success for the admin.
+    let req = add_auth(
+        test::TestRequest::get().uri("/api/operate_logs?action=tasks.reveal_secrets"),
+        &admin_cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let logs: serde_json::Value = test::read_body_json(resp).await;
+    let items = logs["items"].as_array().unwrap();
+    let results: Vec<(&str, &str)> = items
+        .iter()
+        .map(|i| (i["actor"].as_str().unwrap(), i["result"].as_str().unwrap()))
+        .collect();
+    assert!(results.contains(&("admin", "success")), "{results:?}");
+    assert!(results.contains(&("viewer1", "denied")), "{results:?}");
+    assert!(results.contains(&("operator1", "denied")), "{results:?}");
+}
+
+/// A client edits what it was shown — which no longer contains the password. If
+/// echoing the placeholder back overwrote the stored secret, every unrelated
+/// edit would silently break the task's connection.
+#[actix_web::test]
+async fn update_echoing_placeholders_keeps_stored_secrets() {
+    let pool = setup().await;
+    let app = test::init_service(build_test_app(pool.clone())).await;
+    let cookies = do_login!(app, "admin", "admin123");
+    let task_id = create_secretful_task!(app, &cookies);
+
+    // Read back the redacted task and PATCH it straight back, unchanged.
+    let req = add_auth(
+        test::TestRequest::get().uri(&format!("/api/tasks/{task_id}")),
+        &cookies,
+    )
+    .to_request();
+    let redacted: serde_json::Value =
+        test::read_body_json(test::call_service(&app, req).await).await;
+
+    let req = add_auth(
+        test::TestRequest::patch()
+            .uri(&format!("/api/tasks/{task_id}"))
+            .set_json(serde_json::json!({
+                "name": "renamed",
+                "sourceEndpoint": redacted["sourceEndpoint"],
+                "targetEndpoint": redacted["targetEndpoint"],
+                "extractor": redacted["extractor"],
+                "sinker": redacted["sinker"],
+            })),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let stored = dt_console_server::repositories::task_repository::TaskRepository::find_by_id(
+        &pool, &task_id,
+    )
+    .await
+    .unwrap();
+    assert!(
+        stored.source_endpoint.contains(SRC_SECRET),
+        "{}",
+        stored.source_endpoint
+    );
+    assert!(
+        stored.target_endpoint.contains(DST_SECRET),
+        "{}",
+        stored.target_endpoint
+    );
+    assert!(stored.extractor_config.contains(SRC_SECRET));
+    assert!(stored.sinker_config.contains(DST_SECRET));
+    assert!(!stored.source_endpoint.contains("<redacted>"));
+    assert_eq!(stored.name, "renamed");
+}
+
+/// A genuinely new password still gets through — the placeholder is the only
+/// value treated as "leave it alone".
+#[actix_web::test]
+async fn update_with_a_new_password_changes_it() {
+    let pool = setup().await;
+    let app = test::init_service(build_test_app(pool.clone())).await;
+    let cookies = do_login!(app, "admin", "admin123");
+    let task_id = create_secretful_task!(app, &cookies);
+
+    let req = add_auth(
+        test::TestRequest::patch()
+            .uri(&format!("/api/tasks/{task_id}"))
+            .set_json(serde_json::json!({
+                "sourceEndpoint": {
+                    "url": "mysql://203.0.113.1:3306/src_db",
+                    "username": "root",
+                    "password": "rotated_secret",
+                },
+            })),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let stored = dt_console_server::repositories::task_repository::TaskRepository::find_by_id(
+        &pool, &task_id,
+    )
+    .await
+    .unwrap();
+    assert!(stored.source_endpoint.contains("rotated_secret"));
+    assert!(!stored.source_endpoint.contains(SRC_SECRET));
+}
+
+/// Re-importing an export carries placeholders where the secrets were; storing
+/// them would produce a task that cannot connect for invisible reasons.
+#[actix_web::test]
+async fn import_rejects_redaction_placeholder() {
+    let pool = setup().await;
+    let app = test::init_service(build_test_app(pool.clone())).await;
+    let cookies = do_login!(app, "admin", "admin123");
+    let task_id = create_secretful_task!(app, &cookies);
+
+    let req = add_auth(
+        test::TestRequest::get().uri(&format!("/api/tasks/{task_id}/export?format=json")),
+        &cookies,
+    )
+    .to_request();
+    let exported: serde_json::Value =
+        test::read_body_json(test::call_service(&app, req).await).await;
+
+    let req = add_auth(
+        test::TestRequest::post()
+            .uri("/api/tasks/import")
+            .set_json(serde_json::json!({
+                "kind": exported["kind"],
+                "engineSource": "mysql",
+                "engineTarget": "mysql",
+                "sourceEndpoint": exported["sourceEndpoint"],
+                "targetEndpoint": exported["targetEndpoint"],
+                "extractor": exported["extractor"],
+                "sinker": exported["sinker"],
+                "parallelizer": exported["parallelizer"],
+                "pipeline": exported["pipeline"],
+            })),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    let err: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(err["code"], "REDACTED_SECRET_IN_IMPORT");
 }
 
 // ─── VAL-TASK-015: Task deletion with FK cascade ────────────────────────

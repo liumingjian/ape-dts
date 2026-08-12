@@ -91,6 +91,7 @@ pub mod codes {
 
     // Export
     pub const UNSUPPORTED_EXPORT_FORMAT: &str = "UNSUPPORTED_EXPORT_FORMAT";
+    pub const REDACTED_SECRET_IN_IMPORT: &str = "REDACTED_SECRET_IN_IMPORT";
 
     // Log / SSE
     pub const UNKNOWN_LOG_FILE: &str = "UNKNOWN_LOG_FILE";

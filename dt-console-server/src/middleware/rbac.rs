@@ -22,6 +22,8 @@ pub enum RbacAction {
     TaskDelete,
     TaskStart,
     TaskStop,
+    /// Read a task's live credentials (plaintext INI). Admin only, audited.
+    TaskRevealSecrets,
 
     // User management
     UsersList,
@@ -82,6 +84,7 @@ impl std::fmt::Display for RbacAction {
             RbacAction::TaskDelete => "task.delete",
             RbacAction::TaskStart => "task.start",
             RbacAction::TaskStop => "task.stop",
+            RbacAction::TaskRevealSecrets => "task.reveal_secrets",
             RbacAction::UsersList => "users.list",
             RbacAction::UsersCreate => "users.create",
             RbacAction::UsersRead => "users.read",
@@ -201,6 +204,7 @@ mod tests {
             RbacAction::TaskDelete,
             RbacAction::TaskStart,
             RbacAction::TaskStop,
+            RbacAction::TaskRevealSecrets,
             RbacAction::UsersList,
             RbacAction::UsersCreate,
             RbacAction::UsersRead,

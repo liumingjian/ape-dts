@@ -25,6 +25,7 @@ pub mod operate_log_handlers;
 pub mod port_pool;
 pub mod precheck_handlers;
 pub mod rate_limit;
+pub mod redaction;
 pub mod repositories;
 pub mod resource_group_handlers;
 pub mod run_handlers;
@@ -76,6 +77,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(task_handlers::delete_task)
             .service(task_handlers::preview_ini)
             .service(task_handlers::export_task)
+            .service(task_handlers::reveal_ini)
             .service(task_handlers::import_tasks)
             .service(task_handlers::clone_task)
             .service(task_handlers::list_task_runs)
