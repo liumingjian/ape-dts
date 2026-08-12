@@ -518,8 +518,6 @@ struct ResumeContext {
     previous_run_id: String,
     /// Its `log_dir` — the position the new engine starts from.
     log_dir: String,
-    /// Its rendered INI path, handed to the resumer as `config_file`.
-    config_file: String,
     /// The audit action label for the operate log ("tasks.resume").
     audit_action: &'static str,
 }
@@ -809,7 +807,6 @@ async fn start_run(
             &task,
             &ini_renderer::ResumeOverrides {
                 log_dir: ctx.log_dir.clone(),
-                config_file: ctx.config_file.clone(),
             },
         );
         resume_overrides_applied = rendered.applied;
@@ -911,13 +908,29 @@ async fn start_run(
     run.metrics_port = Some(metrics_port as i64);
     run.updated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
-    // The engine is up. Close out the paused predecessor *now*, before the
-    // successor row exists: two rows of the same task in an active status
-    // would make `find_active_by_task` pick one at random, and every stop or
-    // pause after this point would address the wrong Run.
+    let _saved = match RunRepository::create(&pool, &run).await {
+        Ok(r) => r,
+        Err(e) => {
+            // Failed to persist — release port, kill the child process, clean up slot.
+            port_pool.release(metrics_port).await;
+            let _ = executor::LocalExecutor::kill_with_grace(&handle, 3).await;
+            {
+                let mut active = active_runs.lock().await;
+                active.remove(&task_id);
+            }
+            return ApiError::new(codes::INTERNAL_ERROR, format!("run creation failed: {e}"))
+                .error_response();
+        }
+    };
+
+    // The successor row exists, so close out the paused predecessor. Doing
+    // it in this order matters: if the row had failed to persist, the engine
+    // gets killed and the caller gets a 500 — and the predecessor must still
+    // be `paused` for that retry to be possible. `find_active_by_task` picks
+    // the most recent Run, so the brief overlap resolves to the successor.
     if let Some(ctx) = resume.as_ref() {
         if let Err(e) = close_out_resumed_run(&pool, &ctx.previous_run_id).await {
-            tracing::warn!(
+            tracing::error!(
                 "resume: failed to close out predecessor run {}: {e}",
                 ctx.previous_run_id
             );
@@ -938,21 +951,6 @@ async fn start_run(
             .await;
         }
     }
-
-    let _saved = match RunRepository::create(&pool, &run).await {
-        Ok(r) => r,
-        Err(e) => {
-            // Failed to persist — release port, kill the child process, clean up slot.
-            port_pool.release(metrics_port).await;
-            let _ = executor::LocalExecutor::kill_with_grace(&handle, 3).await;
-            {
-                let mut active = active_runs.lock().await;
-                active.remove(&task_id);
-            }
-            return ApiError::new(codes::INTERNAL_ERROR, format!("run creation failed: {e}"))
-                .error_response();
-        }
-    };
 
     // Write control log result.
     let _ = write_control_result(
@@ -1078,10 +1076,12 @@ pub async fn stop_task(
         }
     };
 
-    // Only running or paused runs can be stopped. `pausing` is deliberately
-    // excluded: a graceful stop is already in flight and the supervisor is
-    // about to give it a terminal status.
-    if !matches!(active_run.status.as_str(), "running" | "paused") {
+    // `pausing` is stoppable too, and deliberately so: a pause whose engine
+    // will not exit (a re-attached Run whose pid was recycled, an engine
+    // wedged in its drain) would otherwise have no way out at all, and
+    // `is_active` would freeze the task forever. Stopping it re-labels the
+    // intent as `stopping` and escalates SIGTERM → SIGKILL as usual.
+    if !matches!(active_run.status.as_str(), "running" | "pausing" | "paused") {
         return ApiError::with_details(
             codes::ILLEGAL_TRANSITION,
             "Run is not in a stoppable state",
@@ -1372,18 +1372,43 @@ pub async fn pause_task(
     // Mark `pausing` BEFORE signalling. The supervisor reads this status to
     // tell a requested pause from a requested stop from an external kill, so
     // it has to be persisted before the exit it is meant to explain.
-    let status_before_pause = run.status.clone();
-    run.status = run_status::PAUSING.to_string();
-    run.updated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-    if let Err(e) = RunRepository::update(&pool, &run).await {
-        let _ =
-            write_control_result(&pool, &task_id, &run_id, "pause", "error", &user.username).await;
-        return ApiError::new(
-            codes::INTERNAL_ERROR,
-            format!("run status update failed: {e}"),
-        )
-        .error_response();
+    //
+    // Conditional on the Run still being `running`: the engine may have
+    // exited on its own since the read above, in which case the supervisor
+    // has already written a terminal status — and writing this row back
+    // wholesale would resurrect it as `pausing`, with no process left and
+    // nothing watching it, freezing the task forever.
+    match RunRepository::transition_status(&pool, &run_id, run_status::RUNNING, run_status::PAUSING)
+        .await
+    {
+        Ok(true) => {}
+        Ok(false) => {
+            let current = RunRepository::find_by_id(&pool, &run_id)
+                .await
+                .map(|r| r.status)
+                .unwrap_or_else(|_| "unknown".to_string());
+            let _ =
+                write_control_result(&pool, &task_id, &run_id, "pause", "error", &user.username)
+                    .await;
+            return ApiError::with_details(
+                codes::ILLEGAL_TRANSITION,
+                "The run left the running state before the pause could be applied",
+                serde_json::json!({ "from": current, "to": "pausing" }),
+            )
+            .error_response();
+        }
+        Err(e) => {
+            let _ =
+                write_control_result(&pool, &task_id, &run_id, "pause", "error", &user.username)
+                    .await;
+            return ApiError::new(
+                codes::INTERNAL_ERROR,
+                format!("run status update failed: {e}"),
+            )
+            .error_response();
+        }
     }
+    run.status = run_status::PAUSING.to_string();
 
     // Final scrape while the engine's metrics server is still up, then stop
     // scraping: after the SIGTERM there is no process left to scrape.
@@ -1399,12 +1424,7 @@ pub async fn pause_task(
         Err(e) => {
             // Roll back so a retry is possible — a Run stuck in `pausing`
             // with a live engine would never be finalised by anyone.
-            run.status = status_before_pause;
-            run.updated_at =
-                chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-            if let Err(e) = RunRepository::update(&pool, &run).await {
-                tracing::warn!("failed to roll run {} back after failed pause: {e}", run_id);
-            }
+            rollback_pausing(&pool, &run_id).await;
             let _ =
                 write_control_result(&pool, &task_id, &run_id, "pause", "error", &user.username)
                     .await;
@@ -1412,7 +1432,14 @@ pub async fn pause_task(
                 write_run_audit_log(&pool, &user.username, "tasks.pause", "error", &run_id, &ip)
                     .await;
             return ApiError::with_details(
-                codes::INTERNAL_ERROR,
+                if e.starts_with(STILL_STARTING) {
+                    // A transient race with a start in flight, not a fault:
+                    // the caller should retry, and a 500 tells them to file
+                    // a bug instead.
+                    codes::ILLEGAL_TRANSITION
+                } else {
+                    codes::INTERNAL_ERROR
+                },
                 format!("failed to signal the engine process: {e}"),
                 serde_json::json!({ "run_id": run_id, "pid": run.pid }),
             )
@@ -1428,20 +1455,13 @@ pub async fn pause_task(
         // up as a pause. Put the Run back to `running` and let the
         // supervisor finalise it from the real exit code.
         tracing::warn!("pause: engine process for run {} is already gone", run_id);
-        run.status = status_before_pause;
-        run.updated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-        if let Err(e) = RunRepository::update(&pool, &run).await {
-            tracing::warn!(
-                "failed to roll run {} back after a no-op pause: {e}",
-                run_id
-            );
-        }
+        rollback_pausing(&pool, &run_id).await;
         let _ =
             write_control_result(&pool, &task_id, &run_id, "pause", "error", &user.username).await;
         return ApiError::with_details(
             codes::ILLEGAL_TRANSITION,
             "Cannot pause a run whose engine process is gone",
-            serde_json::json!({ "from": run.status, "to": "paused", "run_id": run_id }),
+            serde_json::json!({ "from": run_status::RUNNING, "to": "paused", "run_id": run_id }),
         )
         .error_response();
     }
@@ -1464,6 +1484,25 @@ pub async fn pause_task(
     HttpResponse::Accepted().json(serde_json::json!({ "run_id": run_id }))
 }
 
+/// Does this Run's log directory still hold the position log a resume needs?
+fn position_log_exists(log_dir: &str) -> bool {
+    PathBuf::from(log_dir).join("position.log").is_file()
+}
+
+/// Undo a `pausing` mark whose signal never went out.
+///
+/// Conditional on the Run still being `pausing`: if the supervisor finalised
+/// it in the meantime (the engine died on its own), that verdict is the truth
+/// and must not be overwritten with `running`.
+async fn rollback_pausing(pool: &sqlx::SqlitePool, run_id: &str) {
+    if let Err(e) =
+        RunRepository::transition_status(pool, run_id, run_status::PAUSING, run_status::RUNNING)
+            .await
+    {
+        tracing::warn!("failed to roll run {run_id} back out of pausing: {e}");
+    }
+}
+
 /// Why this task cannot be paused, or `None` when it can.
 fn pause_unsupported_reason(task: &Task) -> Option<&'static str> {
     if !matches!(task.kind.as_str(), "snapshot" | "cdc") {
@@ -1484,6 +1523,9 @@ fn pause_unsupported_reason(task: &Task) -> Option<&'static str> {
     None
 }
 
+/// Marker prefix for "the engine is mid-spawn" — a retryable conflict.
+const STILL_STARTING: &str = "the run is still starting";
+
 /// Send the pause SIGTERM, preferring the in-memory child handle and falling
 /// back to the recorded pid for Runs re-attached after an orchestrator restart.
 async fn pause_signal_target(
@@ -1498,7 +1540,9 @@ async fn pause_signal_target(
             // Mid-spawn: there is nothing to signal yet, and dropping the
             // slot would let a second start race the one in flight.
             Some(RunSlot::Starting) => {
-                return Err("the run is still starting; retry the pause once it is running".into())
+                return Err(format!(
+                    "{STILL_STARTING}; retry the pause once it is running"
+                ))
             }
             None => match run.pid {
                 Some(pid) if pid > 0 => u32::try_from(pid).ok(),
@@ -1579,15 +1623,17 @@ pub async fn resume_task(
     }
 
     // The position log is the whole point of a resume: without it there is
-    // nothing to continue from, and starting anyway would re-run the task
-    // from its original start marker — a silent duplicate migration.
-    let (log_dir, config_file) = match (previous.log_dir.clone(), previous.ini_path.clone()) {
-        (Some(log_dir), Some(ini_path)) => (log_dir, ini_path),
-        _ => {
+    // nothing to continue from, and the engine would start from the task's
+    // original marker instead — a silent duplicate migration, not an error.
+    // The engine only warns about a missing recovery file, so the check has
+    // to happen here, against the file itself and not just the DB column.
+    let log_dir = match previous.log_dir.clone() {
+        Some(log_dir) if position_log_exists(&log_dir) => log_dir,
+        other => {
             return ApiError::with_details(
                 codes::ILLEGAL_TRANSITION,
-                "Cannot resume a run that has no position log",
-                serde_json::json!({ "run_id": previous.id }),
+                "Cannot resume a run whose position log is missing",
+                serde_json::json!({ "run_id": previous.id, "log_dir": other }),
             )
             .error_response();
         }
@@ -1596,7 +1642,6 @@ pub async fn resume_task(
     let ctx = ResumeContext {
         previous_run_id: previous.id.clone(),
         log_dir,
-        config_file,
         audit_action: "tasks.resume",
     };
 

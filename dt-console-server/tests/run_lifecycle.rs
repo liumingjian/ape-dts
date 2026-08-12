@@ -230,6 +230,14 @@ async fn test_legal_transitions() {
     assert!(dt_console_server::models::is_legal_transition(
         "paused", "stopped"
     ));
+    // A pause that will not converge must still be stoppable, or its task is
+    // frozen by `is_active` with nothing able to move it.
+    assert!(dt_console_server::models::is_legal_transition(
+        "pausing", "stopping"
+    ));
+    assert!(dt_console_server::models::is_legal_transition(
+        "pausing", "running"
+    ));
     assert!(dt_console_server::models::is_legal_transition(
         "running", "stopping"
     ));
@@ -2483,6 +2491,94 @@ async fn test_resume_rejected_when_the_paused_run_has_no_position_log() {
     assert_eq!(resp.status(), StatusCode::CONFLICT);
     let body: serde_json::Value = test::read_body_json(resp).await;
     assert_eq!(body["code"], "ILLEGAL_TRANSITION");
+}
+
+/// A `log_dir` column is not a position log: the directory may have been
+/// cleaned up, and the engine only *warns* about a missing recovery file
+/// before starting from the task's original marker — a silent re-migration.
+#[actix_web::test]
+async fn test_resume_rejected_when_the_position_log_file_is_missing() {
+    let (pool, active_runs) = setup().await;
+    let app = test::init_service(build_test_app(pool.clone(), active_runs)).await;
+    let cookies = do_login!(app, "admin", "admin123");
+    let task_id = create_task!(app, &cookies);
+
+    // A log dir that exists but holds no position.log.
+    let log_dir = std::env::temp_dir().join(format!("dt-resume-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&log_dir).unwrap();
+
+    let run_id = seed_running_run(
+        &pool,
+        &task_id,
+        Some(reaped_pid() as i64),
+        Some(log_dir.to_string_lossy().to_string()),
+    )
+    .await;
+    let mut run = RunRepository::find_by_id(&pool, &run_id).await.unwrap();
+    run.status = "paused".to_string();
+    RunRepository::update(&pool, &run).await.unwrap();
+
+    let req = add_auth(
+        test::TestRequest::post().uri(&format!("/api/tasks/{task_id}/resume")),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::CONFLICT);
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(body["code"], "ILLEGAL_TRANSITION");
+
+    let _ = std::fs::remove_dir_all(&log_dir);
+}
+
+/// A pause that will not converge must still be stoppable, or `is_active`
+/// freezes the task with nothing able to move it.
+#[actix_web::test]
+async fn test_stop_can_overtake_a_pausing_run() {
+    let (pool, active_runs) = setup().await;
+    let app = test::init_service(build_test_app(pool.clone(), active_runs)).await;
+    let cookies = do_login!(app, "admin", "admin123");
+    let task_id = create_task!(app, &cookies);
+
+    // An engine that ignores SIGTERM — exactly the case with no way out.
+    let mut child = std::process::Command::new("sh")
+        .args(["-c", "trap '' TERM; sleep 30"])
+        .spawn()
+        .expect("spawn sh");
+    let pid = child.id();
+    let run_id = seed_running_run(&pool, &task_id, Some(pid as i64), None).await;
+    let mut run = RunRepository::find_by_id(&pool, &run_id).await.unwrap();
+    run.status = "pausing".to_string();
+    RunRepository::update(&pool, &run).await.unwrap();
+
+    let req = add_auth(
+        test::TestRequest::post().uri(&format!("/api/tasks/{task_id}/stop")),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::ACCEPTED);
+
+    let run = RunRepository::find_by_id(&pool, &run_id).await.unwrap();
+    assert_eq!(run.status, "stopped");
+
+    // Reap before asking whether it is alive: an unreaped zombie still
+    // answers `kill(pid, 0)`.
+    let status = child
+        .wait()
+        .expect("the wedged engine must have been killed");
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        assert_eq!(
+            status.signal(),
+            Some(libc::SIGKILL),
+            "an engine that ignores SIGTERM has to be escalated"
+        );
+    }
+    #[cfg(not(unix))]
+    let _ = status;
+    assert!(!dt_console_server::signal::is_alive(pid));
 }
 
 /// Resuming is only legal from the task's *latest* Run: an older paused Run

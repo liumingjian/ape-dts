@@ -239,6 +239,9 @@ pub mod run_status {
 /// - pausing → paused (engine exited 143 — the position log is trustworthy)
 /// - pausing → failed (engine exited 4: the shutdown window expired, so the
 ///   position is not trustworthy and `paused` would be a lie)
+/// - pausing → running (the pause was abandoned before its signal went out)
+/// - pausing → stopping (stop overtakes a pause that will not converge —
+///   without this, a wedged `pausing` Run would freeze its task forever)
 /// - paused → running (a resume starts a *new* Run; the old one is closed
 ///   out separately as `stopped`/`resumed`)
 /// - paused → stopped (discard a paused Run without ever resuming it)
@@ -256,6 +259,8 @@ pub fn is_legal_transition(from: &str, to: &str) -> bool {
             | ("pausing", "paused")
             | ("pausing", "failed")
             | ("pausing", "stopped")
+            | ("pausing", "running")
+            | ("pausing", "stopping")
             | ("paused", "running")
             | ("paused", "stopped")
             | ("running", "stopping")

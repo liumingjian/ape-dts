@@ -110,6 +110,32 @@ impl RunRepository {
         Self::find_by_id(pool, &run.id).await
     }
 
+    /// Move a run from `from` to `to`, but only if it is still in `from`.
+    ///
+    /// Returns whether the transition happened. A handler that read a Run,
+    /// did some work and then wrote the whole row back can resurrect a Run
+    /// the supervisor has already finalised — the supervisor's `stopped`,
+    /// `exit_code` and `stopped_at` are silently overwritten by the stale
+    /// snapshot, and nothing is left watching the process. Status changes
+    /// that race the supervisor go through here instead.
+    pub async fn transition_status(
+        pool: &SqlitePool,
+        run_id: &str,
+        from: &str,
+        to: &str,
+    ) -> Result<bool, sqlx::Error> {
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let result =
+            sqlx::query("UPDATE runs SET status = ?, updated_at = ? WHERE id = ? AND status = ?")
+                .bind(to)
+                .bind(&now)
+                .bind(run_id)
+                .bind(from)
+                .execute(pool)
+                .await?;
+        Ok(result.rows_affected() == 1)
+    }
+
     /// Check whether a task has an active (non-terminal) run.
     pub async fn has_active_run(pool: &SqlitePool, task_id: &str) -> Result<bool, sqlx::Error> {
         let active = Self::find_active_by_task(pool, task_id).await?;

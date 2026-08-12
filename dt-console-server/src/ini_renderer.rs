@@ -123,6 +123,11 @@ pub fn render(task: &Task) -> String {
 ///
 /// 1. `[resumer]` must point at the paused Run's `log_dir`. Whatever the task
 ///    carries in `resumer_config` describes a fresh start, not this resume.
+///    `config_file` stays empty on purpose: the engine reads it as a *second
+///    position log*, line by line through `Position::from_log` — handing it
+///    the task INI would log every line as "invalid position log", spilling
+///    the connection strings and passwords into the new Run's log directory,
+///    which the console serves over its log endpoints.
 /// 2. `recreate_slot_if_exists` must be `false` for PG/GaussDB. The console's
 ///    golden default is `true`; recreating the replication slot throws away
 ///    the very position we are resuming from.
@@ -133,8 +138,6 @@ pub fn render(task: &Task) -> String {
 pub struct ResumeOverrides {
     /// `log_dir` of the paused Run whose position we continue.
     pub log_dir: String,
-    /// The paused Run's rendered INI, so the resumer can match config.
-    pub config_file: String,
 }
 
 /// The INI for a resumed Run, plus a human-readable record of what was forced.
@@ -158,12 +161,12 @@ pub fn render_for_resume(task: &Task, overrides: &ResumeOverrides) -> ResumeRend
     task.resumer_config = serde_json::json!({
         "resume_type": "from_log",
         "log_dir": overrides.log_dir,
-        "config_file": overrides.config_file,
+        "config_file": "",
     })
     .to_string();
     applied.push(format!(
-        "[resumer] forced to from_log(log_dir={}, config_file={}), replacing {}",
-        overrides.log_dir, overrides.config_file, previous_resumer
+        "[resumer] forced to from_log(log_dir={}), replacing {}",
+        overrides.log_dir, previous_resumer
     ));
 
     // 2 & 3. Extractor: no slot recreation, no explicit start point.
@@ -1502,7 +1505,6 @@ mod tests {
     fn resume_overrides() -> ResumeOverrides {
         ResumeOverrides {
             log_dir: "/data/runs/paused-run/logs".into(),
-            config_file: "/data/runs/paused-run/task_config.ini".into(),
         }
     }
 
@@ -1524,9 +1526,11 @@ mod tests {
         assert!(rendered.ini.contains("[resumer]"));
         assert!(rendered.ini.contains("resume_type=from_log"));
         assert!(rendered.ini.contains("log_dir=/data/runs/paused-run/logs"));
-        assert!(rendered
-            .ini
-            .contains("config_file=/data/runs/paused-run/task_config.ini"));
+        assert!(
+            !rendered.ini.contains("config_file="),
+            "config_file is a second position log, not the task INI: feeding it \
+             the INI logs every line as an invalid position, passwords included"
+        );
         assert!(!rendered.ini.contains("/somewhere/else"));
         assert!(rendered.applied.iter().any(|l| l.contains("[resumer]")));
     }
