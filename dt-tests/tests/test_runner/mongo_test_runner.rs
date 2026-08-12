@@ -350,6 +350,8 @@ impl MongoTestRunner {
                 self.execute_update(client, db, sql).await?;
             } else if sql.contains(".delete") {
                 self.execute_delete(client, db, sql).await?;
+            } else if sql.contains(".replace") {
+                self.execute_replace(client, db, sql).await?;
             }
         }
         Ok(())
@@ -483,6 +485,40 @@ impl MongoTestRunner {
         } else {
             coll.update_many(query_doc, update_doc, None).await.unwrap();
         }
+        Ok(())
+    }
+
+    async fn execute_replace(&self, client: &Client, db: &str, sql: &str) -> anyhow::Result<()> {
+        // example: db.tb_1.replaceOne({ "_id": "1" }, { "name": "a" })
+        let re = Regex::new(r"db.(\w+).replaceOne").unwrap();
+        let cap = match re.captures(sql) {
+            Some(cap) => cap,
+            None => return Ok(()),
+        };
+        let tb = cap.get(1).unwrap().as_str();
+        let args_start = sql.find('(').unwrap();
+        let args_end = sql.rfind(')').unwrap();
+        let args = &sql[args_start + 1..args_end];
+        let (query_doc, replacement_doc) = Self::split_update_args(args);
+        let json_query: Value = serde_json::from_str(&Self::normalize_doc_string(&query_doc))?;
+        let json_replacement: Value =
+            serde_json::from_str(&Self::normalize_doc_string(&replacement_doc))?;
+        let query_doc = match Self::convert_extended_json(Bson::try_from(json_query).unwrap()) {
+            Bson::Document(doc) => doc,
+            other => panic!("expected document for replace query, got {:?}", other),
+        };
+        let replacement_doc =
+            match Self::convert_extended_json(Bson::try_from(json_replacement).unwrap()) {
+                Bson::Document(doc) => doc,
+                other => panic!("expected document for replacement, got {:?}", other),
+            };
+
+        client
+            .database(db)
+            .collection::<Document>(tb)
+            .replace_one(query_doc, replacement_doc, None)
+            .await
+            .unwrap();
         Ok(())
     }
 

@@ -165,6 +165,8 @@ pub enum ExtractorConfig {
         source: String,
         heartbeat_interval_secs: u64,
         heartbeat_tb: String,
+        // error, skip
+        on_unsupported_diff: String,
     },
 
     MongoCheck {

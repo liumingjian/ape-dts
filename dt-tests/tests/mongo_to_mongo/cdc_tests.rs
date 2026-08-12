@@ -18,6 +18,23 @@ mod test {
 
     #[tokio::test]
     #[serial]
+    async fn cdc_op_log_nested_diff_test() {
+        TestBase::run_mongo_cdc_test("mongo_to_mongo/cdc/nested_diff_test", 3000, 3000).await;
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn cdc_change_stream_nested_diff_test() {
+        TestBase::run_mongo_cdc_test(
+            "mongo_to_mongo/cdc/change_stream_nested_diff_test",
+            3000,
+            3000,
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    #[serial]
     async fn cdc_resume_test() {
         TestBase::run_mongo_cdc_resume_test("mongo_to_mongo/cdc/resume_test", 3000, 3000).await;
     }

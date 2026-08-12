@@ -270,17 +270,36 @@ impl BaseTestRunner {
         sql
     }
 
+    /// Detects the opening tag of a PostgreSQL dollar quoted block, e.g. `$$` or `$BODY$`.
+    /// Only a real tag counts: mongo test files are full of `$set` / `$unset` operators, and
+    /// treating a line with two of them as a dollar quoted block used to swallow every
+    /// following statement into one unparsable sql.
     fn extract_dollar_tag(line: &str) -> Option<String> {
         let mut start = None;
         for (idx, ch) in line.char_indices() {
             if ch == '$' {
                 if let Some(s) = start {
-                    return Some(line[s..=idx].to_string());
+                    let tag = &line[s..=idx];
+                    // `"$$ROOT"` and friends are mongo variables, not a pg tag
+                    let quoted = s > 0 && line.as_bytes()[s - 1] == b'"';
+                    if !quoted && Self::is_dollar_tag(tag) {
+                        return Some(tag.to_string());
+                    }
+                    // this `$` may still open a tag with a later one
+                    start = Some(idx);
+                    continue;
                 }
                 start = Some(idx);
             }
         }
         None
+    }
+
+    fn is_dollar_tag(tag: &str) -> bool {
+        let inner = &tag[1..tag.len() - 1];
+        inner.is_empty()
+            || (inner.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+                && inner.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
     }
 
     pub fn check_path_exists(file: &str) -> bool {
@@ -296,5 +315,46 @@ impl BaseTestRunner {
             return Some(data_marker);
         }
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::BaseTestRunner;
+
+    #[test]
+    fn extract_dollar_tag_detects_pg_blocks() {
+        assert_eq!(
+            BaseTestRunner::extract_dollar_tag("CREATE FUNCTION f() AS $$"),
+            Some("$$".to_string())
+        );
+        assert_eq!(
+            BaseTestRunner::extract_dollar_tag("CREATE FUNCTION f() AS $BODY$ BEGIN"),
+            Some("$BODY$".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_dollar_tag_ignores_mongo_variables() {
+        assert_eq!(
+            BaseTestRunner::extract_dollar_tag(r#"db.tb_1.updateOne({}, [{ "$set": { "a": "$$ROOT" } }]);"#),
+            None
+        );
+    }
+
+    #[test]
+    fn extract_dollar_tag_ignores_mongo_operators() {
+        assert_eq!(
+            BaseTestRunner::extract_dollar_tag(
+                r#"db.tb_1.updateOne({ "_id": "1" }, { "$set": { "a": 1 }, "$unset": { "b": "" } });"#
+            ),
+            None
+        );
+        assert_eq!(
+            BaseTestRunner::extract_dollar_tag(
+                r#"db.tb_1.updateMany({ "name": { "$exists": true } }, { "$set": { "a": 1 } });"#
+            ),
+            None
+        );
     }
 }
