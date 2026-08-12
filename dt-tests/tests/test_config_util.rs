@@ -67,7 +67,7 @@ impl TestConfigUtil {
         }
 
         let mut update_configs = Vec::new();
-        let ini = IniLoader::new(src_task_config_file).ini;
+        let ini = IniLoader::new(src_task_config_file).unwrap().ini;
         for (section, kvs) in ini.get_map().unwrap() {
             for (k, v) in kvs.iter() {
                 if v.is_none() {
@@ -206,7 +206,7 @@ impl TestConfigUtil {
         dst_task_config_file: &str,
         config: &[(String, String, String)],
     ) {
-        let mut ini = IniLoader::new(src_task_config_file).ini;
+        let mut ini = IniLoader::new(src_task_config_file).unwrap().ini;
         for (section, key, value) in config.iter() {
             ini.set(section, key, Some(value.to_string()));
         }

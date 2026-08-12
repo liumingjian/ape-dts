@@ -19,18 +19,18 @@ pub enum ConnectionAuthConfig {
 }
 
 impl ConnectionAuthConfig {
-    pub fn from(loader: &IniLoader, section: &str) -> Self {
+    pub fn from(loader: &IniLoader, section: &str) -> anyhow::Result<Self> {
         if loader.contains(section, BASIC_AUTH_USERNAME_KEY) {
-            ConnectionAuthConfig::Basic {
-                username: loader.get_optional(section, BASIC_AUTH_USERNAME_KEY),
+            Ok(ConnectionAuthConfig::Basic {
+                username: loader.get_optional(section, BASIC_AUTH_USERNAME_KEY)?,
                 password: if loader.contains(section, BASIC_AUTH_PASSWORD_KEY) {
-                    Some(loader.get_optional(section, BASIC_AUTH_PASSWORD_KEY))
+                    Some(loader.get_optional(section, BASIC_AUTH_PASSWORD_KEY)?)
                 } else {
                     None
                 },
-            }
+            })
         } else {
-            ConnectionAuthConfig::NoAuth
+            Ok(ConnectionAuthConfig::NoAuth)
         }
     }
 
