@@ -43,6 +43,7 @@ postgres-protocol = {path = "vendor/rust-postgres/postgres-protocol"}
 postgres-types= {path = "vendor/rust-postgres/postgres-types"}
 postgres-openssl = {path = "vendor/rust-postgres/postgres-openssl"}
 tokio = { version = "1.25.0", features = ["full"] }
+tokio-util = { version = "0.7" }
 bytes = "1.0"
 configparser = "3.0.2"
 async-mutex = "1.4.0"

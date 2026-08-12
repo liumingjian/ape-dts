@@ -3,7 +3,6 @@ use std::{
     mem::size_of_val,
     pin::Pin,
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
     },
     time::UNIX_EPOCH,
@@ -32,6 +31,8 @@ use crate::{
     },
     Extractor,
 };
+use tokio_util::sync::CancellationToken;
+
 use dt_common::{
     config::{
         config_enums::DbType, config_token_parser::ConfigTokenParser,
@@ -134,7 +135,7 @@ impl PgCdcExtractor {
         }
 
         // start heartbeat
-        self.start_heartbeat(self.base_extractor.shut_down.clone())?;
+        self.start_heartbeat(self.base_extractor.cancel_token.clone())?;
 
         let mut last_tx_end_lsn = actual_start_lsn.clone();
         let mut xid = String::new();
@@ -542,7 +543,7 @@ impl PgCdcExtractor {
         }
     }
 
-    fn start_heartbeat(&mut self, shut_down: Arc<AtomicBool>) -> anyhow::Result<()> {
+    fn start_heartbeat(&mut self, cancel_token: CancellationToken) -> anyhow::Result<()> {
         let schema_tb = self.base_extractor.precheck_heartbeat(
             self.heartbeat_interval_secs,
             &self.heartbeat_tb,
@@ -562,7 +563,7 @@ impl PgCdcExtractor {
         );
         tokio::spawn(async move {
             let mut start_time = Instant::now();
-            while !shut_down.load(Ordering::Acquire) {
+            while !cancel_token.is_cancelled() {
                 if start_time.elapsed().as_secs() >= heartbeat_interval_secs {
                     Self::heartbeat(
                         &slot_name,
@@ -575,7 +576,11 @@ impl PgCdcExtractor {
                     .unwrap();
                     start_time = Instant::now();
                 }
-                TimeUtil::sleep_millis(1000 * heartbeat_interval_secs).await;
+                // sleep interruptibly, so shutdown is not delayed by a full heartbeat interval
+                tokio::select! {
+                    _ = cancel_token.cancelled() => break,
+                    _ = TimeUtil::sleep_millis(1000 * heartbeat_interval_secs) => {}
+                }
             }
         });
         log_info!("heartbeat started");

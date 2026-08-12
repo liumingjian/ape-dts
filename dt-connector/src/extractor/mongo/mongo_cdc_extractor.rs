@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
     },
 };
@@ -15,6 +14,8 @@ use crate::{
     extractor::{base_extractor::BaseExtractor, resumer::recovery::Recovery},
     Extractor,
 };
+use tokio_util::sync::CancellationToken;
+
 use dt_common::{
     config::config_enums::DbType,
     log_error, log_info, log_warn,
@@ -89,7 +90,7 @@ impl Extractor for MongoCdcExtractor {
         );
 
         // start heartbeat
-        self.start_heartbeat(self.base_extractor.shut_down.clone())?;
+        self.start_heartbeat(self.base_extractor.cancel_token.clone())?;
 
         match self.source {
             MongoCdcSource::OpLog => self.extract_oplog().await?,
@@ -464,7 +465,7 @@ impl MongoCdcExtractor {
         Timestamp { time, increment: 0 }
     }
 
-    fn start_heartbeat(&mut self, shut_down: Arc<AtomicBool>) -> anyhow::Result<()> {
+    fn start_heartbeat(&mut self, cancel_token: CancellationToken) -> anyhow::Result<()> {
         let db_tb = self.base_extractor.precheck_heartbeat(
             self.heartbeat_interval_secs,
             &self.heartbeat_tb,
@@ -485,14 +486,18 @@ impl MongoCdcExtractor {
 
         tokio::spawn(async move {
             let mut start_time = Instant::now();
-            while !shut_down.load(Ordering::Acquire) {
+            while !cancel_token.is_cancelled() {
                 if start_time.elapsed().as_secs() >= heartbeat_interval_secs {
                     Self::heartbeat(&app_name, &db_tb[0], &db_tb[1], &syncer, &mongo_client)
                         .await
                         .unwrap();
                     start_time = Instant::now();
                 }
-                TimeUtil::sleep_millis(1000 * heartbeat_interval_secs).await;
+                // sleep interruptibly, so shutdown is not delayed by a full heartbeat interval
+                tokio::select! {
+                    _ = cancel_token.cancelled() => break,
+                    _ = TimeUtil::sleep_millis(1000 * heartbeat_interval_secs) => {}
+                }
             }
         });
         log_info!("heartbeat started");

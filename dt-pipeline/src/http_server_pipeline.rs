@@ -7,15 +7,15 @@ use std::{
 };
 
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
-use anyhow::bail;
+use anyhow::{bail, Context};
 use async_trait::async_trait;
-use futures::executor::block_on;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
+use tokio_util::sync::CancellationToken;
 
 use crate::{base_pipeline::BasePipeline, Pipeline};
 use dt_common::{
-    log_position,
+    log_error, log_info, log_position,
     meta::{
         avro::avro_converter::AvroConverter, dt_data::DtData, dt_queue::DtQueue,
         position::Position, syncer::Syncer,
@@ -36,6 +36,8 @@ pub struct HttpServerPipeline {
     pub batch_sink_interval_secs: u64,
     pub http_host: String,
     pub http_port: u64,
+    /// Cancelled when the task is shutting down, whichever side triggered it.
+    pub cancel_token: CancellationToken,
 
     acked_batch_id: Arc<AtomicU64>,
     sent_batch_id: Arc<AtomicU64>,
@@ -87,6 +89,7 @@ impl HttpServerPipeline {
         batch_sink_interval_secs: u64,
         http_host: &str,
         http_port: u64,
+        cancel_token: CancellationToken,
     ) -> Self {
         Self {
             buffer,
@@ -97,6 +100,7 @@ impl HttpServerPipeline {
             batch_sink_interval_secs,
             http_host: http_host.into(),
             http_port,
+            cancel_token,
             acked_batch_id: Default::default(),
             sent_batch_id: Default::default(),
             pending_ack_data: Default::default(),
@@ -113,20 +117,29 @@ impl Pipeline for HttpServerPipeline {
 
     async fn start(&mut self) -> anyhow::Result<()> {
         let app_data = self.clone();
-        block_on(
-            HttpServer::new(move || {
-                App::new()
-                    .app_data(web::Data::new(app_data.clone()))
-                    .service(web::resource("/info").route(web::get().to(info)))
-                    .service(web::resource("/fetch_new").route(web::get().to(fetch_new)))
-                    .service(web::resource("/fetch_old").route(web::get().to(fetch_old)))
-                    .service(web::resource("/ack").route(web::post().to(ack)))
-            })
-            .bind(format!("{}:{}", self.http_host, self.http_port))
-            .unwrap()
-            .run(),
-        )
-        .unwrap();
+        let bind_addr = format!("{}:{}", self.http_host, self.http_port);
+        let server = HttpServer::new(move || {
+            App::new()
+                .app_data(web::Data::new(app_data.clone()))
+                .service(web::resource("/info").route(web::get().to(info)))
+                .service(web::resource("/fetch_new").route(web::get().to(fetch_new)))
+                .service(web::resource("/fetch_old").route(web::get().to(fetch_old)))
+                .service(web::resource("/ack").route(web::post().to(ack)))
+        })
+        .bind(&bind_addr)
+        .with_context(|| format!("http server pipeline failed to bind [{}]", bind_addr))?
+        .run();
+
+        // awaited, never block_on'd: blocking a runtime worker here would stall every
+        // other task sharing it, the extractor included
+        let handle = server.handle();
+        tokio::select! {
+            res = server => res.context("http server pipeline exited with error")?,
+            _ = self.cancel_token.cancelled() => {
+                log_info!("http server pipeline is shutting down");
+                handle.stop(true).await;
+            }
+        }
         Ok(())
     }
 }
@@ -157,10 +170,16 @@ async fn fetch_new(
         monitor: pipeline.monitor.clone(),
         ..Default::default()
     };
-    let data = parallelizer
+    let data = match parallelizer
         .drain_by_count(&pipeline.buffer, query.batch_size)
         .await
-        .unwrap();
+    {
+        Ok(data) => data,
+        Err(err) => {
+            log_error!("fetch_new failed to drain the buffer, error: {}", err);
+            return HttpResponse::InternalServerError().body(err.to_string());
+        }
+    };
     let (_, last_received_position, last_commit_position) = BasePipeline::fetch_raw(&data);
 
     // data -> avro response
@@ -172,20 +191,23 @@ async fn fetch_new(
     let mut avro_converter = pipeline.avro_converter.clone();
     for i in data {
         match i.dt_data {
-            DtData::Dml { row_data } => {
-                let payload = avro_converter
-                    .row_data_to_avro_value(row_data)
-                    .await
-                    .unwrap();
-                response.data.push(payload);
-            }
+            DtData::Dml { row_data } => match avro_converter.row_data_to_avro_value(row_data).await
+            {
+                Ok(payload) => response.data.push(payload),
+                Err(err) => {
+                    log_error!("fetch_new failed to encode row data, error: {}", err);
+                    return HttpResponse::InternalServerError().body(err.to_string());
+                }
+            },
 
             DtData::Ddl { ddl_data } => {
-                let payload = avro_converter
-                    .ddl_data_to_avro_value(ddl_data)
-                    .await
-                    .unwrap();
-                response.data.push(payload);
+                match avro_converter.ddl_data_to_avro_value(ddl_data).await {
+                    Ok(payload) => response.data.push(payload),
+                    Err(err) => {
+                        log_error!("fetch_new failed to encode ddl data, error: {}", err);
+                        return HttpResponse::InternalServerError().body(err.to_string());
+                    }
+                }
             }
 
             _ => {}
@@ -204,9 +226,9 @@ async fn fetch_new(
     let batch_id = response.batch_id;
     pipeline.sent_batch_id.store(batch_id, Ordering::Release);
     if !response.data.is_empty() {
-        pending_ack_data.insert(batch_id, response);
         pending_ack_positions.insert(batch_id, (last_received_position, last_commit_position));
-        send_response(pending_ack_data.get(&batch_id).unwrap())
+        let stored = pending_ack_data.entry(batch_id).or_insert(response);
+        send_response(stored)
     } else {
         send_response(&response)
     }

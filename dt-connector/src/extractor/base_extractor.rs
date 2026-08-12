@@ -1,10 +1,7 @@
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
-};
+use std::sync::Arc;
 
 use anyhow::bail;
-use tokio::task::yield_now;
+use tokio_util::sync::CancellationToken;
 
 use dt_common::{
     config::{
@@ -38,7 +35,8 @@ use super::extractor_monitor::ExtractorMonitor;
 pub struct BaseExtractor {
     pub buffer: Arc<DtQueue>,
     pub router: RdbRouter,
-    pub shut_down: Arc<AtomicBool>,
+    /// Cancelled when the task is shutting down, whichever side triggered it.
+    pub cancel_token: CancellationToken,
     pub monitor: ExtractorMonitor,
     pub data_marker: Option<DataMarker>,
     pub time_filter: TimeFilter,
@@ -123,8 +121,11 @@ impl BaseExtractor {
 
     pub async fn push_ddl(&mut self, ddl_data: DdlData, position: Position) -> anyhow::Result<()> {
         let ddl_data = self.router.route_ddl(ddl_data);
-        while !self.buffer.is_empty() {
-            yield_now().await;
+        // ddl is a barrier: everything queued before it must be sinked first
+        if !self.buffer.wait_until_drained().await {
+            bail!(Error::Cancelled(
+                "extractor stopped before ddl barrier drained: the task is shutting down".into()
+            ));
         }
         self.push_dt_data(DtData::Ddl { ddl_data }, position).await
     }
@@ -251,16 +252,17 @@ impl BaseExtractor {
     }
 
     pub async fn wait_task_finish(&mut self) -> anyhow::Result<()> {
-        // wait all data to be transferred
-        while !self.buffer.is_empty() {
-            yield_now().await;
+        // wait all data to be transferred, parked on the queue instead of spinning on it
+        let drained = self.buffer.wait_until_drained().await;
+        if !drained {
+            log_info!("extractor stopped waiting for the buffer to drain: task cancelled");
         }
 
         self.monitor.try_flush(true).await;
-        let first = !self.shut_down.swap(true, Ordering::Release);
-        if first {
+        if !self.cancel_token.is_cancelled() {
             log_info!("shutdown triggered by BaseExtractor.wait_task_finish (extractor finished)");
         }
+        self.cancel_token.cancel();
         Ok(())
     }
 }

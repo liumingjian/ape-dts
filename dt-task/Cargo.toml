@@ -19,6 +19,7 @@ sqlx = { workspace = true }
 async-mutex = { workspace = true }
 mongodb = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 concurrent-queue = { workspace = true }
 reqwest = { workspace = true }
 futures = { workspace = true }

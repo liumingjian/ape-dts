@@ -1,6 +1,5 @@
 use std::{
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
     },
     time::{SystemTime, UNIX_EPOCH},
@@ -21,6 +20,8 @@ use crate::extractor::{
     resumer::recovery::Recovery,
 };
 use crate::Extractor;
+use tokio_util::sync::CancellationToken;
+
 use dt_common::{
     config::{
         config_enums::{DbType, ExtractType},
@@ -268,7 +269,7 @@ impl RedisPsyncExtractor {
             self.start_heartbeat(
                 heartbeat_db_id,
                 &heartbeat_db_key[1],
-                self.base_extractor.shut_down.clone(),
+                self.base_extractor.cancel_token.clone(),
             )
             .await?;
         } else {
@@ -415,7 +416,7 @@ impl RedisPsyncExtractor {
         &self,
         db_id: i64,
         key: &str,
-        shut_down: Arc<AtomicBool>,
+        cancel_token: CancellationToken,
     ) -> anyhow::Result<()> {
         log_info!(
             "try starting heartbeat, heartbeat_interval_secs: {}, db_id: {}, key: {}",
@@ -445,12 +446,16 @@ impl RedisPsyncExtractor {
             }
 
             let mut start_time = Instant::now();
-            while !shut_down.load(Ordering::Acquire) {
+            while !cancel_token.is_cancelled() {
                 if start_time.elapsed().as_secs() >= heartbeat_interval_secs {
                     Self::heartbeat(&key, &mut conn).await.unwrap();
                     start_time = Instant::now();
                 }
-                TimeUtil::sleep_millis(1000 * heartbeat_interval_secs).await;
+                // sleep interruptibly, so shutdown is not delayed by a full heartbeat interval
+                tokio::select! {
+                    _ = cancel_token.cancelled() => break,
+                    _ = TimeUtil::sleep_millis(1000 * heartbeat_interval_secs) => {}
+                }
             }
         });
         log_info!("heartbeat started");

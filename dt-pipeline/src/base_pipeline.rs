@@ -1,7 +1,4 @@
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
-};
+use std::{sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use tokio::{
@@ -9,6 +6,7 @@ use tokio::{
     task::yield_now,
     time::Instant,
 };
+use tokio_util::sync::CancellationToken;
 
 use crate::{lua_processor::LuaProcessor, Pipeline};
 use dt_common::{
@@ -33,7 +31,8 @@ pub struct BasePipeline {
     pub parallelizer: Box<dyn Parallelizer + Send + Sync>,
     pub sinker_config: SinkerConfig,
     pub sinkers: Vec<Arc<async_mutex::Mutex<Box<dyn Sinker + Send>>>>,
-    pub shut_down: Arc<AtomicBool>,
+    /// Cancelled when the task is shutting down, whichever side triggered it.
+    pub cancel_token: CancellationToken,
     pub checkpoint_interval_secs: u64,
     pub batch_sink_interval_secs: u64,
     pub syncer: Arc<Mutex<Syncer>>,
@@ -42,6 +41,10 @@ pub struct BasePipeline {
     pub lua_processor: Option<LuaProcessor>,
     pub recorder: Option<Arc<dyn Recorder + Send + Sync>>,
 }
+
+/// How long an idle pipeline parks before re-checking its timers. New data wakes it
+/// immediately through the queue, so this only bounds the checkpoint / batch-sink clocks.
+const IDLE_WAIT: Duration = Duration::from_millis(100);
 
 enum SinkMethod {
     Raw,
@@ -74,7 +77,7 @@ impl Pipeline for BasePipeline {
         let mut last_commit_position = Position::None;
         let mut record_time = Instant::now();
 
-        while !self.shut_down.load(Ordering::Acquire) || !self.buffer.is_empty() {
+        while !self.cancel_token.is_cancelled() || !self.buffer.is_empty() {
             // to avoid too many sub counters, only add counter when buffer is not empty
             if !self.buffer.is_empty() {
                 self.monitor
@@ -138,7 +141,13 @@ impl Pipeline for BasePipeline {
                 .add_counter(CounterType::SinkedByteTotal, data_size.bytes)
                 .await;
 
-            yield_now().await;
+            if data_size.count > 0 || self.cancel_token.is_cancelled() {
+                yield_now().await;
+            } else {
+                // nothing to sink: park instead of spinning, otherwise an idle cdc
+                // task burns a whole core on this loop
+                self.wait_while_idle().await;
+            }
         }
 
         self.record_checkpoint(None, &last_received_position, &last_commit_position)
@@ -148,6 +157,20 @@ impl Pipeline for BasePipeline {
 }
 
 impl BasePipeline {
+    /// Park for at most [`IDLE_WAIT`], waking early on new data or on shutdown.
+    async fn wait_while_idle(&self) {
+        if self.buffer.is_empty() {
+            self.buffer.wait_for_data(IDLE_WAIT).await;
+        } else {
+            // data is queued but held back by batch_sink_interval_secs: only the clock
+            // can end this round, so there is nothing to wake on but shutdown
+            tokio::select! {
+                _ = self.cancel_token.cancelled() => {}
+                _ = tokio::time::sleep(IDLE_WAIT) => {}
+            }
+        }
+    }
+
     async fn sink_raw(
         &mut self,
         all_data: Vec<DtItem>,
@@ -406,5 +429,139 @@ impl BasePipeline {
         );
 
         Instant::now()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use anyhow::bail;
+    use dt_common::{
+        error::Error,
+        meta::{col_value::ColValue, row_type::RowType},
+    };
+    use tokio_util::sync::CancellationToken;
+
+    use super::*;
+
+    /// Drains everything queued, then fails the way a broken sinker does.
+    struct FailingParallelizer;
+
+    #[async_trait]
+    impl Parallelizer for FailingParallelizer {
+        fn get_name(&self) -> String {
+            "FailingParallelizer".into()
+        }
+
+        async fn drain(&mut self, buffer: &DtQueue) -> anyhow::Result<Vec<DtItem>> {
+            let mut data = Vec::new();
+            while let Ok(item) = buffer.pop().await {
+                data.push(item);
+            }
+            Ok(data)
+        }
+
+        async fn sink_dml(
+            &mut self,
+            _data: Vec<RowData>,
+            _sinkers: &[Arc<async_mutex::Mutex<Box<dyn Sinker + Send>>>],
+        ) -> anyhow::Result<DataSize> {
+            bail!("sinker failed to write the batch")
+        }
+    }
+
+    fn dml_item() -> DtItem {
+        DtItem {
+            dt_data: DtData::Dml {
+                row_data: RowData::new(
+                    "test_db".into(),
+                    "test_tb".into(),
+                    RowType::Insert,
+                    None,
+                    Some(HashMap::from([("id".to_string(), ColValue::Long(1))])),
+                ),
+            },
+            position: Position::None,
+            data_origin_node: String::new(),
+        }
+    }
+
+    fn pipeline(buffer: Arc<DtQueue>, cancel_token: CancellationToken) -> BasePipeline {
+        BasePipeline {
+            buffer,
+            parallelizer: Box::new(FailingParallelizer),
+            sinker_config: SinkerConfig::Dummy,
+            sinkers: Vec::new(),
+            cancel_token,
+            checkpoint_interval_secs: 3600,
+            batch_sink_interval_secs: 0,
+            syncer: Arc::new(Mutex::new(Syncer {
+                received_position: Position::None,
+                committed_position: Position::None,
+            })),
+            monitor: Arc::new(Monitor::new("pipeline", "test", 1, 100, 1)),
+            data_marker: None,
+            lua_processor: None,
+            recorder: None,
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn a_sinker_failure_releases_an_extractor_blocked_on_a_full_buffer() {
+        let cancel_token = CancellationToken::new();
+        let buffer = Arc::new(DtQueue::new(1, 0, None, None, cancel_token.clone()));
+
+        // an extractor with more data than the buffer holds: it parks inside push
+        let extractor = {
+            let buffer = buffer.clone();
+            tokio::spawn(async move {
+                for _ in 0..64 {
+                    buffer.push(dml_item()).await?;
+                }
+                Ok::<(), anyhow::Error>(())
+            })
+        };
+
+        let mut pipeline = pipeline(buffer, cancel_token.clone());
+        let err = pipeline
+            .start()
+            .await
+            .expect_err("the failing sinker must surface as a pipeline error");
+        assert!(err.to_string().contains("sinker failed to write the batch"));
+
+        // this is what the task runner does when either side fails
+        cancel_token.cancel();
+
+        let extractor_res = tokio::time::timeout(Duration::from_secs(5), extractor)
+            .await
+            .expect("the extractor stayed blocked on the buffer after the pipeline died")
+            .unwrap();
+        let extractor_err = extractor_res.expect_err("a cancelled push must not report success");
+        assert!(
+            extractor_err
+                .chain()
+                .any(|cause| matches!(cause.downcast_ref::<Error>(), Some(Error::Cancelled(_)))),
+            "expected a cancellation error, got: {:#}",
+            extractor_err
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn an_idle_pipeline_exits_once_the_task_is_cancelled() {
+        let cancel_token = CancellationToken::new();
+        let buffer = Arc::new(DtQueue::new(8, 0, None, None, cancel_token.clone()));
+        let mut pipeline = pipeline(buffer, cancel_token.clone());
+
+        let started = tokio::spawn(async move { pipeline.start().await });
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(!started.is_finished(), "an idle pipeline should keep running");
+
+        cancel_token.cancel();
+        tokio::time::timeout(Duration::from_secs(5), started)
+            .await
+            .expect("the pipeline did not converge after cancellation")
+            .unwrap()
+            .unwrap();
     }
 }

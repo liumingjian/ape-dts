@@ -1,7 +1,6 @@
 use std::{
     pin::Pin,
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
     },
     time::{Duration, UNIX_EPOCH},
@@ -23,6 +22,8 @@ use crate::{
     },
     Extractor,
 };
+use tokio_util::sync::CancellationToken;
+
 use dt_common::{
     config::{config_enums::DbType, connection_auth_config::ConnectionAuthConfig},
     error::Error,
@@ -100,7 +101,7 @@ impl Extractor for GaussDBCdcExtractor {
 
 impl GaussDBCdcExtractor {
     async fn extract_internal(&mut self) -> anyhow::Result<()> {
-        self.start_heartbeat(self.base_extractor.shut_down.clone())?;
+        self.start_heartbeat(self.base_extractor.cancel_token.clone())?;
 
         let decoder = GaussDBJsonDecoder::default();
         let mut last_receive_lsn: Option<PgLsn> = None;
@@ -109,7 +110,7 @@ impl GaussDBCdcExtractor {
         let mut allow_slot_recreate = self.recreate_slot_if_exists;
 
         loop {
-            if self.base_extractor.shut_down.load(Ordering::Acquire) {
+            if self.base_extractor.cancel_token.is_cancelled() {
                 return Ok(());
             }
 
@@ -213,7 +214,7 @@ impl GaussDBCdcExtractor {
             }
 
             loop {
-                if self.base_extractor.shut_down.load(Ordering::Acquire) {
+                if self.base_extractor.cancel_token.is_cancelled() {
                     let _ = self
                         .send_keepalive_status_update(
                             &mut stream,
@@ -391,7 +392,7 @@ impl GaussDBCdcExtractor {
                         }
                     },
                     Some(Err(e)) => {
-                        if self.base_extractor.shut_down.load(Ordering::Acquire) {
+                        if self.base_extractor.cancel_token.is_cancelled() {
                             return Ok(());
                         }
                         log_warn!("gaussdb replication stream closed, will reconnect: {}", e);
@@ -635,7 +636,7 @@ impl GaussDBCdcExtractor {
         filtered
     }
 
-    fn start_heartbeat(&mut self, shut_down: Arc<AtomicBool>) -> anyhow::Result<()> {
+    fn start_heartbeat(&mut self, cancel_token: CancellationToken) -> anyhow::Result<()> {
         let schema_tb = self.base_extractor.precheck_heartbeat(
             self.heartbeat_interval_secs,
             &self.heartbeat_tb,
@@ -655,7 +656,7 @@ impl GaussDBCdcExtractor {
         );
         tokio::spawn(async move {
             let mut start_time = Instant::now();
-            while !shut_down.load(Ordering::Acquire) {
+            while !cancel_token.is_cancelled() {
                 if start_time.elapsed().as_secs() >= heartbeat_interval_secs {
                     Self::heartbeat(
                         &slot_name,
@@ -668,7 +669,11 @@ impl GaussDBCdcExtractor {
                     .unwrap_or_else(|e| log_warn!("gaussdb heartbeat failed: {}", e));
                     start_time = Instant::now();
                 }
-                TimeUtil::sleep_millis(1000 * heartbeat_interval_secs).await;
+                // sleep interruptibly, so shutdown is not delayed by a full heartbeat interval
+                tokio::select! {
+                    _ = cancel_token.cancelled() => break,
+                    _ = TimeUtil::sleep_millis(1000 * heartbeat_interval_secs) => {}
+                }
             }
         });
         log_info!("heartbeat started");

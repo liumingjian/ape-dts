@@ -1,12 +1,13 @@
 use std::{
     collections::HashMap,
     str::FromStr,
-    sync::{atomic::AtomicBool, Arc},
+    sync::Arc,
 };
 
 use anyhow::bail;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
+use tokio_util::sync::CancellationToken;
 
 use dt_common::{
     config::{
@@ -81,7 +82,7 @@ impl ExtractorUtil {
         extractor_client: ConnClient,
         partition_cols: Option<Arc<PartitionCols>>,
         buffer: Arc<DtQueue>,
-        shut_down: Arc<AtomicBool>,
+        cancel_token: CancellationToken,
         syncer: Arc<Mutex<Syncer>>,
         monitor: Arc<Monitor>,
         data_marker: Option<DataMarker>,
@@ -91,7 +92,7 @@ impl ExtractorUtil {
         let mut base_extractor = BaseExtractor {
             buffer,
             router,
-            shut_down,
+            cancel_token,
             monitor: ExtractorMonitor::new(monitor).await,
             data_marker,
             time_filter: TimeFilter::default(),
