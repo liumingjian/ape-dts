@@ -1,11 +1,4 @@
-use std::{
-    collections::VecDeque,
-    panic,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-};
+use std::{collections::VecDeque, panic, sync::Arc};
 
 use anyhow::{bail, Context};
 use chrono::Local;
@@ -18,6 +11,7 @@ use tokio::{
     task::JoinSet,
     time::Duration,
 };
+use tokio_util::sync::CancellationToken;
 
 use super::{
     extractor_util::{ExtractorUtil, PartitionCols},
@@ -53,7 +47,7 @@ use dt_common::{
         FlushableMonitor,
     },
     rdb_filter::RdbFilter,
-    utils::{sql_util::SqlUtil, time_util::TimeUtil},
+    utils::sql_util::SqlUtil,
 };
 use dt_connector::{
     check_log::check_log::CheckSummaryLog,
@@ -83,6 +77,8 @@ pub struct TaskContext {
     pub check_summary: Option<Arc<AsyncMutex<CheckSummaryLog>>>,
     pub enqueue_limiter: Option<Arc<BufferLimiter>>,
     pub dequeue_limiter: Option<Arc<BufferLimiter>>,
+    /// Parent of every token below it: cancelling it stops the whole task tree.
+    pub cancel_token: CancellationToken,
 }
 
 #[derive(Clone)]
@@ -104,6 +100,8 @@ const LOG_DIR_PLACEHOLDER: &str = "LOG_DIR_PLACEHOLDER";
 const CHECK_LOG_FILE_SIZE_PLACEHOLDER: &str = "CHECK_LOG_FILE_SIZE_PLACEHOLDER";
 const DEFAULT_CHECK_LOG_DIR_PLACEHOLDER: &str = "LOG_DIR_PLACEHOLDER/check";
 const DEFAULT_STATISTIC_LOG_DIR_PLACEHOLDER: &str = "LOG_DIR_PLACEHOLDER/statistic";
+/// How long sibling sub tasks get to converge after one of them failed, before they are aborted.
+const MULTI_TASK_CONVERGE_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Tokio task cancellation only aborts the current future. JoinHandles spawned inside (extractor,
 /// pipeline, monitors, etc.) will keep running unless we explicitly stop them.
@@ -112,15 +110,15 @@ const DEFAULT_STATISTIC_LOG_DIR_PLACEHOLDER: &str = "LOG_DIR_PLACEHOLDER/statist
 /// effort shutdown of the internal tasks to avoid leaking long-running CDC jobs (replication slot
 /// stays active) across retries in integration tests.
 struct AbortGuard {
-    shut_down: Arc<AtomicBool>,
+    cancel_token: CancellationToken,
     abort_handles: Vec<tokio::task::AbortHandle>,
     armed: bool,
 }
 
 impl AbortGuard {
-    fn new(shut_down: Arc<AtomicBool>, abort_handles: Vec<tokio::task::AbortHandle>) -> Self {
+    fn new(cancel_token: CancellationToken, abort_handles: Vec<tokio::task::AbortHandle>) -> Self {
         Self {
-            shut_down,
+            cancel_token,
             abort_handles,
             armed: true,
         }
@@ -138,7 +136,8 @@ impl Drop for AbortGuard {
         }
 
         // Allow cooperative exit first, then force-abort if the inner tasks are stuck.
-        let first = !self.shut_down.swap(true, Ordering::Release);
+        let first = !self.cancel_token.is_cancelled();
+        self.cancel_token.cancel();
         if first {
             log_warn!(
                 "shutdown triggered by AbortGuard drop (start_task future cancelled/dropped). Aborting {} inner tasks.",
@@ -254,6 +253,7 @@ impl TaskRunner {
             check_summary: check_summary.clone(),
             enqueue_limiter,
             dequeue_limiter,
+            cancel_token: CancellationToken::new(),
         };
 
         #[cfg(feature = "metrics")]
@@ -297,11 +297,12 @@ impl TaskRunner {
     }
 
     async fn start_multi_task(&self, task_context: TaskContext) -> anyhow::Result<()> {
+        let root_cancel_token = task_context.cancel_token.clone();
         let mut pending_tasks = self.build_pending_tasks(task_context, true).await?;
 
         // start a thread to flush global monitors
-        let global_shut_down = Arc::new(AtomicBool::new(false));
-        let global_shut_down_clone = global_shut_down.clone();
+        let global_cancel_token = CancellationToken::new();
+        let global_cancel_token_clone = global_cancel_token.clone();
         let interval_secs = self.config.pipeline.checkpoint_interval_secs;
         let extractor_monitor = self.extractor_monitor.clone();
         let pipeline_monitor = self.pipeline_monitor.clone();
@@ -310,14 +311,14 @@ impl TaskRunner {
         let global_monitor_task = tokio::spawn(async move {
             Self::flush_monitors_generic::<GroupMonitor, TaskMonitor>(
                 interval_secs,
-                global_shut_down_clone,
+                global_cancel_token_clone,
                 &[extractor_monitor, pipeline_monitor, sinker_monitor],
                 &[task_monitor],
             )
             .await
         });
         let mut global_abort_guard = AbortGuard::new(
-            global_shut_down.clone(),
+            global_cancel_token.clone(),
             vec![global_monitor_task.abort_handle()],
         );
 
@@ -335,28 +336,89 @@ impl TaskRunner {
         }
 
         // when a task is completed, if there are still pending tables, add a new task
+        let mut errors: Vec<String> = Vec::new();
         while let Some(result) = join_set.join_next().await {
-            match result {
-                Ok((_, Ok(()))) => {
-                    if let Some(task_context) = pending_tasks.pop_front() {
-                        self.clone()
-                            .spawn_single_task(task_context, &mut join_set, &semaphore)
-                            .await?;
+            Self::collect_single_task_result(result, &mut errors);
+            if !errors.is_empty() {
+                break;
+            }
+            if let Some(task_context) = pending_tasks.pop_front() {
+                self.clone()
+                    .spawn_single_task(task_context, &mut join_set, &semaphore)
+                    .await?;
+            }
+        }
+
+        if !errors.is_empty() {
+            // do not abandon the sibling tasks: aborting them mid-write would drop
+            // in-flight batches without recording their positions. Cancel, then give
+            // them a bounded window to converge, and only abort what is still stuck.
+            log_error!(
+                "single task failed, cancelling {} sibling task(s): {}",
+                join_set.len(),
+                errors[0]
+            );
+            pending_tasks.clear();
+            root_cancel_token.cancel();
+            let deadline = tokio::time::Instant::now() + MULTI_TASK_CONVERGE_TIMEOUT;
+            while !join_set.is_empty() {
+                match tokio::time::timeout_at(deadline, join_set.join_next()).await {
+                    Ok(Some(result)) => Self::collect_single_task_result(result, &mut errors),
+                    Ok(None) => break,
+                    Err(_) => {
+                        log_error!(
+                            "{} sibling task(s) did not converge within {}s, aborting them",
+                            join_set.len(),
+                            MULTI_TASK_CONVERGE_TIMEOUT.as_secs()
+                        );
+                        errors.push(format!(
+                            "{} sibling task(s) had to be aborted after failing to converge within {}s",
+                            join_set.len(),
+                            MULTI_TASK_CONVERGE_TIMEOUT.as_secs()
+                        ));
+                        join_set.shutdown().await;
+                        break;
                     }
-                }
-                Ok((single_task_id, Err(e))) => {
-                    bail!("single task: [{}] failed, error: {}", single_task_id, e)
-                }
-                Err(e) => {
-                    bail!("join error: {}", e)
                 }
             }
         }
 
-        global_shut_down.store(true, Ordering::Release);
+        global_cancel_token.cancel();
         global_monitor_task.await?;
         global_abort_guard.disarm();
+
+        if !errors.is_empty() {
+            bail!("multi task failed:\n  {}", errors.join("\n  "));
+        }
         Ok(())
+    }
+
+    /// Sort one finished sub task into "keep going" or "record the error"; a task aborted
+    /// during convergence is expected noise, not a new failure.
+    fn collect_single_task_result(
+        result: Result<(String, anyhow::Result<()>), tokio::task::JoinError>,
+        errors: &mut Vec<String>,
+    ) {
+        match result {
+            Ok((_, Ok(()))) => {}
+            Ok((single_task_id, Err(e)))
+                if e.chain().any(|cause| {
+                    matches!(cause.downcast_ref::<Error>(), Some(Error::Cancelled(_)))
+                }) =>
+            {
+                log_warn!(
+                    "single task: [{}] stopped because another task failed: {:#}",
+                    single_task_id,
+                    e
+                );
+            }
+            Ok((single_task_id, Err(e))) => errors.push(format!(
+                "single task: [{}] failed, error: {:#}",
+                single_task_id, e
+            )),
+            Err(e) if e.is_cancelled() => {}
+            Err(e) => errors.push(format!("join error: {}", e)),
+        }
     }
 
     async fn spawn_single_task(
@@ -379,6 +441,7 @@ impl TaskRunner {
             partition_cols: task_context.partition_cols,
             enqueue_limiter: task_context.enqueue_limiter,
             dequeue_limiter: task_context.dequeue_limiter,
+            cancel_token: task_context.cancel_token,
         };
         let me = self.clone();
         join_set.spawn(async move {
@@ -403,15 +466,19 @@ impl TaskRunner {
         let enqueue_limiter = task_context.enqueue_limiter;
         let dequeue_limiter = task_context.dequeue_limiter;
 
+        // a child of the task-wide token: a failure here cancels only this sub task,
+        // while a task-wide cancel still reaches every side of it
+        let cancel_token = task_context.cancel_token.child_token();
+
         let max_bytes = self.config.pipeline.capacity_limiter.buffer_memory_mb * 1024 * 1024;
         let buffer = Arc::new(DtQueue::new(
             self.config.pipeline.capacity_limiter.buffer_size,
             max_bytes as u64,
             enqueue_limiter,
             dequeue_limiter,
+            cancel_token.clone(),
         ));
 
-        let shut_down = Arc::new(AtomicBool::new(false));
         let syncer = Arc::new(Mutex::new(Syncer {
             received_position: Position::None,
             committed_position: Position::None,
@@ -456,7 +523,7 @@ impl TaskRunner {
             extractor_client.clone(),
             task_context.partition_cols,
             buffer.clone(),
-            shut_down.clone(),
+            cancel_token.clone(),
             syncer.clone(),
             extractor_monitor.clone(),
             extractor_data_marker,
@@ -495,7 +562,7 @@ impl TaskRunner {
         let mut pipeline = self
             .create_pipeline(
                 buffer,
-                shut_down.clone(),
+                cancel_token.clone(),
                 syncer,
                 sinkers,
                 pipeline_monitor.clone(),
@@ -539,32 +606,34 @@ impl TaskRunner {
         .await?;
 
         // start threads (avoid unwrap-panics; propagate errors with context)
-        // If either side errors, flip `shut_down` so the other side can exit and avoid deadlock.
-        let shut_down_for_extractor = shut_down.clone();
+        // If either side errors, cancel the token so the other side can exit and avoid deadlock.
+        let cancel_token_for_extractor = cancel_token.clone();
         let f1 = tokio::spawn(async move {
             let extract_res = extractor.extract().await;
             let close_res = extractor.close().await;
             if extract_res.is_err() || close_res.is_err() {
-                let first = !shut_down_for_extractor.swap(true, Ordering::Release);
+                let first = !cancel_token_for_extractor.is_cancelled();
+                cancel_token_for_extractor.cancel();
                 if first {
                     log_error!("shutdown triggered by extractor error; forcing pipeline shutdown");
                 }
             }
             if let Err(e) = extract_res {
-                bail!("extractor.extract failed: {e:#}");
+                return Err(e).context("extractor.extract failed");
             }
             if let Err(e) = close_res {
-                bail!("extractor.close failed: {e:#}");
+                return Err(e).context("extractor.close failed");
             }
             Ok::<(), anyhow::Error>(())
         });
 
-        let shut_down_for_pipeline = shut_down.clone();
+        let cancel_token_for_pipeline = cancel_token.clone();
         let f2 = tokio::spawn(async move {
             let start_res = pipeline.start().await;
             let stop_res = pipeline.stop().await;
             if start_res.is_err() || stop_res.is_err() {
-                let first = !shut_down_for_pipeline.swap(true, Ordering::Release);
+                let first = !cancel_token_for_pipeline.is_cancelled();
+                cancel_token_for_pipeline.cancel();
                 if first {
                     log_error!("shutdown triggered by pipeline error; forcing extractor shutdown");
                 }
@@ -576,10 +645,10 @@ impl TaskRunner {
                 }
             }
             if let Err(e) = start_res {
-                bail!("pipeline.start failed: {e:#}");
+                return Err(e).context("pipeline.start failed");
             }
             if let Err(e) = stop_res {
-                bail!("pipeline.stop failed: {e:#}");
+                return Err(e).context("pipeline.stop failed");
             }
             Ok::<(), anyhow::Error>(())
         });
@@ -590,11 +659,11 @@ impl TaskRunner {
         } else {
             vec![self.task_monitor.clone()]
         };
-        let shut_down_for_monitors = shut_down.clone();
+        let cancel_token_for_monitors = cancel_token.clone();
         let f3 = tokio::spawn(async move {
             Self::flush_monitors_generic::<Monitor, TaskMonitor>(
                 interval_secs,
-                shut_down_for_monitors,
+                cancel_token_for_monitors,
                 &[extractor_monitor, pipeline_monitor, sinker_monitor],
                 &tasks,
             )
@@ -602,19 +671,20 @@ impl TaskRunner {
         });
 
         let mut abort_guard = AbortGuard::new(
-            shut_down.clone(),
+            cancel_token.clone(),
             vec![f1.abort_handle(), f2.abort_handle(), f3.abort_handle()],
         );
         // JoinHandle<T>::await -> Result<T, JoinError>
         // Here f1/f2 return anyhow::Result<()>, so we need to unwrap twice.
         let (r1, r2, r3) = tokio::join!(f1, f2, f3);
         abort_guard.disarm();
-        r1??;
-        r2??;
+        // the pipeline is reported first: when it dies, the extractor's own error is
+        // usually just the cancellation that unblocked it, not the root cause
+        Self::report_task_results(vec![("pipeline", r2), ("extractor", r1)])?;
         r3?;
 
         // Post-drain flush: the pipeline may have processed additional rows
-        // after f3 (monitor flush) exited on shut_down.  Recalculate so that
+        // after f3 (monitor flush) exited on cancellation.  Recalculate so that
         // the final Prometheus scrape sees up-to-date sinker counts and
         // progress close to 100% for snapshot tasks.
         {
@@ -678,7 +748,7 @@ impl TaskRunner {
     async fn create_pipeline(
         &self,
         buffer: Arc<DtQueue>,
-        shut_down: Arc<AtomicBool>,
+        cancel_token: CancellationToken,
         syncer: Arc<Mutex<Syncer>>,
         sinkers: Vec<Arc<AsyncMutex<Box<dyn Sinker + Send>>>>,
         monitor: Arc<Monitor>,
@@ -703,7 +773,7 @@ impl TaskRunner {
                     parallelizer,
                     sinker_config: self.config.sinker.clone(),
                     sinkers,
-                    shut_down,
+                    cancel_token,
                     checkpoint_interval_secs: self.config.pipeline.checkpoint_interval_secs,
                     batch_sink_interval_secs: self.config.pipeline.batch_sink_interval_secs,
                     syncer,
@@ -728,6 +798,7 @@ impl TaskRunner {
                     self.config.pipeline.batch_sink_interval_secs,
                     &self.config.pipeline.http_host,
                     self.config.pipeline.http_port,
+                    cancel_token,
                 );
                 Ok(Box::new(pipeline) as Box<dyn Pipeline + Send>)
             }
@@ -819,7 +890,7 @@ impl TaskRunner {
 
     async fn flush_monitors_generic<T1, T2>(
         interval_secs: u64,
-        shut_down: Arc<AtomicBool>,
+        cancel_token: CancellationToken,
         t1_monitors: &[Arc<T1>],
         t2_monitors: &[Arc<T2>],
     ) where
@@ -830,7 +901,7 @@ impl TaskRunner {
         interval.tick().await;
 
         loop {
-            if shut_down.load(Ordering::Acquire) {
+            if cancel_token.is_cancelled() {
                 Self::do_flush_monitors(t1_monitors, t2_monitors).await;
                 break;
             }
@@ -839,7 +910,7 @@ impl TaskRunner {
                 _ = interval.tick() => {
                     Self::do_flush_monitors(t1_monitors, t2_monitors).await;
                 }
-                _ = Self::wait_for_shutdown(shut_down.clone()) => {
+                _ = cancel_token.cancelled() => {
                     log_info!("task shutdown detected, do final flush");
                     Self::do_flush_monitors(t1_monitors, t2_monitors).await;
                     break;
@@ -848,13 +919,42 @@ impl TaskRunner {
         }
     }
 
-    async fn wait_for_shutdown(shut_down: Arc<AtomicBool>) {
-        loop {
-            if shut_down.load(Ordering::Acquire) {
-                break;
+    /// Report every side that failed, in the given order, without letting a downstream
+    /// cancellation error mask the real root cause.
+    fn report_task_results(
+        results: Vec<(&str, Result<anyhow::Result<()>, tokio::task::JoinError>)>,
+    ) -> anyhow::Result<()> {
+        let mut cancelled: Vec<String> = Vec::new();
+        let mut failures: Vec<String> = Vec::new();
+        for (name, result) in results {
+            match result {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => {
+                    let msg = format!("{} failed: {:#}", name, e);
+                    if e.chain().any(|cause| {
+                        matches!(cause.downcast_ref::<Error>(), Some(Error::Cancelled(_)))
+                    }) {
+                        cancelled.push(msg);
+                    } else {
+                        failures.push(msg);
+                    }
+                }
+                Err(e) => failures.push(format!("{} join error: {}", name, e)),
             }
-            TimeUtil::sleep_millis(100).await;
         }
+
+        if failures.is_empty() && cancelled.is_empty() {
+            return Ok(());
+        }
+        if failures.is_empty() {
+            // typed, so a caller collecting sibling results can tell "stopped because
+            // something else failed" apart from "this is what failed"
+            return Err(Error::Cancelled(cancelled.join("; ")).into());
+        }
+        for msg in cancelled {
+            log_warn!("{} (follow-up of the failure above)", msg);
+        }
+        bail!("{}", failures.join("; "));
     }
 
     async fn do_flush_monitors<T1, T2>(t1_monitors: &[Arc<T1>], t2_monitors: &[Arc<T2>])
@@ -1138,6 +1238,7 @@ impl TaskRunner {
                 partition_cols: original_task_context.partition_cols.clone(),
                 enqueue_limiter: original_task_context.enqueue_limiter.clone(),
                 dequeue_limiter: original_task_context.dequeue_limiter.clone(),
+                cancel_token: original_task_context.cancel_token.clone(),
             });
         } else {
             for schema in schemas.iter() {
@@ -1263,6 +1364,7 @@ impl TaskRunner {
                         partition_cols: original_task_context.partition_cols.clone(),
                         enqueue_limiter: original_task_context.enqueue_limiter.clone(),
                         dequeue_limiter: original_task_context.dequeue_limiter.clone(),
+                        cancel_token: original_task_context.cancel_token.clone(),
                     });
                 }
 

@@ -4,27 +4,37 @@ use std::{
         atomic::{AtomicU64, Ordering},
         Arc,
     },
+    time::Duration,
 };
 
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
-use anyhow::bail;
+use anyhow::{bail, Context};
 use async_trait::async_trait;
-use futures::executor::block_on;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
+use tokio_util::sync::CancellationToken;
 
 use crate::{base_pipeline::BasePipeline, Pipeline};
 use dt_common::{
-    log_position,
+    log_error, log_info, log_position,
     meta::{
-        avro::avro_converter::AvroConverter, dt_data::DtData, dt_queue::DtQueue,
-        position::Position, syncer::Syncer,
+        avro::avro_converter::AvroConverter,
+        dt_data::{DtData, DtItem},
+        dt_queue::DtQueue,
+        position::Position,
+        syncer::Syncer,
     },
     monitor::{counter_type::CounterType, monitor::Monitor},
 };
 use dt_parallelizer::base_parallelizer::BaseParallelizer;
 
 type PositionInfo = (Option<Position>, Option<Position>);
+
+/// How long a shutting-down server waits for the consumer to ack what it already fetched.
+/// Without it, the last fetched batch would never be checkpointed.
+const ACK_GRACE: Duration = Duration::from_secs(30);
+/// Poll interval while waiting out [`ACK_GRACE`].
+const ACK_POLL: Duration = Duration::from_millis(200);
 
 #[derive(Clone)]
 pub struct HttpServerPipeline {
@@ -36,11 +46,16 @@ pub struct HttpServerPipeline {
     pub batch_sink_interval_secs: u64,
     pub http_host: String,
     pub http_port: u64,
+    /// Cancelled when the task is shutting down, whichever side triggered it.
+    pub cancel_token: CancellationToken,
 
     acked_batch_id: Arc<AtomicU64>,
     sent_batch_id: Arc<AtomicU64>,
     pending_ack_data: Arc<async_std::sync::Mutex<HashMap<u64, FetchResp>>>,
     pending_ack_positions: Arc<async_std::sync::Mutex<HashMap<u64, PositionInfo>>>,
+    /// Items already popped off the queue for a batch that failed to encode. They are
+    /// retried on the next fetch, so a failed response never swallows them.
+    carry_over: Arc<async_std::sync::Mutex<Vec<DtItem>>>,
 }
 
 #[derive(Deserialize)]
@@ -87,6 +102,7 @@ impl HttpServerPipeline {
         batch_sink_interval_secs: u64,
         http_host: &str,
         http_port: u64,
+        cancel_token: CancellationToken,
     ) -> Self {
         Self {
             buffer,
@@ -97,10 +113,37 @@ impl HttpServerPipeline {
             batch_sink_interval_secs,
             http_host: http_host.into(),
             http_port,
+            cancel_token,
             acked_batch_id: Default::default(),
             sent_batch_id: Default::default(),
             pending_ack_data: Default::default(),
             pending_ack_positions: Default::default(),
+            carry_over: Default::default(),
+        }
+    }
+}
+
+impl HttpServerPipeline {
+    /// Wait until every sent batch has been acked, up to [`ACK_GRACE`]. Anything still
+    /// unacked when the window closes is reported: its position is not checkpointed.
+    async fn wait_for_pending_acks(&self) {
+        let deadline = tokio::time::Instant::now() + ACK_GRACE;
+        loop {
+            let sent = self.sent_batch_id.load(Ordering::Acquire);
+            let acked = self.acked_batch_id.load(Ordering::Acquire);
+            if acked >= sent {
+                return;
+            }
+            if tokio::time::Instant::now() >= deadline {
+                log_error!(
+                    "http server pipeline is stopping with batches [{}..{}] unacked after {}s, their positions are not checkpointed",
+                    acked + 1,
+                    sent,
+                    ACK_GRACE.as_secs()
+                );
+                return;
+            }
+            tokio::time::sleep(ACK_POLL).await;
         }
     }
 }
@@ -113,20 +156,42 @@ impl Pipeline for HttpServerPipeline {
 
     async fn start(&mut self) -> anyhow::Result<()> {
         let app_data = self.clone();
-        block_on(
-            HttpServer::new(move || {
-                App::new()
-                    .app_data(web::Data::new(app_data.clone()))
-                    .service(web::resource("/info").route(web::get().to(info)))
-                    .service(web::resource("/fetch_new").route(web::get().to(fetch_new)))
-                    .service(web::resource("/fetch_old").route(web::get().to(fetch_old)))
-                    .service(web::resource("/ack").route(web::post().to(ack)))
-            })
-            .bind(format!("{}:{}", self.http_host, self.http_port))
-            .unwrap()
-            .run(),
-        )
-        .unwrap();
+        let bind_addr = format!("{}:{}", self.http_host, self.http_port);
+        let server = HttpServer::new(move || {
+            App::new()
+                .app_data(web::Data::new(app_data.clone()))
+                .service(web::resource("/info").route(web::get().to(info)))
+                .service(web::resource("/fetch_new").route(web::get().to(fetch_new)))
+                .service(web::resource("/fetch_old").route(web::get().to(fetch_old)))
+                .service(web::resource("/ack").route(web::post().to(ack)))
+        })
+        .bind(&bind_addr)
+        .with_context(|| format!("http server pipeline failed to bind [{}]", bind_addr))?
+        .run();
+
+        // spawned, never block_on'd: blocking a runtime worker here would stall every
+        // other task sharing it, the extractor included. It also has to outlive the
+        // select! below, since stopping it means talking to the running server.
+        let handle = server.handle();
+        let mut server_task = tokio::spawn(server);
+
+        tokio::select! {
+            res = &mut server_task => {
+                res.context("http server pipeline panicked")?
+                    .context("http server pipeline exited with error")?;
+            }
+            _ = self.cancel_token.cancelled() => {
+                // the consumer acks out of band, so the last fetched batch is only
+                // checkpointed if we stay up long enough to receive its ack
+                self.wait_for_pending_acks().await;
+                log_info!("http server pipeline is shutting down");
+                handle.stop(true).await;
+                server_task
+                    .await
+                    .context("http server pipeline panicked while stopping")?
+                    .context("http server pipeline failed to stop cleanly")?;
+            }
+        }
         Ok(())
     }
 }
@@ -157,10 +222,23 @@ async fn fetch_new(
         monitor: pipeline.monitor.clone(),
         ..Default::default()
     };
-    let data = parallelizer
-        .drain_by_count(&pipeline.buffer, query.batch_size)
-        .await
-        .unwrap();
+    // items from a batch that failed to encode come first, so a failed response
+    // never loses them and never reorders the stream
+    let mut carry_over = pipeline.carry_over.lock().await;
+    let mut data = std::mem::take(&mut *carry_over);
+    if data.len() < query.batch_size {
+        match parallelizer
+            .drain_by_count(&pipeline.buffer, query.batch_size - data.len())
+            .await
+        {
+            Ok(drained) => data.extend(drained),
+            Err(err) => {
+                log_error!("fetch_new failed to drain the buffer, error: {}", err);
+                *carry_over = data;
+                return HttpResponse::InternalServerError().body(err.to_string());
+            }
+        }
+    }
     let (_, last_received_position, last_commit_position) = BasePipeline::fetch_raw(&data);
 
     // data -> avro response
@@ -169,27 +247,39 @@ async fn fetch_new(
         data: Vec::new(),
     };
 
+    // the converter consumes what it encodes, so encode from a clone: a failure must be
+    // able to hand the whole batch back to carry_over intact
     let mut avro_converter = pipeline.avro_converter.clone();
-    for i in data {
-        match i.dt_data {
+    let mut encode_err = None;
+    for i in data.iter() {
+        let encoded = match &i.dt_data {
             DtData::Dml { row_data } => {
-                let payload = avro_converter
-                    .row_data_to_avro_value(row_data)
+                avro_converter
+                    .row_data_to_avro_value(row_data.clone())
                     .await
-                    .unwrap();
-                response.data.push(payload);
             }
-
             DtData::Ddl { ddl_data } => {
-                let payload = avro_converter
-                    .ddl_data_to_avro_value(ddl_data)
+                avro_converter
+                    .ddl_data_to_avro_value(ddl_data.clone())
                     .await
-                    .unwrap();
-                response.data.push(payload);
             }
-
-            _ => {}
+            _ => continue,
+        };
+        match encoded {
+            Ok(payload) => response.data.push(payload),
+            Err(err) => {
+                encode_err = Some(err);
+                break;
+            }
         }
+    }
+    if let Some(err) = encode_err {
+        log_error!(
+            "fetch_new failed to encode data, the batch is kept for the next fetch, error: {}",
+            err
+        );
+        *carry_over = data;
+        return HttpResponse::InternalServerError().body(err.to_string());
     }
 
     // update monitor
@@ -204,9 +294,9 @@ async fn fetch_new(
     let batch_id = response.batch_id;
     pipeline.sent_batch_id.store(batch_id, Ordering::Release);
     if !response.data.is_empty() {
-        pending_ack_data.insert(batch_id, response);
         pending_ack_positions.insert(batch_id, (last_received_position, last_commit_position));
-        send_response(pending_ack_data.get(&batch_id).unwrap())
+        let stored = pending_ack_data.entry(batch_id).or_insert(response);
+        send_response(stored)
     } else {
         send_response(&response)
     }

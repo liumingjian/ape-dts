@@ -1,5 +1,5 @@
 use std::{
-    sync::{atomic::Ordering, Arc},
+    sync::Arc,
     time::{Duration, UNIX_EPOCH},
 };
 
@@ -9,6 +9,7 @@ use async_trait::async_trait;
 use crate::extractor::{base_extractor::BaseExtractor, resumer::recovery::Recovery};
 use crate::oracle::OracleSqlPlusClient;
 use crate::Extractor;
+
 use dt_common::{
     config::{config_enums::DbType, connection_auth_config::ConnectionAuthConfig},
     log_info,
@@ -161,7 +162,7 @@ impl OracleLogMinerCdcExtractor {
     }
 
     fn should_stop(&mut self) -> anyhow::Result<bool> {
-        if self.base_extractor.shut_down.load(Ordering::Acquire) {
+        if self.base_extractor.cancel_token.is_cancelled() {
             return Ok(true);
         }
 

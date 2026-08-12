@@ -17,6 +17,10 @@ pub struct CheckParallelizer {
 
 #[async_trait]
 impl Parallelizer for CheckParallelizer {
+    fn has_pending_data(&self) -> bool {
+        !self.base_parallelizer.popped_data.is_empty()
+    }
+
     fn get_name(&self) -> String {
         "CheckParallelizer".to_string()
     }

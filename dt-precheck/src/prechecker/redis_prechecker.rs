@@ -1,7 +1,8 @@
-use std::{sync::atomic::AtomicBool, sync::Arc};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use tokio::sync::Mutex;
+use tokio_util::sync::CancellationToken;
 
 use super::traits::Prechecker;
 use crate::{
@@ -79,14 +80,15 @@ impl Prechecker for RedisPrechecker {
             // should never happen since we've already checked the extractor type before into this function
             _ => 0,
         };
-        let buffer = Arc::new(DtQueue::new(1, 0, None, None));
+        let cancel_token = CancellationToken::new();
+        let buffer = Arc::new(DtQueue::new(1, 0, None, None, cancel_token.clone()));
 
         let filter = RdbFilter::from_config(&self.task_config.filter, &DbType::Redis)?;
         let monitor = Arc::new(Monitor::new("extractor", "", 1, 100, 1));
         let base_extractor = BaseExtractor {
             buffer,
             router: RdbRouter::from_config(&self.task_config.router, &DbType::Redis)?,
-            shut_down: Arc::new(AtomicBool::new(false)),
+            cancel_token,
             monitor: ExtractorMonitor::new(monitor).await,
             data_marker: None,
             time_filter: TimeFilter::default(),

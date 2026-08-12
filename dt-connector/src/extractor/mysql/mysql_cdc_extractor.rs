@@ -1,12 +1,4 @@
-use std::{
-    cmp,
-    collections::HashMap,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    time::Duration,
-};
+use std::{cmp, collections::HashMap, sync::Arc, time::Duration};
 
 use anyhow::bail;
 use async_recursion::async_recursion;
@@ -29,6 +21,8 @@ use crate::{
     },
     Extractor,
 };
+use tokio_util::sync::CancellationToken;
+
 use dt_common::{
     config::{config_enums::DbType, connection_auth_config::ConnectionAuthConfig},
     error::Error,
@@ -198,7 +192,7 @@ impl MysqlCdcExtractor {
         }
 
         // start heartbeat
-        self.start_heartbeat(self.base_extractor.shut_down.clone())?;
+        self.start_heartbeat(self.base_extractor.cancel_token.clone())?;
 
         loop {
             if self.base_extractor.time_filter.ended {
@@ -470,7 +464,7 @@ impl MysqlCdcExtractor {
         filtered
     }
 
-    fn start_heartbeat(&mut self, shut_down: Arc<AtomicBool>) -> anyhow::Result<()> {
+    fn start_heartbeat(&mut self, cancel_token: CancellationToken) -> anyhow::Result<()> {
         let db_tb = self.base_extractor.precheck_heartbeat(
             self.heartbeat_interval_secs,
             &self.heartbeat_tb,
@@ -491,14 +485,18 @@ impl MysqlCdcExtractor {
 
         tokio::spawn(async move {
             let mut start_time = Instant::now();
-            while !shut_down.load(Ordering::Acquire) {
+            while !cancel_token.is_cancelled() {
                 if start_time.elapsed().as_secs() >= heartbeat_interval_secs {
                     Self::heartbeat(server_id, &db_tb[0], &db_tb[1], &syncer, &conn_pool)
                         .await
                         .unwrap();
                     start_time = Instant::now();
                 }
-                TimeUtil::sleep_millis(1000 * heartbeat_interval_secs).await;
+                // sleep interruptibly, so shutdown is not delayed by a full heartbeat interval
+                tokio::select! {
+                    _ = cancel_token.cancelled() => break,
+                    _ = TimeUtil::sleep_millis(1000 * heartbeat_interval_secs) => {}
+                }
             }
         });
         log_info!("heartbeat started");

@@ -24,6 +24,10 @@ pub struct RedisParallelizer {
 
 #[async_trait]
 impl Parallelizer for RedisParallelizer {
+    fn has_pending_data(&self) -> bool {
+        !self.base_parallelizer.popped_data.is_empty()
+    }
+
     fn get_name(&self) -> String {
         "RedisParallelizer".to_string()
     }

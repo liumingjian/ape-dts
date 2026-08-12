@@ -35,6 +35,10 @@ pub struct TbMergedData {
 
 #[async_trait]
 impl Parallelizer for MergeParallelizer {
+    fn has_pending_data(&self) -> bool {
+        !self.base_parallelizer.popped_data.is_empty()
+    }
+
     async fn close(&mut self) -> anyhow::Result<()> {
         if let Some(meta_manager) = &self.meta_manager {
             meta_manager.close().await?;
