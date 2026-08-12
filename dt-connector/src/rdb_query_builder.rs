@@ -219,10 +219,81 @@ impl RdbQueryBuilder<'_> {
             }
         }
 
-        if replace && self.mysql_tb_meta.is_some() {
-            sql = format!("REPLACE{}", sql.trim_start_matches("INSERT"));
+        if replace {
+            if self.mysql_tb_meta.is_some() {
+                sql = format!("REPLACE{}", sql.trim_start_matches("INSERT"));
+            } else if let Some(conflict_clause) = self.get_batch_conflict_clause() {
+                sql = format!("{} {}", sql, conflict_clause);
+            }
         }
         Ok((RdbQueryInfo { sql, cols, binds }, malloc_size))
+    }
+
+    /// The batch counterpart of the single row upsert built by [`Self::get_replace_query`].
+    /// New values come from `EXCLUDED` instead of extra binds, so the clause adds no placeholders.
+    /// Returns None when the db type has no ON CONFLICT support (mysql uses REPLACE, GaussDBOracle
+    /// deletes first, see [`Self::get_batch_replace_delete_query`]), or when the table has no
+    /// id cols to use as the conflict target.
+    fn get_batch_conflict_clause(&self) -> Option<String> {
+        if !matches!(self.db_type, DbType::Pg | DbType::GaussDBPg)
+            || self.rdb_tb_meta.id_cols.is_empty()
+        {
+            return None;
+        }
+
+        let set_pairs: Vec<String> = self
+            .rdb_tb_meta
+            .cols
+            .iter()
+            .filter(|col| !self.rdb_tb_meta.id_cols.contains(*col))
+            .map(|col| {
+                let escaped_col = self.escape(col);
+                format!("{}=EXCLUDED.{}", escaped_col, escaped_col)
+            })
+            .collect();
+
+        let conflict_action = if set_pairs.is_empty() {
+            // when all columns are primary keys, use DO NOTHING instead of DO UPDATE SET
+            "DO NOTHING".to_string()
+        } else {
+            format!("DO UPDATE SET {}", set_pairs.join(","))
+        };
+
+        Some(format!(
+            "ON CONFLICT ({}) {}",
+            self.escape_cols(&self.rdb_tb_meta.id_cols).join(","),
+            conflict_action
+        ))
+    }
+
+    /// The batch counterpart of [`Self::get_replace_delete_query`]: GaussDBOracle supports no
+    /// ON CONFLICT, so a batch insert with replace deletes the incoming keys first.
+    pub fn get_batch_replace_delete_query<'a>(
+        &self,
+        data: &'a [RowData],
+        start_index: usize,
+        batch_size: usize,
+    ) -> anyhow::Result<RdbQueryInfo<'a>> {
+        let rows: Vec<&'a RowData> = data.iter().skip(start_index).take(batch_size).collect();
+        let where_in_sql = self.get_where_in_info(&rows, 0, rows.len(), true)?;
+        let sql = format!(
+            "DELETE FROM {}.{} WHERE {}",
+            self.escape(&self.rdb_tb_meta.schema),
+            self.escape(&self.rdb_tb_meta.tb),
+            where_in_sql
+        );
+
+        let cap = rows.len().saturating_mul(self.rdb_tb_meta.id_cols.len());
+        let mut cols = Vec::with_capacity(cap);
+        let mut binds = Vec::with_capacity(cap);
+        for row_data in rows.iter() {
+            let after = row_data.require_after()?;
+            for col in self.rdb_tb_meta.id_cols.iter() {
+                cols.push(col.clone());
+                binds.push(Self::get_col_value(after, col)?);
+            }
+        }
+        Ok(RdbQueryInfo { sql, cols, binds })
     }
 
     fn get_replace_query<'a>(
@@ -846,6 +917,128 @@ mod tests {
             r#"DELETE FROM "public"."t_oracle_to_gaussdb_oracle" WHERE "id" = $1::int4"#
         );
         assert_eq!(query_info.binds[0], Some(&ColValue::LongLong(3)));
+    }
+
+    #[test]
+    fn pg_batch_insert_replace_upserts_on_conflict() {
+        let tb_meta = pg_tb_meta("public", "t_batch");
+        let rows = [pg_row_data(1), pg_row_data(2)];
+        let query_builder = RdbQueryBuilder::new_for_pg(&tb_meta, None);
+
+        let (query_info, _) = query_builder
+            .get_batch_insert_query(&rows, 0, 2, true)
+            .unwrap();
+
+        assert_eq!(
+            query_info.sql,
+            r#"INSERT INTO "public"."t_batch"("id","tracer","payload") VALUES($1::int4,$2::text,$3::text),($4::int4,$5::text,$6::text) ON CONFLICT ("id") DO UPDATE SET "tracer"=EXCLUDED."tracer","payload"=EXCLUDED."payload""#
+        );
+        // the conflict clause must not consume placeholders, binds stay one per inserted col
+        assert_eq!(query_info.binds.len(), 6);
+        assert_eq!(query_info.cols.len(), 6);
+    }
+
+    #[test]
+    fn pg_batch_insert_without_replace_keeps_plain_insert() {
+        let tb_meta = pg_tb_meta("public", "t_batch");
+        let rows = [pg_row_data(1)];
+        let query_builder = RdbQueryBuilder::new_for_pg(&tb_meta, None);
+
+        let (query_info, _) = query_builder
+            .get_batch_insert_query(&rows, 0, 1, false)
+            .unwrap();
+
+        assert!(!query_info.sql.contains("ON CONFLICT"));
+    }
+
+    #[test]
+    fn gaussdb_pg_batch_insert_replace_upserts_on_conflict() {
+        let tb_meta = pg_tb_meta("public", "t_batch");
+        let rows = [pg_row_data(1)];
+        let query_builder = RdbQueryBuilder::new_for_pg_compatible(
+            &tb_meta,
+            None,
+            dt_common::config::config_enums::DbType::GaussDBPg,
+        );
+
+        let (query_info, _) = query_builder
+            .get_batch_insert_query(&rows, 0, 1, true)
+            .unwrap();
+
+        assert!(query_info
+            .sql
+            .contains(r#"ON CONFLICT ("id") DO UPDATE SET"#));
+    }
+
+    #[test]
+    fn pg_batch_insert_replace_does_nothing_when_all_cols_are_keys() {
+        let mut tb_meta = pg_tb_meta("public", "t_batch");
+        tb_meta.basic.id_cols = tb_meta.basic.cols.clone();
+        let rows = [pg_row_data(1)];
+        let query_builder = RdbQueryBuilder::new_for_pg(&tb_meta, None);
+
+        let (query_info, _) = query_builder
+            .get_batch_insert_query(&rows, 0, 1, true)
+            .unwrap();
+
+        assert!(query_info
+            .sql
+            .ends_with(r#"ON CONFLICT ("id","tracer","payload") DO NOTHING"#));
+    }
+
+    #[test]
+    fn pg_batch_insert_replace_skips_conflict_clause_without_id_cols() {
+        let mut tb_meta = pg_tb_meta("public", "t_batch");
+        tb_meta.basic.id_cols = vec![];
+        let rows = [pg_row_data(1)];
+        let query_builder = RdbQueryBuilder::new_for_pg(&tb_meta, None);
+
+        let (query_info, _) = query_builder
+            .get_batch_insert_query(&rows, 0, 1, true)
+            .unwrap();
+
+        assert!(!query_info.sql.contains("ON CONFLICT"));
+    }
+
+    #[test]
+    fn gaussdb_oracle_batch_insert_replace_uses_delete_then_insert() {
+        let tb_meta = pg_tb_meta("public", "t_oracle_to_gaussdb_oracle");
+        let rows = [oracle_row_data(), oracle_row_data()];
+        let query_builder = RdbQueryBuilder::new_for_pg_compatible(
+            &tb_meta,
+            None,
+            dt_common::config::config_enums::DbType::GaussDBOracle,
+        );
+
+        let (insert_info, _) = query_builder
+            .get_batch_insert_query(&rows, 0, 2, true)
+            .unwrap();
+        assert!(!insert_info.sql.contains("ON CONFLICT"));
+
+        let delete_info = query_builder
+            .get_batch_replace_delete_query(&rows, 0, 2)
+            .unwrap();
+        assert_eq!(
+            delete_info.sql,
+            r#"DELETE FROM "public"."t_oracle_to_gaussdb_oracle" WHERE ("id") IN (($1::int4),($2::int4))"#
+        );
+        assert_eq!(delete_info.cols, vec!["id".to_string(), "id".to_string()]);
+        assert_eq!(delete_info.binds[0], Some(&ColValue::LongLong(3)));
+        assert_eq!(delete_info.binds[1], Some(&ColValue::LongLong(3)));
+    }
+
+    fn pg_row_data(id: i64) -> RowData {
+        let mut after = HashMap::new();
+        after.insert("id".to_string(), ColValue::LongLong(id));
+        after.insert("tracer".to_string(), ColValue::String("t".to_string()));
+        after.insert("payload".to_string(), ColValue::String("p".to_string()));
+        RowData::new(
+            "public".to_string(),
+            "t_batch".to_string(),
+            RowType::Insert,
+            None,
+            Some(after),
+        )
     }
 
     fn oracle_row_data() -> RowData {
