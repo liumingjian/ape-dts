@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 sanitize_run_id() {
   local raw="$1"
@@ -67,6 +67,18 @@ die() {
   exit 1
 }
 
+# Safety net for stages that fail through `set -e` instead of `die` (a bare
+# `mysql_sql` heredoc, a compose call, an assignment from a failing command
+# substitution). Without this the run aborts with an empty FAILURE_REASON and
+# summary.md shows no cause at all. Recorded unconditionally; write_summary
+# only falls back to it when the run actually failed and nothing called `die`.
+record_err() {
+  local status="$1"
+  local lineno="$2"
+  local cmd="$3"
+  LAST_ERR_REASON="stage ${CURRENT_STAGE:-initialization} aborted: \`${cmd}\` exited with status ${status} (${BASH_SOURCE[0]##*/}:${lineno})"
+}
+
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "missing dependency: $1"
 }
@@ -83,19 +95,73 @@ postgres_sql() {
   compose exec -T postgresql-target psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres "$@"
 }
 
+# Probe seams: overridden by the unit tests to drive readiness sequences.
+probe_mysql() {
+  mysql_sql -e "SELECT 1" >/dev/null 2>&1
+}
+
+probe_postgres() {
+  postgres_sql -tA -c "SELECT 1" >/dev/null 2>&1
+}
+
+# Prints the compose service's container health: healthy/unhealthy/starting, or
+# "none" when the image declares no healthcheck. Empty output means "unknown"
+# (container not created yet, or docker inspect failed) and counts as not ready.
+service_health() {
+  local service="$1"
+  local cid
+  cid="$(compose ps -q "$service" 2>/dev/null | head -n1)"
+  [[ -n "$cid" ]] || return 1
+  docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid" 2>/dev/null
+}
+
+services_healthy() {
+  local service health
+  for service in mysql-source postgresql-target; do
+    health="$(service_health "$service" || true)"
+    case "$health" in
+      healthy|none) ;;
+      *) return 1 ;;
+    esac
+  done
+  return 0
+}
+
+# The MySQL official image starts a temporary server during initialization and
+# then restarts it. A single successful `SELECT 1` can land on that temporary
+# server, after which the very next statement dies with ERROR 2002. Readiness
+# therefore requires both the compose healthcheck to report healthy and
+# DB_READY_STREAK_REQUIRED consecutive successful probes, so the restart window
+# breaks the streak instead of being mistaken for a ready database.
 wait_for_databases() {
   local deadline=$((SECONDS + DOCKER_TIMEOUT_SECS))
+  local streak=0
+  local reason="no readiness probe completed"
   while (( SECONDS <= deadline )); do
-    if mysql_sql -e "SELECT 1" >/dev/null 2>&1 && postgres_sql -tA -c "SELECT 1" >/dev/null 2>&1; then
-      return 0
+    if ! services_healthy; then
+      streak=0
+      reason="container healthcheck not healthy yet"
+    elif ! probe_mysql; then
+      streak=0
+      reason="mysql not accepting connections yet"
+    elif ! probe_postgres; then
+      streak=0
+      reason="postgresql not accepting connections yet"
+    else
+      streak=$((streak + 1))
+      reason="only ${streak}/${DB_READY_STREAK_REQUIRED} consecutive probes succeeded"
+      if (( streak >= DB_READY_STREAK_REQUIRED )); then
+        log "databases ready (${streak} consecutive probes)"
+        return 0
+      fi
     fi
-    sleep 1
+    sleep "$DB_READY_PROBE_INTERVAL_SECS"
   done
-  die "database readiness exceeded ${DOCKER_TIMEOUT_SECS}s"
+  die "database readiness exceeded ${DOCKER_TIMEOUT_SECS}s (${reason})"
 }
 
 prepare_snapshot_data() {
-  mysql_sql <<'SQL'
+  mysql_sql <<'SQL' || return 1
 DROP DATABASE IF EXISTS ape_dts_e2e;
 CREATE DATABASE ape_dts_e2e;
 CREATE TABLE ape_dts_e2e.migration_redline_orders (
@@ -114,7 +180,7 @@ VALUES
   (3, 'ORD-003', 'Carol', 19.99, 'created', 'will be deleted');
 SQL
 
-  postgres_sql <<'SQL'
+  postgres_sql <<'SQL' || return 1
 DROP TABLE IF EXISTS public.migration_redline_orders;
 CREATE TABLE public.migration_redline_orders (
   id BIGINT PRIMARY KEY,
@@ -125,6 +191,7 @@ CREATE TABLE public.migration_redline_orders (
   note VARCHAR(255) NULL
 );
 SQL
+  return 0
 }
 
 write_snapshot_config() {
@@ -455,13 +522,24 @@ collect_diagnostics() {
   compose logs --no-color postgresql-target >"$RUN_DIR/docker/postgresql.log" 2>&1 || true
 }
 
+# A failed run must never report "none": fall back to whatever the ERR trap
+# caught when the failing stage bypassed `die`.
+summary_reason() {
+  local exit_code="$1"
+  if [[ "$exit_code" == "0" ]]; then
+    printf '%s' "${FAILURE_REASON:-none}"
+    return 0
+  fi
+  printf '%s' "${FAILURE_REASON:-${LAST_ERR_REASON:-unknown failure (no reason recorded)}}"
+}
+
 write_summary() {
   local exit_code="$1"
   {
     printf '# MySQL to PostgreSQL red-line run\n\n'
     printf -- '- Result: %s\n' "$([[ "$exit_code" == "0" ]] && printf PASS || printf FAIL)"
     printf -- '- Stage: %s\n' "${CURRENT_STAGE:-initialization}"
-    printf -- '- Reason: %s\n' "${FAILURE_REASON:-none}"
+    printf -- '- Reason: %s\n' "$(summary_reason "$exit_code")"
     printf -- '- Snapshot exit code: %s\n' "${SNAPSHOT_EXIT_CODE:-not-run}"
     printf -- '- CDC exit code: %s\n' "${CDC_EXIT_CODE:-not-stopped}"
     printf -- '- Artifacts: `%s`\n' "$RUN_DIR"
@@ -470,7 +548,7 @@ write_summary() {
 
 cleanup() {
   local exit_code=$?
-  trap - EXIT INT TERM
+  trap - EXIT INT TERM ERR
   set +e
   collect_diagnostics
   stop_cdc
@@ -492,6 +570,8 @@ main() {
   REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
   COMPOSE_FILE="$REPO_ROOT/scripts/e2e/docker-compose.mysql-to-postgresql-redline.yml"
   DOCKER_TIMEOUT_SECS="${DOCKER_TIMEOUT_SECS:-90}"
+  DB_READY_STREAK_REQUIRED="${DB_READY_STREAK_REQUIRED:-3}"
+  DB_READY_PROBE_INTERVAL_SECS="${DB_READY_PROBE_INTERVAL_SECS:-1}"
   SNAPSHOT_TIMEOUT_SECS="${SNAPSHOT_TIMEOUT_SECS:-120}"
   CDC_PROBE_TIMEOUT_SECS="${CDC_PROBE_TIMEOUT_SECS:-60}"
   CRUD_TIMEOUT_SECS="${CRUD_TIMEOUT_SECS:-30}"
@@ -511,22 +591,25 @@ main() {
   SNAPSHOT_CONFIG="$RUN_DIR/snapshot-task.ini"
   CDC_CONFIG="$RUN_DIR/cdc-task.ini"
   CDC_PID=""
+  FAILURE_REASON=""
+  LAST_ERR_REASON=""
   mkdir -p "$RUN_DIR"/{docker,dumps,diffs,engine-logs/snapshot,engine-logs/cdc}
 
+  trap 'record_err "$?" "$LINENO" "$BASH_COMMAND"' ERR
   trap cleanup EXIT
   trap 'exit 130' INT
   trap 'exit 143' TERM
 
   CURRENT_STAGE="docker-start"
   log "artifacts: $RUN_DIR"
-  compose up -d
+  compose up -d || die "docker compose up failed"
   COMPOSE_STARTED=1
   wait_for_databases
-  MYSQL_PORT="$(parse_compose_port "$(compose port mysql-source 3306)")"
-  POSTGRES_PORT="$(parse_compose_port "$(compose port postgresql-target 5432)")"
+  MYSQL_PORT="$(parse_compose_port "$(compose port mysql-source 3306)")" || die "could not resolve the published mysql port"
+  POSTGRES_PORT="$(parse_compose_port "$(compose port postgresql-target 5432)")" || die "could not resolve the published postgresql port"
 
   CURRENT_STAGE="snapshot-prepare"
-  prepare_snapshot_data
+  prepare_snapshot_data || die "schema and fixture preparation failed (databases went away after readiness)"
   write_snapshot_config
   ensure_dt_main
 

@@ -156,6 +156,144 @@ case "$assert_phase_output" in
     failures=$((failures + 1)) ;;
 esac
 
+# --- readiness race (ticket 34) ---------------------------------------------
+# The MySQL image serves a temporary server during initialization and then
+# restarts it. A single successful probe must not be mistaken for readiness.
+
+# Drives wait_for_databases against a scripted probe sequence.
+# $1: space-separated per-tick outcomes for mysql ("ok"/"fail")
+# $2: required streak
+# Prints "<status> <ticks-consumed>".
+run_readiness() {
+  local script="$1"
+  local required="$2"
+  (
+    DOCKER_TIMEOUT_SECS=30
+    DB_READY_STREAK_REQUIRED="$required"
+    DB_READY_PROBE_INTERVAL_SECS=0
+    tick=0
+    outcomes=($script)
+    services_healthy() { :; }
+    probe_postgres() { :; }
+    probe_mysql() {
+      local outcome="${outcomes[$tick]:-fail}"
+      tick=$((tick + 1))
+      [[ "$outcome" == "ok" ]]
+    }
+    sleep() { :; }
+    log() { :; }
+    status=0
+    wait_for_databases >/dev/null 2>&1 || status=$?
+    printf '%s %s' "$status" "$tick"
+  )
+}
+
+assert_eq "readiness needs consecutive successes, not just one" \
+  "0 5" "$(run_readiness "ok fail ok ok ok" 3)"
+assert_eq "readiness returns as soon as the streak is met" \
+  "0 3" "$(run_readiness "ok ok ok" 3)"
+
+# A probe that flaps forever must time out, and say why.
+readiness_timeout_output() {
+  (
+    DOCKER_TIMEOUT_SECS=3
+    DB_READY_STREAK_REQUIRED=3
+    DB_READY_PROBE_INTERVAL_SECS=0
+    services_healthy() { :; }
+    probe_mysql() { :; }
+    probe_postgres() { return 1; }
+    sleep() { SECONDS=$((SECONDS + 1)); }
+    log() { :; }
+    wait_for_databases 2>&1
+  )
+}
+readiness_output="$(readiness_timeout_output || true)"
+case "$readiness_output" in
+  *"database readiness exceeded"*"postgresql not accepting connections yet"*)
+    printf 'ok - %s\n' "readiness timeout names the side that never came up" ;;
+  *)
+    printf 'not ok - %s\nactual: <%s>\n' "readiness timeout names the side that never came up" "$readiness_output" >&2
+    failures=$((failures + 1)) ;;
+esac
+
+# An unhealthy container must never be counted toward the streak.
+readiness_unhealthy_output() {
+  (
+    DOCKER_TIMEOUT_SECS=3
+    DB_READY_STREAK_REQUIRED=1
+    DB_READY_PROBE_INTERVAL_SECS=0
+    services_healthy() { return 1; }
+    probe_mysql() { :; }
+    probe_postgres() { :; }
+    sleep() { SECONDS=$((SECONDS + 1)); }
+    log() { :; }
+    wait_for_databases 2>&1
+  )
+}
+readiness_unhealthy="$(readiness_unhealthy_output || true)"
+case "$readiness_unhealthy" in
+  *"container healthcheck not healthy yet"*)
+    printf 'ok - %s\n' "readiness gates on the compose healthcheck" ;;
+  *)
+    printf 'not ok - %s\nactual: <%s>\n' "readiness gates on the compose healthcheck" "$readiness_unhealthy" >&2
+    failures=$((failures + 1)) ;;
+esac
+
+# services_healthy accepts an image without a healthcheck, rejects "starting".
+assert_eq "services_healthy rejects a starting container" "not-ready" \
+  "$(service_health() { printf 'starting'; }; services_healthy && printf ready || printf not-ready)"
+assert_eq "services_healthy accepts an image with no healthcheck" "ready" \
+  "$(service_health() { printf 'none'; }; services_healthy && printf ready || printf not-ready)"
+assert_eq "services_healthy accepts healthy containers" "ready" \
+  "$(service_health() { printf 'healthy'; }; services_healthy && printf ready || printf not-ready)"
+assert_eq "services_healthy rejects an unknown container" "not-ready" \
+  "$(service_health() { return 1; }; services_healthy && printf ready || printf not-ready)"
+
+# --- failure reason must survive a stage that bypasses die() ------------------
+assert_eq "summary_reason keeps the explicit die reason" \
+  "snapshot dt-main failed with exit code 3" \
+  "$(FAILURE_REASON="snapshot dt-main failed with exit code 3" LAST_ERR_REASON="" summary_reason 1)"
+assert_eq "summary_reason falls back to the trapped command on a set -e abort" \
+  "stage snapshot-prepare aborted: \`mysql_sql\` exited with status 1 (redline.sh:42)" \
+  "$(FAILURE_REASON="" LAST_ERR_REASON="stage snapshot-prepare aborted: \`mysql_sql\` exited with status 1 (redline.sh:42)" summary_reason 1)"
+assert_eq "summary_reason never reports none on a failed run" \
+  "unknown failure (no reason recorded)" \
+  "$(FAILURE_REASON="" LAST_ERR_REASON="" summary_reason 1)"
+assert_eq "summary_reason reports none on a passing run" "none" \
+  "$(FAILURE_REASON="" LAST_ERR_REASON="stray" summary_reason 0)"
+
+record_err_reason() {
+  (
+    CURRENT_STAGE="snapshot-prepare"
+    record_err 1 42 "mysql_sql"
+    printf '%s' "$LAST_ERR_REASON"
+  )
+}
+case "$(record_err_reason)" in
+  "stage snapshot-prepare aborted: \`mysql_sql\` exited with status 1 ("*)
+    printf 'ok - %s\n' "record_err names the stage and the failing command" ;;
+  *)
+    printf 'not ok - %s\nactual: <%s>\n' "record_err names the stage and the failing command" "$(record_err_reason)" >&2
+    failures=$((failures + 1)) ;;
+esac
+
+# cleanup runs stop_cdc before write_summary; neither may lose the die reason.
+summary_survives_shutdown() {
+  (
+    RUN_DIR="$tmp_dir"
+    CURRENT_STAGE="snapshot-prepare"
+    FAILURE_REASON="schema and fixture preparation failed"
+    LAST_ERR_REASON=""
+    CDC_PID=""
+    stop_cdc
+    write_summary 1
+    grep -F -- '- Reason:' "$RUN_DIR/summary.md"
+  )
+}
+assert_eq "shutdown path preserves the failure reason in summary.md" \
+  "- Reason: schema and fixture preparation failed" \
+  "$(summary_survives_shutdown)"
+
 if (( failures > 0 )); then
   printf '%d test(s) failed\n' "$failures" >&2
   exit 1
