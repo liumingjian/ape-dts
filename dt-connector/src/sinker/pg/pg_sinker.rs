@@ -629,39 +629,66 @@ impl PgSinker {
                 )
             })?;
 
+        // GaussDBOracle supports no ON CONFLICT, so replace means: delete the incoming keys first,
+        // in the same transaction as the insert.
+        let replace_delete_info = if self.replace
+            && self.db_type == DbType::GaussDBOracle
+            && !tb_meta.basic.id_cols.is_empty()
+        {
+            Some(query_builder.get_batch_replace_delete_query(data, start_index, batch_size)?)
+        } else {
+            None
+        };
+
         let start_time = Instant::now();
         let mut rts = LimitedQueue::new(1);
         let conn_pool = self.current_pool().await;
-        let exec_result: anyhow::Result<()> = if let Some(sql) = self.get_data_marker_sql().await {
-            let mut tx = conn_pool.begin().await.with_context(|| {
-                format!("failed to begin tx for batch insert: {}.{}", schema, tb)
-            })?;
-            sqlx::query(&sql)
-                .execute(&mut tx)
+        let data_marker_sql = self.get_data_marker_sql().await;
+        let exec_result: anyhow::Result<()> =
+            if data_marker_sql.is_some() || replace_delete_info.is_some() {
+                // keep the `?`s inside the block so a failure still falls back to serial sink below
+                async {
+                    let mut tx = conn_pool.begin().await.with_context(|| {
+                        format!("failed to begin tx for batch insert: {}.{}", schema, tb)
+                    })?;
+                    if let Some(sql) = &data_marker_sql {
+                        sqlx::query(sql).execute(&mut tx).await.with_context(|| {
+                            format!("failed to execute data marker sql: [{}]", sql)
+                        })?;
+                    }
+                    if let Some(delete_info) = &replace_delete_info {
+                        let delete_query = query_builder.create_pg_query(delete_info)?;
+                        delete_query.execute(&mut tx).await.with_context(|| {
+                            format!(
+                                "gaussdb_oracle batch replace delete failed: {}.{} sql=[{}]",
+                                schema, tb, delete_info.sql
+                            )
+                        })?;
+                    }
+                    query.execute(&mut tx).await.with_context(|| {
+                        format!(
+                            "batch insert execute failed (in tx): {}.{} sql=[{}]",
+                            schema, tb, query_info.sql
+                        )
+                    })?;
+                    tx.commit().await.with_context(|| {
+                        format!("failed to commit tx for batch insert: {}.{}", schema, tb)
+                    })?;
+                    Ok(())
+                }
                 .await
-                .with_context(|| format!("failed to execute data marker sql: [{}]", sql))?;
-            query.execute(&mut tx).await.with_context(|| {
-                format!(
-                    "batch insert execute failed (with data marker): {}.{} sql=[{}]",
-                    schema, tb, query_info.sql
-                )
-            })?;
-            tx.commit().await.with_context(|| {
-                format!("failed to commit tx for batch insert: {}.{}", schema, tb)
-            })?;
-            Ok(())
-        } else {
-            query
-                .execute(&conn_pool)
-                .await
-                .map(|_| ())
-                .with_context(|| {
-                    format!(
-                        "batch insert execute failed: {}.{} sql=[{}]",
-                        schema, tb, query_info.sql
-                    )
-                })
-        };
+            } else {
+                query
+                    .execute(&conn_pool)
+                    .await
+                    .map(|_| ())
+                    .with_context(|| {
+                        format!(
+                            "batch insert execute failed: {}.{} sql=[{}]",
+                            schema, tb, query_info.sql
+                        )
+                    })
+            };
 
         if let Err(error) = exec_result {
             log_error!(
