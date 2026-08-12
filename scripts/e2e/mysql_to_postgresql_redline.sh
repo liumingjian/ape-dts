@@ -4,9 +4,11 @@ set -Eeuo pipefail
 # A run stopped by SIGTERM must leave with 128+15, never 0: an orchestrator has to be able to
 # tell "drained and stopped on request" from "reached the end of the task".
 SIGTERM_EXIT_CODE=143
-# The row written immediately before the signal: it only reaches the target if the shutdown
-# really drained the buffer instead of exiting on the spot.
+# Probe rows for the two shutdown checks: 9002 rides the normal CDC engine (does SIGTERM stop it
+# cleanly?), 9003 rides a second engine that holds everything in the pipeline (does the shutdown
+# itself drain and checkpoint?).
 GRACEFUL_PROBE_ROW="9002|PROBE-9002|Graceful Stop|0.02|probe|<NULL>"
+DRAIN_PROBE_ROW="9003|PROBE-9003|Drain On Shutdown|0.03|probe|<NULL>"
 
 sanitize_run_id() {
   local raw="$1"
@@ -250,7 +252,11 @@ EOF
 write_cdc_config() {
   local binlog_filename="$1"
   local binlog_position="$2"
-  cat >"$CDC_CONFIG" <<EOF
+  local config_path="${3:-$CDC_CONFIG}"
+  local log_dir="${4:-$RUN_DIR/engine-logs/cdc}"
+  local batch_sink_interval_secs="${5:-0}"
+  local checkpoint_interval_secs="${6:-1}"
+  cat >"$config_path" <<EOF
 [extractor]
 db_type=mysql
 extract_type=cdc
@@ -290,12 +296,13 @@ parallel_size=1
 
 [pipeline]
 buffer_size=4
-checkpoint_interval_secs=1
+checkpoint_interval_secs=${checkpoint_interval_secs}
+batch_sink_interval_secs=${batch_sink_interval_secs}
 
 [runtime]
 log_level=info
 log4rs_file=${REPO_ROOT}/log4rs.yaml
-log_dir=${RUN_DIR}/engine-logs/cdc
+log_dir=${log_dir}
 EOF
 }
 
@@ -357,28 +364,31 @@ stop_cdc() {
 last_checkpoint_position() {
   local position_log="$1"
   [[ -r "$position_log" ]] || return 0
-  grep -F 'checkpoint_position |' "$position_log" | tail -n 1 | sed -E 's/.*checkpoint_position \| //'
+  # No match is an answer ("nothing recorded"), not a failure: under `set -e` a bare grep here
+  # would abort the stage instead of letting the caller report the missing resume point.
+  grep -F 'checkpoint_position |' "$position_log" | tail -n 1 | sed -E 's/.*checkpoint_position \| //' || true
 }
 
 # Prints why a graceful stop is unacceptable, empty when the shutdown was clean.
 # Pure: every observation is passed in, so the unit tests can drive each failure mode.
 graceful_stop_reason() {
   local exit_code="$1"
-  local source_probe="$2"
-  local target_probe="$3"
-  local position_before="$4"
-  local position_after="$5"
+  local expected_row="$2"
+  local source_probe="$3"
+  local target_probe="$4"
+  local position_before="$5"
+  local position_after="$6"
 
   if [[ "$exit_code" != "$SIGTERM_EXIT_CODE" ]]; then
     printf '%s' "cdc dt-main exited with code $exit_code after SIGTERM, expected $SIGTERM_EXIT_CODE"
     return 0
   fi
-  if [[ "$source_probe" != "$GRACEFUL_PROBE_ROW" ]]; then
-    printf '%s' "the graceful-stop probe row never landed in mysql, so the shutdown was not exercised"
+  if [[ "$source_probe" != "$expected_row" ]]; then
+    printf '%s' "the probe row never landed in mysql, so the shutdown was not exercised"
     return 0
   fi
-  if [[ "$target_probe" != "$GRACEFUL_PROBE_ROW" ]]; then
-    printf '%s' "the row written just before SIGTERM never reached postgresql: the shutdown dropped buffered data"
+  if [[ "$target_probe" != "$expected_row" ]]; then
+    printf '%s' "the row written before SIGTERM never reached postgresql: the shutdown dropped buffered data"
     return 0
   fi
   if [[ -z "$position_after" ]]; then
@@ -391,18 +401,33 @@ graceful_stop_reason() {
   fi
 }
 
-# SIGTERM (what k8s/systemd and the console executor send) must drain, record the position and
-# exit non-zero. Runs last: it stops the CDC engine for good.
-assert_graceful_stop() {
-  cdc_is_alive || die "cdc dt-main was no longer running when the graceful stop check started"
-  local position_log="$RUN_DIR/engine-logs/cdc/position.log"
-  local position_before
-  position_before="$(last_checkpoint_position "$position_log")"
+# The drain check is only meaningful while the data is still inside the engine: if the row already
+# reached the target before the signal, the run proved nothing.
+drain_precondition_reason() {
+  local target_probe="$1"
+  [[ -n "$target_probe" ]] || return 0
+  printf '%s' "the probe row reached postgresql before SIGTERM (batch_sink_interval_secs did not hold it back), so the drain assertion would be vacuous"
+}
 
-  mysql_sql -e "INSERT INTO ape_dts_e2e.migration_redline_orders VALUES (9002, 'PROBE-9002', 'Graceful Stop', 0.02, 'probe', NULL);" \
-    || die "could not write the graceful-stop probe row"
+# Waits until the CDC engine has propagated a probe row to the target.
+wait_for_probe_row() {
+  local expected_row="$1"
+  local id="${expected_row%%|*}"
+  local deadline=$((SECONDS + CDC_PROBE_TIMEOUT_SECS))
+  while (( SECONDS <= deadline )); do
+    require_cdc_alive
+    if [[ "$(dump_postgres 2>/dev/null | grep "^${id}|" || true)" == "$expected_row" ]]; then
+      return 0
+    fi
+    sleep 1
+  done
+  die "probe row $id did not reach postgresql within ${CDC_PROBE_TIMEOUT_SECS}s"
+}
+
+# Stops the running CDC engine and waits for it to leave on its own. Prints nothing; sets
+# CDC_EXIT_CODE and clears CDC_PID.
+sigterm_and_wait() {
   kill -TERM "$CDC_PID" >/dev/null 2>&1 || die "could not send SIGTERM to cdc dt-main (pid=$CDC_PID)"
-
   local deadline=$((SECONDS + GRACEFUL_STOP_TIMEOUT_SECS))
   while cdc_is_alive && (( SECONDS <= deadline )); do
     sleep 1
@@ -412,20 +437,75 @@ assert_graceful_stop() {
     CDC_PID=""
     die "cdc dt-main did not exit within ${GRACEFUL_STOP_TIMEOUT_SECS}s of SIGTERM (it ignored the signal)"
   fi
-
   set +e
   wait "$CDC_PID" >/dev/null 2>&1
   CDC_EXIT_CODE=$?
   set -e
   CDC_PID=""
+}
+
+# SIGTERM (what k8s/systemd and the console executor send) must stop the running engine on its
+# own, keep the data it had already written and leave a non-zero, signal-shaped exit code.
+# Runs last: it stops the CDC engine for good.
+assert_graceful_stop() {
+  cdc_is_alive || die "cdc dt-main was no longer running when the graceful stop check started"
+  local position_log="$RUN_DIR/engine-logs/cdc/position.log"
+  local position_before
+  position_before="$(last_checkpoint_position "$position_log")"
+
+  mysql_sql -e "INSERT INTO ape_dts_e2e.migration_redline_orders VALUES (9002, 'PROBE-9002', 'Graceful Stop', 0.02, 'probe', NULL);" \
+    || die "could not write the graceful-stop probe row"
+  # Wait for it to propagate first: cancellation drops binlog events the extractor has not read
+  # yet, so signalling immediately after the INSERT would be a race, not an assertion.
+  wait_for_probe_row "$GRACEFUL_PROBE_ROW"
+  sigterm_and_wait
 
   local source_probe target_probe position_after reason
   source_probe="$(dump_mysql 2>/dev/null | grep '^9002|' || true)"
   target_probe="$(dump_postgres 2>/dev/null | grep '^9002|' || true)"
   position_after="$(last_checkpoint_position "$position_log")"
-  reason="$(graceful_stop_reason "$CDC_EXIT_CODE" "$source_probe" "$target_probe" "$position_before" "$position_after")"
+  reason="$(graceful_stop_reason "$CDC_EXIT_CODE" "$GRACEFUL_PROBE_ROW" "$source_probe" "$target_probe" "$position_before" "$position_after")"
   [[ -z "$reason" ]] || die "$reason (position log: $position_log)"
   log "graceful stop verified (exit code $CDC_EXIT_CODE, position: $position_after)"
+}
+
+# The drain and the forced final checkpoint, proven rather than raced: this engine holds every
+# change inside the pipeline for DRAIN_HOLD_SECS and never checkpoints on a clock, so the probe
+# row in the target and any line in position.log can only come from the shutdown path itself.
+assert_shutdown_drains_and_checkpoints() {
+  [[ -z "${CDC_PID:-}" ]] || die "the drain check needs the previous cdc engine to be stopped"
+  local config="$RUN_DIR/cdc-drain-task.ini"
+  local log_dir="$RUN_DIR/engine-logs/cdc-drain"
+  local position_log="$log_dir/position.log"
+  mkdir -p "$log_dir"
+
+  # The position is captured before the INSERT, so the engine replays it even if it starts late.
+  capture_master_status
+  write_cdc_config "$BINLOG_FILENAME" "$BINLOG_POSITION" "$config" "$log_dir" \
+    "$DRAIN_HOLD_SECS" "$DRAIN_CHECKPOINT_INTERVAL_SECS"
+  "$DT_MAIN_BIN" "$config" >"$RUN_DIR/cdc-drain.stdout.log" 2>"$RUN_DIR/cdc-drain.stderr.log" &
+  CDC_PID=$!
+  log "drain-check dt-main started (pid=$CDC_PID, hold=${DRAIN_HOLD_SECS}s)"
+
+  mysql_sql -e "INSERT INTO ape_dts_e2e.migration_redline_orders VALUES (9003, 'PROBE-9003', 'Drain On Shutdown', 0.03, 'probe', NULL);" \
+    || die "could not write the drain probe row"
+  sleep "$DRAIN_SETTLE_SECS"
+  require_cdc_alive
+
+  local held reason
+  held="$(dump_postgres 2>/dev/null | grep '^9003|' || true)"
+  reason="$(drain_precondition_reason "$held")"
+  [[ -z "$reason" ]] || die "$reason"
+
+  sigterm_and_wait
+
+  local source_probe target_probe position_after
+  source_probe="$(dump_mysql 2>/dev/null | grep '^9003|' || true)"
+  target_probe="$(dump_postgres 2>/dev/null | grep '^9003|' || true)"
+  position_after="$(last_checkpoint_position "$position_log")"
+  reason="$(graceful_stop_reason "$CDC_EXIT_CODE" "$DRAIN_PROBE_ROW" "$source_probe" "$target_probe" "" "$position_after")"
+  [[ -z "$reason" ]] || die "$reason (position log: $position_log)"
+  log "shutdown drain and final checkpoint verified (exit code $CDC_EXIT_CODE, position: $position_after)"
 }
 
 ensure_dt_main() {
@@ -597,6 +677,9 @@ run_cdc_scenario() {
 
   CURRENT_STAGE="cdc-graceful-stop"
   assert_graceful_stop
+
+  CURRENT_STAGE="cdc-shutdown-drain"
+  assert_shutdown_drains_and_checkpoints
 }
 
 collect_diagnostics() {
@@ -663,6 +746,11 @@ main() {
   FINAL_TIMEOUT_SECS="${FINAL_TIMEOUT_SECS:-60}"
   STOP_TIMEOUT_SECS="${STOP_TIMEOUT_SECS:-15}"
   GRACEFUL_STOP_TIMEOUT_SECS="${GRACEFUL_STOP_TIMEOUT_SECS:-30}"
+  # Long enough that nothing can be sinked or checkpointed on a clock during the drain check,
+  # so only the shutdown path can move the data and the position.
+  DRAIN_HOLD_SECS="${DRAIN_HOLD_SECS:-120}"
+  DRAIN_CHECKPOINT_INTERVAL_SECS="${DRAIN_CHECKPOINT_INTERVAL_SECS:-3600}"
+  DRAIN_SETTLE_SECS="${DRAIN_SETTLE_SECS:-5}"
   KEEP_ENV="${KEEP_ENV:-0}"
 
   require_cmd docker

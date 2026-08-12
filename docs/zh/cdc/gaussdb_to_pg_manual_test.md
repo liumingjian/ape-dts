@@ -241,8 +241,10 @@ log_dir=./logs/manual/gaussdb_to_pg_cdc
 在仓库根目录执行：
 
 ```bash
-# 收到 SIGINT/SIGTERM 后允许排空缓冲并落位点的时间上限（默认 8 秒）
-export SHUTDOWN_TIMEOUT_SECS=3
+# 收到 SIGINT/SIGTERM 后允许排空缓冲并落位点的时间上限，默认 8 秒；
+# 设得太小（例如 3）会让忙碌任务来不及收敛，进程以退出码 4 硬退且最后位点可能没落盘；
+# 设成 0 表示不给任何窗口，任何信号都直接变成退出码 4。
+export SHUTDOWN_TIMEOUT_SECS=8
 cargo run -p dt-main -- .local/manual/gaussdb_to_pg_cdc.ini
 ```
 

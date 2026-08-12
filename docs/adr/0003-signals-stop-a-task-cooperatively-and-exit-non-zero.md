@@ -24,4 +24,6 @@ The old handler listened only for ctrl-c, slept `SHUTDOWN_TIMEOUT_SECS` and call
 - "Stopped by SIGTERM" is never mistaken for success. The console's stop path already writes its own `stopped` status before reaping, so the non-zero code does not turn an intentional stop into a `failed` run; a signal from anywhere else does surface as non-zero, which is the point.
 - The console's grace window becomes real: the engine now uses it to drain rather than ignoring it until SIGKILL.
 - Restarts stop replaying the tail of the last window, because the shutdown path forces a final `record_checkpoint` through the pipeline's cancellation drain.
+- A batch accumulation window (`batch_sink_interval_secs`, used by the foxlake-style sinkers) is abandoned on cancellation: holding rows back to fill a batch that will never be sinked both loses them and keeps the task open until the window elapses.
+- `128 + signal` is reserved for a shutdown that actually converged. A drain that fails on the way out reports `3`, so "stopped cleanly" never covers for a missing position; a wait released by the cancellation itself (`Error::Cancelled`) is not such a failure.
 - Any new engine wait that cannot observe the token reintroduces the timeout branch: exit code `4` is the visible symptom, and it names the signal and the window in stderr.

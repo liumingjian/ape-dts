@@ -99,8 +99,12 @@ impl Pipeline for BasePipeline {
                 record_time = Instant::now();
             }
 
-            // some sinkers (foxlake) need to accumulate data to a big batch and sink
-            let accumulating = last_sink_time.elapsed().as_secs() < self.batch_sink_interval_secs
+            // some sinkers (foxlake) need to accumulate data to a big batch and sink.
+            // A shutdown ends the accumulation window: keeping data back to fill a batch that
+            // will never be sinked is how buffered rows get lost, and it holds the whole task
+            // open until the window elapses.
+            let accumulating = !self.cancel_token.is_cancelled()
+                && last_sink_time.elapsed().as_secs() < self.batch_sink_interval_secs
                 && !self.buffer.is_full();
             let data = if accumulating {
                 Vec::new()
@@ -556,6 +560,71 @@ mod tests {
                 .any(|cause| matches!(cause.downcast_ref::<Error>(), Some(Error::Cancelled(_)))),
             "expected a cancellation error, got: {:#}",
             extractor_err
+        );
+    }
+
+    /// Drains everything queued and reports it as sinked.
+    struct CountingParallelizer {
+        sinked: Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    #[async_trait]
+    impl Parallelizer for CountingParallelizer {
+        fn get_name(&self) -> String {
+            "CountingParallelizer".into()
+        }
+
+        async fn drain(&mut self, buffer: &DtQueue) -> anyhow::Result<Vec<DtItem>> {
+            let mut data = Vec::new();
+            while let Ok(item) = buffer.pop().await {
+                data.push(item);
+            }
+            Ok(data)
+        }
+
+        async fn sink_dml(
+            &mut self,
+            data: Vec<RowData>,
+            _sinkers: &[Arc<async_mutex::Mutex<Box<dyn Sinker + Send>>>],
+        ) -> anyhow::Result<DataSize> {
+            self.sinked
+                .fetch_add(data.len(), std::sync::atomic::Ordering::SeqCst);
+            Ok(DataSize::default())
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_shutdown_ends_the_batch_accumulation_window_instead_of_holding_the_data() {
+        let cancel_token = CancellationToken::new();
+        let buffer = Arc::new(DtQueue::new(8, 0, None, None, cancel_token.clone()));
+        let sinked = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+
+        let mut pipeline = pipeline(buffer.clone(), cancel_token.clone());
+        pipeline.parallelizer = Box::new(CountingParallelizer {
+            sinked: sinked.clone(),
+        });
+        // an accumulation window far longer than any shutdown may wait for
+        pipeline.batch_sink_interval_secs = 3600;
+
+        buffer.push(dml_item()).await.unwrap();
+        let started = tokio::spawn(async move { pipeline.start().await });
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert_eq!(
+            sinked.load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "the item should still be held back by the accumulation window"
+        );
+
+        cancel_token.cancel();
+        tokio::time::timeout(Duration::from_secs(5), started)
+            .await
+            .expect("the pipeline kept accumulating instead of draining on shutdown")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            sinked.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "the shutdown must sink what it had accumulated"
         );
     }
 

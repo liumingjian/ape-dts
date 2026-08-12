@@ -276,20 +276,25 @@ impl RedisPsyncExtractor {
 
         let mut heartbeat_timestamp = String::new();
         let mut start_time = Instant::now();
+        // Pinned once and reused: this is the hot per-command loop, and a fresh
+        // WaitForCancellationFuture per iteration would queue and dequeue a waker every command.
+        let cancelled = self.base_extractor.cancel_token.clone().cancelled_owned();
+        tokio::pin!(cancelled);
         loop {
-            // The stream polls with a 1ms sleep on Nil, so a cancelled task would otherwise
-            // spin here forever instead of letting the extractor return.
-            if self.base_extractor.cancel_token.is_cancelled() {
-                return Ok(());
-            }
-
             // heartbeat
             if start_time.elapsed().as_secs() >= self.keepalive_interval_secs {
                 self.keep_alive_ack().await?;
                 start_time = Instant::now();
             }
 
-            let (value, n) = self.conn.read_with_len().await?;
+            // An idle master only speaks on its ping clock (repl-ping-replica-period, 10s by
+            // default), so the read waits for bytes: cancellation has to race it, not queue
+            // behind it, or a cancelled task outlives the shutdown window.
+            let (value, n) = tokio::select! {
+                biased;
+                _ = &mut cancelled => return Ok(()),
+                read = self.conn.read_with_len() => read?,
+            };
             if Value::Nil == value {
                 TimeUtil::sleep_millis(1).await;
                 continue;

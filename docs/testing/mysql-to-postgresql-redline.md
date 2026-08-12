@@ -39,7 +39,8 @@ CDC 按顺序执行：
 3. 更新 `id=1` 的金额、状态和备注，并等待旧值消失；
 4. 删除 `id=3` 并等待目标端删除；
 5. 重新查询两端全表，与最终固定期望比较；
-6. 写入 `id=9002` 探针后立即向 CDC 进程发 SIGTERM，验证优雅关停：进程必须在窗口内自行退出、退出码为 143（`128 + SIGTERM`）、探针行已落到目标端（缓冲被排空而非丢弃）、`position.log` 的最后一条 `checkpoint_position` 相比关停前已推进（位点已落盘）。见 [ADR 0003](../adr/0003-signals-stop-a-task-cooperatively-and-exit-non-zero.md)。
+6. 写入 `id=9002` 探针并等它到达目标端后向 CDC 进程发 SIGTERM，验证优雅关停：进程必须在窗口内自行退出、退出码为 143（`128 + SIGTERM`）、已写入的数据仍在、`position.log` 的最后一条 `checkpoint_position` 相比关停前已推进；
+7. 再起一个**只为验证排空**的 CDC 引擎：`batch_sink_interval_secs=120` 把变更全部压在管道里、`checkpoint_interval_secs=3600` 保证不会有任何按时钟触发的落位点。写入 `id=9003` 探针并确认它**还没有**到达目标端（否则断言就是空跑，脚本直接失败），然后发 SIGTERM——探针行出现在目标端、`position.log` 出现第一条 `checkpoint_position`，只可能来自关停路径本身。见 [ADR 0003](../adr/0003-signals-stop-a-task-cooperatively-and-exit-non-zero.md)。
 
 最终数据必须为：
 
@@ -60,6 +61,7 @@ CDC 按顺序执行：
 | CDC 探针 | 60 秒 |
 | 每个 CRUD 阶段 | 30 秒 |
 | 优雅关停（SIGTERM 后进程退出） | 30 秒 |
+| 排空验证（数据压管道 + 关停落位点） | 120 秒持有窗口 / 5 秒沉降 |
 | 最终一致性 | 60 秒 |
 | CDC 进程停止 | 15 秒 |
 

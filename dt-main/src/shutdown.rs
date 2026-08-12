@@ -103,29 +103,44 @@ async fn next_signal(signals: &mut watch::Receiver<Option<i32>>) -> i32 {
 /// returned channel, a second one of any kind exits immediately (the operator asked twice).
 #[cfg(unix)]
 pub fn spawn_signal_listener(cancel_token: CancellationToken) -> watch::Receiver<Option<i32>> {
-    use tokio::signal::unix::{signal, SignalKind};
+    use tokio::signal::unix::{signal, Signal, SignalKind};
+
+    /// Installing a handler is irreversible and removes the default terminate behaviour, so a
+    /// half-installed listener must keep the half that worked: dropping both would leave the
+    /// process with neither a handler nor a default action, i.e. unkillable short of SIGKILL.
+    fn install(kind: SignalKind, name: &str) -> Option<Signal> {
+        match signal(kind) {
+            Ok(stream) => Some(stream),
+            Err(e) => {
+                eprintln!("failed to install the {name} handler, {name} will not stop this task gracefully: {e}");
+                None
+            }
+        }
+    }
 
     let (tx, rx) = watch::channel(None);
     tokio::spawn(async move {
-        let mut sigint = match signal(SignalKind::interrupt()) {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("failed to install the SIGINT handler: {e}");
-                return;
-            }
-        };
-        let mut sigterm = match signal(SignalKind::terminate()) {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("failed to install the SIGTERM handler: {e}");
-                return;
-            }
-        };
+        let mut sigint = install(SignalKind::interrupt(), "SIGINT");
+        let mut sigterm = install(SignalKind::terminate(), "SIGTERM");
 
         loop {
-            let received = tokio::select! {
-                _ = sigint.recv() => SIGINT,
-                _ = sigterm.recv() => SIGTERM,
+            let received = match (sigint.as_mut(), sigterm.as_mut()) {
+                (Some(sigint), Some(sigterm)) => tokio::select! {
+                    _ = sigint.recv() => SIGINT,
+                    _ = sigterm.recv() => SIGTERM,
+                },
+                (Some(sigint), None) => {
+                    sigint.recv().await;
+                    SIGINT
+                }
+                (None, Some(sigterm)) => {
+                    sigterm.recv().await;
+                    SIGTERM
+                }
+                (None, None) => {
+                    eprintln!("no signal handler could be installed; this task cannot be stopped gracefully");
+                    return;
+                }
             };
             handle_signal(received, &tx, &cancel_token);
         }
@@ -133,7 +148,9 @@ pub fn spawn_signal_listener(cancel_token: CancellationToken) -> watch::Receiver
     rx
 }
 
-/// Windows has no SIGTERM; ctrl-c is the only cooperative stop available.
+/// Windows has no SIGTERM; ctrl-c is the only cooperative stop available. Note that each
+/// `ctrl_c()` registration starts with no pending event, so a second ctrl-c landing between two
+/// iterations can be missed — the "press it again to exit now" escape hatch is best effort here.
 #[cfg(not(unix))]
 pub fn spawn_signal_listener(cancel_token: CancellationToken) -> watch::Receiver<Option<i32>> {
     let (tx, rx) = watch::channel(None);

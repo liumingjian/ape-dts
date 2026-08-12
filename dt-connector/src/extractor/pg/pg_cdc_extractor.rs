@@ -143,6 +143,10 @@ impl PgCdcExtractor {
         };
         let mut position: Position = get_position("", 0);
 
+        // Pinned once and reused across WAL messages, for the same reason as the MySQL side.
+        let cancelled = self.base_extractor.cancel_token.clone().cancelled_owned();
+        tokio::pin!(cancelled);
+
         // refer: https://www.postgresql.org/docs/10/protocol-replication.html to get WAL data details
         loop {
             if self.base_extractor.time_filter.ended {
@@ -159,7 +163,7 @@ impl PgCdcExtractor {
             // keepalive clock, so cancellation has to race the read instead of waiting behind it.
             let next = tokio::select! {
                 biased;
-                _ = self.base_extractor.cancel_token.cancelled() => return Ok(()),
+                _ = &mut cancelled => return Ok(()),
                 next = stream.next() => next,
             };
             match next {

@@ -93,15 +93,24 @@ async fn run() -> i32 {
             EXIT_TASK_FAILED
         }
         // The run stopped short of its end, so it must not look like a success — even when the
-        // shutdown itself went perfectly.
-        Shutdown::Interrupted { signal, result } => {
-            if let Err(e) = result {
-                eprintln!("task stopped by signal {signal} while erroring: {e:#}");
-            } else {
+        // shutdown itself went perfectly. And 128+signal claims a *clean* stop, so a drain that
+        // failed on the way out reports the failure instead: its position may be missing.
+        Shutdown::Interrupted { signal, result } => match result {
+            Ok(()) => {
                 eprintln!("task stopped gracefully after signal {signal}: position recorded");
+                shutdown::exit_code_for_signal(signal)
             }
-            shutdown::exit_code_for_signal(signal)
-        }
+            // A wait released by the cancellation itself is the shutdown working, not a failure
+            // (ADR 0002 demotes those to `Error::Cancelled`); anything else really did fail.
+            Err(e) if is_cancellation(&e) => {
+                eprintln!("task stopped gracefully after signal {signal}: position recorded ({e:#})");
+                shutdown::exit_code_for_signal(signal)
+            }
+            Err(e) => {
+                eprintln!("task failed while shutting down on signal {signal}: {e:#}");
+                EXIT_TASK_FAILED
+            }
+        },
         Shutdown::TimedOut { signal } => {
             eprintln!(
                 "task did not converge within {}s after signal {signal}, forcing exit; the last position may not have been recorded",
@@ -110,4 +119,14 @@ async fn run() -> i32 {
             shutdown::EXIT_SHUTDOWN_TIMED_OUT
         }
     }
+}
+
+/// True when the error is only the shutdown releasing a wait, not a real failure.
+fn is_cancellation(e: &anyhow::Error) -> bool {
+    e.chain().any(|cause| {
+        matches!(
+            cause.downcast_ref::<dt_common::error::Error>(),
+            Some(dt_common::error::Error::Cancelled(_))
+        )
+    })
 }
