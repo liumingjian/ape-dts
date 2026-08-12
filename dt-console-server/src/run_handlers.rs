@@ -366,6 +366,20 @@ async fn write_run_audit_log(
     target: &str,
     ip: &str,
 ) -> Result<(), ApiError> {
+    write_run_audit_log_with_details(pool, actor, action, result, target, ip, None).await
+}
+
+/// Write an operate_log audit entry carrying a JSON `details` payload.
+#[allow(clippy::too_many_arguments)]
+async fn write_run_audit_log_with_details(
+    pool: &sqlx::SqlitePool,
+    actor: &str,
+    action: &str,
+    result: &str,
+    target: &str,
+    ip: &str,
+    details: Option<serde_json::Value>,
+) -> Result<(), ApiError> {
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let log = crate::models::OperateLog {
         id: 0,
@@ -373,7 +387,7 @@ async fn write_run_audit_log(
         action: action.to_string(),
         result: result.to_string(),
         target: Some(target.to_string()),
-        details: None,
+        details: details.map(|d| d.to_string()),
         ip: Some(ip.to_string()),
         created_at: now,
     };
@@ -381,6 +395,30 @@ async fn write_run_audit_log(
         tracing::warn!("audit log write failed: {e}");
     }
     Ok(())
+}
+
+/// Close out the `paused` Run a resume just superseded.
+///
+/// Without this the task owns two Runs in an active status and
+/// `find_active_by_task` starts returning whichever sorts first — so every
+/// later stop or pause could address the dead predecessor instead of the
+/// live successor. `stop_method="resumed"` distinguishes it from a Run an
+/// operator actually stopped.
+async fn close_out_resumed_run(pool: &sqlx::SqlitePool, run_id: &str) -> Result<(), String> {
+    let mut previous = RunRepository::find_by_id(pool, run_id)
+        .await
+        .map_err(|e| format!("lookup failed: {e}"))?;
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    previous.status = run_status::STOPPED.to_string();
+    previous.stop_method = Some("resumed".to_string());
+    if previous.stopped_at.is_none() {
+        previous.stopped_at = Some(now.clone());
+    }
+    previous.updated_at = now;
+    RunRepository::update(pool, &previous)
+        .await
+        .map(|_| ())
+        .map_err(|e| format!("update failed: {e}"))
 }
 
 /// Convert a Run model to a RunResponse DTO, including position data.
@@ -411,6 +449,7 @@ fn run_to_response(run: &Run) -> RunResponse {
         stop_method: run.stop_method.clone(),
         position,
         metrics_port: run.metrics_port,
+        resumed_from_run_id: run.resumed_from_run_id.clone(),
         created_at: run.created_at.clone(),
         updated_at: run.updated_at.clone(),
     }
@@ -450,11 +489,73 @@ pub async fn start_task(
     }
 
     let task_id = path.into_inner();
-    let ip = req
-        .connection_info()
+    let ip = client_ip(&req);
+
+    start_run(
+        pool,
+        user,
+        task_id,
+        active_runs,
+        scraper_state,
+        port_pool,
+        idempotency_cache,
+        ip,
+        idem_key,
+        None,
+    )
+    .await
+}
+
+/// Everything a resumed Run needs from the `paused` Run it continues.
+///
+/// `resume` is not a distinct spawn path: it is a plain start whose INI is
+/// pinned to a predecessor's position log (see
+/// [`ini_renderer::render_for_resume`]) and whose predecessor is closed out
+/// as `stopped`/`resumed` the moment the new engine is up.
+#[derive(Debug, Clone)]
+struct ResumeContext {
+    /// The paused Run being continued.
+    previous_run_id: String,
+    /// Its `log_dir` — the position the new engine starts from.
+    log_dir: String,
+    /// Its rendered INI path, handed to the resumer as `config_file`.
+    config_file: String,
+    /// The audit action label for the operate log ("tasks.resume").
+    audit_action: &'static str,
+}
+
+/// The peer address of a request, for audit rows.
+fn client_ip(req: &actix_web::HttpRequest) -> String {
+    req.connection_info()
         .peer_addr()
         .map(|a| a.to_string())
-        .unwrap_or_else(|| "unknown".to_string());
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+/// Start a Run for `task_id` — fresh when `resume` is `None`, continuing a
+/// paused Run's position when it is `Some`.
+///
+/// RBAC and idempotency replay are the caller's job; everything from the
+/// license check onwards is shared, deliberately, so a resumed Run cannot
+/// drift away from a started one (precheck, port allocation, supervision).
+#[allow(clippy::too_many_arguments)]
+async fn start_run(
+    pool: web::Data<sqlx::SqlitePool>,
+    user: UserContext,
+    task_id: String,
+    active_runs: web::Data<ActiveRuns>,
+    scraper_state: web::Data<ScraperState>,
+    port_pool: web::Data<PortPool>,
+    idempotency_cache: web::Data<IdempotencyCache>,
+    ip: String,
+    idem_key: Option<String>,
+    resume: Option<ResumeContext>,
+) -> HttpResponse {
+    let control_action = if resume.is_some() { "resume" } else { "start" };
+    let audit_action = resume
+        .as_ref()
+        .map(|r| r.audit_action)
+        .unwrap_or("tasks.start");
 
     // Check license expiry and cap before starting.
     if let Err(e) = crate::license_handlers::check_license_for_start(&pool).await {
@@ -586,18 +687,23 @@ pub async fn start_task(
     }
 
     // Also check DB for active runs from previous orchestrator sessions.
+    // A resume is the one case where an active Run legitimately exists: the
+    // `paused` predecessor, which this call is about to close out.
+    let resumed_from = resume.as_ref().map(|r| r.previous_run_id.as_str());
     if let Ok(Some(active_run)) = RunRepository::find_active_by_task(&pool, &task_id).await {
-        // Clean up the Starting slot we just claimed.
-        {
-            let mut active = active_runs.lock().await;
-            active.remove(&task_id);
+        if Some(active_run.id.as_str()) != resumed_from {
+            // Clean up the Starting slot we just claimed.
+            {
+                let mut active = active_runs.lock().await;
+                active.remove(&task_id);
+            }
+            return ApiError::with_details(
+                codes::RUN_ALREADY_ACTIVE,
+                "A run is already active for this task",
+                serde_json::json!({ "run_id": active_run.id, "run_status": active_run.status }),
+            )
+            .error_response();
         }
-        return ApiError::with_details(
-            codes::RUN_ALREADY_ACTIVE,
-            "A run is already active for this task",
-            serde_json::json!({ "run_id": active_run.id, "run_status": active_run.status }),
-        )
-        .error_response();
     }
 
     let binary_override = if std::env::var("APE_DTS_BINARY_PATH").is_ok() {
@@ -605,7 +711,15 @@ pub async fn start_task(
     } else {
         None
     };
-    if let Err(e) = run_struct_init_if_requested(&task, binary_override.as_deref()).await {
+    // Struct init belongs to a *fresh* start only: on resume the target
+    // structures already exist, and re-running it would either no-op loudly
+    // or fight the data the paused Run already wrote.
+    let struct_init = if resume.is_none() {
+        run_struct_init_if_requested(&task, binary_override.as_deref()).await
+    } else {
+        Ok(())
+    };
+    if let Err(e) = struct_init {
         {
             let mut active = active_runs.lock().await;
             active.remove(&task_id);
@@ -613,7 +727,7 @@ pub async fn start_task(
         let _ = write_run_audit_log(
             &pool,
             &user.username,
-            "tasks.start",
+            audit_action,
             "failure",
             &task_id,
             &ip,
@@ -643,12 +757,13 @@ pub async fn start_task(
         exit_code: None,
         stop_method: None,
         metrics_port: None,
+        resumed_from_run_id: resume.as_ref().map(|r| r.previous_run_id.clone()),
         created_at: now.clone(),
         updated_at: now,
     };
 
     // Write control log intent.
-    let _ = write_control_intent(&pool, &task_id, &run_id, "start", &user.username).await;
+    let _ = write_control_intent(&pool, &task_id, &run_id, control_action, &user.username).await;
 
     // Allocate a metrics port from the pool BEFORE rendering INI, so the port
     // is injected into the [metrics] section and the engine binds exactly that port.
@@ -686,7 +801,20 @@ pub async fn start_task(
     // engine runs in two phases (snapshot → cdc); pre-stage the phase 2 INI
     // and capture the CDC start marker BEFORE we spawn so phase 2 picks up
     // every change made during phase 1.
-    let ini_content = if crate::two_phase::is_two_phase_task(&task) {
+    let mut resume_overrides_applied: Vec<String> = Vec::new();
+    let ini_content = if let Some(ctx) = resume.as_ref() {
+        // A resumed Run never goes through the two-phase path: pause is only
+        // offered for plain snapshot/cdc tasks (see `pause_task`).
+        let rendered = ini_renderer::render_for_resume(
+            &task,
+            &ini_renderer::ResumeOverrides {
+                log_dir: ctx.log_dir.clone(),
+                config_file: ctx.config_file.clone(),
+            },
+        );
+        resume_overrides_applied = rendered.applied;
+        rendered.ini
+    } else if crate::two_phase::is_two_phase_task(&task) {
         let run_dir_path = std::path::PathBuf::from(&run_dir_str);
         let phase2_start = match crate::two_phase::capture_phase2_start(&task).await {
             Ok(start) => start,
@@ -749,7 +877,7 @@ pub async fn start_task(
                     &pool,
                     &task_id,
                     &run_id,
-                    "start",
+                    control_action,
                     "error",
                     &user.username,
                 )
@@ -765,7 +893,7 @@ pub async fn start_task(
             let _ = write_run_audit_log(
                 &pool,
                 &user.username,
-                "tasks.start",
+                audit_action,
                 "failure",
                 &task_id,
                 &ip,
@@ -783,6 +911,34 @@ pub async fn start_task(
     run.metrics_port = Some(metrics_port as i64);
     run.updated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
+    // The engine is up. Close out the paused predecessor *now*, before the
+    // successor row exists: two rows of the same task in an active status
+    // would make `find_active_by_task` pick one at random, and every stop or
+    // pause after this point would address the wrong Run.
+    if let Some(ctx) = resume.as_ref() {
+        if let Err(e) = close_out_resumed_run(&pool, &ctx.previous_run_id).await {
+            tracing::warn!(
+                "resume: failed to close out predecessor run {}: {e}",
+                ctx.previous_run_id
+            );
+        }
+        if !resume_overrides_applied.is_empty() {
+            let _ = write_run_audit_log_with_details(
+                &pool,
+                &user.username,
+                "tasks.resume.ini_override",
+                "success",
+                &run_id,
+                &ip,
+                Some(serde_json::json!({
+                    "resumedFromRunId": ctx.previous_run_id,
+                    "overrides": resume_overrides_applied,
+                })),
+            )
+            .await;
+        }
+    }
+
     let _saved = match RunRepository::create(&pool, &run).await {
         Ok(r) => r,
         Err(e) => {
@@ -799,8 +955,15 @@ pub async fn start_task(
     };
 
     // Write control log result.
-    let _ =
-        write_control_result(&pool, &task_id, &run_id, "start", "success", &user.username).await;
+    let _ = write_control_result(
+        &pool,
+        &task_id,
+        &run_id,
+        control_action,
+        "success",
+        &user.username,
+    )
+    .await;
 
     // Replace the Starting slot with the real Active handle.
     {
@@ -819,15 +982,7 @@ pub async fn start_task(
     let _ = update_task_status(&pool, &task_id, "running").await;
 
     // Write audit log.
-    let _ = write_run_audit_log(
-        &pool,
-        &user.username,
-        "tasks.start",
-        "success",
-        &run_id,
-        &ip,
-    )
-    .await;
+    let _ = write_run_audit_log(&pool, &user.username, audit_action, "success", &run_id, &ip).await;
 
     // Spawn a background task to monitor the child process.
     let bg_pool = pool.get_ref().clone();
@@ -923,7 +1078,9 @@ pub async fn stop_task(
         }
     };
 
-    // Only running or paused runs can be stopped.
+    // Only running or paused runs can be stopped. `pausing` is deliberately
+    // excluded: a graceful stop is already in flight and the supervisor is
+    // about to give it a terminal status.
     if !matches!(active_run.status.as_str(), "running" | "paused") {
         return ApiError::with_details(
             codes::ILLEGAL_TRANSITION,
@@ -934,6 +1091,46 @@ pub async fn stop_task(
     }
 
     let run_id = active_run.id.clone();
+
+    // A `paused` Run has no process: pause stopped the engine for good and
+    // only its position log survives. Stopping it is a decision to discard
+    // that position, not something to signal — sending SIGTERM here would
+    // hit a recycled pid at worst and nothing at best.
+    if active_run.status == run_status::PAUSED {
+        let _ = write_control_intent(&pool, &task_id, &run_id, "stop", &user.username).await;
+
+        let mut run = active_run;
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        run.status = run_status::STOPPED.to_string();
+        run.stop_method = Some("discarded".to_string());
+        if run.stopped_at.is_none() {
+            run.stopped_at = Some(now.clone());
+        }
+        run.updated_at = now;
+
+        if let Err(e) = RunRepository::update(&pool, &run).await {
+            let _ = write_control_result(&pool, &task_id, &run_id, "stop", "error", &user.username)
+                .await;
+            return ApiError::new(
+                codes::INTERNAL_ERROR,
+                format!("run status update failed: {e}"),
+            )
+            .error_response();
+        }
+
+        scraper_state.remove_target(&task_id).await;
+        let _ =
+            write_control_result(&pool, &task_id, &run_id, "stop", "success", &user.username).await;
+        let _ = update_task_status(&pool, &task_id, "stopped").await;
+        let _ =
+            write_run_audit_log(&pool, &user.username, "tasks.stop", "success", &run_id, &ip).await;
+
+        let stop_body = serde_json::json!({ "run_id": run_id });
+        if let Some(ref key) = idem_key {
+            idempotency_cache.put(key, 202, stop_body.clone()).await;
+        }
+        return HttpResponse::Accepted().json(stop_body);
+    }
 
     // Write control log intent.
     let _ = write_control_intent(&pool, &task_id, &run_id, "stop", &user.username).await;
@@ -1083,16 +1280,23 @@ pub async fn stop_task(
     HttpResponse::Accepted().json(stop_body)
 }
 
-/// POST /api/tasks/:id/pause — pause a running CDC Run.
+/// POST /api/tasks/:id/pause — pause the active Run for a Task.
+///
+/// Pause is a graceful stop *with intent*, not a soft suspend (ADR 0004):
+/// the engine gets the same SIGTERM as a stop, drains, writes its position
+/// and exits 143 — the process is gone afterwards. The Run goes to `pausing`
+/// first and only the supervisor, seeing the real exit code, decides whether
+/// it lands in `paused` (position trustworthy, resumable) or `failed`.
 ///
 /// Returns 202 on success.
-/// Returns 409 if the Run is not in a pausable state.
+/// Returns 409 if the Run is not in a pausable state or the task kind has no
+/// position to resume from.
 #[post("/tasks/{id}/pause")]
 pub async fn pause_task(
     pool: web::Data<sqlx::SqlitePool>,
     user: UserContext,
     path: web::Path<String>,
-    _active_runs: web::Data<ActiveRuns>,
+    active_runs: web::Data<ActiveRuns>,
     scraper_state: web::Data<ScraperState>,
     req: actix_web::HttpRequest,
 ) -> HttpResponse {
@@ -1101,11 +1305,7 @@ pub async fn pause_task(
     }
 
     let task_id = path.into_inner();
-    let ip = req
-        .connection_info()
-        .peer_addr()
-        .map(|a| a.to_string())
-        .unwrap_or_else(|| "unknown".to_string());
+    let ip = client_ip(&req);
 
     // Find the active Run.
     let mut run = match RunRepository::find_active_by_task(&pool, &task_id).await {
@@ -1141,70 +1341,107 @@ pub async fn pause_task(
         .error_response();
     }
 
+    // Kind gate: pause is only meaningful where there is a position to
+    // resume from. A `check` or `struct` task has none, so "pause" would be
+    // an ordinary stop wearing a resumable label.
+    let task = match TaskRepository::find_by_id(&pool, &task_id).await {
+        Ok(t) => t,
+        Err(_) => {
+            return ApiError::with_details(
+                codes::TASK_NOT_FOUND,
+                "Task not found",
+                serde_json::json!({ "id": task_id }),
+            )
+            .error_response();
+        }
+    };
+    if let Some(reason) = pause_unsupported_reason(&task) {
+        return ApiError::with_details(
+            codes::UNSUPPORTED_FOR_KIND,
+            reason,
+            serde_json::json!({ "kind": task.kind, "task_id": task_id }),
+        )
+        .error_response();
+    }
+
     let run_id = run.id.clone();
 
     // Write control log intent.
     let _ = write_control_intent(&pool, &task_id, &run_id, "pause", &user.username).await;
 
-    // Send SIGUSR1 to the child process (engine interprets as pause signal).
-    // An undeliverable signal must not be papered over with a `paused` status:
-    // the engine would keep running while the console claims otherwise.
-    if let Some(pid) = run.pid {
-        match send_pause_signal(pid as u32) {
-            Ok(crate::signal::SignalOutcome::Delivered) => {}
-            Ok(crate::signal::SignalOutcome::ProcessGone) => {
-                // Nothing is running to pause. Claiming `paused` would be the
-                // same lie as claiming `stopped` after a failed kill; the
-                // supervisor will finalise the Run on its next sweep.
-                tracing::warn!(
-                    "pause: engine process {pid} for run {} is already gone",
-                    run_id
-                );
-                let _ = write_control_result(
-                    &pool,
-                    &task_id,
-                    &run_id,
-                    "pause",
-                    "error",
-                    &user.username,
-                )
-                .await;
-                return ApiError::with_details(
-                    codes::ILLEGAL_TRANSITION,
-                    "Cannot pause a run whose engine process is gone",
-                    serde_json::json!({ "from": run.status, "to": "paused", "pid": pid }),
-                )
-                .error_response();
-            }
-            Err(e) => {
-                let _ = write_control_result(
-                    &pool,
-                    &task_id,
-                    &run_id,
-                    "pause",
-                    "error",
-                    &user.username,
-                )
-                .await;
-                return ApiError::new(codes::INTERNAL_ERROR, format!("pause signal failed: {e}"))
-                    .error_response();
-            }
-        }
-    }
-
-    // Transition to paused.
-    run.status = run_status::PAUSED.to_string();
+    // Mark `pausing` BEFORE signalling. The supervisor reads this status to
+    // tell a requested pause from a requested stop from an external kill, so
+    // it has to be persisted before the exit it is meant to explain.
+    let status_before_pause = run.status.clone();
+    run.status = run_status::PAUSING.to_string();
     run.updated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-
-    // Pause metric ingestion.
-    scraper_state.pause(&run_id).await;
-
     if let Err(e) = RunRepository::update(&pool, &run).await {
         let _ =
             write_control_result(&pool, &task_id, &run_id, "pause", "error", &user.username).await;
         return ApiError::new(
             codes::INTERNAL_ERROR,
             format!("run status update failed: {e}"),
+        )
+        .error_response();
+    }
+
+    // Final scrape while the engine's metrics server is still up, then stop
+    // scraping: after the SIGTERM there is no process left to scrape.
+    if let Some(port) = run.metrics_port.and_then(|p| u16::try_from(p).ok()) {
+        let task_id_for_scrape = run.task_id.as_deref().unwrap_or(&task_id);
+        metrics_scraper::scrape_single_run(&pool, task_id_for_scrape, &run_id, "127.0.0.1", port)
+            .await;
+    }
+
+    // Signal the engine: the same cooperative SIGTERM a stop sends.
+    let signalled = match pause_signal_target(&active_runs, &task_id, &run).await {
+        Ok(outcome) => outcome,
+        Err(e) => {
+            // Roll back so a retry is possible — a Run stuck in `pausing`
+            // with a live engine would never be finalised by anyone.
+            run.status = status_before_pause;
+            run.updated_at =
+                chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+            if let Err(e) = RunRepository::update(&pool, &run).await {
+                tracing::warn!("failed to roll run {} back after failed pause: {e}", run_id);
+            }
+            let _ =
+                write_control_result(&pool, &task_id, &run_id, "pause", "error", &user.username)
+                    .await;
+            let _ =
+                write_run_audit_log(&pool, &user.username, "tasks.pause", "error", &run_id, &ip)
+                    .await;
+            return ApiError::with_details(
+                codes::INTERNAL_ERROR,
+                format!("failed to signal the engine process: {e}"),
+                serde_json::json!({ "run_id": run_id, "pid": run.pid }),
+            )
+            .error_response();
+        }
+    };
+
+    scraper_state.remove_target(&task_id).await;
+
+    if signalled == crate::signal::SignalOutcome::ProcessGone {
+        // Nothing was paused: the engine had already died, so whatever it
+        // left behind is not the product of a drain and must not be dressed
+        // up as a pause. Put the Run back to `running` and let the
+        // supervisor finalise it from the real exit code.
+        tracing::warn!("pause: engine process for run {} is already gone", run_id);
+        run.status = status_before_pause;
+        run.updated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        if let Err(e) = RunRepository::update(&pool, &run).await {
+            tracing::warn!(
+                "failed to roll run {} back after a no-op pause: {e}",
+                run_id
+            );
+        }
+        let _ =
+            write_control_result(&pool, &task_id, &run_id, "pause", "error", &user.username).await;
+        return ApiError::with_details(
+            codes::ILLEGAL_TRANSITION,
+            "Cannot pause a run whose engine process is gone",
+            serde_json::json!({ "from": run.status, "to": "paused", "run_id": run_id }),
         )
         .error_response();
     }
@@ -1227,45 +1464,102 @@ pub async fn pause_task(
     HttpResponse::Accepted().json(serde_json::json!({ "run_id": run_id }))
 }
 
+/// Why this task cannot be paused, or `None` when it can.
+fn pause_unsupported_reason(task: &Task) -> Option<&'static str> {
+    if !matches!(task.kind.as_str(), "snapshot" | "cdc") {
+        return Some(
+            "pause is only supported for snapshot and cdc tasks; \
+             check and struct tasks have no resumable position",
+        );
+    }
+    if crate::two_phase::is_two_phase_task(task) {
+        // The two-phase orchestration owns its own snapshot→cdc handover
+        // (a pre-staged phase 2 INI and a start marker captured before phase
+        // 1). Resuming from a position log would bypass both.
+        return Some(
+            "pause is not supported for managed snapshot_and_cdc tasks: \
+             the snapshot→cdc handover owns the start position",
+        );
+    }
+    None
+}
+
+/// Send the pause SIGTERM, preferring the in-memory child handle and falling
+/// back to the recorded pid for Runs re-attached after an orchestrator restart.
+async fn pause_signal_target(
+    active_runs: &ActiveRuns,
+    task_id: &str,
+    run: &Run,
+) -> Result<crate::signal::SignalOutcome, String> {
+    let pid = {
+        let active = active_runs.lock().await;
+        match active.get(task_id) {
+            Some(RunSlot::Active(handle)) => Some(handle.pid),
+            // Mid-spawn: there is nothing to signal yet, and dropping the
+            // slot would let a second start race the one in flight.
+            Some(RunSlot::Starting) => {
+                return Err("the run is still starting; retry the pause once it is running".into())
+            }
+            None => match run.pid {
+                Some(pid) if pid > 0 => u32::try_from(pid).ok(),
+                _ => None,
+            },
+        }
+    };
+
+    match pid {
+        Some(pid) => crate::signal::send(pid, crate::signal::EngineSignal::Term),
+        None => Err("the run has no usable process id".to_string()),
+    }
+}
+
 /// POST /api/tasks/:id/resume — resume a paused Run.
 ///
-/// Returns 202 on success.
-/// Returns 409 if the Run is not paused.
+/// A resume is a **new Run** started from the paused Run's position log, not
+/// a signal to a suspended process: pause left no process behind (ADR 0004).
+/// The paused predecessor is closed out as `stopped`/`resumed` and the new
+/// Run records it in `resumed_from_run_id`.
+///
+/// Returns 202 with the *new* `run_id`.
+/// Returns 409 if the latest Run for the task is not `paused`.
 #[post("/tasks/{id}/resume")]
 pub async fn resume_task(
     pool: web::Data<sqlx::SqlitePool>,
     user: UserContext,
     path: web::Path<String>,
-    _active_runs: web::Data<ActiveRuns>,
+    active_runs: web::Data<ActiveRuns>,
     scraper_state: web::Data<ScraperState>,
+    runtime_state: (web::Data<PortPool>, web::Data<IdempotencyCache>),
     req: actix_web::HttpRequest,
 ) -> HttpResponse {
+    let (port_pool, idempotency_cache) = runtime_state;
     if let Err(e) = rbac::require_action(&user, RbacAction::TaskStart) {
         return e.error_response();
     }
 
-    let task_id = path.into_inner();
-    let ip = req
-        .connection_info()
-        .peer_addr()
-        .map(|a| a.to_string())
-        .unwrap_or_else(|| "unknown".to_string());
+    let idem_key = extract_scoped_key(&req, &user.user_id);
+    if let Some(ref key) = idem_key {
+        if let Some(cached) = idempotency_cache.get(key).await {
+            return HttpResponse::build(
+                actix_web::http::StatusCode::from_u16(cached.status)
+                    .unwrap_or(actix_web::http::StatusCode::ACCEPTED),
+            )
+            .json(cached.body);
+        }
+    }
 
-    // Find the active Run.
-    let mut run = match RunRepository::find_active_by_task(&pool, &task_id).await {
+    let task_id = path.into_inner();
+    let ip = client_ip(&req);
+
+    // The Run being resumed must be the task's most recent one: resuming an
+    // older paused Run would silently rewind past everything since.
+    let previous = match RunRepository::find_latest_by_task(&pool, &task_id).await {
         Ok(Some(r)) => r,
         Ok(None) => {
-            // No active run — report ILLEGAL_TRANSITION with the terminal status.
-            let from_status = RunRepository::find_latest_by_task(&pool, &task_id)
-                .await
-                .ok()
-                .flatten()
-                .map(|r| r.status)
-                .unwrap_or_else(|| "none".to_string());
             return ApiError::with_details(
                 codes::ILLEGAL_TRANSITION,
-                "Cannot resume a run that is not active",
-                serde_json::json!({ "from": from_status, "to": "running" }),
+                "Cannot resume a task that has never run",
+                serde_json::json!({ "from": "none", "to": "running" }),
             )
             .error_response();
         }
@@ -1275,104 +1569,50 @@ pub async fn resume_task(
         }
     };
 
-    // Only paused runs can be resumed.
-    if run.status != run_status::PAUSED {
+    if previous.status != run_status::PAUSED {
         return ApiError::with_details(
             codes::ILLEGAL_TRANSITION,
             "Cannot resume a run that is not paused",
-            serde_json::json!({ "from": run.status, "to": "running" }),
+            serde_json::json!({ "from": previous.status, "to": "running" }),
         )
         .error_response();
     }
 
-    let run_id = run.id.clone();
-
-    // Write control log intent.
-    let _ = write_control_intent(&pool, &task_id, &run_id, "resume", &user.username).await;
-
-    // Send SIGUSR2 to the child process (engine interprets as resume signal).
-    // As with pause: a failed signal must surface, not become a false `running`.
-    if let Some(pid) = run.pid {
-        match send_resume_signal(pid as u32) {
-            Ok(crate::signal::SignalOutcome::Delivered) => {}
-            Ok(crate::signal::SignalOutcome::ProcessGone) => {
-                // As with pause: there is no engine left to resume.
-                tracing::warn!(
-                    "resume: engine process {pid} for run {} is already gone",
-                    run_id
-                );
-                let _ = write_control_result(
-                    &pool,
-                    &task_id,
-                    &run_id,
-                    "resume",
-                    "error",
-                    &user.username,
-                )
-                .await;
-                return ApiError::with_details(
-                    codes::ILLEGAL_TRANSITION,
-                    "Cannot resume a run whose engine process is gone",
-                    serde_json::json!({ "from": run.status, "to": "running", "pid": pid }),
-                )
-                .error_response();
-            }
-            Err(e) => {
-                let _ = write_control_result(
-                    &pool,
-                    &task_id,
-                    &run_id,
-                    "resume",
-                    "error",
-                    &user.username,
-                )
-                .await;
-                return ApiError::new(codes::INTERNAL_ERROR, format!("resume signal failed: {e}"))
-                    .error_response();
-            }
+    // The position log is the whole point of a resume: without it there is
+    // nothing to continue from, and starting anyway would re-run the task
+    // from its original start marker — a silent duplicate migration.
+    let (log_dir, config_file) = match (previous.log_dir.clone(), previous.ini_path.clone()) {
+        (Some(log_dir), Some(ini_path)) => (log_dir, ini_path),
+        _ => {
+            return ApiError::with_details(
+                codes::ILLEGAL_TRANSITION,
+                "Cannot resume a run that has no position log",
+                serde_json::json!({ "run_id": previous.id }),
+            )
+            .error_response();
         }
-    }
+    };
 
-    // Transition to running.
-    run.status = run_status::RUNNING.to_string();
-    run.updated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let ctx = ResumeContext {
+        previous_run_id: previous.id.clone(),
+        log_dir,
+        config_file,
+        audit_action: "tasks.resume",
+    };
 
-    // Resume metric ingestion.
-    scraper_state.resume(&run_id).await;
-
-    if let Err(e) = RunRepository::update(&pool, &run).await {
-        let _ =
-            write_control_result(&pool, &task_id, &run_id, "resume", "error", &user.username).await;
-        return ApiError::new(
-            codes::INTERNAL_ERROR,
-            format!("run status update failed: {e}"),
-        )
-        .error_response();
-    }
-
-    // Write control log result.
-    let _ = write_control_result(
-        &pool,
-        &task_id,
-        &run_id,
-        "resume",
-        "success",
-        &user.username,
+    start_run(
+        pool,
+        user,
+        task_id,
+        active_runs,
+        scraper_state,
+        port_pool,
+        idempotency_cache,
+        ip,
+        idem_key,
+        Some(ctx),
     )
-    .await;
-
-    // Write audit log.
-    let _ = write_run_audit_log(
-        &pool,
-        &user.username,
-        "tasks.resume",
-        "success",
-        &run_id,
-        &ip,
-    )
-    .await;
-
-    HttpResponse::Accepted().json(serde_json::json!({ "run_id": run_id }))
+    .await
 }
 
 /// GET /api/runs — list all Runs across all Tasks, most recent first.
@@ -1427,7 +1667,7 @@ async fn find_operator_for_run(pool: &sqlx::SqlitePool, run_id: &str) -> String 
     let logs = ControlLogRepository::list(pool).await.unwrap_or_default();
     logs.iter()
         .find(|l| {
-            l.action == "start"
+            (l.action == "start" || l.action == "resume")
                 && l.run_id.as_deref() == Some(run_id)
                 && l.intent_or_result == "intent"
         })
@@ -1528,16 +1768,36 @@ pub async fn supervise_run(
                         run.updated_at = now;
 
                         match exit {
-                            ExitStatus::Exited { code } => {
-                                run.exit_code = Some(code as i64);
-                                if code == 0 {
-                                    run.status = run_status::STOPPED.to_string();
-                                } else {
-                                    run.status = run_status::FAILED.to_string();
-                                }
-                            }
+                            ExitStatus::Exited { code } => run.exit_code = Some(code as i64),
                             ExitStatus::Signaled { signal } => {
-                                run.exit_code = Some(128 + signal as i64);
+                                run.exit_code = Some(128 + signal as i64)
+                            }
+                        }
+
+                        // What the exit *means* depends on what the console
+                        // asked for, which is exactly what the Run's current
+                        // status records: `pausing` → paused, `stopping` →
+                        // stopped, neither → somebody outside the console
+                        // stopped the engine.
+                        let mut external_stop = false;
+                        match executor::classify_exit(&run.status, &exit) {
+                            executor::ExitDisposition::Paused => {
+                                run.status = run_status::PAUSED.to_string();
+                                run.stop_method = Some("paused".to_string());
+                            }
+                            executor::ExitDisposition::Stopped => {
+                                run.status = run_status::STOPPED.to_string();
+                            }
+                            executor::ExitDisposition::StoppedExternally => {
+                                // Routine under a process supervisor (a k8s
+                                // rolling update sends SIGTERM), so not
+                                // `failed` — alerting would drown. The
+                                // control log keeps it auditable.
+                                run.status = run_status::STOPPED.to_string();
+                                run.stop_method = Some("external".to_string());
+                                external_stop = true;
+                            }
+                            executor::ExitDisposition::Failed => {
                                 run.status = run_status::FAILED.to_string();
                             }
                         }
@@ -1554,6 +1814,17 @@ pub async fn supervise_run(
                         // Write control log result for natural exit.
                         // Use the operator from the original start intent, or a system sentinel.
                         let start_operator = find_operator_for_run(&pool, &run_id).await;
+                        if external_stop {
+                            let _ = write_control_result(
+                                &pool,
+                                &task_id,
+                                &run_id,
+                                "external_stop",
+                                &run.status,
+                                &start_operator,
+                            )
+                            .await;
+                        }
                         let _ = write_control_result(
                             &pool,
                             &task_id,
@@ -1713,51 +1984,61 @@ async fn update_task_status(
     Ok(())
 }
 
-/// Send a pause signal (SIGUSR1) to the engine process.
-fn send_pause_signal(pid: u32) -> Result<crate::signal::SignalOutcome, String> {
-    crate::signal::send(pid, crate::signal::EngineSignal::Pause)
-}
-
-/// Send a resume signal (SIGUSR2) to the engine process.
-fn send_resume_signal(pid: u32) -> Result<crate::signal::SignalOutcome, String> {
-    crate::signal::send(pid, crate::signal::EngineSignal::Resume)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[cfg(unix)]
     #[test]
-    fn test_pause_resume_signals_reach_a_live_child() {
+    fn test_pause_signals_the_engine_with_sigterm() {
         use crate::signal::SignalOutcome;
 
-        // `sleep` ignores SIGUSR1/2 by default, so delivery is observable
-        // only through the syscall's own return — which is the point: the
-        // old shell-out reported success even when nothing was delivered.
+        // Pause is a cooperative stop, so it sends the *same* signal a stop
+        // does. There is no SIGUSR channel any more: `dt-main` never handled
+        // SIGUSR1/2, so sending them was a disguised kill.
         let mut child = std::process::Command::new("sleep")
             .arg("30")
             .spawn()
             .expect("spawn sleep");
         let pid = child.id();
 
-        assert_eq!(send_pause_signal(pid).unwrap(), SignalOutcome::Delivered);
-        assert_eq!(send_resume_signal(pid).unwrap(), SignalOutcome::Delivered);
+        assert_eq!(
+            crate::signal::send(pid, crate::signal::EngineSignal::Term).unwrap(),
+            SignalOutcome::Delivered
+        );
 
         let _ = child.kill();
         let _ = child.wait();
     }
 
-    #[cfg(unix)]
     #[test]
-    fn test_signals_to_dead_pid_report_process_gone() {
-        use crate::signal::SignalOutcome;
+    fn test_pause_kind_gate_allows_only_snapshot_and_cdc() {
+        let mut task = make_snapshot_task_for_struct_init();
 
-        let dead = crate::signal::reaped_pid();
-        assert_eq!(send_pause_signal(dead).unwrap(), SignalOutcome::ProcessGone);
-        assert_eq!(
-            send_resume_signal(dead).unwrap(),
-            SignalOutcome::ProcessGone
+        task.kind = "snapshot".into();
+        assert!(pause_unsupported_reason(&task).is_none());
+        task.kind = "cdc".into();
+        assert!(pause_unsupported_reason(&task).is_none());
+
+        for kind in ["check", "struct"] {
+            task.kind = kind.into();
+            assert!(
+                pause_unsupported_reason(&task).is_some(),
+                "{kind} has no resumable position and must not be pausable"
+            );
+        }
+    }
+
+    #[test]
+    fn test_pause_kind_gate_rejects_two_phase_tasks() {
+        let mut task = make_snapshot_task_for_struct_init();
+        task.kind = "cdc".into();
+        task.db_type_source = "mysql".into();
+        task.extractor_config = r#"{"extract_type":"snapshot_and_cdc"}"#.into();
+
+        assert!(
+            pause_unsupported_reason(&task).is_some(),
+            "the managed snapshot→cdc handover owns its own start position"
         );
     }
 

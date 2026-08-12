@@ -270,6 +270,7 @@ mod tests {
             exit_code: None,
             stop_method: None,
             metrics_port: None,
+            resumed_from_run_id: None,
             created_at: now.clone(),
             updated_at: now,
         };

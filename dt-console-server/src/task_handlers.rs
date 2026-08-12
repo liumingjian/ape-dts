@@ -636,13 +636,20 @@ pub async fn delete_task(
     HttpResponse::NoContent().finish()
 }
 
+/// The Run statuses that block edits to a Task. Mirrors
+/// [`crate::models::run_status::is_active`] — a `paused` Run still owns the
+/// position a resume will continue from, so the task must stay frozen.
+fn run_status_active_set() -> [&'static str; 5] {
+    ["pending", "running", "pausing", "paused", "stopping"]
+}
+
 /// Check that no active run exists for the given task.
 pub async fn check_no_active_run(pool: &SqlitePool, task_id: &str) -> Result<(), ApiError> {
     let runs = RunRepository::list_by_task(pool, task_id)
         .await
         .map_err(|e| ApiError::new(codes::INTERNAL_ERROR, format!("run list failed: {e}")))?;
 
-    let active_statuses = ["pending", "running", "paused", "stopping"];
+    let active_statuses = run_status_active_set();
     if let Some(active_run) = runs
         .iter()
         .find(|r| active_statuses.contains(&r.status.as_str()))

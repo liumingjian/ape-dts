@@ -115,6 +115,128 @@ pub fn render(task: &Task) -> String {
     out
 }
 
+/// The three forced overrides a resumed Run's INI must carry.
+///
+/// A resume is a *new* engine process started from a paused Run's position
+/// log. Each of these, left alone, is a silent data error rather than a loud
+/// failure — the engine starts happily and reads from the wrong place:
+///
+/// 1. `[resumer]` must point at the paused Run's `log_dir`. Whatever the task
+///    carries in `resumer_config` describes a fresh start, not this resume.
+/// 2. `recreate_slot_if_exists` must be `false` for PG/GaussDB. The console's
+///    golden default is `true`; recreating the replication slot throws away
+///    the very position we are resuming from.
+/// 3. Explicit start points (`start_lsn`, `start_time_utc`, `start_scn`,
+///    binlog file/position) must be cleared, or they win over the resumer and
+///    the Run silently restarts from the task's original marker.
+#[derive(Debug, Clone)]
+pub struct ResumeOverrides {
+    /// `log_dir` of the paused Run whose position we continue.
+    pub log_dir: String,
+    /// The paused Run's rendered INI, so the resumer can match config.
+    pub config_file: String,
+}
+
+/// The INI for a resumed Run, plus a human-readable record of what was forced.
+#[derive(Debug, Clone)]
+pub struct ResumeRender {
+    pub ini: String,
+    /// One line per override actually applied — written to the audit log so
+    /// an operator can tell a resume from a plain start after the fact.
+    pub applied: Vec<String>,
+}
+
+/// Render a Task to INI for a **resume**: same as [`render`], but with the
+/// three overrides in [`ResumeOverrides`] forced on top of the task's own
+/// config.
+pub fn render_for_resume(task: &Task, overrides: &ResumeOverrides) -> ResumeRender {
+    let mut task = task.clone();
+    let mut applied = Vec::new();
+
+    // 1. [resumer] — always FromLog against the paused Run's log_dir.
+    let previous_resumer = task.resumer_config.clone();
+    task.resumer_config = serde_json::json!({
+        "resume_type": "from_log",
+        "log_dir": overrides.log_dir,
+        "config_file": overrides.config_file,
+    })
+    .to_string();
+    applied.push(format!(
+        "[resumer] forced to from_log(log_dir={}, config_file={}), replacing {}",
+        overrides.log_dir, overrides.config_file, previous_resumer
+    ));
+
+    // 2 & 3. Extractor: no slot recreation, no explicit start point.
+    let mut extractor: serde_json::Value =
+        serde_json::from_str(&task.extractor_config).unwrap_or_default();
+    if !extractor.is_object() {
+        extractor = serde_json::json!({});
+    }
+    if let Some(obj) = extractor.as_object_mut() {
+        let previous_slot_flag = obj.insert(
+            "recreate_slot_if_exists".to_string(),
+            serde_json::Value::Bool(false),
+        );
+        if previous_slot_flag != Some(serde_json::Value::Bool(false)) {
+            applied.push(format!(
+                "recreate_slot_if_exists forced to false (was {}): recreating the replication \
+                 slot would discard the position being resumed from",
+                previous_slot_flag
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| "unset".to_string())
+            ));
+        }
+
+        for key in EXPLICIT_START_KEYS {
+            match obj.get(*key) {
+                None => continue,
+                Some(v) if is_cleared_start_value(v) => continue,
+                Some(v) => {
+                    applied.push(format!(
+                        "{key} cleared (was {v}): the resumer supplies the start point"
+                    ));
+                }
+            }
+            let cleared = cleared_start_value(obj.get(*key));
+            obj.insert((*key).to_string(), cleared);
+        }
+    }
+    task.extractor_config = extractor.to_string();
+
+    ResumeRender {
+        ini: render(&task),
+        applied,
+    }
+}
+
+/// Explicit start markers that must never survive into a resumed Run.
+const EXPLICIT_START_KEYS: &[&str] = &[
+    "start_lsn",
+    "start_time_utc",
+    "start_scn",
+    "binlog_filename",
+    "binlog_position",
+];
+
+/// Is this start marker already neutral (empty string / zero)?
+fn is_cleared_start_value(v: &serde_json::Value) -> bool {
+    match v {
+        serde_json::Value::Null => true,
+        serde_json::Value::String(s) => s.is_empty(),
+        serde_json::Value::Number(n) => n.as_u64() == Some(0),
+        _ => false,
+    }
+}
+
+/// The neutral value for a start marker, keeping its JSON type: numeric
+/// markers stay numeric (the renderer only emits strings for string keys).
+fn cleared_start_value(current: Option<&serde_json::Value>) -> serde_json::Value {
+    match current {
+        Some(serde_json::Value::Number(_)) => serde_json::json!(0),
+        _ => serde_json::Value::String(String::new()),
+    }
+}
+
 /// Check whether a JSON object has any non-empty fields.
 fn has_non_empty_fields(v: &serde_json::Value) -> bool {
     match v {
@@ -1373,5 +1495,133 @@ mod tests {
         let json = serde_json::json!({"count": "not_a_number"});
         push_opt_u64(&mut kv, &json, "count", "count");
         assert!(kv.is_empty(), "invalid string should not produce a value");
+    }
+
+    // ── render_for_resume: the three forced overrides ─────────────────────
+
+    fn resume_overrides() -> ResumeOverrides {
+        ResumeOverrides {
+            log_dir: "/data/runs/paused-run/logs".into(),
+            config_file: "/data/runs/paused-run/task_config.ini".into(),
+        }
+    }
+
+    #[test]
+    fn test_resume_forces_resumer_at_the_paused_runs_log_dir() {
+        let mut task = make_task(
+            "cdc",
+            "mysql",
+            "mysql",
+            r#"{"extractType":"cdc","url":"mysql://src:3306/db","server_id":2000}"#,
+            r#"{"sinkType":"write","url":"mysql://dst:3306/db"}"#,
+        );
+        // A task-level resumer pointing anywhere else must lose.
+        task.resumer_config =
+            r#"{"resume_type":"from_log","log_dir":"/somewhere/else","config_file":""}"#.into();
+
+        let rendered = render_for_resume(&task, &resume_overrides());
+
+        assert!(rendered.ini.contains("[resumer]"));
+        assert!(rendered.ini.contains("resume_type=from_log"));
+        assert!(rendered.ini.contains("log_dir=/data/runs/paused-run/logs"));
+        assert!(rendered
+            .ini
+            .contains("config_file=/data/runs/paused-run/task_config.ini"));
+        assert!(!rendered.ini.contains("/somewhere/else"));
+        assert!(rendered.applied.iter().any(|l| l.contains("[resumer]")));
+    }
+
+    #[test]
+    fn test_resume_forces_a_dummy_resumer_task_to_from_log() {
+        // The common case: the task never configured a resumer at all, so
+        // `render` would omit the section entirely and the engine would
+        // restart from the task's original start point.
+        let task = make_task(
+            "cdc",
+            "mysql",
+            "mysql",
+            r#"{"extractType":"cdc","url":"mysql://src:3306/db","server_id":2000}"#,
+            r#"{"sinkType":"write","url":"mysql://dst:3306/db"}"#,
+        );
+        assert!(!render(&task).contains("[resumer]"));
+
+        let rendered = render_for_resume(&task, &resume_overrides());
+        assert!(rendered.ini.contains("resume_type=from_log"));
+    }
+
+    #[test]
+    fn test_resume_forces_recreate_slot_if_exists_false() {
+        let task = make_task(
+            "cdc",
+            "pg",
+            "pg",
+            r#"{"extractType":"cdc","url":"postgres://src:5432/db","slot_name":"ape_test","recreate_slot_if_exists":true}"#,
+            r#"{"sinkType":"write","url":"postgres://dst:5432/db"}"#,
+        );
+        assert!(
+            render(&task).contains("recreate_slot_if_exists=true"),
+            "the console golden default is true — that is the trap"
+        );
+
+        let rendered = render_for_resume(&task, &resume_overrides());
+        assert!(rendered.ini.contains("recreate_slot_if_exists=false"));
+        assert!(!rendered.ini.contains("recreate_slot_if_exists=true"));
+        assert!(rendered
+            .applied
+            .iter()
+            .any(|l| l.contains("recreate_slot_if_exists")));
+    }
+
+    #[test]
+    fn test_resume_clears_explicit_start_points() {
+        let task = make_task(
+            "cdc",
+            "pg",
+            "pg",
+            r#"{"extractType":"cdc","url":"postgres://src:5432/db","slot_name":"ape_test","start_lsn":"0/1234ABC","start_time_utc":"2026-08-01 00:00:00.000"}"#,
+            r#"{"sinkType":"write","url":"postgres://dst:5432/db"}"#,
+        );
+        assert!(render(&task).contains("start_lsn=0/1234ABC"));
+
+        let rendered = render_for_resume(&task, &resume_overrides());
+        assert!(!rendered.ini.contains("start_lsn="));
+        assert!(!rendered.ini.contains("start_time_utc=2026-08-01"));
+        assert!(rendered.applied.iter().any(|l| l.contains("start_lsn")));
+        assert!(rendered
+            .applied
+            .iter()
+            .any(|l| l.contains("start_time_utc")));
+    }
+
+    #[test]
+    fn test_resume_clears_an_explicit_binlog_start_point() {
+        let task = make_task(
+            "cdc",
+            "mysql",
+            "mysql",
+            r#"{"extractType":"cdc","url":"mysql://src:3306/db","server_id":2000,"binlog_filename":"mysql-bin.000007","binlog_position":4}"#,
+            r#"{"sinkType":"write","url":"mysql://dst:3306/db"}"#,
+        );
+        assert!(render(&task).contains("binlog_filename=mysql-bin.000007"));
+
+        let rendered = render_for_resume(&task, &resume_overrides());
+        assert!(!rendered.ini.contains("binlog_filename="));
+        assert!(rendered.ini.contains("binlog_position=0"));
+    }
+
+    #[test]
+    fn test_resume_records_nothing_when_there_was_nothing_to_override() {
+        let task = make_task(
+            "snapshot",
+            "mysql",
+            "mysql",
+            r#"{"extractType":"snapshot","url":"mysql://src:3306/db","recreate_slot_if_exists":false}"#,
+            r#"{"sinkType":"write","url":"mysql://dst:3306/db"}"#,
+        );
+        let rendered = render_for_resume(&task, &resume_overrides());
+        // The resumer is always forced, so exactly one line — no phantom
+        // "cleared" entries for keys that were already neutral.
+        assert_eq!(rendered.applied.len(), 1, "{:?}", rendered.applied);
+        assert!(rendered.applied[0].contains("[resumer]"));
     }
 }

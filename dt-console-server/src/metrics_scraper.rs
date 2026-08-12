@@ -12,7 +12,6 @@
 use crate::models::MetricPoint;
 use crate::repositories::alert_repository::AlertRepository;
 use crate::repositories::metric_point_repository::MetricPointRepository;
-use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -45,8 +44,6 @@ pub struct ScraperState {
     targets: Arc<Mutex<Vec<ScrapeTarget>>>,
     /// Per-target failure tracking.
     failures: Arc<Mutex<std::collections::HashMap<String, FailureState>>>,
-    /// Set of run_ids currently paused (should not be scraped).
-    paused: Arc<Mutex<HashSet<String>>>,
     /// Whether the background scraper loop is running.
     running: Arc<Mutex<bool>>,
 }
@@ -56,7 +53,6 @@ impl ScraperState {
         Self {
             targets: Arc::new(Mutex::new(Vec::new())),
             failures: Arc::new(Mutex::new(std::collections::HashMap::new())),
-            paused: Arc::new(Mutex::new(HashSet::new())),
             running: Arc::new(Mutex::new(false)),
         }
     }
@@ -102,24 +98,6 @@ impl ScraperState {
             let key = format!("{task_id}:{rid}");
             failures.remove(&key);
         }
-    }
-
-    /// Mark a run as paused (stops scraping).
-    pub async fn pause(&self, run_id: &str) {
-        let mut paused = self.paused.lock().await;
-        paused.insert(run_id.to_string());
-    }
-
-    /// Mark a run as resumed (restarts scraping).
-    pub async fn resume(&self, run_id: &str) {
-        let mut paused = self.paused.lock().await;
-        paused.remove(run_id);
-    }
-
-    /// Check if a run is paused.
-    async fn is_paused(&self, run_id: &str) -> bool {
-        let paused = self.paused.lock().await;
-        paused.contains(run_id)
     }
 
     /// Get current targets snapshot.
@@ -247,11 +225,6 @@ async fn scrape_tick(pool: &sqlx::SqlitePool, state: &ScraperState) {
     let targets = state.get_targets().await;
 
     for target in targets {
-        // Skip paused runs.
-        if state.is_paused(&target.run_id).await {
-            continue;
-        }
-
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
         match scrape_endpoint(&target.host, target.port).await {
@@ -571,15 +544,6 @@ mod tests {
         state.remove_target("t2").await;
         let failures = state.failures.lock().await;
         assert!(!failures.contains_key("t2:r2"));
-    }
-
-    #[tokio::test]
-    async fn scraper_state_pause_resume() {
-        let state = ScraperState::new();
-        state.pause("r1").await;
-        assert!(state.is_paused("r1").await);
-        state.resume("r1").await;
-        assert!(!state.is_paused("r1").await);
     }
 
     #[tokio::test]

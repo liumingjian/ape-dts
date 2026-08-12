@@ -369,6 +369,7 @@ async fn run_repository_crud() {
         exit_code: None,
         stop_method: None,
         metrics_port: Some(9100),
+        resumed_from_run_id: None,
         created_at: now(),
         updated_at: now(),
     };

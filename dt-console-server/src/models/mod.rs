@@ -164,6 +164,10 @@ pub struct Run {
     /// NULL for legacy rows or runs that failed before port allocation.
     #[sqlx(default)]
     pub metrics_port: Option<i64>,
+    /// Set when this Run was started by resuming a `paused` Run: the id of
+    /// that predecessor, whose `log_dir` supplied the resume position.
+    #[sqlx(default)]
+    pub resumed_from_run_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -186,6 +190,8 @@ pub struct RunResponse {
     pub position: Option<serde_json::Value>,
     /// Dynamically-allocated Prometheus metrics port in [9100, 9199].
     pub metrics_port: Option<i64>,
+    /// Id of the `paused` Run this Run resumed from, if any.
+    pub resumed_from_run_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -201,14 +207,22 @@ pub struct StartRunResponse {
 pub mod run_status {
     pub const PENDING: &str = "pending";
     pub const RUNNING: &str = "running";
+    /// Pause requested: SIGTERM sent, engine still draining. Symmetric with
+    /// `STOPPING` — the supervisor decides the terminal status when the
+    /// process actually exits.
+    pub const PAUSING: &str = "pausing";
     pub const PAUSED: &str = "paused";
     pub const STOPPING: &str = "stopping";
     pub const STOPPED: &str = "stopped";
     pub const FAILED: &str = "failed";
 
     /// All statuses that represent an "active" (non-terminal) Run.
+    ///
+    /// `paused` counts as active even though its engine process is gone: the
+    /// Run still owns the position log a resume will start from, so the task
+    /// must not be startable behind its back.
     pub fn is_active(status: &str) -> bool {
-        matches!(status, PENDING | RUNNING | PAUSED | STOPPING)
+        matches!(status, PENDING | RUNNING | PAUSING | PAUSED | STOPPING)
     }
 
     /// All statuses that represent a terminal Run.
@@ -221,8 +235,13 @@ pub mod run_status {
 ///
 /// Legal transitions:
 /// - pending → running
-/// - running → paused
-/// - paused → running
+/// - running → pausing (pause requested: SIGTERM sent, engine draining)
+/// - pausing → paused (engine exited 143 — the position log is trustworthy)
+/// - pausing → failed (engine exited 4: the shutdown window expired, so the
+///   position is not trustworthy and `paused` would be a lie)
+/// - paused → running (a resume starts a *new* Run; the old one is closed
+///   out separately as `stopped`/`resumed`)
+/// - paused → stopped (discard a paused Run without ever resuming it)
 /// - running → stopping
 /// - paused → stopping
 /// - stopping → stopped
@@ -233,8 +252,12 @@ pub fn is_legal_transition(from: &str, to: &str) -> bool {
     matches!(
         (from, to),
         ("pending", "running")
-            | ("running", "paused")
+            | ("running", "pausing")
+            | ("pausing", "paused")
+            | ("pausing", "failed")
+            | ("pausing", "stopped")
             | ("paused", "running")
+            | ("paused", "stopped")
             | ("running", "stopping")
             | ("paused", "stopping")
             | ("stopping", "stopped")

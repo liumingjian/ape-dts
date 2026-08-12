@@ -251,6 +251,7 @@ async fn seed_run_with_port(pool: &SqlitePool, run_id: &str, task_id: &str, metr
         exit_code: None,
         stop_method: None,
         metrics_port: Some(metrics_port),
+        resumed_from_run_id: None,
         created_at: now.clone(),
         updated_at: now,
     };

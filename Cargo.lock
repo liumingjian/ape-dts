@@ -1812,9 +1812,12 @@ dependencies = [
 name = "dt-main"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "dt-common",
  "dt-precheck",
  "dt-task",
  "tokio",
+ "tokio-util 0.7.15",
 ]
 
 [[package]]

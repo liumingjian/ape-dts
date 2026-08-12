@@ -10,8 +10,9 @@ impl RunRepository {
     pub async fn create(pool: &SqlitePool, run: &Run) -> Result<Run, sqlx::Error> {
         sqlx::query(
             "INSERT INTO runs (id, task_id, status, pid, ini_path, log_dir, started_at,
-             stopped_at, exit_code, stop_method, metrics_port, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             stopped_at, exit_code, stop_method, metrics_port, resumed_from_run_id,
+             created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&run.id)
         .bind(&run.task_id)
@@ -24,6 +25,7 @@ impl RunRepository {
         .bind(run.exit_code)
         .bind(&run.stop_method)
         .bind(run.metrics_port)
+        .bind(&run.resumed_from_run_id)
         .bind(&run.created_at)
         .bind(&run.updated_at)
         .execute(pool)
@@ -66,14 +68,14 @@ impl RunRepository {
 
     /// Find the active (non-terminal) run for a given task.
     ///
-    /// Returns the most recent run whose status is in {pending, running, paused, stopping},
+    /// Returns the most recent run whose status is in {pending, running, pausing, paused, stopping},
     /// or None if no active run exists.
     pub async fn find_active_by_task(
         pool: &SqlitePool,
         task_id: &str,
     ) -> Result<Option<Run>, sqlx::Error> {
         let runs = sqlx::query_as(
-            "SELECT * FROM runs WHERE task_id = ? AND status IN ('pending', 'running', 'paused', 'stopping') ORDER BY created_at DESC LIMIT 1",
+            "SELECT * FROM runs WHERE task_id = ? AND status IN ('pending', 'running', 'pausing', 'paused', 'stopping') ORDER BY created_at DESC LIMIT 1",
         )
         .bind(task_id)
         .fetch_all(pool)
@@ -87,7 +89,7 @@ impl RunRepository {
         sqlx::query(
             "UPDATE runs SET status = ?, pid = ?, ini_path = ?, log_dir = ?,
              started_at = ?, stopped_at = ?, exit_code = ?, stop_method = ?,
-             metrics_port = ?, updated_at = ?
+             metrics_port = ?, resumed_from_run_id = ?, updated_at = ?
              WHERE id = ?",
         )
         .bind(&run.status)
@@ -99,6 +101,7 @@ impl RunRepository {
         .bind(run.exit_code)
         .bind(&run.stop_method)
         .bind(run.metrics_port)
+        .bind(&run.resumed_from_run_id)
         .bind(&run.updated_at)
         .bind(&run.id)
         .execute(pool)

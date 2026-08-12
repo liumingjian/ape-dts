@@ -559,6 +559,7 @@ async fn delete_task_active_run_409() {
         exit_code: None,
         stop_method: None,
         metrics_port: None,
+        resumed_from_run_id: None,
         created_at: now.clone(),
         updated_at: now,
     };
@@ -2012,6 +2013,7 @@ async fn task_delete_cascades_fk_set_null() {
         exit_code: Some(0),
         stop_method: Some("graceful".to_string()),
         metrics_port: None,
+        resumed_from_run_id: None,
         created_at: now.clone(),
         updated_at: now,
     };
@@ -2120,6 +2122,7 @@ async fn task_delete_blocked_by_active_run_unchanged() {
         exit_code: None,
         stop_method: None,
         metrics_port: None,
+        resumed_from_run_id: None,
         created_at: now.clone(),
         updated_at: now,
     };

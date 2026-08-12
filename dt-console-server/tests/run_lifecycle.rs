@@ -216,10 +216,19 @@ async fn test_legal_transitions() {
         "pending", "running"
     ));
     assert!(dt_console_server::models::is_legal_transition(
-        "running", "paused"
+        "running", "pausing"
+    ));
+    assert!(dt_console_server::models::is_legal_transition(
+        "pausing", "paused"
+    ));
+    assert!(dt_console_server::models::is_legal_transition(
+        "pausing", "failed"
     ));
     assert!(dt_console_server::models::is_legal_transition(
         "paused", "running"
+    ));
+    assert!(dt_console_server::models::is_legal_transition(
+        "paused", "stopped"
     ));
     assert!(dt_console_server::models::is_legal_transition(
         "running", "stopping"
@@ -273,6 +282,12 @@ async fn test_illegal_transitions() {
     assert!(!dt_console_server::models::is_legal_transition(
         "stopped", "stopping"
     ));
+    // Pause is a graceful stop, not a suspend: `running` goes to `pausing`
+    // and only the supervisor, reading the real exit code, may write
+    // `paused`.
+    assert!(!dt_console_server::models::is_legal_transition(
+        "running", "paused"
+    ));
 }
 
 #[tokio::test]
@@ -280,6 +295,7 @@ async fn test_run_status_helpers() {
     use dt_console_server::models::run_status;
     assert!(run_status::is_active("pending"));
     assert!(run_status::is_active("running"));
+    assert!(run_status::is_active("pausing"));
     assert!(run_status::is_active("paused"));
     assert!(run_status::is_active("stopping"));
     assert!(!run_status::is_active("stopped"));
@@ -1284,120 +1300,6 @@ async fn test_control_log_stop_intent_and_result() {
     cleanup_run_dirs(&pool, &task_id).await;
 }
 
-/// VAL-CTRL-003: pause and resume each write intent + result (4 rows total).
-#[actix_web::test]
-async fn test_control_log_pause_and_resume_each_write_intent_and_result() {
-    let (pool, active_runs) = setup().await;
-    let app = test::init_service(build_test_app(pool.clone(), active_runs)).await;
-    let cookies = do_login!(app, "admin", "admin123");
-
-    let req = add_auth(
-        test::TestRequest::post()
-            .uri("/api/tasks")
-            .set_json(serde_json::json!({
-                "kind": "cdc",
-                "engineSource": "mysql",
-                "engineTarget": "mysql",
-                "sourceEndpoint": { "url": "mysql://db-src.example.com:3307/testdb" },
-                "targetEndpoint": { "url": "mysql://db-src.example.com:3307/testdb" },
-                "extractor": { "extract_type": "cdc", "server_id": "100" },
-                "filter": { "doDbs": ["testdb"] }
-            })),
-        &cookies,
-    )
-    .to_request();
-    let resp = test::call_service(&app, req).await;
-    let task_body: serde_json::Value = test::read_body_json(resp).await;
-    let task_id = task_body["id"].as_str().unwrap().to_string();
-
-    std::env::set_var("APE_DTS_BINARY_PATH", "sleep");
-
-    let req = add_auth(
-        test::TestRequest::post().uri(&format!("/api/tasks/{task_id}/start")),
-        &cookies,
-    )
-    .to_request();
-    let resp = test::call_service(&app, req).await;
-    let body: serde_json::Value = test::read_body_json(resp).await;
-    let run_id = body["runId"].as_str().unwrap().to_string();
-
-    // Pause.
-    let req = add_auth(
-        test::TestRequest::post().uri(&format!("/api/tasks/{task_id}/pause")),
-        &cookies,
-    )
-    .to_request();
-    let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), StatusCode::ACCEPTED);
-
-    // Verify pause control logs (2 rows).
-    let logs =
-        dt_console_server::repositories::control_log_repository::ControlLogRepository::list(&pool)
-            .await
-            .unwrap();
-    let pause_logs: Vec<_> = logs
-        .iter()
-        .filter(|l| l.action == "pause" && l.run_id.as_deref() == Some(&run_id))
-        .collect();
-    assert_eq!(
-        pause_logs.len(),
-        2,
-        "should have exactly 2 pause logs (intent + result)"
-    );
-    assert!(pause_logs.iter().any(|l| l.intent_or_result == "intent"));
-    assert!(pause_logs
-        .iter()
-        .any(|l| l.intent_or_result.starts_with("result:")));
-
-    // Resume.
-    let req = add_auth(
-        test::TestRequest::post().uri(&format!("/api/tasks/{task_id}/resume")),
-        &cookies,
-    )
-    .to_request();
-    let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), StatusCode::ACCEPTED);
-
-    // Verify resume control logs (2 rows).
-    let logs =
-        dt_console_server::repositories::control_log_repository::ControlLogRepository::list(&pool)
-            .await
-            .unwrap();
-    let resume_logs: Vec<_> = logs
-        .iter()
-        .filter(|l| l.action == "resume" && l.run_id.as_deref() == Some(&run_id))
-        .collect();
-    assert_eq!(
-        resume_logs.len(),
-        2,
-        "should have exactly 2 resume logs (intent + result)"
-    );
-    assert!(resume_logs.iter().any(|l| l.intent_or_result == "intent"));
-    assert!(resume_logs
-        .iter()
-        .any(|l| l.intent_or_result.starts_with("result:")));
-
-    // Total: 4 pause/resume logs, all sharing the same run_id.
-    let all_pause_resume: Vec<_> = logs
-        .iter()
-        .filter(|l| {
-            (l.action == "pause" || l.action == "resume") && l.run_id.as_deref() == Some(&run_id)
-        })
-        .collect();
-    assert_eq!(all_pause_resume.len(), 4, "4 total pause+resume logs");
-
-    // Clean up.
-    let req = add_auth(
-        test::TestRequest::post().uri(&format!("/api/tasks/{task_id}/stop")),
-        &cookies,
-    )
-    .to_request();
-    let _ = test::call_service(&app, req).await;
-    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-    std::env::remove_var("APE_DTS_BINARY_PATH");
-    cleanup_run_dirs(&pool, &task_id).await;
-}
-
 /// VAL-CTRL-004: Intent row survives an aborted action (no result row).
 #[actix_web::test]
 async fn test_control_log_intent_survives_aborted_action() {
@@ -2134,6 +2036,7 @@ async fn seed_running_run(
         exit_code: None,
         stop_method: None,
         metrics_port: None,
+        resumed_from_run_id: None,
         created_at: now.clone(),
         updated_at: now,
     };
@@ -2365,4 +2268,252 @@ async fn test_pause_of_a_dead_engine_is_refused() {
         run.status, "running",
         "the run must not be recorded as paused when nothing was paused"
     );
+}
+
+/// VAL-CTRL-003: pause writes intent + result, and so does discarding the
+/// paused Run with a stop.
+///
+/// Deliberately seeds the Run rows instead of calling `start`: `start` runs
+/// precheck against the fake endpoints these tests use and is refused with
+/// 422, which would make this a test of precheck rather than of control logs.
+#[actix_web::test]
+async fn test_control_log_pause_and_discard_each_write_intent_and_result() {
+    let (pool, active_runs) = setup().await;
+    let app = test::init_service(build_test_app(pool.clone(), active_runs)).await;
+    let cookies = do_login!(app, "admin", "admin123");
+    let task_id = create_task!(app, &cookies);
+
+    // A live child so the pause SIGTERM has a real process to reach.
+    let mut child = std::process::Command::new("sleep")
+        .arg("30")
+        .spawn()
+        .expect("spawn sleep");
+    let run_id = seed_running_run(&pool, &task_id, Some(child.id() as i64), None).await;
+
+    let req = add_auth(
+        test::TestRequest::post().uri(&format!("/api/tasks/{task_id}/pause")),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::ACCEPTED);
+    let _ = child.wait();
+
+    let logs =
+        dt_console_server::repositories::control_log_repository::ControlLogRepository::list(&pool)
+            .await
+            .unwrap();
+    let pause_logs: Vec<_> = logs
+        .iter()
+        .filter(|l| l.action == "pause" && l.run_id.as_deref() == Some(&run_id))
+        .collect();
+    assert_eq!(
+        pause_logs.len(),
+        2,
+        "should have exactly 2 pause logs (intent + result)"
+    );
+    assert!(pause_logs.iter().any(|l| l.intent_or_result == "intent"));
+    assert!(pause_logs
+        .iter()
+        .any(|l| l.intent_or_result.starts_with("result:")));
+
+    // There is no supervisor in this test app, so land the Run in `paused`
+    // the way the supervisor would, then discard it.
+    let mut run = RunRepository::find_by_id(&pool, &run_id).await.unwrap();
+    assert_eq!(
+        run.status, "pausing",
+        "pause must not write `paused` itself"
+    );
+    run.status = "paused".to_string();
+    RunRepository::update(&pool, &run).await.unwrap();
+
+    let req = add_auth(
+        test::TestRequest::post().uri(&format!("/api/tasks/{task_id}/stop")),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::ACCEPTED);
+
+    let logs =
+        dt_console_server::repositories::control_log_repository::ControlLogRepository::list(&pool)
+            .await
+            .unwrap();
+    let stop_logs: Vec<_> = logs
+        .iter()
+        .filter(|l| l.action == "stop" && l.run_id.as_deref() == Some(&run_id))
+        .collect();
+    assert_eq!(stop_logs.len(), 2, "stop writes intent + result too");
+}
+
+/// Pause is a SIGTERM with intent: the Run goes to `pausing` (never straight
+/// to `paused`) and the engine process is actually signalled.
+#[actix_web::test]
+async fn test_pause_marks_pausing_and_signals_the_engine() {
+    let (pool, active_runs) = setup().await;
+    let app = test::init_service(build_test_app(pool.clone(), active_runs)).await;
+    let cookies = do_login!(app, "admin", "admin123");
+    let task_id = create_task!(app, &cookies);
+
+    let mut child = std::process::Command::new("sleep")
+        .arg("30")
+        .spawn()
+        .expect("spawn sleep");
+    let pid = child.id();
+    let run_id = seed_running_run(&pool, &task_id, Some(pid as i64), None).await;
+
+    let req = add_auth(
+        test::TestRequest::post().uri(&format!("/api/tasks/{task_id}/pause")),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::ACCEPTED);
+
+    let run = RunRepository::find_by_id(&pool, &run_id).await.unwrap();
+    assert_eq!(
+        run.status, "pausing",
+        "only the supervisor, seeing the exit code, may write `paused`"
+    );
+
+    // The child got a real SIGTERM.
+    let status = child.wait().expect("child should have been signalled");
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        assert_eq!(status.signal(), Some(libc::SIGTERM));
+    }
+    #[cfg(not(unix))]
+    let _ = status;
+}
+
+/// Pause is refused for kinds with no resumable position.
+#[actix_web::test]
+async fn test_pause_rejected_for_check_kind() {
+    let (pool, active_runs) = setup().await;
+    let app = test::init_service(build_test_app(pool.clone(), active_runs)).await;
+    let cookies = do_login!(app, "admin", "admin123");
+    let task_id = create_task!(app, &cookies);
+
+    // `kind` is immutable through the API, so rewrite it directly.
+    sqlx::query("UPDATE tasks SET kind = 'check' WHERE id = ?")
+        .bind(&task_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let dead = reaped_pid();
+    seed_running_run(&pool, &task_id, Some(dead as i64), None).await;
+
+    let req = add_auth(
+        test::TestRequest::post().uri(&format!("/api/tasks/{task_id}/pause")),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::CONFLICT);
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(body["code"], "UNSUPPORTED_FOR_KIND");
+    assert_eq!(body["details"]["kind"], "check");
+}
+
+/// Stopping a `paused` Run discards its position instead of signalling a
+/// process that pause already ended.
+#[actix_web::test]
+async fn test_stop_of_paused_run_is_discarded_without_a_signal() {
+    let (pool, active_runs) = setup().await;
+    let app = test::init_service(build_test_app(pool.clone(), active_runs)).await;
+    let cookies = do_login!(app, "admin", "admin123");
+    let task_id = create_task!(app, &cookies);
+
+    // A live child standing in for a *recycled* pid: a paused Run's pid
+    // column still holds the number of the process pause ended, and stop
+    // must not fire a signal at whoever inherited it.
+    let mut child = std::process::Command::new("sleep")
+        .arg("30")
+        .spawn()
+        .expect("spawn sleep");
+    let pid = child.id();
+    let run_id = seed_running_run(&pool, &task_id, Some(pid as i64), None).await;
+    let mut run = RunRepository::find_by_id(&pool, &run_id).await.unwrap();
+    run.status = "paused".to_string();
+    RunRepository::update(&pool, &run).await.unwrap();
+
+    let req = add_auth(
+        test::TestRequest::post().uri(&format!("/api/tasks/{task_id}/stop")),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::ACCEPTED);
+
+    let run = RunRepository::find_by_id(&pool, &run_id).await.unwrap();
+    assert_eq!(run.status, "stopped");
+    assert_eq!(run.stop_method.as_deref(), Some("discarded"));
+
+    assert!(
+        dt_console_server::signal::is_alive(pid),
+        "stopping a paused Run must not signal the pid it used to own"
+    );
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+/// A resume needs the paused Run's position log; without one it would
+/// silently restart the task from its original start marker.
+#[actix_web::test]
+async fn test_resume_rejected_when_the_paused_run_has_no_position_log() {
+    let (pool, active_runs) = setup().await;
+    let app = test::init_service(build_test_app(pool.clone(), active_runs)).await;
+    let cookies = do_login!(app, "admin", "admin123");
+    let task_id = create_task!(app, &cookies);
+
+    let run_id = seed_running_run(&pool, &task_id, Some(reaped_pid() as i64), None).await;
+    let mut run = RunRepository::find_by_id(&pool, &run_id).await.unwrap();
+    run.status = "paused".to_string();
+    run.log_dir = None;
+    RunRepository::update(&pool, &run).await.unwrap();
+
+    let req = add_auth(
+        test::TestRequest::post().uri(&format!("/api/tasks/{task_id}/resume")),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::CONFLICT);
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(body["code"], "ILLEGAL_TRANSITION");
+}
+
+/// Resuming is only legal from the task's *latest* Run: an older paused Run
+/// would rewind past everything that ran after it.
+#[actix_web::test]
+async fn test_resume_rejected_when_the_latest_run_is_not_paused() {
+    let (pool, active_runs) = setup().await;
+    let app = test::init_service(build_test_app(pool.clone(), active_runs)).await;
+    let cookies = do_login!(app, "admin", "admin123");
+    let task_id = create_task!(app, &cookies);
+
+    let paused_id = seed_running_run(&pool, &task_id, Some(reaped_pid() as i64), None).await;
+    let mut paused = RunRepository::find_by_id(&pool, &paused_id).await.unwrap();
+    paused.status = "paused".to_string();
+    RunRepository::update(&pool, &paused).await.unwrap();
+
+    // A later Run that ended normally.
+    tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
+    let later_id = seed_running_run(&pool, &task_id, Some(reaped_pid() as i64), None).await;
+    let mut later = RunRepository::find_by_id(&pool, &later_id).await.unwrap();
+    later.status = "stopped".to_string();
+    RunRepository::update(&pool, &later).await.unwrap();
+
+    let req = add_auth(
+        test::TestRequest::post().uri(&format!("/api/tasks/{task_id}/resume")),
+        &cookies,
+    )
+    .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::CONFLICT);
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(body["code"], "ILLEGAL_TRANSITION");
+    assert_eq!(body["details"]["from"], "stopped");
 }
