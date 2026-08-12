@@ -13,8 +13,8 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use crate::error::{codes, ApiError};
-use crate::executor::{self, ChildStatus, ExitStatus, RunSlot};
-use crate::idempotency::{extract_key, IdempotencyCache};
+use crate::executor::{self, ChildStatus, ExitStatus, KillResult, RunSlot};
+use crate::idempotency::{extract_scoped_key, IdempotencyCache};
 use crate::ini_renderer;
 use crate::metrics_scraper::{self, ScraperState};
 use crate::middleware::rbac::{self, RbacAction};
@@ -438,7 +438,7 @@ pub async fn start_task(
     }
 
     // Idempotency-Key check: if the key was seen before, return the cached result.
-    let idem_key = extract_key(&req);
+    let idem_key = extract_scoped_key(&req, &user.user_id);
     if let Some(ref key) = idem_key {
         if let Some(cached) = idempotency_cache.get(key).await {
             return HttpResponse::build(
@@ -880,7 +880,7 @@ pub async fn stop_task(
     }
 
     // Idempotency-Key check: if the key was seen before, return the cached result.
-    let idem_key = extract_key(&req);
+    let idem_key = extract_scoped_key(&req, &user.user_id);
     if let Some(ref key) = idem_key {
         if let Some(cached) = idempotency_cache.get(key).await {
             return HttpResponse::build(
@@ -951,6 +951,7 @@ pub async fn stop_task(
         .error_response();
     }
 
+    let status_before_stop = run.status.clone();
     run.status = run_status::STOPPING.to_string();
     run.updated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
@@ -973,32 +974,68 @@ pub async fn stop_task(
             .await;
     }
 
-    // Kill the child process.
-    let kill_result = {
+    // Kill the child process. A kill that did not happen must not be papered
+    // over with a `stopped` status: the engine would still be running while
+    // the console reports it stopped, and the task would look free to restart.
+    let kill_outcome: Result<Option<KillResult>, String> = {
         let mut active = active_runs.lock().await;
-        if let Some(slot) = active.remove(&task_id) {
-            if let Some(handle) = slot.into_handle() {
-                match executor::LocalExecutor::kill(&handle).await {
-                    Ok(kr) => Some(kr),
+        match active.remove(&task_id) {
+            Some(slot) => match slot.into_handle() {
+                Some(handle) => match executor::LocalExecutor::kill(&handle).await {
+                    Ok(kr) => Ok(Some(kr)),
                     Err(e) => {
-                        tracing::warn!("kill failed for run {}: {e}", run_id);
-                        None
+                        // Put the slot back — the process may still be alive and
+                        // this handle is the only way to reach it again.
+                        active.insert(task_id.clone(), RunSlot::Active(handle));
+                        Err(e)
                     }
+                },
+                None => {
+                    // Slot was in Starting state: the engine is mid-spawn, so
+                    // there is nothing to signal *yet* — and releasing the slot
+                    // would let a second start race the one in flight. Put it
+                    // back and make the caller retry.
+                    active.insert(task_id.clone(), RunSlot::Starting);
+                    Err("the run is still starting; retry the stop once it is running".to_string())
                 }
-            } else {
-                // Slot was in Starting state — no child process to kill.
-                tracing::warn!(
-                    "stop requested for task {} but slot was Starting (no child)",
-                    task_id
-                );
-                None
+            },
+            None => {
+                // No handle in memory — stop by pid, with the same graceful
+                // escalation, so "stopped" still means the process is gone.
+                match run.pid {
+                    Some(pid) if pid > 0 => {
+                        let grace = executor::grace_window_secs();
+                        executor::LocalExecutor::kill_by_pid(pid as u32, grace)
+                            .await
+                            .map(Some)
+                    }
+                    _ => Ok(None),
+                }
             }
-        } else {
-            // Handle not in memory — try sending SIGTERM directly via PID.
-            if let Some(pid) = run.pid {
-                let _ = kill_process_by_pid(pid as u32).await;
+        }
+    };
+
+    let kill_result = match kill_outcome {
+        Ok(kr) => kr,
+        Err(e) => {
+            tracing::warn!("kill failed for run {}: {e}", run_id);
+            // Roll the Run back to where it was so a retry is possible.
+            run.status = status_before_stop;
+            run.updated_at =
+                chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+            if let Err(e) = RunRepository::update(&pool, &run).await {
+                tracing::warn!("failed to roll run {} back after failed kill: {e}", run_id);
             }
-            None
+            let _ = write_control_result(&pool, &task_id, &run_id, "stop", "error", &user.username)
+                .await;
+            let _ = write_run_audit_log(&pool, &user.username, "tasks.stop", "error", &run_id, &ip)
+                .await;
+            return ApiError::with_details(
+                codes::INTERNAL_ERROR,
+                format!("failed to stop the engine process: {e}"),
+                serde_json::json!({ "run_id": run_id, "pid": run.pid }),
+            )
+            .error_response();
         }
     };
 
@@ -1110,9 +1147,48 @@ pub async fn pause_task(
     let _ = write_control_intent(&pool, &task_id, &run_id, "pause", &user.username).await;
 
     // Send SIGUSR1 to the child process (engine interprets as pause signal).
+    // An undeliverable signal must not be papered over with a `paused` status:
+    // the engine would keep running while the console claims otherwise.
     if let Some(pid) = run.pid {
-        if let Err(e) = send_pause_signal(pid as u32) {
-            tracing::warn!("pause signal failed for run {}: {e}", run_id);
+        match send_pause_signal(pid as u32) {
+            Ok(crate::signal::SignalOutcome::Delivered) => {}
+            Ok(crate::signal::SignalOutcome::ProcessGone) => {
+                // Nothing is running to pause. Claiming `paused` would be the
+                // same lie as claiming `stopped` after a failed kill; the
+                // supervisor will finalise the Run on its next sweep.
+                tracing::warn!(
+                    "pause: engine process {pid} for run {} is already gone",
+                    run_id
+                );
+                let _ = write_control_result(
+                    &pool,
+                    &task_id,
+                    &run_id,
+                    "pause",
+                    "error",
+                    &user.username,
+                )
+                .await;
+                return ApiError::with_details(
+                    codes::ILLEGAL_TRANSITION,
+                    "Cannot pause a run whose engine process is gone",
+                    serde_json::json!({ "from": run.status, "to": "paused", "pid": pid }),
+                )
+                .error_response();
+            }
+            Err(e) => {
+                let _ = write_control_result(
+                    &pool,
+                    &task_id,
+                    &run_id,
+                    "pause",
+                    "error",
+                    &user.username,
+                )
+                .await;
+                return ApiError::new(codes::INTERNAL_ERROR, format!("pause signal failed: {e}"))
+                    .error_response();
+            }
         }
     }
 
@@ -1215,9 +1291,45 @@ pub async fn resume_task(
     let _ = write_control_intent(&pool, &task_id, &run_id, "resume", &user.username).await;
 
     // Send SIGUSR2 to the child process (engine interprets as resume signal).
+    // As with pause: a failed signal must surface, not become a false `running`.
     if let Some(pid) = run.pid {
-        if let Err(e) = send_resume_signal(pid as u32) {
-            tracing::warn!("resume signal failed for run {}: {e}", run_id);
+        match send_resume_signal(pid as u32) {
+            Ok(crate::signal::SignalOutcome::Delivered) => {}
+            Ok(crate::signal::SignalOutcome::ProcessGone) => {
+                // As with pause: there is no engine left to resume.
+                tracing::warn!(
+                    "resume: engine process {pid} for run {} is already gone",
+                    run_id
+                );
+                let _ = write_control_result(
+                    &pool,
+                    &task_id,
+                    &run_id,
+                    "resume",
+                    "error",
+                    &user.username,
+                )
+                .await;
+                return ApiError::with_details(
+                    codes::ILLEGAL_TRANSITION,
+                    "Cannot resume a run whose engine process is gone",
+                    serde_json::json!({ "from": run.status, "to": "running", "pid": pid }),
+                )
+                .error_response();
+            }
+            Err(e) => {
+                let _ = write_control_result(
+                    &pool,
+                    &task_id,
+                    &run_id,
+                    "resume",
+                    "error",
+                    &user.username,
+                )
+                .await;
+                return ApiError::new(codes::INTERNAL_ERROR, format!("resume signal failed: {e}"))
+                    .error_response();
+            }
         }
     }
 
@@ -1601,77 +1713,52 @@ async fn update_task_status(
     Ok(())
 }
 
-/// Kill a process by PID when the RunHandle is not available.
-async fn kill_process_by_pid(pid: u32) -> Result<(), String> {
-    #[cfg(unix)]
-    {
-        std::process::Command::new("kill")
-            .args(["-s", "TERM", &pid.to_string()])
-            .output()
-            .map_err(|e| format!("failed to kill pid {pid}: {e}"))?;
-    }
-    Ok(())
-}
-
 /// Send a pause signal (SIGUSR1) to the engine process.
-#[cfg(unix)]
-fn send_pause_signal(pid: u32) -> Result<(), String> {
-    std::process::Command::new("kill")
-        .args(["-s", "USR1", &pid.to_string()])
-        .output()
-        .map_err(|e| format!("failed to send SIGUSR1 to pid {pid}: {e}"))?;
-    Ok(())
+fn send_pause_signal(pid: u32) -> Result<crate::signal::SignalOutcome, String> {
+    crate::signal::send(pid, crate::signal::EngineSignal::Pause)
 }
 
 /// Send a resume signal (SIGUSR2) to the engine process.
-#[cfg(unix)]
-fn send_resume_signal(pid: u32) -> Result<(), String> {
-    std::process::Command::new("kill")
-        .args(["-s", "USR2", &pid.to_string()])
-        .output()
-        .map_err(|e| format!("failed to send SIGUSR2 to pid {pid}: {e}"))?;
-    Ok(())
-}
-
-#[cfg(not(unix))]
-fn send_pause_signal(_pid: u32) -> Result<(), String> {
-    Err("Pause signal not supported on this platform".to_string())
-}
-
-#[cfg(not(unix))]
-fn send_resume_signal(_pid: u32) -> Result<(), String> {
-    Err("Resume signal not supported on this platform".to_string())
+fn send_resume_signal(pid: u32) -> Result<crate::signal::SignalOutcome, String> {
+    crate::signal::send(pid, crate::signal::EngineSignal::Resume)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    #[cfg(unix)]
     #[test]
-    fn test_pause_signal_uses_sigusr1() {
-        // Verify that send_pause_signal constructs a "kill -s USR1" command
-        // by inspecting the function's implementation. On Unix, the function
-        // uses Command::new("kill").args(["-s", "USR1", &pid]).
-        // We can't easily test the actual signal delivery without a real
-        // process, but we can verify the function exists and compiles with
-        // the correct signal name.
-        // This test serves as a compile-time assertion that SIGUSR1 is used.
-        #[cfg(unix)]
-        {
-            // Send SIGUSR1 to PID 0 would fail, but the signal choice is
-            // embedded in the command. We verify indirectly by checking
-            // the function signature is correct.
-            let _ = send_pause_signal(999999);
-        }
+    fn test_pause_resume_signals_reach_a_live_child() {
+        use crate::signal::SignalOutcome;
+
+        // `sleep` ignores SIGUSR1/2 by default, so delivery is observable
+        // only through the syscall's own return — which is the point: the
+        // old shell-out reported success even when nothing was delivered.
+        let mut child = std::process::Command::new("sleep")
+            .arg("30")
+            .spawn()
+            .expect("spawn sleep");
+        let pid = child.id();
+
+        assert_eq!(send_pause_signal(pid).unwrap(), SignalOutcome::Delivered);
+        assert_eq!(send_resume_signal(pid).unwrap(), SignalOutcome::Delivered);
+
+        let _ = child.kill();
+        let _ = child.wait();
     }
 
+    #[cfg(unix)]
     #[test]
-    fn test_resume_signal_uses_sigusr2() {
-        // Same as above: compile-time assertion for SIGUSR2.
-        #[cfg(unix)]
-        {
-            let _ = send_resume_signal(999999);
-        }
+    fn test_signals_to_dead_pid_report_process_gone() {
+        use crate::signal::SignalOutcome;
+
+        let dead = crate::signal::reaped_pid();
+        assert_eq!(send_pause_signal(dead).unwrap(), SignalOutcome::ProcessGone);
+        assert_eq!(
+            send_resume_signal(dead).unwrap(),
+            SignalOutcome::ProcessGone
+        );
     }
 
     #[test]

@@ -97,8 +97,11 @@ async fn main() -> std::io::Result<()> {
     // Create the alert engine state.
     let alert_engine_state = alert_engine::AlertEngineState::new();
 
-    // Create the idempotency cache for lifecycle/clear dedup.
+    // Create the idempotency cache for lifecycle/clear dedup, and start the
+    // background sweep — `get` alone only evicts keys someone asks about, so
+    // the map would otherwise grow for the process's whole lifetime.
     let idempotency_cache = IdempotencyCache::new();
+    dt_console_server::idempotency::spawn_evictor(idempotency_cache.clone());
 
     // Create the SSE session tracker for closing connections on session invalidation.
     let sse_session_tracker = SseSessionTracker::new();
@@ -222,19 +225,12 @@ async fn reconcile_live_runs(
     }
 
     for run in runs {
+        // Same liveness definition as the supervisor uses at runtime, so a
+        // given pid cannot read as alive before a restart and dead after it.
         let pid_alive = match run.pid {
-            Some(pid) if pid > 0 => {
-                // Check if the process is still alive.
-                // On Unix, sending signal 0 to a PID checks existence without affecting it.
-                #[cfg(unix)]
-                {
-                    unsafe { libc::kill(pid as i32, 0) == 0 }
-                }
-                #[cfg(not(unix))]
-                {
-                    false
-                }
-            }
+            Some(pid) if pid > 0 => u32::try_from(pid)
+                .map(dt_console_server::signal::is_alive)
+                .unwrap_or(false),
             _ => false,
         };
 

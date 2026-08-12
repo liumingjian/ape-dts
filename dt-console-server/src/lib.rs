@@ -29,6 +29,7 @@ pub mod redaction;
 pub mod repositories;
 pub mod resource_group_handlers;
 pub mod run_handlers;
+pub mod signal;
 pub mod sse_session_tracker;
 pub mod system_handlers;
 pub mod task_handlers;
