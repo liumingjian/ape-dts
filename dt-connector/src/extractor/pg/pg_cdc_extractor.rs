@@ -155,7 +155,14 @@ impl PgCdcExtractor {
                 start_time = Instant::now();
             }
 
-            match stream.next().await {
+            // Same as the MySQL side: an idle replication stream only yields on the server's
+            // keepalive clock, so cancellation has to race the read instead of waiting behind it.
+            let next = tokio::select! {
+                biased;
+                _ = self.base_extractor.cancel_token.cancelled() => return Ok(()),
+                next = stream.next() => next,
+            };
+            match next {
                 Some(Ok(XLogData(body))) => {
                     let data = body.into_data();
                     match data {

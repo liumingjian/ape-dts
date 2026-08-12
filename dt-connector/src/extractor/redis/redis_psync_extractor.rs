@@ -277,6 +277,12 @@ impl RedisPsyncExtractor {
         let mut heartbeat_timestamp = String::new();
         let mut start_time = Instant::now();
         loop {
+            // The stream polls with a 1ms sleep on Nil, so a cancelled task would otherwise
+            // spin here forever instead of letting the extractor return.
+            if self.base_extractor.cancel_token.is_cancelled() {
+                return Ok(());
+            }
+
             // heartbeat
             if start_time.elapsed().as_secs() >= self.keepalive_interval_secs {
                 self.keep_alive_ack().await?;

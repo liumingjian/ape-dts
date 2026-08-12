@@ -294,6 +294,37 @@ assert_eq "shutdown path preserves the failure reason in summary.md" \
   "- Reason: schema and fixture preparation failed" \
   "$(summary_survives_shutdown)"
 
+# Graceful stop (SIGTERM): the acceptance is "drained + position recorded + non-zero exit",
+# and each failure mode must name itself instead of collapsing into one vague message.
+printf 'checkpoint_position | mysql-bin.000003:100\n' >"$tmp_dir/position.log"
+printf 'checkpoint_position | mysql-bin.000003:842\n' >>"$tmp_dir/position.log"
+printf 'other line\n' >>"$tmp_dir/position.log"
+assert_eq "last_checkpoint_position reads the newest recorded position" \
+  "mysql-bin.000003:842" "$(last_checkpoint_position "$tmp_dir/position.log")"
+assert_eq "last_checkpoint_position is empty when nothing was recorded" \
+  "" "$(last_checkpoint_position "$tmp_dir/missing-position.log")"
+
+assert_eq "graceful_stop_reason accepts a clean shutdown" "" \
+  "$(graceful_stop_reason 143 "$GRACEFUL_PROBE_ROW" "$GRACEFUL_PROBE_ROW" "mysql-bin.000003:100" "mysql-bin.000003:842")"
+assert_eq "graceful_stop_reason rejects a zero exit code after SIGTERM" \
+  "cdc dt-main exited with code 0 after SIGTERM, expected 143" \
+  "$(graceful_stop_reason 0 "$GRACEFUL_PROBE_ROW" "$GRACEFUL_PROBE_ROW" "mysql-bin.000003:100" "mysql-bin.000003:842")"
+assert_eq "graceful_stop_reason rejects a hard kill exit code" \
+  "cdc dt-main exited with code 137 after SIGTERM, expected 143" \
+  "$(graceful_stop_reason 137 "$GRACEFUL_PROBE_ROW" "$GRACEFUL_PROBE_ROW" "mysql-bin.000003:100" "mysql-bin.000003:842")"
+assert_eq "graceful_stop_reason blames the fixture when the probe never reached mysql" \
+  "the graceful-stop probe row never landed in mysql, so the shutdown was not exercised" \
+  "$(graceful_stop_reason 143 "" "" "mysql-bin.000003:100" "mysql-bin.000003:842")"
+assert_eq "graceful_stop_reason reports data dropped by the shutdown" \
+  "the row written just before SIGTERM never reached postgresql: the shutdown dropped buffered data" \
+  "$(graceful_stop_reason 143 "$GRACEFUL_PROBE_ROW" "" "mysql-bin.000003:100" "mysql-bin.000003:842")"
+assert_eq "graceful_stop_reason reports a missing resume point" \
+  "no checkpoint position was recorded, the shutdown left no resume point" \
+  "$(graceful_stop_reason 143 "$GRACEFUL_PROBE_ROW" "$GRACEFUL_PROBE_ROW" "" "")"
+assert_eq "graceful_stop_reason reports a position that never advanced" \
+  "the checkpoint position did not advance past the pre-shutdown position (mysql-bin.000003:100): the final position was not recorded" \
+  "$(graceful_stop_reason 143 "$GRACEFUL_PROBE_ROW" "$GRACEFUL_PROBE_ROW" "mysql-bin.000003:100" "mysql-bin.000003:100")"
+
 if (( failures > 0 )); then
   printf '%d test(s) failed\n' "$failures" >&2
   exit 1

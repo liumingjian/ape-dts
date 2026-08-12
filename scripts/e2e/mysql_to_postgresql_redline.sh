@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+# A run stopped by SIGTERM must leave with 128+15, never 0: an orchestrator has to be able to
+# tell "drained and stopped on request" from "reached the end of the task".
+SIGTERM_EXIT_CODE=143
+# The row written immediately before the signal: it only reaches the target if the shutdown
+# really drained the buffer instead of exiting on the spot.
+GRACEFUL_PROBE_ROW="9002|PROBE-9002|Graceful Stop|0.02|probe|<NULL>"
+
 sanitize_run_id() {
   local raw="$1"
   local sanitized
@@ -346,6 +353,81 @@ stop_cdc() {
   CDC_PID=""
 }
 
+# Last position the engine committed to position.log, empty when it never recorded one.
+last_checkpoint_position() {
+  local position_log="$1"
+  [[ -r "$position_log" ]] || return 0
+  grep -F 'checkpoint_position |' "$position_log" | tail -n 1 | sed -E 's/.*checkpoint_position \| //'
+}
+
+# Prints why a graceful stop is unacceptable, empty when the shutdown was clean.
+# Pure: every observation is passed in, so the unit tests can drive each failure mode.
+graceful_stop_reason() {
+  local exit_code="$1"
+  local source_probe="$2"
+  local target_probe="$3"
+  local position_before="$4"
+  local position_after="$5"
+
+  if [[ "$exit_code" != "$SIGTERM_EXIT_CODE" ]]; then
+    printf '%s' "cdc dt-main exited with code $exit_code after SIGTERM, expected $SIGTERM_EXIT_CODE"
+    return 0
+  fi
+  if [[ "$source_probe" != "$GRACEFUL_PROBE_ROW" ]]; then
+    printf '%s' "the graceful-stop probe row never landed in mysql, so the shutdown was not exercised"
+    return 0
+  fi
+  if [[ "$target_probe" != "$GRACEFUL_PROBE_ROW" ]]; then
+    printf '%s' "the row written just before SIGTERM never reached postgresql: the shutdown dropped buffered data"
+    return 0
+  fi
+  if [[ -z "$position_after" ]]; then
+    printf '%s' "no checkpoint position was recorded, the shutdown left no resume point"
+    return 0
+  fi
+  if [[ "$position_after" == "$position_before" ]]; then
+    printf '%s' "the checkpoint position did not advance past the pre-shutdown position ($position_before): the final position was not recorded"
+    return 0
+  fi
+}
+
+# SIGTERM (what k8s/systemd and the console executor send) must drain, record the position and
+# exit non-zero. Runs last: it stops the CDC engine for good.
+assert_graceful_stop() {
+  cdc_is_alive || die "cdc dt-main was no longer running when the graceful stop check started"
+  local position_log="$RUN_DIR/engine-logs/cdc/position.log"
+  local position_before
+  position_before="$(last_checkpoint_position "$position_log")"
+
+  mysql_sql -e "INSERT INTO ape_dts_e2e.migration_redline_orders VALUES (9002, 'PROBE-9002', 'Graceful Stop', 0.02, 'probe', NULL);" \
+    || die "could not write the graceful-stop probe row"
+  kill -TERM "$CDC_PID" >/dev/null 2>&1 || die "could not send SIGTERM to cdc dt-main (pid=$CDC_PID)"
+
+  local deadline=$((SECONDS + GRACEFUL_STOP_TIMEOUT_SECS))
+  while cdc_is_alive && (( SECONDS <= deadline )); do
+    sleep 1
+  done
+  if cdc_is_alive; then
+    kill -KILL "$CDC_PID" >/dev/null 2>&1 || true
+    CDC_PID=""
+    die "cdc dt-main did not exit within ${GRACEFUL_STOP_TIMEOUT_SECS}s of SIGTERM (it ignored the signal)"
+  fi
+
+  set +e
+  wait "$CDC_PID" >/dev/null 2>&1
+  CDC_EXIT_CODE=$?
+  set -e
+  CDC_PID=""
+
+  local source_probe target_probe position_after reason
+  source_probe="$(dump_mysql 2>/dev/null | grep '^9002|' || true)"
+  target_probe="$(dump_postgres 2>/dev/null | grep '^9002|' || true)"
+  position_after="$(last_checkpoint_position "$position_log")"
+  reason="$(graceful_stop_reason "$CDC_EXIT_CODE" "$source_probe" "$target_probe" "$position_before" "$position_after")"
+  [[ -z "$reason" ]] || die "$reason (position log: $position_log)"
+  log "graceful stop verified (exit code $CDC_EXIT_CODE, position: $position_after)"
+}
+
 ensure_dt_main() {
   if [[ -n "${DT_MAIN_BIN:-}" ]]; then
     [[ -x "$DT_MAIN_BIN" ]] || die "DT_MAIN_BIN is not executable: $DT_MAIN_BIN"
@@ -512,6 +594,9 @@ run_cdc_scenario() {
 
   CURRENT_STAGE="final-verify"
   wait_for_phase final "$FINAL_TIMEOUT_SECS"
+
+  CURRENT_STAGE="cdc-graceful-stop"
+  assert_graceful_stop
 }
 
 collect_diagnostics() {
@@ -577,6 +662,7 @@ main() {
   CRUD_TIMEOUT_SECS="${CRUD_TIMEOUT_SECS:-30}"
   FINAL_TIMEOUT_SECS="${FINAL_TIMEOUT_SECS:-60}"
   STOP_TIMEOUT_SECS="${STOP_TIMEOUT_SECS:-15}"
+  GRACEFUL_STOP_TIMEOUT_SECS="${GRACEFUL_STOP_TIMEOUT_SECS:-30}"
   KEEP_ENV="${KEEP_ENV:-0}"
 
   require_cmd docker

@@ -21,4 +21,4 @@ Task shutdown is carried by a `tokio_util::sync::CancellationToken` threaded fro
 - Shutdown is cooperative and convergent: `start_multi_task` cancels and joins its siblings with a bounded timeout instead of dropping the `JoinSet` and aborting in-flight writes that have not recorded their positions. Aborting is the last resort, and it is logged.
 - Idle CPU drops from a pegged core to near zero, and shutdown latency drops from "up to one heartbeat interval" to "immediately".
 - New blocking code in the engine is now obliged to take the token; a wait without a cancellation arm reintroduces the deadlock class.
-- Graceful shutdown on a signal (rather than the current hard `exit(0)` timer in `dt-main`) becomes a matter of cancelling the root token — that is the follow-up ticket, not part of this decision.
+- Graceful shutdown on a signal became a matter of cancelling the root token; that follow-up landed as [ADR 0003](0003-signals-stop-a-task-cooperatively-and-exit-non-zero.md).

@@ -200,7 +200,20 @@ impl MysqlCdcExtractor {
                 return Ok(());
             }
 
-            let (header, data) = stream.read().await?;
+            // An idle binlog stream never returns, so the read must be racing the token:
+            // without this arm a cancelled CDC task hangs until something is written upstream.
+            let (header, data) = tokio::select! {
+                biased;
+                _ = self.base_extractor.cancel_token.cancelled() => {
+                    // Best effort: the read future was dropped mid-message, so a failing close
+                    // is expected noise and must not turn a clean shutdown into a task error.
+                    if let Err(e) = stream.close().await {
+                        log_warn!("failed to close the binlog stream on shutdown: {}", e);
+                    }
+                    return Ok(());
+                }
+                read = stream.read() => read?,
+            };
             match data {
                 EventData::Rotate(r) => {
                     ctx.binlog_filename = r.binlog_filename;
