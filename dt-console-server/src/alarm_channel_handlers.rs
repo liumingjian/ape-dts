@@ -157,7 +157,13 @@ pub async fn update_alarm_channel(
         channel.kind = kind_lower;
     }
     if let Some(ref config) = body.config {
-        channel.config = serde_json::to_string(config).unwrap_or_else(|_| "{}".to_string());
+        // The client only ever saw a redacted config, so put back any secret it
+        // echoed as the placeholder rather than persisting the placeholder.
+        let mut merged = config.clone();
+        let stored: serde_json::Value =
+            serde_json::from_str(&channel.config).unwrap_or(serde_json::json!({}));
+        crate::redaction::restore_secrets(&mut merged, &stored);
+        channel.config = serde_json::to_string(&merged).unwrap_or_else(|_| "{}".to_string());
     }
     if let Some(enabled) = body.enabled {
         channel.enabled = enabled;
@@ -211,9 +217,14 @@ pub async fn delete_alarm_channel(
 }
 
 /// Convert an AlarmChannel to a JSON response value with XSS escaping.
+///
+/// Channel configs carry webhook URLs, bot tokens, SMTP passwords and SNMP
+/// communities, so the config is redacted on the way out; writes restore the
+/// stored value when the client echoes the placeholder back.
 fn channel_to_json(ch: &AlarmChannel) -> serde_json::Value {
-    let config: serde_json::Value =
+    let mut config: serde_json::Value =
         serde_json::from_str(&ch.config).unwrap_or(serde_json::json!({}));
+    crate::redaction::redact_secrets(&mut config);
     serde_json::json!({
         "id": crate::alert_handlers::escape_xss(&ch.id),
         "name": crate::alert_handlers::escape_xss(&ch.name),

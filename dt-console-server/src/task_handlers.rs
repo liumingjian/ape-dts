@@ -16,6 +16,7 @@ use crate::middleware::rbac::{self, RbacAction};
 use crate::models::{
     CreateTaskRequest, OperateLog, TaskListResponse, TaskResponse, UpdateTaskRequest, UserContext,
 };
+use crate::redaction;
 use crate::repositories::operate_log_repository::OperateLogRepository;
 use crate::repositories::resource_group_repository::ResourceGroupRepository;
 use crate::repositories::run_repository::RunRepository;
@@ -54,6 +55,40 @@ fn task_to_response(task: &crate::models::Task) -> TaskResponse {
 /// Parse a JSON string or return empty object.
 fn parse_json_or_default(s: &str) -> serde_json::Value {
     serde_json::from_str(s).unwrap_or(serde_json::Value::Object(Default::default()))
+}
+
+/// Convert a Task to the public DTO with every secret replaced by a placeholder.
+///
+/// Every task read surface goes through here — list, get, export JSON, and the
+/// create/update/import/clone echoes. Plaintext is served only by `reveal_ini`,
+/// which is admin-only and audited.
+fn task_to_redacted_response(task: &crate::models::Task) -> TaskResponse {
+    let mut resp = task_to_response(task);
+    for field in [
+        &mut resp.source_endpoint,
+        &mut resp.target_endpoint,
+        &mut resp.extractor,
+        &mut resp.sinker,
+        &mut resp.filter,
+        &mut resp.router,
+        &mut resp.parallelizer,
+        &mut resp.pipeline,
+        &mut resp.resumer,
+        &mut resp.processor,
+        &mut resp.runtime,
+        &mut resp.metrics,
+    ] {
+        redaction::redact_secrets(field);
+    }
+    resp
+}
+
+/// Serialise an incoming config section for storage, putting back any secret the
+/// client echoed as the redaction placeholder (see `redaction::restore_secrets`).
+fn merge_incoming_config(incoming: &serde_json::Value, stored_raw: &str) -> String {
+    let mut merged = incoming.clone();
+    redaction::restore_secrets(&mut merged, &parse_json_or_default(stored_raw));
+    merged.to_string()
 }
 
 /// Extract a URL string from an endpoint JSON value.
@@ -314,7 +349,7 @@ pub async fn create_task(
     )
     .await;
 
-    HttpResponse::Created().json(task_to_response(&saved))
+    HttpResponse::Created().json(task_to_redacted_response(&saved))
 }
 
 /// GET /api/tasks — list tasks with optional filters.
@@ -353,7 +388,7 @@ pub async fn list_tasks(
         }
     };
 
-    let items: Vec<TaskResponse> = tasks.iter().map(task_to_response).collect();
+    let items: Vec<TaskResponse> = tasks.iter().map(task_to_redacted_response).collect();
 
     HttpResponse::Ok().json(TaskListResponse {
         items,
@@ -376,7 +411,7 @@ pub async fn get_task(
 
     let id = path.into_inner();
     match TaskRepository::find_by_id(&pool, &id).await {
-        Ok(task) => HttpResponse::Ok().json(task_to_response(&task)),
+        Ok(task) => HttpResponse::Ok().json(task_to_redacted_response(&task)),
         Err(_) => ApiError::with_details(
             codes::TASK_NOT_FOUND,
             "Task not found",
@@ -448,40 +483,40 @@ pub async fn update_task(
         task.name = name.clone();
     }
     if let Some(ref ep) = body.source_endpoint {
-        task.source_endpoint = ep.to_string();
+        task.source_endpoint = merge_incoming_config(ep, &task.source_endpoint);
     }
     if let Some(ref ep) = body.target_endpoint {
-        task.target_endpoint = ep.to_string();
+        task.target_endpoint = merge_incoming_config(ep, &task.target_endpoint);
     }
     if let Some(ref cfg) = body.extractor {
-        task.extractor_config = cfg.to_string();
+        task.extractor_config = merge_incoming_config(cfg, &task.extractor_config);
     }
     if let Some(ref cfg) = body.sinker {
-        task.sinker_config = cfg.to_string();
+        task.sinker_config = merge_incoming_config(cfg, &task.sinker_config);
     }
     if let Some(ref cfg) = body.filter {
-        task.filter_config = cfg.to_string();
+        task.filter_config = merge_incoming_config(cfg, &task.filter_config);
     }
     if let Some(ref cfg) = body.router {
-        task.router_config = cfg.to_string();
+        task.router_config = merge_incoming_config(cfg, &task.router_config);
     }
     if let Some(ref cfg) = body.parallelizer {
-        task.parallelizer_config = cfg.to_string();
+        task.parallelizer_config = merge_incoming_config(cfg, &task.parallelizer_config);
     }
     if let Some(ref cfg) = body.pipeline {
-        task.pipeline_config = cfg.to_string();
+        task.pipeline_config = merge_incoming_config(cfg, &task.pipeline_config);
     }
     if let Some(ref cfg) = body.resumer {
-        task.resumer_config = cfg.to_string();
+        task.resumer_config = merge_incoming_config(cfg, &task.resumer_config);
     }
     if let Some(ref cfg) = body.processor {
-        task.processor_config = cfg.to_string();
+        task.processor_config = merge_incoming_config(cfg, &task.processor_config);
     }
     if let Some(ref cfg) = body.runtime {
-        task.runtime_config = cfg.to_string();
+        task.runtime_config = merge_incoming_config(cfg, &task.runtime_config);
     }
     if let Some(ref cfg) = body.metrics {
-        task.metrics_config = cfg.to_string();
+        task.metrics_config = merge_incoming_config(cfg, &task.metrics_config);
     }
     if let Some(ref rg_id) = body.resource_group_id {
         task.resource_group_id = rg_id.clone();
@@ -547,7 +582,7 @@ pub async fn update_task(
     )
     .await;
 
-    HttpResponse::Ok().json(task_to_response(&saved))
+    HttpResponse::Ok().json(task_to_redacted_response(&saved))
 }
 
 /// DELETE /api/tasks/:id — delete a task.
@@ -643,7 +678,9 @@ pub struct TaskListQuery {
 /// GET /api/tasks/:id/preview_ini — render a Task to INI text.
 ///
 /// Returns `Content-Type: text/plain; charset=utf-8` with body byte-identical
-/// to what `IniRenderer::render(task)` produces in-process.
+/// to what `IniRenderer::render(task)` produces in-process, minus secrets:
+/// passwords render as `******` and URL credentials as `***`. Admins can get
+/// the plaintext from `GET /tasks/:id/reveal_ini`, which is audited.
 #[get("/tasks/{id}/preview_ini")]
 pub async fn preview_ini(
     pool: web::Data<SqlitePool>,
@@ -657,7 +694,7 @@ pub async fn preview_ini(
     let id = path.into_inner();
     match TaskRepository::find_by_id(&pool, &id).await {
         Ok(task) => {
-            let ini = crate::ini_renderer::render(&task);
+            let ini = redaction::redact_ini(&crate::ini_renderer::render(&task));
             HttpResponse::Ok()
                 .content_type("text/plain; charset=utf-8")
                 .body(ini)
@@ -679,8 +716,8 @@ pub struct ExportQuery {
 
 /// GET /api/tasks/:id/export?format=json|ini — export a Task.
 ///
-/// - `format=json` (default): returns the full Task DTO as JSON with sensitive fields redacted.
-/// - `format=ini`: returns INI text byte-equal to `preview_ini`.
+/// - `format=json` (default): the full Task DTO with every secret redacted.
+/// - `format=ini`: INI text byte-equal to `preview_ini` (also redacted).
 #[get("/tasks/{id}/export")]
 pub async fn export_task(
     pool: web::Data<SqlitePool>,
@@ -708,15 +745,9 @@ pub async fn export_task(
     };
 
     match format {
-        "json" => {
-            let mut resp = task_to_response(&task);
-            // Redact sensitive fields in endpoints
-            redact_passwords(&mut resp.source_endpoint);
-            redact_passwords(&mut resp.target_endpoint);
-            HttpResponse::Ok().json(resp)
-        }
+        "json" => HttpResponse::Ok().json(task_to_redacted_response(&task)),
         "ini" => {
-            let ini = crate::ini_renderer::render(&task);
+            let ini = redaction::redact_ini(&crate::ini_renderer::render(&task));
             HttpResponse::Ok()
                 .content_type("text/plain; charset=utf-8")
                 .body(ini)
@@ -727,17 +758,6 @@ pub async fn export_task(
             serde_json::json!({ "format": format, "supported": ["json", "ini"] }),
         )
         .error_response(),
-    }
-}
-
-/// Redact password fields in a JSON value (mutates in-place).
-fn redact_passwords(value: &mut serde_json::Value) {
-    if let serde_json::Value::Object(map) = value {
-        if let Some(serde_json::Value::String(s)) = map.get_mut("password") {
-            if !s.is_empty() {
-                *s = "<redacted>".to_string();
-            }
-        }
     }
 }
 
@@ -872,6 +892,20 @@ async fn import_single_task(
             "message": e.to_string()
         })
     })?;
+
+    // An export is redacted, so importing one back carries placeholders where
+    // the secrets were. Persisting those would create a task that fails to
+    // connect for reasons nobody can see; say so instead.
+    if contains_redaction_placeholder(body) {
+        return Err(serde_json::json!({
+            "code": codes::REDACTED_SECRET_IN_IMPORT,
+            "message": format!(
+                "Import payload still carries the redaction placeholder '{}'; \
+                 replace it with the real secret before importing",
+                redaction::REDACTED
+            )
+        }));
+    }
 
     let source_sub_mode = sub_mode_for_side(
         &import_req.engine_source,
@@ -1032,7 +1066,79 @@ async fn import_single_task(
     )
     .await;
 
-    Ok(task_to_response(&saved))
+    Ok(task_to_redacted_response(&saved))
+}
+
+/// Whether any string anywhere in the payload is the redaction placeholder.
+fn contains_redaction_placeholder(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::String(s) => s == redaction::REDACTED,
+        serde_json::Value::Object(map) => map.values().any(contains_redaction_placeholder),
+        serde_json::Value::Array(items) => items.iter().any(contains_redaction_placeholder),
+        _ => false,
+    }
+}
+
+/// GET /api/tasks/:id/reveal_ini — plaintext INI, admin only, audited.
+///
+/// The single console surface that returns live credentials. It exists because
+/// operators genuinely need the real INI to reproduce a run outside the console;
+/// everything else (`preview_ini`, `export`) is redacted. Every call writes an
+/// audit log, allowed or denied, so a credential read is never silent.
+#[get("/tasks/{id}/reveal_ini")]
+pub async fn reveal_ini(
+    pool: web::Data<SqlitePool>,
+    user: UserContext,
+    path: web::Path<String>,
+    req: actix_web::HttpRequest,
+) -> HttpResponse {
+    let id = path.into_inner();
+    let ip = req
+        .connection_info()
+        .peer_addr()
+        .map(|a| a.to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    if let Err(e) = rbac::require_action(&user, RbacAction::TaskRevealSecrets) {
+        let _ = write_task_audit_log(
+            &pool,
+            &user.username,
+            "tasks.reveal_secrets",
+            "denied",
+            &id,
+            &ip,
+            None,
+        )
+        .await;
+        return e.error_response();
+    }
+
+    let task = match TaskRepository::find_by_id(&pool, &id).await {
+        Ok(t) => t,
+        Err(_) => {
+            return ApiError::with_details(
+                codes::TASK_NOT_FOUND,
+                "Task not found",
+                serde_json::json!({ "id": id }),
+            )
+            .error_response();
+        }
+    };
+
+    let _ = write_task_audit_log(
+        &pool,
+        &user.username,
+        "tasks.reveal_secrets",
+        "success",
+        &id,
+        &ip,
+        None,
+    )
+    .await;
+
+    HttpResponse::Ok()
+        .content_type("text/plain; charset=utf-8")
+        .body(crate::ini_renderer::render(&task))
 }
 
 /// POST /api/tasks/:id/clone — clone a Task.
@@ -1132,7 +1238,7 @@ pub async fn clone_task(
     )
     .await;
 
-    HttpResponse::Created().json(task_to_response(&saved))
+    HttpResponse::Created().json(task_to_redacted_response(&saved))
 }
 
 /// Find the next available copy number for a task_id.

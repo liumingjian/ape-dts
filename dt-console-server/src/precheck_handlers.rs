@@ -15,6 +15,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::error::{codes, ApiError};
+use crate::redaction::redact_url;
 use crate::ini_renderer;
 use crate::middleware::rbac::{self, RbacAction};
 use crate::models::{CreateTaskRequest, Task, UserContext};
@@ -50,18 +51,6 @@ fn new_request_id() -> String {
         .collect()
 }
 
-/// Redact secrets/credentials from an endpoint URL before logging.
-/// Replaces any user:password segment with a placeholder.
-fn redact_url(url: &str) -> String {
-    if let Some(at) = url.find('@') {
-        if let Some(scheme_end) = url.find("://") {
-            let prefix = &url[..scheme_end + 3];
-            let suffix = &url[at..];
-            return format!("{prefix}***{suffix}");
-        }
-    }
-    url.to_string()
-}
 
 /// Extract a redacted endpoint URL from the JSON-encoded endpoint config
 /// stored on `Task` (best-effort; absent / malformed entries fall back to
