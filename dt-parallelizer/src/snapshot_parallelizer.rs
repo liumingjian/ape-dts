@@ -14,6 +14,10 @@ pub struct SnapshotParallelizer {
 
 #[async_trait]
 impl Parallelizer for SnapshotParallelizer {
+    fn has_pending_data(&self) -> bool {
+        !self.base_parallelizer.popped_data.is_empty()
+    }
+
     fn get_name(&self) -> String {
         "SnapshotParallelizer".to_string()
     }

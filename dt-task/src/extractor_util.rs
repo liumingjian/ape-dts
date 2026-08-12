@@ -1,8 +1,4 @@
-use std::{
-    collections::HashMap,
-    str::FromStr,
-    sync::Arc,
-};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use anyhow::bail;
 use serde::{Deserialize, Serialize};

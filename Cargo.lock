@@ -1717,6 +1717,7 @@ dependencies = [
  "strum",
  "thiserror 1.0.69",
  "tokio",
+ "tokio-util 0.7.15",
  "url",
  "urlencoding",
 ]
@@ -1765,6 +1766,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tokio-postgres",
+ "tokio-util 0.7.15",
  "url",
  "uuid",
 ]
@@ -1851,6 +1853,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "tokio-util 0.7.15",
 ]
 
 [[package]]
@@ -1871,6 +1874,7 @@ dependencies = [
  "sqlx",
  "strum",
  "tokio",
+ "tokio-util 0.7.15",
  "url",
 ]
 
@@ -1908,6 +1912,7 @@ dependencies = [
  "sqlx",
  "strum",
  "tokio",
+ "tokio-util 0.7.15",
 ]
 
 [[package]]

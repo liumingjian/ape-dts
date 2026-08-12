@@ -482,7 +482,10 @@ mod tests {
             .await
             .expect("wait_until_drained stayed parked after cancellation")
             .unwrap();
-        assert!(!drained, "the queue never drained, so it must not report drained");
+        assert!(
+            !drained,
+            "the queue never drained, so it must not report drained"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

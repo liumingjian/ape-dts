@@ -1,7 +1,5 @@
 use std::{
-    sync::{
-        Arc,
-    },
+    sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
 

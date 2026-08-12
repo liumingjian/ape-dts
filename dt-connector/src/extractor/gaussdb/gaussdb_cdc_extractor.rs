@@ -1,8 +1,6 @@
 use std::{
     pin::Pin,
-    sync::{
-        Arc,
-    },
+    sync::Arc,
     time::{Duration, UNIX_EPOCH},
 };
 

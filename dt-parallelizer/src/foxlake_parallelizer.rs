@@ -20,6 +20,14 @@ pub struct FoxlakeParallelizer {
 
 #[async_trait]
 impl Parallelizer for FoxlakeParallelizer {
+    fn has_pending_data(&self) -> bool {
+        !self
+            .snapshot_parallelizer
+            .base_parallelizer
+            .popped_data
+            .is_empty()
+    }
+
     fn get_name(&self) -> String {
         "FoxlakeParallelizer".to_string()
     }

@@ -1,11 +1,4 @@
-use std::{
-    cmp,
-    collections::HashMap,
-    sync::{
-        Arc,
-    },
-    time::Duration,
-};
+use std::{cmp, collections::HashMap, sync::Arc, time::Duration};
 
 use anyhow::bail;
 use async_recursion::async_recursion;

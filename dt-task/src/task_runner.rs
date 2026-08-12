@@ -401,9 +401,21 @@ impl TaskRunner {
     ) {
         match result {
             Ok((_, Ok(()))) => {}
-            Ok((single_task_id, Err(e))) => {
-                errors.push(format!("single task: [{}] failed, error: {:#}", single_task_id, e))
+            Ok((single_task_id, Err(e)))
+                if e.chain().any(|cause| {
+                    matches!(cause.downcast_ref::<Error>(), Some(Error::Cancelled(_)))
+                }) =>
+            {
+                log_warn!(
+                    "single task: [{}] stopped because another task failed: {:#}",
+                    single_task_id,
+                    e
+                );
             }
+            Ok((single_task_id, Err(e))) => errors.push(format!(
+                "single task: [{}] failed, error: {:#}",
+                single_task_id, e
+            )),
             Err(e) if e.is_cancelled() => {}
             Err(e) => errors.push(format!("join error: {}", e)),
         }
@@ -919,9 +931,9 @@ impl TaskRunner {
                 Ok(Ok(())) => {}
                 Ok(Err(e)) => {
                     let msg = format!("{} failed: {:#}", name, e);
-                    if e.chain()
-                        .any(|cause| matches!(cause.downcast_ref::<Error>(), Some(Error::Cancelled(_))))
-                    {
+                    if e.chain().any(|cause| {
+                        matches!(cause.downcast_ref::<Error>(), Some(Error::Cancelled(_)))
+                    }) {
                         cancelled.push(msg);
                     } else {
                         failures.push(msg);
@@ -935,7 +947,9 @@ impl TaskRunner {
             return Ok(());
         }
         if failures.is_empty() {
-            bail!("{}", cancelled.join("; "));
+            // typed, so a caller collecting sibling results can tell "stopped because
+            // something else failed" apart from "this is what failed"
+            return Err(Error::Cancelled(cancelled.join("; ")).into());
         }
         for msg in cancelled {
             log_warn!("{} (follow-up of the failure above)", msg);

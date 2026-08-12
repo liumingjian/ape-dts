@@ -29,6 +29,13 @@ pub trait Parallelizer {
         Ok(Vec::new())
     }
 
+    /// Whether items already popped off the queue are still held back inside the
+    /// parallelizer. The queue being empty does not mean the task has been drained:
+    /// `drain` stops at the first item of a different sql type and carries it over.
+    fn has_pending_data(&self) -> bool {
+        false
+    }
+
     async fn sink_ddl(
         &mut self,
         _data: Vec<DdlData>,

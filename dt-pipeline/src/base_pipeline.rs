@@ -77,7 +77,12 @@ impl Pipeline for BasePipeline {
         let mut last_commit_position = Position::None;
         let mut record_time = Instant::now();
 
-        while !self.cancel_token.is_cancelled() || !self.buffer.is_empty() {
+        // the parallelizer can hold items it already popped off the queue, so an empty
+        // queue alone does not mean everything has been sinked
+        while !self.cancel_token.is_cancelled()
+            || !self.buffer.is_empty()
+            || self.parallelizer.has_pending_data()
+        {
             // to avoid too many sub counters, only add counter when buffer is not empty
             if !self.buffer.is_empty() {
                 self.monitor
@@ -95,14 +100,15 @@ impl Pipeline for BasePipeline {
             }
 
             // some sinkers (foxlake) need to accumulate data to a big batch and sink
-            let data = if last_sink_time.elapsed().as_secs() < self.batch_sink_interval_secs
-                && !self.buffer.is_full()
-            {
+            let accumulating = last_sink_time.elapsed().as_secs() < self.batch_sink_interval_secs
+                && !self.buffer.is_full();
+            let data = if accumulating {
                 Vec::new()
             } else {
                 last_sink_time = Instant::now();
                 self.parallelizer.drain(self.buffer.as_ref()).await?
             };
+            let drained_count = data.len();
 
             if let Some(data_marker) = &mut self.data_marker {
                 if !data.is_empty() {
@@ -141,12 +147,17 @@ impl Pipeline for BasePipeline {
                 .add_counter(CounterType::SinkedByteTotal, data_size.bytes)
                 .await;
 
-            if data_size.count > 0 || self.cancel_token.is_cancelled() {
+            if self.cancel_token.is_cancelled() || drained_count > 0 {
+                // still making progress (or draining out on shutdown): keep the loop hot
                 yield_now().await;
+            } else if accumulating {
+                // holding data back until batch_sink_interval_secs elapses: only the clock
+                // can end this round, so sleep out the rest of the accumulation window
+                self.sleep_while_accumulating(last_sink_time).await;
             } else {
-                // nothing to sink: park instead of spinning, otherwise an idle cdc
-                // task burns a whole core on this loop
-                self.wait_while_idle().await;
+                // the queue was empty: park on it instead of spinning, otherwise an idle
+                // cdc task burns a whole core on this loop
+                self.buffer.wait_for_data(IDLE_WAIT).await;
             }
         }
 
@@ -157,17 +168,18 @@ impl Pipeline for BasePipeline {
 }
 
 impl BasePipeline {
-    /// Park for at most [`IDLE_WAIT`], waking early on new data or on shutdown.
-    async fn wait_while_idle(&self) {
-        if self.buffer.is_empty() {
-            self.buffer.wait_for_data(IDLE_WAIT).await;
-        } else {
-            // data is queued but held back by batch_sink_interval_secs: only the clock
-            // can end this round, so there is nothing to wake on but shutdown
-            tokio::select! {
-                _ = self.cancel_token.cancelled() => {}
-                _ = tokio::time::sleep(IDLE_WAIT) => {}
-            }
+    /// Sleep out the rest of the batch-sink accumulation window, never past [`IDLE_WAIT`]
+    /// and never past shutdown.
+    async fn sleep_while_accumulating(&self, last_sink_time: Instant) {
+        let elapsed = last_sink_time.elapsed();
+        let window = Duration::from_secs(self.batch_sink_interval_secs);
+        let remaining = window.saturating_sub(elapsed).min(IDLE_WAIT);
+        if remaining.is_zero() {
+            return;
+        }
+        tokio::select! {
+            _ = self.cancel_token.cancelled() => {}
+            _ = tokio::time::sleep(remaining) => {}
         }
     }
 
@@ -555,7 +567,10 @@ mod tests {
 
         let started = tokio::spawn(async move { pipeline.start().await });
         tokio::time::sleep(Duration::from_millis(100)).await;
-        assert!(!started.is_finished(), "an idle pipeline should keep running");
+        assert!(
+            !started.is_finished(),
+            "an idle pipeline should keep running"
+        );
 
         cancel_token.cancel();
         tokio::time::timeout(Duration::from_secs(5), started)
