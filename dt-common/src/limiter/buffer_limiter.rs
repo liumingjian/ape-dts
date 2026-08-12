@@ -7,6 +7,8 @@ use crate::{
 
 pub struct BufferLimiter {
     limiters: Vec<Box<dyn Limiter + Send + Sync>>,
+    has_byte_limiter: bool,
+    byte_capacity: Option<u64>,
 }
 
 impl BufferLimiter {
@@ -15,6 +17,8 @@ impl BufferLimiter {
         capacity_limiter_config: Option<&CapacityLimiterConfig>,
     ) -> Option<Self> {
         let mut limiters: Vec<Box<dyn Limiter + Send + Sync>> = Vec::new();
+        let mut has_byte_limiter = false;
+        let mut byte_capacity = None;
 
         if let Some(rate_cfg) = rate_limiter_config {
             if rate_cfg.max_rps > 0 {
@@ -24,17 +28,20 @@ impl BufferLimiter {
                 )));
             }
 
-            if rate_cfg.max_mbps > 0 && rate_cfg.max_mbps <= (u32::MAX / (1024 * 1024)) {
-                let bps = rate_cfg.max_mbps * 1024 * 1024;
-                limiters.push(Box::new(crate::limiter::rate_limiter::RateLimiter::new(
-                    bps,
-                    UnitType::Bytes,
-                )));
-            } else {
-                log_error!(
-                    "max_mbps={} is too large and will be ignored to prevent overflow",
-                    rate_cfg.max_mbps
-                );
+            if rate_cfg.max_mbps > 0 {
+                if rate_cfg.max_mbps <= (u32::MAX / (1024 * 1024)) {
+                    let bps = rate_cfg.max_mbps * 1024 * 1024;
+                    has_byte_limiter = true;
+                    limiters.push(Box::new(crate::limiter::rate_limiter::RateLimiter::new(
+                        bps,
+                        UnitType::Bytes,
+                    )));
+                } else {
+                    log_error!(
+                        "max_mbps={} is too large and will be ignored to prevent overflow",
+                        rate_cfg.max_mbps
+                    );
+                }
             }
         }
 
@@ -48,36 +55,57 @@ impl BufferLimiter {
                 ));
             }
 
-            if cap_cfg.buffer_memory_mb > 0
-                && cap_cfg.buffer_memory_mb as u64 <= (u32::MAX / (1024 * 1024)) as u64
-            {
-                let capacity_bytes = cap_cfg.buffer_memory_mb * 1024 * 1024;
-                limiters.push(Box::new(
-                    crate::limiter::capacity_limiter::CapacityLimiter::new(
-                        capacity_bytes,
-                        UnitType::Bytes,
-                    ),
-                ));
-            } else {
-                log_error!(
-                    "buffer_memory_mb={} is too large and will be ignored to prevent overflow",
-                    cap_cfg.buffer_memory_mb
-                );
+            if cap_cfg.buffer_memory_mb > 0 {
+                if cap_cfg.buffer_memory_mb as u64 <= (u32::MAX / (1024 * 1024)) as u64 {
+                    let capacity_bytes = cap_cfg.buffer_memory_mb * 1024 * 1024;
+                    has_byte_limiter = true;
+                    byte_capacity = Some(capacity_bytes as u64);
+                    limiters.push(Box::new(
+                        crate::limiter::capacity_limiter::CapacityLimiter::new(
+                            capacity_bytes,
+                            UnitType::Bytes,
+                        ),
+                    ));
+                } else {
+                    log_error!(
+                        "buffer_memory_mb={} is too large and will be ignored to prevent overflow",
+                        cap_cfg.buffer_memory_mb
+                    );
+                }
             }
         }
 
         if limiters.is_empty() {
             None
         } else {
-            Some(Self { limiters })
+            Some(Self {
+                limiters,
+                has_byte_limiter,
+                byte_capacity,
+            })
         }
     }
 
     pub async fn acquire(&self, dt_item: &DtItem) -> anyhow::Result<()> {
+        let data_size = dt_item.dt_data.get_data_size();
+        if let Some(capacity) = self.byte_capacity {
+            if data_size > capacity {
+                anyhow::bail!(
+                    "requested {} byte permits exceeds limiter capacity {}",
+                    data_size,
+                    capacity
+                );
+            }
+        }
+        let size = if self.has_byte_limiter {
+            u32::try_from(data_size)
+                .map_err(|_| anyhow::anyhow!("data size {} exceeds u32 permit range", data_size))?
+        } else {
+            0
+        };
         for limiter in &self.limiters {
             match limiter.get_unit_type().await {
                 UnitType::Bytes => {
-                    let size = dt_item.dt_data.get_data_size() as u32;
                     limiter.acquire(size).await?;
                 }
                 UnitType::Records => {
@@ -176,6 +204,55 @@ mod tests {
                 break;
             }
         }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn oversized_item_does_not_consume_record_capacity() {
+        const MEM_MB: usize = 1;
+        const OVERSIZED_ITEM_BYTES: usize = 1024 * 1024 + 1;
+
+        let (rate_cfg, cap_cfg) = build_configs(0, 0, 1, MEM_MB);
+        let limiter = BufferLimiter::from_config(Some(&rate_cfg), Some(&cap_cfg)).unwrap();
+
+        assert!(limiter
+            .acquire(&bytes_item(OVERSIZED_ITEM_BYTES))
+            .await
+            .is_err());
+        tokio::time::timeout(Duration::from_millis(100), limiter.acquire(&record_item()))
+            .await
+            .expect("record capacity should remain available")
+            .unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn oversized_item_returns_error_without_waiting() {
+        const MEM_MB: usize = 1;
+        const OVERSIZED_ITEM_BYTES: usize = 1024 * 1024 + 1;
+
+        let (rate_cfg, cap_cfg) = build_configs(0, 0, 0, MEM_MB);
+        let limiter = BufferLimiter::from_config(Some(&rate_cfg), Some(&cap_cfg)).unwrap();
+        let item = bytes_item(OVERSIZED_ITEM_BYTES);
+
+        let result = tokio::time::timeout(Duration::from_millis(100), limiter.acquire(&item))
+            .await
+            .expect("oversized item acquisition should not wait");
+        let error = result.err().unwrap();
+
+        assert!(
+            error
+                .to_string()
+                .contains("requested 1048577 byte permits exceeds limiter capacity 1048576"),
+            "unexpected error: {error:#}"
+        );
+    }
+
+    #[test]
+    fn zero_values_disable_all_limiters() {
+        let (rate_cfg, cap_cfg) = build_configs(0, 0, 0, 0);
+
+        let limiter = BufferLimiter::from_config(Some(&rate_cfg), Some(&cap_cfg));
+
+        assert!(limiter.is_none());
     }
 
     // ── parameter 1: max_rps (rate limiter – records/s) ──────────────────────

@@ -1,5 +1,4 @@
 use anyhow::bail;
-use configparser::ini::Ini;
 use dt_common::{config::ini_loader::IniLoader, error::Error};
 
 use super::precheck_config::PrecheckConfig;
@@ -11,23 +10,24 @@ pub struct PrecheckTaskConfig {
 }
 
 impl PrecheckTaskConfig {
+    pub fn is_precheck(task_config_file: &str) -> anyhow::Result<bool> {
+        let loader = IniLoader::new(task_config_file)?;
+        Ok(loader.ini.sections().contains(&PRECHECK.to_string()))
+    }
+
     pub fn new(task_config_file: &str) -> anyhow::Result<Self> {
-        let ini = IniLoader::new(task_config_file).ini;
-        let precheck_config = Self::load_precheck_config(&ini)?;
+        let loader = IniLoader::new(task_config_file)?;
+        let precheck_config = Self::load_precheck_config(&loader)?;
         Ok(Self {
             precheck: precheck_config,
         })
     }
 
-    fn load_precheck_config(ini: &Ini) -> anyhow::Result<PrecheckConfig> {
-        let (do_struct_opt, do_cdc_opt): (Option<String>, Option<String>) = (
-            ini.get(PRECHECK, "do_struct_init"),
-            ini.get(PRECHECK, "do_cdc"),
-        );
-        if let (Some(do_struct), Some(do_cdc)) = (do_struct_opt, do_cdc_opt) {
+    fn load_precheck_config(loader: &IniLoader) -> anyhow::Result<PrecheckConfig> {
+        if loader.contains(PRECHECK, "do_struct_init") && loader.contains(PRECHECK, "do_cdc") {
             Ok(PrecheckConfig {
-                do_struct_init: do_struct.parse().unwrap(),
-                do_cdc: do_cdc.parse().unwrap(),
+                do_struct_init: loader.get_required(PRECHECK, "do_struct_init")?,
+                do_cdc: loader.get_required(PRECHECK, "do_cdc")?,
             })
         } else {
             bail! {Error::ConfigError(

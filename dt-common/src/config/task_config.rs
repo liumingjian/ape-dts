@@ -115,16 +115,16 @@ const RESUMER_CONNECTION_LIMIT_DEFAULT: usize = 5;
 
 impl TaskConfig {
     pub fn new(task_config_file: &str) -> anyhow::Result<Self> {
-        let loader = IniLoader::new(task_config_file);
+        let loader = IniLoader::new(task_config_file)?;
 
-        let pipeline = Self::load_pipeline_config(&loader);
+        let pipeline = Self::load_pipeline_config(&loader)?;
         let runtime = Self::load_runtime_config(&loader)?;
         let (sinker_basic, sinker) = Self::load_sinker_config(&loader)?;
         let resumer = Self::load_resumer_config(&loader, &runtime, &sinker_basic)?;
         let (extractor_basic, extractor) = Self::load_extractor_config(&loader, &pipeline)?;
         let filter = Self::load_filter_config(&loader)?;
         let router = Self::load_router_config(&loader)?;
-        Ok(Self {
+        let config = Self {
             global: Self::load_global_config(
                 &loader,
                 &extractor_basic,
@@ -147,7 +147,47 @@ impl TaskConfig {
             meta_center: Self::load_meta_center_config(&loader)?,
             #[cfg(feature = "metrics")]
             metrics: Self::load_metrics_config(&loader)?,
-        })
+        };
+        config.validate()?;
+        Ok(config)
+    }
+
+    fn validate(&self) -> anyhow::Result<()> {
+        if self.parallelizer.parallel_size < 1 {
+            bail!(Error::ConfigError(
+                "parallelizer.parallel_size must be greater than 0".into()
+            ));
+        }
+        if self.runtime.tb_parallel_size < 1 {
+            bail!(Error::ConfigError(
+                "runtime.tb_parallel_size must be greater than 0".into()
+            ));
+        }
+        if self.pipeline.capacity_limiter.buffer_size < 1 {
+            bail!(Error::ConfigError(
+                "pipeline.buffer_size must be greater than 0".into()
+            ));
+        }
+        if self.pipeline.checkpoint_interval_secs < 1 {
+            bail!(Error::ConfigError(
+                "pipeline.checkpoint_interval_secs must be greater than 0".into()
+            ));
+        }
+        if (self.extractor_basic.max_connections as usize) < self.parallelizer.parallel_size {
+            bail!(Error::ConfigError(
+                "extractor.max_connections must be greater than or equal to parallelizer.parallel_size"
+                    .into()
+            ));
+        }
+        if !matches!(self.sinker, SinkerConfig::Dummy)
+            && (self.sinker_basic.max_connections as usize) < self.parallelizer.parallel_size
+        {
+            bail!(Error::ConfigError(
+                "sinker.max_connections must be greater than or equal to parallelizer.parallel_size"
+                    .into()
+            ));
+        }
+        Ok(())
     }
 
     fn load_global_config(
@@ -162,7 +202,7 @@ impl TaskConfig {
                 GLOBAL,
                 "task_id",
                 TaskUtil::generate_task_id(extractor_basic, sinker_basic, filter, router),
-            ),
+            )?,
         })
     }
 
@@ -170,24 +210,27 @@ impl TaskConfig {
         loader: &IniLoader,
         pipeline: &PipelineConfig,
     ) -> anyhow::Result<(BasicExtractorConfig, ExtractorConfig)> {
-        let db_type: DbType = loader.get_required(EXTRACTOR, DB_TYPE);
-        let extract_type: ExtractType = loader.get_required(EXTRACTOR, "extract_type");
-        let url: String = loader.get_optional(EXTRACTOR, URL);
+        let db_type: DbType = loader.get_required(EXTRACTOR, DB_TYPE)?;
+        let extract_type: ExtractType = loader.get_required(EXTRACTOR, "extract_type")?;
+        let url: String = loader.get_optional(EXTRACTOR, URL)?;
         let heartbeat_interval_secs: u64 =
-            loader.get_with_default(EXTRACTOR, HEARTBEAT_INTERVAL_SECS, 10);
+            loader.get_with_default(EXTRACTOR, HEARTBEAT_INTERVAL_SECS, 10)?;
         let keepalive_interval_secs: u64 =
-            loader.get_with_default(EXTRACTOR, KEEPALIVE_INTERVAL_SECS, 10);
-        let heartbeat_tb = loader.get_optional(EXTRACTOR, HEARTBEAT_TB);
-        let batch_size =
-            loader.get_with_default(EXTRACTOR, BATCH_SIZE, pipeline.capacity_limiter.buffer_size);
+            loader.get_with_default(EXTRACTOR, KEEPALIVE_INTERVAL_SECS, 10)?;
+        let heartbeat_tb = loader.get_optional(EXTRACTOR, HEARTBEAT_TB)?;
+        let batch_size = loader.get_with_default(
+            EXTRACTOR,
+            BATCH_SIZE,
+            pipeline.capacity_limiter.buffer_size,
+        )?;
         let max_connections =
-            loader.get_with_default(EXTRACTOR, MAX_CONNECTIONS, DEFAULT_MAX_CONNECTIONS);
+            loader.get_with_default(EXTRACTOR, MAX_CONNECTIONS, DEFAULT_MAX_CONNECTIONS)?;
 
-        let connection_auth = ConnectionAuthConfig::from(loader, EXTRACTOR);
+        let connection_auth = ConnectionAuthConfig::from(loader, EXTRACTOR)?;
 
         let rate_limiter = RateLimiterConfig {
-            max_rps: loader.get_optional(EXTRACTOR, "max_rps"),
-            max_mbps: loader.get_optional(EXTRACTOR, "max_mbps"),
+            max_rps: loader.get_optional(EXTRACTOR, "max_rps")?,
+            max_mbps: loader.get_optional(EXTRACTOR, "max_mbps")?,
         };
         let basic = BasicExtractorConfig {
             db_type: db_type.clone(),
@@ -208,51 +251,51 @@ impl TaskConfig {
                     connection_auth,
                     db: String::new(),
                     tb: String::new(),
-                    sample_interval: loader.get_with_default(EXTRACTOR, SAMPLE_INTERVAL, 1),
-                    parallel_size: loader.get_with_default(EXTRACTOR, PARALLEL_SIZE, 1),
+                    sample_interval: loader.get_with_default(EXTRACTOR, SAMPLE_INTERVAL, 1)?,
+                    parallel_size: loader.get_with_default(EXTRACTOR, PARALLEL_SIZE, 1)?,
                     batch_size,
-                    partition_cols: loader.get_optional(EXTRACTOR, PARTITION_COLS),
+                    partition_cols: loader.get_optional(EXTRACTOR, PARTITION_COLS)?,
                 },
 
                 ExtractType::Cdc => ExtractorConfig::MysqlCdc {
                     url,
                     connection_auth,
-                    binlog_filename: loader.get_optional(EXTRACTOR, "binlog_filename"),
-                    binlog_position: loader.get_optional(EXTRACTOR, "binlog_position"),
-                    server_id: loader.get_required(EXTRACTOR, "server_id"),
-                    gtid_enabled: loader.get_optional(EXTRACTOR, "gtid_enabled"),
-                    gtid_set: loader.get_optional(EXTRACTOR, "gtid_set"),
+                    binlog_filename: loader.get_optional(EXTRACTOR, "binlog_filename")?,
+                    binlog_position: loader.get_optional(EXTRACTOR, "binlog_position")?,
+                    server_id: loader.get_required(EXTRACTOR, "server_id")?,
+                    gtid_enabled: loader.get_optional(EXTRACTOR, "gtid_enabled")?,
+                    gtid_set: loader.get_optional(EXTRACTOR, "gtid_set")?,
                     binlog_heartbeat_interval_secs: loader.get_with_default(
                         EXTRACTOR,
                         "binlog_heartbeat_interval_secs",
                         10,
-                    ),
+                    )?,
                     binlog_timeout_secs: loader.get_with_default(
                         EXTRACTOR,
                         "binlog_timeout_secs",
                         60,
-                    ),
+                    )?,
                     heartbeat_interval_secs,
                     heartbeat_tb,
                     keepalive_idle_secs: loader.get_with_default(
                         EXTRACTOR,
                         "keepalive_idle_secs",
                         60,
-                    ),
+                    )?,
                     keepalive_interval_secs: loader.get_with_default(
                         EXTRACTOR,
                         "keepalive_interval_secs",
                         10,
-                    ),
-                    start_time_utc: loader.get_optional(EXTRACTOR, "start_time_utc"),
-                    end_time_utc: loader.get_optional(EXTRACTOR, "end_time_utc"),
+                    )?,
+                    start_time_utc: loader.get_optional(EXTRACTOR, "start_time_utc")?,
+                    end_time_utc: loader.get_optional(EXTRACTOR, "end_time_utc")?,
                 },
 
                 ExtractType::CheckLog => ExtractorConfig::MysqlCheck {
                     url,
                     connection_auth,
-                    check_log_dir: loader.get_required(EXTRACTOR, CHECK_LOG_DIR),
-                    batch_size: loader.get_with_default(EXTRACTOR, BATCH_SIZE, 200),
+                    check_log_dir: loader.get_required(EXTRACTOR, CHECK_LOG_DIR)?,
+                    batch_size: loader.get_with_default(EXTRACTOR, BATCH_SIZE, 200)?,
                 },
 
                 ExtractType::Struct => ExtractorConfig::MysqlStruct {
@@ -264,18 +307,18 @@ impl TaskConfig {
                         EXTRACTOR,
                         "db_batch_size",
                         DEFAULT_DB_BATCH_SIZE,
-                    ),
+                    )?,
                 },
 
                 ExtractType::FoxlakeS3 => {
                     let s3_config = S3Config {
-                        bucket: loader.get_optional(EXTRACTOR, "s3_bucket"),
-                        access_key: loader.get_optional(EXTRACTOR, "s3_access_key"),
-                        secret_key: loader.get_optional(EXTRACTOR, "s3_secret_key"),
-                        region: loader.get_optional(EXTRACTOR, "s3_region"),
-                        endpoint: loader.get_optional(EXTRACTOR, "s3_endpoint"),
-                        root_dir: loader.get_optional(EXTRACTOR, "s3_root_dir"),
-                        root_url: loader.get_optional(EXTRACTOR, "s3_root_url"),
+                        bucket: loader.get_optional(EXTRACTOR, "s3_bucket")?,
+                        access_key: loader.get_optional(EXTRACTOR, "s3_access_key")?,
+                        secret_key: loader.get_optional(EXTRACTOR, "s3_secret_key")?,
+                        region: loader.get_optional(EXTRACTOR, "s3_region")?,
+                        endpoint: loader.get_optional(EXTRACTOR, "s3_endpoint")?,
+                        root_dir: loader.get_optional(EXTRACTOR, "s3_root_dir")?,
+                        root_url: loader.get_optional(EXTRACTOR, "s3_root_url")?,
                     };
                     ExtractorConfig::FoxlakeS3 {
                         url,
@@ -295,33 +338,33 @@ impl TaskConfig {
                     connection_auth,
                     schema: String::new(),
                     tb: String::new(),
-                    sample_interval: loader.get_with_default(EXTRACTOR, SAMPLE_INTERVAL, 1),
-                    parallel_size: loader.get_with_default(EXTRACTOR, PARALLEL_SIZE, 1),
+                    sample_interval: loader.get_with_default(EXTRACTOR, SAMPLE_INTERVAL, 1)?,
+                    parallel_size: loader.get_with_default(EXTRACTOR, PARALLEL_SIZE, 1)?,
                     batch_size,
-                    partition_cols: loader.get_optional(EXTRACTOR, PARTITION_COLS),
+                    partition_cols: loader.get_optional(EXTRACTOR, PARTITION_COLS)?,
                 },
 
                 ExtractType::Cdc => ExtractorConfig::PgCdc {
                     url,
                     connection_auth,
-                    slot_name: loader.get_required(EXTRACTOR, "slot_name"),
-                    pub_name: loader.get_optional(EXTRACTOR, "pub_name"),
-                    start_lsn: loader.get_optional(EXTRACTOR, "start_lsn"),
+                    slot_name: loader.get_required(EXTRACTOR, "slot_name")?,
+                    pub_name: loader.get_optional(EXTRACTOR, "pub_name")?,
+                    start_lsn: loader.get_optional(EXTRACTOR, "start_lsn")?,
                     recreate_slot_if_exists: loader
-                        .get_optional(EXTRACTOR, "recreate_slot_if_exists"),
+                        .get_optional(EXTRACTOR, "recreate_slot_if_exists")?,
                     keepalive_interval_secs,
                     heartbeat_interval_secs,
                     heartbeat_tb,
-                    ddl_meta_tb: loader.get_optional(EXTRACTOR, "ddl_meta_tb"),
-                    start_time_utc: loader.get_optional(EXTRACTOR, "start_time_utc"),
-                    end_time_utc: loader.get_optional(EXTRACTOR, "end_time_utc"),
+                    ddl_meta_tb: loader.get_optional(EXTRACTOR, "ddl_meta_tb")?,
+                    start_time_utc: loader.get_optional(EXTRACTOR, "start_time_utc")?,
+                    end_time_utc: loader.get_optional(EXTRACTOR, "end_time_utc")?,
                 },
 
                 ExtractType::CheckLog => ExtractorConfig::PgCheck {
                     url,
                     connection_auth,
-                    check_log_dir: loader.get_required(EXTRACTOR, CHECK_LOG_DIR),
-                    batch_size: loader.get_with_default(EXTRACTOR, BATCH_SIZE, 200),
+                    check_log_dir: loader.get_required(EXTRACTOR, CHECK_LOG_DIR)?,
+                    batch_size: loader.get_with_default(EXTRACTOR, BATCH_SIZE, 200)?,
                 },
 
                 ExtractType::Struct => ExtractorConfig::PgStruct {
@@ -334,7 +377,7 @@ impl TaskConfig {
                         EXTRACTOR,
                         "db_batch_size",
                         DEFAULT_DB_BATCH_SIZE,
-                    ),
+                    )?,
                 },
 
                 _ => bail! { not_supported_err },
@@ -346,10 +389,10 @@ impl TaskConfig {
                     connection_auth,
                     schema: String::new(),
                     tb: String::new(),
-                    sample_interval: loader.get_with_default(EXTRACTOR, SAMPLE_INTERVAL, 1),
-                    parallel_size: loader.get_with_default(EXTRACTOR, PARALLEL_SIZE, 1),
+                    sample_interval: loader.get_with_default(EXTRACTOR, SAMPLE_INTERVAL, 1)?,
+                    parallel_size: loader.get_with_default(EXTRACTOR, PARALLEL_SIZE, 1)?,
                     batch_size,
-                    partition_cols: loader.get_optional(EXTRACTOR, PARTITION_COLS),
+                    partition_cols: loader.get_optional(EXTRACTOR, PARTITION_COLS)?,
                 },
                 ExtractType::Struct => ExtractorConfig::OracleStruct {
                     url,
@@ -360,16 +403,16 @@ impl TaskConfig {
                         EXTRACTOR,
                         "db_batch_size",
                         DEFAULT_DB_BATCH_SIZE,
-                    ),
+                    )?,
                 },
                 ExtractType::Cdc => {
-                    let cdc_mode: String = loader.get_optional(EXTRACTOR, CDC_MODE);
+                    let cdc_mode: String = loader.get_optional(EXTRACTOR, CDC_MODE)?;
                     let poll_interval_millis =
-                        loader.get_with_default(EXTRACTOR, "poll_interval_millis", 200_u64);
+                        loader.get_with_default(EXTRACTOR, "poll_interval_millis", 200_u64)?;
                     let poll_batch_size =
-                        loader.get_with_default(EXTRACTOR, "poll_batch_size", 200);
-                    let start_time_utc = loader.get_optional(EXTRACTOR, "start_time_utc");
-                    let end_time_utc = loader.get_optional(EXTRACTOR, "end_time_utc");
+                        loader.get_with_default(EXTRACTOR, "poll_batch_size", 200)?;
+                    let start_time_utc = loader.get_optional(EXTRACTOR, "start_time_utc")?;
+                    let end_time_utc = loader.get_optional(EXTRACTOR, "end_time_utc")?;
 
                     if cdc_mode.trim().eq_ignore_ascii_case("logminer") {
                         ExtractorConfig::OracleLogMinerCdc {
@@ -377,7 +420,7 @@ impl TaskConfig {
                             connection_auth,
                             poll_interval_millis,
                             poll_batch_size,
-                            start_scn: loader.get_optional(EXTRACTOR, START_SCN),
+                            start_scn: loader.get_optional(EXTRACTOR, START_SCN)?,
                             start_time_utc,
                             end_time_utc,
                         }
@@ -389,7 +432,7 @@ impl TaskConfig {
                             connection_auth,
                             poll_interval_millis,
                             poll_batch_size,
-                            start_change_id: loader.get_optional(EXTRACTOR, "start_change_id"),
+                            start_change_id: loader.get_optional(EXTRACTOR, "start_change_id")?,
                             start_time_utc,
                             end_time_utc,
                         }
@@ -406,32 +449,32 @@ impl TaskConfig {
                     connection_auth,
                     schema: String::new(),
                     tb: String::new(),
-                    sample_interval: loader.get_with_default(EXTRACTOR, SAMPLE_INTERVAL, 1),
-                    parallel_size: loader.get_with_default(EXTRACTOR, PARALLEL_SIZE, 1),
+                    sample_interval: loader.get_with_default(EXTRACTOR, SAMPLE_INTERVAL, 1)?,
+                    parallel_size: loader.get_with_default(EXTRACTOR, PARALLEL_SIZE, 1)?,
                     batch_size,
-                    partition_cols: loader.get_optional(EXTRACTOR, PARTITION_COLS),
+                    partition_cols: loader.get_optional(EXTRACTOR, PARTITION_COLS)?,
                 },
 
                 // GaussDB CDC is implemented via mppdb_decoding (see dt-connector extractor/gaussdb).
                 ExtractType::Cdc => ExtractorConfig::GaussDBCdc {
                     url,
                     connection_auth,
-                    slot_name: loader.get_required(EXTRACTOR, "slot_name"),
-                    start_lsn: loader.get_optional(EXTRACTOR, "start_lsn"),
+                    slot_name: loader.get_required(EXTRACTOR, "slot_name")?,
+                    start_lsn: loader.get_optional(EXTRACTOR, "start_lsn")?,
                     recreate_slot_if_exists: loader
-                        .get_optional(EXTRACTOR, "recreate_slot_if_exists"),
+                        .get_optional(EXTRACTOR, "recreate_slot_if_exists")?,
                     keepalive_interval_secs,
                     heartbeat_interval_secs,
                     heartbeat_tb,
-                    start_time_utc: loader.get_optional(EXTRACTOR, "start_time_utc"),
-                    end_time_utc: loader.get_optional(EXTRACTOR, "end_time_utc"),
+                    start_time_utc: loader.get_optional(EXTRACTOR, "start_time_utc")?,
+                    end_time_utc: loader.get_optional(EXTRACTOR, "end_time_utc")?,
                 },
 
                 ExtractType::CheckLog => ExtractorConfig::PgCheck {
                     url,
                     connection_auth,
-                    check_log_dir: loader.get_required(EXTRACTOR, CHECK_LOG_DIR),
-                    batch_size: loader.get_with_default(EXTRACTOR, BATCH_SIZE, 200),
+                    check_log_dir: loader.get_required(EXTRACTOR, CHECK_LOG_DIR)?,
+                    batch_size: loader.get_with_default(EXTRACTOR, BATCH_SIZE, 200)?,
                 },
 
                 ExtractType::Struct => ExtractorConfig::PgStruct {
@@ -444,7 +487,7 @@ impl TaskConfig {
                         EXTRACTOR,
                         "db_batch_size",
                         DEFAULT_DB_BATCH_SIZE,
-                    ),
+                    )?,
                 },
 
                 _ => bail! { not_supported_err },
@@ -456,10 +499,10 @@ impl TaskConfig {
                     connection_auth,
                     schema: String::new(),
                     tb: String::new(),
-                    sample_interval: loader.get_with_default(EXTRACTOR, SAMPLE_INTERVAL, 1),
-                    parallel_size: loader.get_with_default(EXTRACTOR, PARALLEL_SIZE, 1),
+                    sample_interval: loader.get_with_default(EXTRACTOR, SAMPLE_INTERVAL, 1)?,
+                    parallel_size: loader.get_with_default(EXTRACTOR, PARALLEL_SIZE, 1)?,
                     batch_size,
-                    partition_cols: loader.get_optional(EXTRACTOR, PARTITION_COLS),
+                    partition_cols: loader.get_optional(EXTRACTOR, PARTITION_COLS)?,
                 },
 
                 // GaussDB CDC is implemented via mppdb_decoding (see dt-connector extractor/gaussdb).
@@ -469,22 +512,22 @@ impl TaskConfig {
                 ExtractType::Cdc => ExtractorConfig::GaussDBCdc {
                     url,
                     connection_auth,
-                    slot_name: loader.get_required(EXTRACTOR, "slot_name"),
-                    start_lsn: loader.get_optional(EXTRACTOR, "start_lsn"),
+                    slot_name: loader.get_required(EXTRACTOR, "slot_name")?,
+                    start_lsn: loader.get_optional(EXTRACTOR, "start_lsn")?,
                     recreate_slot_if_exists: loader
-                        .get_optional(EXTRACTOR, "recreate_slot_if_exists"),
+                        .get_optional(EXTRACTOR, "recreate_slot_if_exists")?,
                     keepalive_interval_secs,
                     heartbeat_interval_secs,
                     heartbeat_tb,
-                    start_time_utc: loader.get_optional(EXTRACTOR, "start_time_utc"),
-                    end_time_utc: loader.get_optional(EXTRACTOR, "end_time_utc"),
+                    start_time_utc: loader.get_optional(EXTRACTOR, "start_time_utc")?,
+                    end_time_utc: loader.get_optional(EXTRACTOR, "end_time_utc")?,
                 },
 
                 ExtractType::CheckLog => ExtractorConfig::PgCheck {
                     url,
                     connection_auth,
-                    check_log_dir: loader.get_required(EXTRACTOR, CHECK_LOG_DIR),
-                    batch_size: loader.get_with_default(EXTRACTOR, BATCH_SIZE, 200),
+                    check_log_dir: loader.get_required(EXTRACTOR, CHECK_LOG_DIR)?,
+                    batch_size: loader.get_with_default(EXTRACTOR, BATCH_SIZE, 200)?,
                 },
 
                 ExtractType::Struct => ExtractorConfig::PgStruct {
@@ -497,7 +540,7 @@ impl TaskConfig {
                         EXTRACTOR,
                         "db_batch_size",
                         DEFAULT_DB_BATCH_SIZE,
-                    ),
+                    )?,
                 },
 
                 _ => bail! { not_supported_err },
@@ -505,7 +548,7 @@ impl TaskConfig {
 
             DbType::Mongo => {
                 let app_name: String =
-                    loader.get_with_default(EXTRACTOR, APP_NAME, APE_DTS.to_string());
+                    loader.get_with_default(EXTRACTOR, APP_NAME, APE_DTS.to_string())?;
                 match extract_type {
                     ExtractType::Snapshot => ExtractorConfig::MongoSnapshot {
                         url,
@@ -519,9 +562,9 @@ impl TaskConfig {
                         url,
                         connection_auth,
                         app_name,
-                        resume_token: loader.get_optional(EXTRACTOR, "resume_token"),
-                        start_timestamp: loader.get_optional(EXTRACTOR, "start_timestamp"),
-                        source: loader.get_optional(EXTRACTOR, "source"),
+                        resume_token: loader.get_optional(EXTRACTOR, "resume_token")?,
+                        start_timestamp: loader.get_optional(EXTRACTOR, "start_timestamp")?,
+                        source: loader.get_optional(EXTRACTOR, "source")?,
                         heartbeat_interval_secs,
                         heartbeat_tb,
                     },
@@ -530,8 +573,8 @@ impl TaskConfig {
                         url,
                         connection_auth,
                         app_name,
-                        check_log_dir: loader.get_required(EXTRACTOR, CHECK_LOG_DIR),
-                        batch_size: loader.get_with_default(EXTRACTOR, BATCH_SIZE, 200),
+                        check_log_dir: loader.get_required(EXTRACTOR, CHECK_LOG_DIR)?,
+                        batch_size: loader.get_with_default(EXTRACTOR, BATCH_SIZE, 200)?,
                     },
 
                     _ => bail! { not_supported_err },
@@ -540,7 +583,7 @@ impl TaskConfig {
 
             DbType::Redis => match extract_type {
                 ExtractType::Snapshot => {
-                    let repl_port = loader.get_with_default(EXTRACTOR, REPL_PORT, 10008);
+                    let repl_port = loader.get_with_default(EXTRACTOR, REPL_PORT, 10008)?;
                     ExtractorConfig::RedisSnapshot {
                         url,
                         connection_auth,
@@ -549,41 +592,41 @@ impl TaskConfig {
                 }
 
                 ExtractType::SnapshotFile => ExtractorConfig::RedisSnapshotFile {
-                    file_path: loader.get_required(EXTRACTOR, "file_path"),
+                    file_path: loader.get_required(EXTRACTOR, "file_path")?,
                 },
 
                 ExtractType::Scan => ExtractorConfig::RedisScan {
                     url,
                     connection_auth,
-                    statistic_type: loader.get_required(EXTRACTOR, "statistic_type"),
-                    scan_count: loader.get_with_default(EXTRACTOR, "scan_count", 1000),
+                    statistic_type: loader.get_required(EXTRACTOR, "statistic_type")?,
+                    scan_count: loader.get_with_default(EXTRACTOR, "scan_count", 1000)?,
                 },
 
                 ExtractType::Cdc => {
-                    let repl_port = loader.get_with_default(EXTRACTOR, REPL_PORT, 10008);
+                    let repl_port = loader.get_with_default(EXTRACTOR, REPL_PORT, 10008)?;
                     ExtractorConfig::RedisCdc {
                         url,
                         connection_auth,
                         repl_port,
-                        repl_id: loader.get_optional(EXTRACTOR, "repl_id"),
-                        repl_offset: loader.get_optional(EXTRACTOR, "repl_offset"),
+                        repl_id: loader.get_optional(EXTRACTOR, "repl_id")?,
+                        repl_offset: loader.get_optional(EXTRACTOR, "repl_offset")?,
                         keepalive_interval_secs,
                         heartbeat_interval_secs,
-                        heartbeat_key: loader.get_optional(EXTRACTOR, "heartbeat_key"),
-                        now_db_id: loader.get_optional(EXTRACTOR, "now_db_id"),
+                        heartbeat_key: loader.get_optional(EXTRACTOR, "heartbeat_key")?,
+                        now_db_id: loader.get_optional(EXTRACTOR, "now_db_id")?,
                     }
                 }
 
                 ExtractType::SnapshotAndCdc => {
-                    let repl_port = loader.get_with_default(EXTRACTOR, REPL_PORT, 10008);
+                    let repl_port = loader.get_with_default(EXTRACTOR, REPL_PORT, 10008)?;
                     ExtractorConfig::RedisSnapshotAndCdc {
                         url,
                         connection_auth,
                         repl_port,
-                        repl_id: loader.get_optional(EXTRACTOR, "repl_id"),
+                        repl_id: loader.get_optional(EXTRACTOR, "repl_id")?,
                         keepalive_interval_secs,
                         heartbeat_interval_secs,
-                        heartbeat_key: loader.get_optional(EXTRACTOR, "heartbeat_key"),
+                        heartbeat_key: loader.get_optional(EXTRACTOR, "heartbeat_key")?,
                     }
                 }
 
@@ -597,11 +640,11 @@ impl TaskConfig {
 
             DbType::Kafka => ExtractorConfig::Kafka {
                 url,
-                group: loader.get_required(EXTRACTOR, "group"),
-                topic: loader.get_required(EXTRACTOR, "topic"),
-                partition: loader.get_optional(EXTRACTOR, "partition"),
-                offset: loader.get_optional(EXTRACTOR, "offset"),
-                ack_interval_secs: loader.get_optional(EXTRACTOR, "ack_interval_secs"),
+                group: loader.get_required(EXTRACTOR, "group")?,
+                topic: loader.get_required(EXTRACTOR, "topic")?,
+                partition: loader.get_optional(EXTRACTOR, "partition")?,
+                offset: loader.get_optional(EXTRACTOR, "offset")?,
+                ack_interval_secs: loader.get_optional(EXTRACTOR, "ack_interval_secs")?,
             },
 
             db_type => {
@@ -615,22 +658,22 @@ impl TaskConfig {
     }
 
     fn load_sinker_config(loader: &IniLoader) -> anyhow::Result<(BasicSinkerConfig, SinkerConfig)> {
-        let sink_type = loader.get_with_default(SINKER, "sink_type", SinkType::Write);
+        let sink_type = loader.get_with_default(SINKER, "sink_type", SinkType::Write)?;
         if let SinkType::Dummy = sink_type {
             return Ok((BasicSinkerConfig::default(), SinkerConfig::Dummy));
         }
 
-        let db_type: DbType = loader.get_required(SINKER, DB_TYPE);
-        let url: String = loader.get_optional(SINKER, URL);
-        let batch_size: usize = loader.get_with_default(SINKER, BATCH_SIZE, 200);
+        let db_type: DbType = loader.get_required(SINKER, DB_TYPE)?;
+        let url: String = loader.get_optional(SINKER, URL)?;
+        let batch_size: usize = loader.get_with_default(SINKER, BATCH_SIZE, 200)?;
         let max_connections =
-            loader.get_with_default(SINKER, MAX_CONNECTIONS, DEFAULT_MAX_CONNECTIONS);
+            loader.get_with_default(SINKER, MAX_CONNECTIONS, DEFAULT_MAX_CONNECTIONS)?;
 
-        let connection_auth = ConnectionAuthConfig::from(loader, SINKER);
+        let connection_auth = ConnectionAuthConfig::from(loader, SINKER)?;
 
         let rate_limiter = RateLimiterConfig {
-            max_rps: loader.get_optional(SINKER, "max_rps"),
-            max_mbps: loader.get_optional(SINKER, "max_mbps"),
+            max_rps: loader.get_optional(SINKER, "max_rps")?,
+            max_mbps: loader.get_optional(SINKER, "max_mbps")?,
         };
         let basic = BasicSinkerConfig {
             sink_type: sink_type.clone(),
@@ -643,7 +686,7 @@ impl TaskConfig {
         };
 
         let conflict_policy: ConflictPolicyEnum =
-            loader.get_with_default(SINKER, "conflict_policy", ConflictPolicyEnum::Interrupt);
+            loader.get_with_default(SINKER, "conflict_policy", ConflictPolicyEnum::Interrupt)?;
 
         let not_supported_err =
             Error::ConfigError(format!("sinker db type: {} not supported", db_type));
@@ -654,34 +697,34 @@ impl TaskConfig {
                     url,
                     connection_auth,
                     batch_size,
-                    replace: loader.get_with_default(SINKER, REPLACE, true),
+                    replace: loader.get_with_default(SINKER, REPLACE, true)?,
                     disable_foreign_key_checks: loader.get_with_default(
                         SINKER,
                         DISABLE_FOREIGN_KEY_CHECKS,
                         true,
-                    ),
-                    transaction_isolation: loader.get_optional(SINKER, "transaction_isolation"),
+                    )?,
+                    transaction_isolation: loader.get_optional(SINKER, "transaction_isolation")?,
                 },
 
                 SinkType::Check => SinkerConfig::MysqlCheck {
                     url,
                     connection_auth,
                     batch_size,
-                    check_log_dir: loader.get_optional(SINKER, CHECK_LOG_DIR),
+                    check_log_dir: loader.get_optional(SINKER, CHECK_LOG_DIR)?,
                     check_log_file_size: loader.get_with_default(
                         SINKER,
                         CHECK_LOG_FILE_SIZE,
                         DEFAULT_CHECK_LOG_FILE_SIZE.to_string(),
-                    ),
-                    output_full_row: loader.get_with_default(SINKER, OUTPUT_FULL_ROW, false),
-                    output_revise_sql: loader.get_with_default(SINKER, OUTPUT_REVISE_SQL, false),
+                    )?,
+                    output_full_row: loader.get_with_default(SINKER, OUTPUT_FULL_ROW, false)?,
+                    output_revise_sql: loader.get_with_default(SINKER, OUTPUT_REVISE_SQL, false)?,
                     revise_match_full_row: loader.get_with_default(
                         SINKER,
                         REVISE_MATCH_FULL_ROW,
                         false,
-                    ),
-                    retry_interval_secs: loader.get_with_default(SINKER, RETRY_INTERVAL_SECS, 0),
-                    max_retries: loader.get_with_default(SINKER, MAX_RETRIES, 1),
+                    )?,
+                    retry_interval_secs: loader.get_with_default(SINKER, RETRY_INTERVAL_SECS, 0)?,
+                    max_retries: loader.get_with_default(SINKER, MAX_RETRIES, 1)?,
                 },
 
                 SinkType::Struct => SinkerConfig::MysqlStruct {
@@ -691,7 +734,7 @@ impl TaskConfig {
                 },
 
                 SinkType::Sql => SinkerConfig::Sql {
-                    reverse: loader.get_optional(SINKER, REVERSE),
+                    reverse: loader.get_optional(SINKER, REVERSE)?,
                 },
 
                 _ => bail! { not_supported_err },
@@ -706,33 +749,33 @@ impl TaskConfig {
                         SINKER,
                         REPLACE,
                         !matches!(db_type, DbType::GaussDBOracle),
-                    ),
+                    )?,
                     disable_foreign_key_checks: loader.get_with_default(
                         SINKER,
                         DISABLE_FOREIGN_KEY_CHECKS,
                         true,
-                    ),
+                    )?,
                 },
 
                 SinkType::Check => SinkerConfig::PgCheck {
                     url,
                     connection_auth,
                     batch_size,
-                    check_log_dir: loader.get_optional(SINKER, CHECK_LOG_DIR),
+                    check_log_dir: loader.get_optional(SINKER, CHECK_LOG_DIR)?,
                     check_log_file_size: loader.get_with_default(
                         SINKER,
                         CHECK_LOG_FILE_SIZE,
                         DEFAULT_CHECK_LOG_FILE_SIZE.to_string(),
-                    ),
-                    output_full_row: loader.get_with_default(SINKER, OUTPUT_FULL_ROW, false),
-                    output_revise_sql: loader.get_with_default(SINKER, OUTPUT_REVISE_SQL, false),
+                    )?,
+                    output_full_row: loader.get_with_default(SINKER, OUTPUT_FULL_ROW, false)?,
+                    output_revise_sql: loader.get_with_default(SINKER, OUTPUT_REVISE_SQL, false)?,
                     revise_match_full_row: loader.get_with_default(
                         SINKER,
                         REVISE_MATCH_FULL_ROW,
                         false,
-                    ),
-                    retry_interval_secs: loader.get_with_default(SINKER, RETRY_INTERVAL_SECS, 0),
-                    max_retries: loader.get_with_default(SINKER, MAX_RETRIES, 1),
+                    )?,
+                    retry_interval_secs: loader.get_with_default(SINKER, RETRY_INTERVAL_SECS, 0)?,
+                    max_retries: loader.get_with_default(SINKER, MAX_RETRIES, 1)?,
                 },
 
                 SinkType::Struct => SinkerConfig::PgStruct {
@@ -742,7 +785,7 @@ impl TaskConfig {
                 },
 
                 SinkType::Sql => SinkerConfig::Sql {
-                    reverse: loader.get_optional(SINKER, REVERSE),
+                    reverse: loader.get_optional(SINKER, REVERSE)?,
                 },
 
                 _ => bail! { not_supported_err },
@@ -753,27 +796,27 @@ impl TaskConfig {
                     url,
                     connection_auth,
                     batch_size,
-                    replace: loader.get_with_default(SINKER, REPLACE, true),
+                    replace: loader.get_with_default(SINKER, REPLACE, true)?,
                 },
                 SinkType::Check => SinkerConfig::OracleCheck {
                     url,
                     connection_auth,
                     batch_size,
-                    check_log_dir: loader.get_optional(SINKER, CHECK_LOG_DIR),
+                    check_log_dir: loader.get_optional(SINKER, CHECK_LOG_DIR)?,
                     check_log_file_size: loader.get_with_default(
                         SINKER,
                         CHECK_LOG_FILE_SIZE,
                         DEFAULT_CHECK_LOG_FILE_SIZE.to_string(),
-                    ),
-                    output_full_row: loader.get_with_default(SINKER, OUTPUT_FULL_ROW, false),
-                    output_revise_sql: loader.get_with_default(SINKER, OUTPUT_REVISE_SQL, false),
+                    )?,
+                    output_full_row: loader.get_with_default(SINKER, OUTPUT_FULL_ROW, false)?,
+                    output_revise_sql: loader.get_with_default(SINKER, OUTPUT_REVISE_SQL, false)?,
                     revise_match_full_row: loader.get_with_default(
                         SINKER,
                         REVISE_MATCH_FULL_ROW,
                         false,
-                    ),
-                    retry_interval_secs: loader.get_with_default(SINKER, RETRY_INTERVAL_SECS, 0),
-                    max_retries: loader.get_with_default(SINKER, MAX_RETRIES, 1),
+                    )?,
+                    retry_interval_secs: loader.get_with_default(SINKER, RETRY_INTERVAL_SECS, 0)?,
+                    max_retries: loader.get_with_default(SINKER, MAX_RETRIES, 1)?,
                 },
                 SinkType::Struct => SinkerConfig::OracleStruct {
                     url,
@@ -785,7 +828,7 @@ impl TaskConfig {
 
             DbType::Mongo => {
                 let app_name: String =
-                    loader.get_with_default(SINKER, APP_NAME, APE_DTS.to_string());
+                    loader.get_with_default(SINKER, APP_NAME, APE_DTS.to_string())?;
                 match sink_type {
                     SinkType::Write => SinkerConfig::Mongo {
                         url,
@@ -799,24 +842,24 @@ impl TaskConfig {
                         connection_auth,
                         app_name,
                         batch_size,
-                        check_log_dir: loader.get_optional(SINKER, CHECK_LOG_DIR),
+                        check_log_dir: loader.get_optional(SINKER, CHECK_LOG_DIR)?,
                         check_log_file_size: loader.get_with_default(
                             SINKER,
                             CHECK_LOG_FILE_SIZE,
                             DEFAULT_CHECK_LOG_FILE_SIZE.to_string(),
-                        ),
-                        output_full_row: loader.get_with_default(SINKER, OUTPUT_FULL_ROW, false),
+                        )?,
+                        output_full_row: loader.get_with_default(SINKER, OUTPUT_FULL_ROW, false)?,
                         output_revise_sql: loader.get_with_default(
                             SINKER,
                             "output_revise_sql",
                             false,
-                        ),
+                        )?,
                         retry_interval_secs: loader.get_with_default(
                             SINKER,
                             RETRY_INTERVAL_SECS,
                             0,
-                        ),
-                        max_retries: loader.get_with_default(SINKER, MAX_RETRIES, 1),
+                        )?,
+                        max_retries: loader.get_with_default(SINKER, MAX_RETRIES, 1)?,
                     },
 
                     _ => bail! { not_supported_err },
@@ -826,9 +869,13 @@ impl TaskConfig {
             DbType::Kafka => SinkerConfig::Kafka {
                 url,
                 batch_size,
-                ack_timeout_secs: loader.get_with_default(SINKER, "ack_timeout_secs", 5),
-                required_acks: loader.get_with_default(SINKER, "required_acks", "one".to_string()),
-                with_field_defs: loader.get_with_default(SINKER, "with_field_defs", true),
+                ack_timeout_secs: loader.get_with_default(SINKER, "ack_timeout_secs", 5)?,
+                required_acks: loader.get_with_default(
+                    SINKER,
+                    "required_acks",
+                    "one".to_string(),
+                )?,
+                with_field_defs: loader.get_with_default(SINKER, "with_field_defs", true)?,
             },
 
             DbType::Redis => match sink_type {
@@ -836,15 +883,15 @@ impl TaskConfig {
                     url,
                     connection_auth,
                     batch_size,
-                    method: loader.get_optional(SINKER, "method"),
-                    is_cluster: loader.get_optional(SINKER, "is_cluster"),
+                    method: loader.get_optional(SINKER, "method")?,
+                    is_cluster: loader.get_optional(SINKER, "is_cluster")?,
                 },
 
                 SinkType::Statistic => SinkerConfig::RedisStatistic {
-                    statistic_type: loader.get_required(SINKER, "statistic_type"),
-                    data_size_threshold: loader.get_optional(SINKER, "data_size_threshold"),
-                    freq_threshold: loader.get_optional(SINKER, "freq_threshold"),
-                    statistic_log_dir: loader.get_optional(SINKER, "statistic_log_dir"),
+                    statistic_type: loader.get_required(SINKER, "statistic_type")?,
+                    data_size_threshold: loader.get_optional(SINKER, "data_size_threshold")?,
+                    freq_threshold: loader.get_optional(SINKER, "freq_threshold")?,
+                    statistic_log_dir: loader.get_optional(SINKER, "statistic_log_dir")?,
                 },
 
                 _ => bail! { not_supported_err },
@@ -855,8 +902,8 @@ impl TaskConfig {
                     url,
                     connection_auth,
                     batch_size,
-                    stream_load_url: loader.get_optional(SINKER, "stream_load_url"),
-                    hard_delete: loader.get_optional(SINKER, "hard_delete"),
+                    stream_load_url: loader.get_optional(SINKER, "stream_load_url")?,
+                    hard_delete: loader.get_optional(SINKER, "hard_delete")?,
                 },
 
                 SinkType::Struct => SinkerConfig::StarRocksStruct {
@@ -873,7 +920,7 @@ impl TaskConfig {
                     url,
                     connection_auth,
                     batch_size,
-                    stream_load_url: loader.get_optional(SINKER, "stream_load_url"),
+                    stream_load_url: loader.get_optional(SINKER, "stream_load_url")?,
                 },
 
                 SinkType::Struct => SinkerConfig::DorisStruct {
@@ -895,7 +942,7 @@ impl TaskConfig {
                         SINKER,
                         "engine",
                         "ReplacingMergeTree".to_string(),
-                    ),
+                    )?,
                 },
 
                 _ => bail! { not_supported_err },
@@ -903,34 +950,34 @@ impl TaskConfig {
 
             DbType::Foxlake => {
                 let s3_config = S3Config {
-                    bucket: loader.get_optional(SINKER, "s3_bucket"),
-                    access_key: loader.get_optional(SINKER, "s3_access_key"),
-                    secret_key: loader.get_optional(SINKER, "s3_secret_key"),
-                    region: loader.get_optional(SINKER, "s3_region"),
-                    endpoint: loader.get_optional(SINKER, "s3_endpoint"),
-                    root_dir: loader.get_optional(SINKER, "s3_root_dir"),
-                    root_url: loader.get_optional(SINKER, "s3_root_url"),
+                    bucket: loader.get_optional(SINKER, "s3_bucket")?,
+                    access_key: loader.get_optional(SINKER, "s3_access_key")?,
+                    secret_key: loader.get_optional(SINKER, "s3_secret_key")?,
+                    region: loader.get_optional(SINKER, "s3_region")?,
+                    endpoint: loader.get_optional(SINKER, "s3_endpoint")?,
+                    root_dir: loader.get_optional(SINKER, "s3_root_dir")?,
+                    root_url: loader.get_optional(SINKER, "s3_root_url")?,
                 };
 
                 match sink_type {
                     SinkType::Write => SinkerConfig::Foxlake {
                         url,
                         batch_size,
-                        batch_memory_mb: loader.get_optional(SINKER, "batch_memory_mb"),
+                        batch_memory_mb: loader.get_optional(SINKER, "batch_memory_mb")?,
                         s3_config,
-                        engine: loader.get_optional(SINKER, "engine"),
+                        engine: loader.get_optional(SINKER, "engine")?,
                     },
 
                     SinkType::Struct => SinkerConfig::FoxlakeStruct {
                         url,
                         conflict_policy,
-                        engine: loader.get_optional(SINKER, "engine"),
+                        engine: loader.get_optional(SINKER, "engine")?,
                     },
 
                     SinkType::Push => SinkerConfig::FoxlakePush {
                         url,
                         batch_size,
-                        batch_memory_mb: loader.get_optional(SINKER, "batch_memory_mb"),
+                        batch_memory_mb: loader.get_optional(SINKER, "batch_memory_mb")?,
                         s3_config,
                     },
 
@@ -949,19 +996,19 @@ impl TaskConfig {
 
     fn load_parallelizer_config(loader: &IniLoader) -> anyhow::Result<ParallelizerConfig> {
         Ok(ParallelizerConfig {
-            parallel_size: loader.get_with_default(PARALLELIZER, PARALLEL_SIZE, 1),
+            parallel_size: loader.get_with_default(PARALLELIZER, PARALLEL_SIZE, 1)?,
             parallel_type: loader.get_with_default(
                 PARALLELIZER,
                 "parallel_type",
                 ParallelType::Serial,
-            ),
+            )?,
         })
     }
 
-    fn load_pipeline_config(loader: &IniLoader) -> PipelineConfig {
+    fn load_pipeline_config(loader: &IniLoader) -> anyhow::Result<PipelineConfig> {
         let capacity_limiter = CapacityLimiterConfig {
-            buffer_size: loader.get_with_default(PIPELINE, "buffer_size", 16000),
-            buffer_memory_mb: loader.get_optional(PIPELINE, "buffer_memory_mb"),
+            buffer_size: loader.get_with_default(PIPELINE, "buffer_size", 16000)?,
+            buffer_memory_mb: loader.get_optional(PIPELINE, "buffer_memory_mb")?,
         };
         let mut config = PipelineConfig {
             capacity_limiter,
@@ -969,57 +1016,65 @@ impl TaskConfig {
                 PIPELINE,
                 "checkpoint_interval_secs",
                 10,
-            ),
-            batch_sink_interval_secs: loader.get_optional(PIPELINE, "batch_sink_interval_secs"),
-            counter_time_window_secs: loader.get_optional(PIPELINE, "counter_time_window_secs"),
-            counter_max_sub_count: loader.get_with_default(PIPELINE, "counter_max_sub_count", 1000),
-            pipeline_type: loader.get_with_default(PIPELINE, "pipeline_type", PipelineType::Basic),
-            http_host: loader.get_with_default(PIPELINE, "http_host", "0.0.0.0".to_string()),
-            http_port: loader.get_with_default(PIPELINE, "http_port", 10231),
-            with_field_defs: loader.get_with_default(PIPELINE, "with_field_defs", true),
+            )?,
+            batch_sink_interval_secs: loader.get_optional(PIPELINE, "batch_sink_interval_secs")?,
+            counter_time_window_secs: loader.get_optional(PIPELINE, "counter_time_window_secs")?,
+            counter_max_sub_count: loader.get_with_default(
+                PIPELINE,
+                "counter_max_sub_count",
+                1000,
+            )?,
+            pipeline_type: loader.get_with_default(
+                PIPELINE,
+                "pipeline_type",
+                PipelineType::Basic,
+            )?,
+            http_host: loader.get_with_default(PIPELINE, "http_host", "0.0.0.0".to_string())?,
+            http_port: loader.get_with_default(PIPELINE, "http_port", 10231)?,
+            with_field_defs: loader.get_with_default(PIPELINE, "with_field_defs", true)?,
         };
 
         if config.counter_time_window_secs == 0 {
             config.counter_time_window_secs = config.checkpoint_interval_secs;
         }
-        config
+        Ok(config)
     }
 
     fn load_runtime_config(loader: &IniLoader) -> anyhow::Result<RuntimeConfig> {
         Ok(RuntimeConfig {
-            log_level: loader.get_with_default(RUNTIME, "log_level", "info".to_string()),
-            log_dir: loader.get_with_default(RUNTIME, "log_dir", "./logs".to_string()),
+            log_level: loader.get_with_default(RUNTIME, "log_level", "info".to_string())?,
+            log_dir: loader.get_with_default(RUNTIME, "log_dir", "./logs".to_string())?,
             log4rs_file: loader.get_with_default(
                 RUNTIME,
                 "log4rs_file",
                 "./log4rs.yaml".to_string(),
-            ),
-            tb_parallel_size: loader.get_with_default(RUNTIME, "tb_parallel_size", 1),
+            )?,
+            tb_parallel_size: loader.get_with_default(RUNTIME, "tb_parallel_size", 1)?,
         })
     }
 
     fn load_filter_config(loader: &IniLoader) -> anyhow::Result<FilterConfig> {
         Ok(FilterConfig {
-            do_schemas: loader.get_optional(FILTER, "do_dbs"),
-            ignore_schemas: loader.get_optional(FILTER, "ignore_dbs"),
-            do_tbs: loader.get_optional(FILTER, "do_tbs"),
-            ignore_tbs: loader.get_optional(FILTER, "ignore_tbs"),
-            ignore_cols: loader.get_optional(FILTER, "ignore_cols"),
-            do_events: loader.get_optional(FILTER, "do_events"),
-            do_ddls: loader.get_optional(FILTER, "do_ddls"),
-            do_dcls: loader.get_optional(FILTER, "do_dcls"),
-            do_structures: loader.get_with_default(FILTER, "do_structures", ASTRISK.to_string()),
-            ignore_cmds: loader.get_optional(FILTER, "ignore_cmds"),
-            where_conditions: loader.get_optional(FILTER, "where_conditions"),
+            do_schemas: loader.get_optional(FILTER, "do_dbs")?,
+            ignore_schemas: loader.get_optional(FILTER, "ignore_dbs")?,
+            do_tbs: loader.get_optional(FILTER, "do_tbs")?,
+            ignore_tbs: loader.get_optional(FILTER, "ignore_tbs")?,
+            ignore_cols: loader.get_optional(FILTER, "ignore_cols")?,
+            do_events: loader.get_optional(FILTER, "do_events")?,
+            do_ddls: loader.get_optional(FILTER, "do_ddls")?,
+            do_dcls: loader.get_optional(FILTER, "do_dcls")?,
+            do_structures: loader.get_with_default(FILTER, "do_structures", ASTRISK.to_string())?,
+            ignore_cmds: loader.get_optional(FILTER, "ignore_cmds")?,
+            where_conditions: loader.get_optional(FILTER, "where_conditions")?,
         })
     }
 
     fn load_router_config(loader: &IniLoader) -> anyhow::Result<RouterConfig> {
         Ok(RouterConfig::Rdb {
-            schema_map: loader.get_optional(ROUTER, "db_map"),
-            tb_map: loader.get_optional(ROUTER, "tb_map"),
-            col_map: loader.get_optional(ROUTER, "col_map"),
-            topic_map: loader.get_optional(ROUTER, "topic_map"),
+            schema_map: loader.get_optional(ROUTER, "db_map")?,
+            tb_map: loader.get_optional(ROUTER, "tb_map")?,
+            col_map: loader.get_optional(ROUTER, "col_map")?,
+            topic_map: loader.get_optional(ROUTER, "topic_map")?,
         })
     }
 
@@ -1029,37 +1084,37 @@ impl TaskConfig {
         sinker_basic: &BasicSinkerConfig,
     ) -> anyhow::Result<ResumerConfig> {
         // compatible with older versions
-        if let Some(config) = Self::load_resumer_config_deprecated(loader, runtime) {
+        if let Some(config) = Self::load_resumer_config_deprecated(loader, runtime)? {
             return Ok(config);
         }
 
-        let resume_type = loader.get_with_default(RESUMER, RESUME_TYPE, ResumeType::Dummy);
+        let resume_type = loader.get_with_default(RESUMER, RESUME_TYPE, ResumeType::Dummy)?;
         match resume_type {
             ResumeType::FromLog => Ok(ResumerConfig::FromLog {
-                log_dir: loader.get_with_default(RESUMER, "log_dir", runtime.log_dir.clone()),
-                config_file: loader.get_optional(RESUMER, "config_file"),
+                log_dir: loader.get_with_default(RESUMER, "log_dir", runtime.log_dir.clone())?,
+                config_file: loader.get_optional(RESUMER, "config_file")?,
             }),
             ResumeType::FromTarget => Ok(ResumerConfig::FromDB {
                 url: sinker_basic.url.clone(),
-                connection_auth: ConnectionAuthConfig::from(loader, SINKER),
+                connection_auth: ConnectionAuthConfig::from(loader, SINKER)?,
                 db_type: sinker_basic.db_type.clone(),
-                table_full_name: loader.get_optional(RESUMER, "table_full_name"),
+                table_full_name: loader.get_optional(RESUMER, "table_full_name")?,
                 max_connections: loader.get_with_default(
                     RESUMER,
                     MAX_CONNECTIONS,
                     RESUMER_CONNECTION_LIMIT_DEFAULT,
-                ),
+                )?,
             }),
             ResumeType::FromDB => Ok(ResumerConfig::FromDB {
-                url: loader.get_required(RESUMER, URL),
-                connection_auth: ConnectionAuthConfig::from(loader, RESUMER),
-                db_type: loader.get_required(RESUMER, DB_TYPE),
-                table_full_name: loader.get_optional(RESUMER, "table_full_name"),
+                url: loader.get_required(RESUMER, URL)?,
+                connection_auth: ConnectionAuthConfig::from(loader, RESUMER)?,
+                db_type: loader.get_required(RESUMER, DB_TYPE)?,
+                table_full_name: loader.get_optional(RESUMER, "table_full_name")?,
                 max_connections: loader.get_with_default(
                     RESUMER,
                     MAX_CONNECTIONS,
                     RESUMER_CONNECTION_LIMIT_DEFAULT,
-                ),
+                )?,
             }),
             _ => Ok(ResumerConfig::Dummy),
         }
@@ -1068,22 +1123,22 @@ impl TaskConfig {
     fn load_resumer_config_deprecated(
         loader: &IniLoader,
         runtime: &RuntimeConfig,
-    ) -> Option<ResumerConfig> {
+    ) -> anyhow::Result<Option<ResumerConfig>> {
         if !loader.contains(RESUMER, RESUME_FROM_LOG) && !loader.contains(RESUMER, RESUME_LOG_DIR)
             || !loader.contains(RESUMER, RESUME_CONFIG_FILE)
         {
-            return None;
+            return Ok(None);
         }
-        let resume_from_log = loader.get_with_default(RESUMER, RESUME_FROM_LOG, false);
+        let resume_from_log = loader.get_with_default(RESUMER, RESUME_FROM_LOG, false)?;
         let log_dir = if resume_from_log {
-            loader.get_with_default(RESUMER, RESUME_LOG_DIR, runtime.log_dir.clone())
+            loader.get_with_default(RESUMER, RESUME_LOG_DIR, runtime.log_dir.clone())?
         } else {
             String::new()
         };
-        Some(ResumerConfig::FromLog {
+        Ok(Some(ResumerConfig::FromLog {
             log_dir,
-            config_file: loader.get_optional(RESUMER, RESUME_CONFIG_FILE),
-        })
+            config_file: loader.get_optional(RESUMER, RESUME_CONFIG_FILE)?,
+        }))
     }
 
     fn load_data_marker_config(loader: &IniLoader) -> anyhow::Result<Option<DataMarkerConfig>> {
@@ -1092,13 +1147,13 @@ impl TaskConfig {
         }
 
         Ok(Some(DataMarkerConfig {
-            topo_name: loader.get_required(DATA_MARKER, "topo_name"),
-            topo_nodes: loader.get_optional(DATA_MARKER, "topo_nodes"),
-            src_node: loader.get_required(DATA_MARKER, "src_node"),
-            dst_node: loader.get_required(DATA_MARKER, "dst_node"),
-            do_nodes: loader.get_required(DATA_MARKER, "do_nodes"),
-            ignore_nodes: loader.get_optional(DATA_MARKER, "ignore_nodes"),
-            marker: loader.get_required(DATA_MARKER, "marker"),
+            topo_name: loader.get_required(DATA_MARKER, "topo_name")?,
+            topo_nodes: loader.get_optional(DATA_MARKER, "topo_nodes")?,
+            src_node: loader.get_required(DATA_MARKER, "src_node")?,
+            dst_node: loader.get_required(DATA_MARKER, "dst_node")?,
+            do_nodes: loader.get_required(DATA_MARKER, "do_nodes")?,
+            ignore_nodes: loader.get_optional(DATA_MARKER, "ignore_nodes")?,
+            marker: loader.get_required(DATA_MARKER, "marker")?,
         }))
     }
 
@@ -1107,7 +1162,7 @@ impl TaskConfig {
             return Ok(None);
         }
 
-        let lua_code_file = loader.get_optional(PROCESSOR, "lua_code_file");
+        let lua_code_file = loader.get_optional(PROCESSOR, "lua_code_file")?;
         let mut lua_code = String::new();
 
         if fs::metadata(&lua_code_file).is_ok() {
@@ -1124,12 +1179,12 @@ impl TaskConfig {
 
     fn load_meta_center_config(loader: &IniLoader) -> anyhow::Result<Option<MetaCenterConfig>> {
         let mut config = MetaCenterConfig::Basic;
-        let db_type: DbType = loader.get_required(EXTRACTOR, DB_TYPE);
-        let meta_type = loader.get_with_default(META_CENTER, "type", MetaCenterType::Basic);
+        let db_type: DbType = loader.get_required(EXTRACTOR, DB_TYPE)?;
+        let meta_type = loader.get_with_default(META_CENTER, "type", MetaCenterType::Basic)?;
         if meta_type == MetaCenterType::DbEngine && db_type == DbType::Mysql {
-            let extractor_url: String = loader.get_required(EXTRACTOR, URL);
-            let sinker_url: String = loader.get_required(SINKER, URL);
-            let meta_center_url: String = loader.get_required(META_CENTER, URL);
+            let extractor_url: String = loader.get_required(EXTRACTOR, URL)?;
+            let sinker_url: String = loader.get_required(SINKER, URL)?;
+            let meta_center_url: String = loader.get_required(META_CENTER, URL)?;
             if extractor_url == meta_center_url || sinker_url == meta_center_url {
                 panic!(
                     "config, [{}].{} should be different with [{}].{} and [{}].{}",
@@ -1139,12 +1194,12 @@ impl TaskConfig {
 
             config = MetaCenterConfig::MySqlDbEngine {
                 url: meta_center_url,
-                connection_auth: ConnectionAuthConfig::from(loader, META_CENTER),
+                connection_auth: ConnectionAuthConfig::from(loader, META_CENTER)?,
                 ddl_conflict_policy: loader.get_with_default(
                     META_CENTER,
                     DDL_CONFLICT_POLICY,
                     ConflictPolicyEnum::Interrupt,
-                ),
+                )?,
             }
         }
         Ok(Some(config))
@@ -1153,7 +1208,7 @@ impl TaskConfig {
     #[cfg(feature = "metrics")]
     fn load_metrics_config(loader: &IniLoader) -> anyhow::Result<MetricsConfig> {
         let metrics_section = "metrics";
-        let labels_str: String = loader.get_optional(metrics_section, "labels");
+        let labels_str: String = loader.get_optional(metrics_section, "labels")?;
         let mut metrics_labels = HashMap::new();
         if !labels_str.is_empty() {
             for label_pair in labels_str.split(',') {
@@ -1163,10 +1218,137 @@ impl TaskConfig {
             }
         }
         Ok(MetricsConfig {
-            http_host: loader.get_with_default(metrics_section, "http_host", "0.0.0.0".to_string()),
-            http_port: loader.get_with_default(metrics_section, "http_port", 9090),
-            workers: loader.get_with_default(metrics_section, "workers", 2),
+            http_host: loader.get_with_default(
+                metrics_section,
+                "http_host",
+                "0.0.0.0".to_string(),
+            )?,
+            http_port: loader.get_with_default(metrics_section, "http_port", 9090)?,
+            workers: loader.get_with_default(metrics_section, "workers", 2)?,
             metrics_labels,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs,
+        path::PathBuf,
+        sync::atomic::{AtomicUsize, Ordering},
+    };
+
+    use super::TaskConfig;
+
+    static CONFIG_ID: AtomicUsize = AtomicUsize::new(0);
+
+    fn write_config(extra: &str) -> PathBuf {
+        write_config_with_sinker("[sinker]\nsink_type=dummy", extra)
+    }
+
+    fn write_config_with_sinker(sinker: &str, extra: &str) -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "ape-dts-task-config-{}-{}.ini",
+            std::process::id(),
+            CONFIG_ID.fetch_add(1, Ordering::Relaxed)
+        ));
+        let content = format!(
+            "[extractor]\ndb_type=mysql\nextract_type=struct\nurl=mysql://localhost\nmax_connections=4\n\n{sinker}\n\n[parallelizer]\nparallel_size=1\n\n[pipeline]\nbuffer_size=1\ncheckpoint_interval_secs=1\n\n[runtime]\ntb_parallel_size=1\n{extra}"
+        );
+        fs::write(&path, content).unwrap();
+        path
+    }
+
+    #[test]
+    fn rejects_sinker_connection_limit_below_parallel_size() {
+        let path = write_config_with_sinker(
+            "[sinker]\nsink_type=write\ndb_type=mysql\nurl=mysql://localhost\nmax_connections=2",
+            "\n[parallelizer]\nparallel_size=3\n",
+        );
+
+        let error = TaskConfig::new(path.to_str().unwrap()).err().unwrap();
+
+        fs::remove_file(path).unwrap();
+        assert!(
+            error.to_string().contains(
+                "sinker.max_connections must be greater than or equal to parallelizer.parallel_size"
+            ),
+            "unexpected error: {error:#}"
+        );
+    }
+
+    #[test]
+    fn rejects_extractor_connection_limit_below_parallel_size() {
+        let path = write_config("\n[parallelizer]\nparallel_size=5\n");
+
+        let error = TaskConfig::new(path.to_str().unwrap()).err().unwrap();
+
+        fs::remove_file(path).unwrap();
+        assert!(
+            error.to_string().contains(
+                "extractor.max_connections must be greater than or equal to parallelizer.parallel_size"
+            ),
+            "unexpected error: {error:#}"
+        );
+    }
+
+    #[test]
+    fn rejects_zero_checkpoint_interval() {
+        let path = write_config("\n[pipeline]\nbuffer_size=1\ncheckpoint_interval_secs=0\n");
+
+        let error = TaskConfig::new(path.to_str().unwrap()).err().unwrap();
+
+        fs::remove_file(path).unwrap();
+        assert!(
+            error
+                .to_string()
+                .contains("pipeline.checkpoint_interval_secs must be greater than 0"),
+            "unexpected error: {error:#}"
+        );
+    }
+
+    #[test]
+    fn rejects_zero_pipeline_buffer_size() {
+        let path = write_config("\n[pipeline]\nbuffer_size=0\ncheckpoint_interval_secs=1\n");
+
+        let error = TaskConfig::new(path.to_str().unwrap()).err().unwrap();
+
+        fs::remove_file(path).unwrap();
+        assert!(
+            error
+                .to_string()
+                .contains("pipeline.buffer_size must be greater than 0"),
+            "unexpected error: {error:#}"
+        );
+    }
+
+    #[test]
+    fn rejects_zero_runtime_table_parallel_size() {
+        let path = write_config("\n[runtime]\ntb_parallel_size=0\n");
+
+        let error = TaskConfig::new(path.to_str().unwrap()).err().unwrap();
+
+        fs::remove_file(path).unwrap();
+        assert!(
+            error
+                .to_string()
+                .contains("runtime.tb_parallel_size must be greater than 0"),
+            "unexpected error: {error:#}"
+        );
+    }
+
+    #[test]
+    fn rejects_zero_parallelizer_parallel_size() {
+        let path = write_config("\n[parallelizer]\nparallel_size=0\n");
+
+        let error = TaskConfig::new(path.to_str().unwrap()).err().unwrap();
+
+        fs::remove_file(path).unwrap();
+        assert!(
+            error
+                .to_string()
+                .contains("parallelizer.parallel_size must be greater than 0"),
+            "unexpected error: {error:#}"
+        );
     }
 }

@@ -14,7 +14,7 @@ pub struct MockConfig<T: MockColType> {
 
 impl<T: MockColType + DeserializeOwned> MockConfig<T> {
     pub fn new(config_file: &str) -> Option<Self> {
-        let loader = IniLoader::new(config_file);
+        let loader = IniLoader::new(config_file).unwrap();
         let key_prefix = T::config_key_prefix();
         let col_types = if let Some(config_map) =
             loader.ini.get_map().unwrap_or_default().get("mock")
@@ -40,16 +40,25 @@ impl<T: MockColType + DeserializeOwned> MockConfig<T> {
         } else {
             return None;
         };
-        let db_str = loader.get_with_default("mock", "db", "mock_db_1".to_string());
-        let insert_rows = loader.get_with_default("mock", "insert_rows_each_table", 30);
-        let seed = loader.get_with_default("mock", "seed", 777);
-        let mock_strategy = loader.get_with_default("mock", "strategy", "multi".to_string());
+        let db_str = loader
+            .get_with_default("mock", "db", "mock_db_1".to_string())
+            .unwrap();
+        let insert_rows = loader
+            .get_with_default("mock", "insert_rows_each_table", 30)
+            .unwrap();
+        let seed = loader.get_with_default("mock", "seed", 777).unwrap();
+        let mock_strategy = loader
+            .get_with_default("mock", "strategy", "multi".to_string())
+            .unwrap();
         let mut tb_suffix = 0usize;
         let mut mock_stmts = Vec::new();
         if mock_strategy == "single" {
-            let constraints_str = loader.get_with_default("mock", "constraints", "[]".to_string());
-            let nullable_cols_str =
-                loader.get_with_default("mock", "nullable_cols", "[]".to_string());
+            let constraints_str = loader
+                .get_with_default("mock", "constraints", "[]".to_string())
+                .unwrap();
+            let nullable_cols_str = loader
+                .get_with_default("mock", "nullable_cols", "[]".to_string())
+                .unwrap();
             let constraints: Vec<Constraint> = serde_json::from_str(&constraints_str).unwrap();
             let nullable_cols: Vec<usize> = serde_json::from_str(&nullable_cols_str).unwrap();
             let all_types = col_types.first().unwrap().clone();
