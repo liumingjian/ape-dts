@@ -4,7 +4,7 @@ use anyhow::Context;
 use async_trait::async_trait;
 use mongodb::{
     bson::{doc, Document},
-    options::UpdateOptions,
+    options::{ReplaceOptions, UpdateOptions},
     Client, Collection,
 };
 use tokio::time::Instant;
@@ -19,6 +19,16 @@ use dt_common::{
     monitor::monitor::Monitor,
     utils::limit_queue::LimitedQueue,
 };
+
+/// How the update carried by a RowData must be applied on the target.
+enum MongoUpdateKind {
+    /// the whole new doc, replacing whatever the target holds
+    Replacement,
+    /// operators to apply, upserting so a replayed batch stays idempotent
+    Diff,
+    /// operators to apply, but the source doc is gone: upserting would leave a ghost doc
+    DiffWithoutUpsert,
+}
 
 #[derive(Clone)]
 pub struct MongoSinker {
@@ -88,7 +98,7 @@ impl MongoSinker {
                             .context("mongo doc missing `_id`")?;
                         let query_doc = doc! {MongoConstants::ID: id};
                         let update_doc = doc! {MongoConstants::SET: doc};
-                        self.upsert(&collection, query_doc, update_doc).await?;
+                        self.update(&collection, query_doc, update_doc, true).await?;
                         rts.push((start_time.elapsed().as_millis() as u64, 1));
                     }
                 }
@@ -118,23 +128,38 @@ impl MongoSinker {
                         }
                     };
 
-                    let update_doc = {
-                        let after = row_data.require_after_mut()?;
-                        if let Some(ColValue::MongoDoc(doc)) = after.remove(MongoConstants::DOC) {
-                            Some(doc)
-                        } else if let Some(ColValue::MongoDoc(doc)) =
-                            after.remove(MongoConstants::DIFF_DOC)
-                        {
-                            // for Update row_data from oplog (NOT change stream), after contains diff_doc instead of doc
-                            Some(doc)
-                        } else {
-                            None
-                        }
+                    let after = row_data.require_after_mut()?;
+                    // an Update from a change stream (or a replacement style op_log entry) carries
+                    // the whole new doc, one from an op_log diff carries operators to apply
+                    let update = if let Some(ColValue::MongoDoc(doc)) =
+                        after.remove(MongoConstants::DOC)
+                    {
+                        Some((doc, MongoUpdateKind::Replacement))
+                    } else if let Some(ColValue::MongoDoc(doc)) =
+                        after.remove(MongoConstants::DIFF_DOC)
+                    {
+                        Some((doc, MongoUpdateKind::Diff))
+                    } else if let Some(ColValue::MongoDoc(doc)) =
+                        after.remove(MongoConstants::DIFF_DOC_NO_UPSERT)
+                    {
+                        Some((doc, MongoUpdateKind::DiffWithoutUpsert))
+                    } else {
+                        None
                     };
 
-                    if query_doc.is_some() && update_doc.is_some() {
-                        self.upsert(&collection, query_doc.unwrap(), update_doc.unwrap())
-                            .await?;
+                    if let (Some(query_doc), Some((update_doc, kind))) = (query_doc, update) {
+                        match kind {
+                            MongoUpdateKind::Replacement => {
+                                self.replace(&collection, query_doc, update_doc).await?
+                            }
+                            MongoUpdateKind::Diff => {
+                                self.update(&collection, query_doc, update_doc, true).await?
+                            }
+                            MongoUpdateKind::DiffWithoutUpsert => {
+                                self.update(&collection, query_doc, update_doc, false)
+                                    .await?
+                            }
+                        }
                         rts.push((start_time.elapsed().as_millis() as u64, 1));
                     }
                 }
@@ -236,13 +261,27 @@ impl MongoSinker {
         BaseSinker::update_batch_monitor(&self.monitor, batch_size as u64, data_size as u64).await
     }
 
-    async fn upsert(
+    async fn replace(
+        &mut self,
+        collection: &Collection<Document>,
+        query_doc: Document,
+        replacement: Document,
+    ) -> anyhow::Result<()> {
+        let options = ReplaceOptions::builder().upsert(true).build();
+        collection
+            .replace_one(query_doc, replacement, Some(options))
+            .await?;
+        Ok(())
+    }
+
+    async fn update(
         &mut self,
         collection: &Collection<Document>,
         query_doc: Document,
         update_doc: Document,
+        upsert: bool,
     ) -> anyhow::Result<()> {
-        let options = UpdateOptions::builder().upsert(true).build();
+        let options = UpdateOptions::builder().upsert(upsert).build();
         collection
             .update_one(query_doc, update_doc, Some(options))
             .await?;

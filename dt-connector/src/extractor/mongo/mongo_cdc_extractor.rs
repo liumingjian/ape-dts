@@ -6,9 +6,15 @@ use serde_json::json;
 use tokio::{sync::Mutex, time::Instant};
 
 use crate::{
-    extractor::{base_extractor::BaseExtractor, resumer::recovery::Recovery},
+    extractor::{
+        base_extractor::BaseExtractor,
+        mongo::mongo_diff::{MongoDiff, MongoUpdate},
+        resumer::recovery::Recovery,
+    },
     Extractor,
 };
+use anyhow::{bail, Context};
+use futures::StreamExt;
 use tokio_util::sync::CancellationToken;
 
 use dt_common::{
@@ -17,7 +23,10 @@ use dt_common::{
     meta::{
         col_value::ColValue,
         dt_data::DtData,
-        mongo::{mongo_cdc_source::MongoCdcSource, mongo_constant::MongoConstants},
+        mongo::{
+            mongo_cdc_source::MongoCdcSource, mongo_constant::MongoConstants,
+            mongo_diff_policy::MongoUnsupportedDiffPolicy,
+        },
         position::Position,
         row_data::RowData,
         row_type::RowType,
@@ -29,7 +38,7 @@ use dt_common::{
 };
 use mongodb::{
     bson::{doc, Bson, Document, Timestamp},
-    change_stream::event::{OperationType, ResumeToken},
+    change_stream::event::{OperationType, ResumeToken, UpdateDescription},
     options::{ChangeStreamOptions, FullDocumentBeforeChangeType, FullDocumentType, UpdateOptions},
     Client,
 };
@@ -46,6 +55,7 @@ pub struct MongoCdcExtractor {
     pub heartbeat_tb: String,
     pub syncer: Arc<Mutex<Syncer>>,
     pub recovery: Option<Arc<dyn Recovery + Send + Sync>>,
+    pub on_unsupported_diff: MongoUnsupportedDiffPolicy,
 }
 
 #[async_trait]
@@ -141,67 +151,59 @@ impl MongoCdcExtractor {
                 "i" => {
                     after.insert(
                         MongoConstants::DOC.to_string(),
-                        ColValue::MongoDoc(o.unwrap().as_document().unwrap().clone()),
+                        ColValue::MongoDoc(Self::require_doc(&o, "o")?.clone()),
                     );
                 }
                 "u" => {
                     row_type = RowType::Update;
-                    // for update op log, doc.o contains only diff instead of full doc
-                    let after_doc = o.unwrap().as_document().unwrap();
+                    // for update op log, doc.o contains only the diff instead of the full doc
                     // refer: https://www.mongodb.com/community/forums/t/oplog-update-entry-without-set-and-unset/171771
                     // https://www.mongodb.com/docs/manual/reference/operator/update/#update-operators-1
-                    // in MongoDB 4.4 and earlier, after_doc contains $set with all new document fields,
-                    // after that, after_doc contains diff with only changed fields.
-                    let diff_doc = if let Some(doc) = after_doc.get("diff") {
-                        let doc = doc.as_document().unwrap();
-                        if let Some(i_doc) = doc.get("i") {
-                            doc! {MongoConstants::SET: i_doc.as_document().unwrap()}
-                        } else if let Some(u_doc) = doc.get("u") {
-                            doc! {MongoConstants::SET: u_doc.as_document().unwrap()}
-                        } else if let Some(d_doc) = doc.get("d") {
-                            doc! {MongoConstants::UNSET: d_doc.as_document().unwrap()}
-                        } else {
-                            doc! {}
-                        }
-                    } else if let Some(set_doc) = after_doc.get(MongoConstants::SET) {
-                        doc! {MongoConstants::SET: set_doc.as_document().unwrap()}
-                    } else if let Some(unset_doc) = after_doc.get(MongoConstants::UNSET) {
-                        doc! {MongoConstants::UNSET: unset_doc.as_document().unwrap()}
-                    } else {
-                        doc! {}
-                    };
+                    // in MongoDB 4.2 and earlier, o contains $set / $unset with the changed fields,
+                    // from 4.4 on, o contains a `$v: 2` diff tree which needs expanding.
+                    let o_doc = Self::require_doc(&o, "o")?;
+                    let o2_doc = Self::require_doc(&o2, "o2")?;
 
-                    if diff_doc.is_empty() {
-                        log_error!(
-                            "update op_log is neither $set nor $unset, ignore, o2: {:?}, o: {:?}",
-                            o2,
-                            o
-                        );
-                        continue;
+                    match MongoDiff::parse_update(o_doc) {
+                        Ok(MongoUpdate::Diff(diff_doc)) => {
+                            after.insert(
+                                MongoConstants::DIFF_DOC.to_string(),
+                                ColValue::MongoDoc(diff_doc),
+                            );
+                        }
+
+                        // replacement style update: o is the new version of the whole doc
+                        Ok(MongoUpdate::Replace(new_doc)) => {
+                            after.insert(
+                                MongoConstants::DOC.to_string(),
+                                ColValue::MongoDoc(new_doc),
+                            );
+                        }
+
+                        Err(err) => {
+                            self.on_unsupported_diff(err, &format!("o2: {:?}, o: {:?}", o2, o))?;
+                            continue;
+                        }
                     }
 
-                    after.insert(
-                        MongoConstants::DIFF_DOC.to_string(),
-                        ColValue::MongoDoc(diff_doc.clone()),
-                    );
                     before.insert(
                         MongoConstants::DOC.to_string(),
-                        ColValue::MongoDoc(o2.unwrap().as_document().unwrap().clone()),
+                        ColValue::MongoDoc(o2_doc.clone()),
                     );
                 }
                 "d" => {
                     row_type = RowType::Delete;
                     before.insert(
                         MongoConstants::DOC.to_string(),
-                        ColValue::MongoDoc(o.unwrap().as_document().unwrap().clone()),
+                        ColValue::MongoDoc(Self::require_doc(&o, "o")?.clone()),
                     );
                 }
                 // TODO, DDL
                 "c" | "xi" | "xd" => {
                     // after version 7.0, the oplog generated by deleteMany is "c" instead of "d"
-                    let data = Self::extract_oplog_delete_many(&doc);
+                    let data = Self::extract_oplog_delete_many(&doc)?;
                     for (row_data, position) in data {
-                        self.push_row_to_buf(row_data, position).await.unwrap();
+                        self.push_row_to_buf(row_data, position).await?;
                     }
                     continue;
                 }
@@ -217,7 +219,7 @@ impl MongoCdcExtractor {
 
             // get db & tb
             let (row_data, position) =
-                Self::build_oplog_row_data(&ns, &ts, row_type, before, after);
+                Self::build_oplog_row_data(&ns, &ts, row_type, before, after)?;
             self.push_row_to_buf(row_data, position).await?;
         }
         Ok(())
@@ -231,7 +233,7 @@ impl MongoCdcExtractor {
         op.into()
     }
 
-    fn extract_oplog_delete_many(doc: &Document) -> Vec<(RowData, Position)> {
+    fn extract_oplog_delete_many(doc: &Document) -> anyhow::Result<Vec<(RowData, Position)>> {
         // Some(Document({
         //     "applyOps": Array([Document({
         //         "op": String("d"),
@@ -261,17 +263,17 @@ impl MongoCdcExtractor {
         let ts = doc.get("ts");
 
         if o.is_none() || o.unwrap().as_document().is_none() {
-            return data;
+            return Ok(data);
         }
 
         let doc = o.unwrap().as_document().unwrap();
         if doc.get("applyOps").is_none() {
-            return data;
+            return Ok(data);
         }
 
         let apply_ops = doc.get("applyOps").unwrap();
         if apply_ops.as_array().is_none() {
-            return data;
+            return Ok(data);
         }
 
         for ops in apply_ops.as_array().unwrap() {
@@ -291,7 +293,7 @@ impl MongoCdcExtractor {
             let mut before = HashMap::new();
             before.insert(
                 MongoConstants::DOC.to_string(),
-                ColValue::MongoDoc(o.unwrap().as_document().unwrap().clone()),
+                ColValue::MongoDoc(Self::require_doc(&o, "applyOps.o")?.clone()),
             );
 
             data.push(Self::build_oplog_row_data(
@@ -300,9 +302,9 @@ impl MongoCdcExtractor {
                 RowType::Delete,
                 before,
                 HashMap::new(),
-            ));
+            )?);
         }
-        data
+        Ok(data)
     }
 
     fn build_oplog_row_data(
@@ -311,9 +313,13 @@ impl MongoCdcExtractor {
         row_type: RowType,
         before: HashMap<String, ColValue>,
         after: HashMap<String, ColValue>,
-    ) -> (RowData, Position) {
-        let ts = ts.unwrap().as_timestamp().unwrap();
-        let ns = ns.unwrap().as_str().unwrap();
+    ) -> anyhow::Result<(RowData, Position)> {
+        let ts = ts
+            .and_then(|v| v.as_timestamp())
+            .context("op_log entry has no valid `ts`")?;
+        let ns = ns
+            .and_then(|v| v.as_str())
+            .context("op_log entry has no valid `ns`")?;
 
         // get db & tb
         let tokens: Vec<&str> = ns.split('.').collect();
@@ -333,7 +339,7 @@ impl MongoCdcExtractor {
             timestamp: Position::format_timestamp_millis(ts.time as i64 * 1000),
         };
         let row_data = RowData::new(db, tb, row_type, before, after);
-        (row_data, position)
+        Ok((row_data, position))
     }
 
     async fn extract_change_stream(&mut self) -> anyhow::Result<()> {
@@ -355,78 +361,188 @@ impl MongoCdcExtractor {
             .build();
 
         let mut change_stream = self.mongo_client.watch(None, stream_options).await?;
-        loop {
-            let result = change_stream.next_if_any().await?;
-            if let Some(doc) = result {
-                let resume_token = doc.id;
-                let position = if let Some(operation_time) = doc.cluster_time {
-                    Position::MongoCdc {
-                        resume_token: json!(resume_token).to_string(),
-                        operation_time: operation_time.time,
-                        timestamp: Position::format_timestamp_millis(
-                            operation_time.time as i64 * 1000,
-                        ),
-                    }
-                } else {
-                    Position::MongoCdc {
-                        resume_token: json!(resume_token).to_string(),
-                        operation_time: 0,
-                        timestamp: String::new(),
-                    }
-                };
+        let cancel_token = self.base_extractor.cancel_token.clone();
 
-                let (mut db, mut tb) = (String::new(), String::new());
-                if let Some(ns) = doc.ns {
-                    db = ns.db.clone();
-                    if let Some(coll) = ns.coll {
-                        tb = coll.clone();
-                    }
+        loop {
+            // await the next event instead of polling with next_if_any, which used to spin
+            // a whole cpu core on an idle stream
+            let next = tokio::select! {
+                biased;
+                _ = cancel_token.cancelled() => return Ok(()),
+                next = change_stream.next() => next,
+            };
+
+            let doc = match next {
+                Some(result) => result?,
+                // the stream ended, nothing more to extract
+                None => return Ok(()),
+            };
+
+            let resume_token = doc.id;
+            let position = if let Some(operation_time) = doc.cluster_time {
+                Position::MongoCdc {
+                    resume_token: json!(resume_token).to_string(),
+                    operation_time: operation_time.time,
+                    timestamp: Position::format_timestamp_millis(operation_time.time as i64 * 1000),
+                }
+            } else {
+                Position::MongoCdc {
+                    resume_token: json!(resume_token).to_string(),
+                    operation_time: 0,
+                    timestamp: String::new(),
+                }
+            };
+
+            let (mut db, mut tb) = (String::new(), String::new());
+            if let Some(ns) = doc.ns {
+                db = ns.db.clone();
+                if let Some(coll) = ns.coll {
+                    tb = coll.clone();
+                }
+            }
+
+            let mut row_type = RowType::Insert;
+            let mut before = HashMap::new();
+            let mut after = HashMap::new();
+
+            match doc.operation_type {
+                OperationType::Insert => {
+                    let full_document = doc
+                        .full_document
+                        .context("change stream insert event has no fullDocument")?;
+                    after.insert(
+                        MongoConstants::DOC.to_string(),
+                        ColValue::MongoDoc(full_document),
+                    );
                 }
 
-                let mut row_type = RowType::Insert;
-                let mut before = HashMap::new();
-                let mut after = HashMap::new();
+                OperationType::Delete => {
+                    row_type = RowType::Delete;
+                    let document_key = doc
+                        .document_key
+                        .context("change stream delete event has no documentKey")?;
+                    before.insert(
+                        MongoConstants::DOC.to_string(),
+                        ColValue::MongoDoc(document_key),
+                    );
+                }
 
-                match doc.operation_type {
-                    OperationType::Insert => {
-                        after.insert(
-                            MongoConstants::DOC.to_string(),
-                            ColValue::MongoDoc(doc.full_document.unwrap()),
+                OperationType::Update | OperationType::Replace => {
+                    row_type = RowType::Update;
+                    let document_key = doc
+                        .document_key
+                        .context("change stream update event has no documentKey")?;
+
+                    if let Some(document) = doc.full_document {
+                        after.insert(MongoConstants::DOC.to_string(), ColValue::MongoDoc(document));
+                    } else if doc.operation_type == OperationType::Replace {
+                        // a replace event carries no updateDescription, and the post image is
+                        // missing only when the doc was deleted right after: the delete event
+                        // that follows brings the target back in sync
+                        log_warn!(
+                            "change stream replace event has no fullDocument, the doc is already gone, skipping it, document_key: {:?}",
+                            document_key
                         );
-                    }
-
-                    OperationType::Delete => {
-                        row_type = RowType::Delete;
-                        before.insert(
-                            MongoConstants::DOC.to_string(),
-                            ColValue::MongoDoc(doc.document_key.unwrap()),
-                        );
-                    }
-
-                    OperationType::Update | OperationType::Replace => {
-                        row_type = RowType::Update;
-                        if let Some(document) = doc.full_document {
-                            before.insert(
-                                MongoConstants::DOC.to_string(),
-                                ColValue::MongoDoc(doc.document_key.unwrap()),
-                            );
-                            after.insert(
-                                MongoConstants::DOC.to_string(),
-                                ColValue::MongoDoc(document),
-                            );
+                        continue;
+                    } else {
+                        // the post image is unavailable, typically because the doc was deleted
+                        // before the update lookup ran, fall back to the update description,
+                        // which already carries dotted paths. it must NOT upsert: the doc no
+                        // longer exists on the source, recreating it from the changed fields
+                        // alone would leave a ghost on the target
+                        match Self::change_stream_diff_doc(&doc.update_description) {
+                            Ok(diff_doc) => {
+                                after.insert(
+                                    MongoConstants::DIFF_DOC_NO_UPSERT.to_string(),
+                                    ColValue::MongoDoc(diff_doc),
+                                );
+                            }
+                            Err(err) => {
+                                self.on_unsupported_diff(
+                                    err,
+                                    &format!("document_key: {:?}", document_key),
+                                )?;
+                                continue;
+                            }
                         }
                     }
 
-                    // TODO, heartbeat and DDL
-                    _ => {
-                        continue;
-                    }
+                    before.insert(
+                        MongoConstants::DOC.to_string(),
+                        ColValue::MongoDoc(document_key),
+                    );
                 }
 
-                let row_data = RowData::new(db, tb, row_type, Some(before), Some(after));
-                self.push_row_to_buf(row_data, position).await?;
+                // TODO, heartbeat and DDL
+                _ => {
+                    continue;
+                }
+            }
+
+            let row_data = RowData::new(db, tb, row_type, Some(before), Some(after));
+            self.push_row_to_buf(row_data, position).await?;
+        }
+    }
+
+    /// Builds a `{$set: .., $unset: ..}` update out of a change stream `updateDescription`,
+    /// used when the post image of an update is not available.
+    fn change_stream_diff_doc(
+        update_description: &Option<UpdateDescription>,
+    ) -> anyhow::Result<Document> {
+        let update_description = match update_description {
+            Some(update_description) => update_description,
+            None => bail!("change stream update event has neither fullDocument nor updateDescription"),
+        };
+
+        if let Some(truncated_arrays) = &update_description.truncated_arrays {
+            if !truncated_arrays.is_empty() {
+                bail!(
+                    "change stream update event truncated arrays {:?}, which can not be replayed without the post image",
+                    truncated_arrays
+                );
             }
         }
+
+        let mut update = Document::new();
+        if !update_description.updated_fields.is_empty() {
+            update.insert(
+                MongoConstants::SET,
+                update_description.updated_fields.clone(),
+            );
+        }
+        if !update_description.removed_fields.is_empty() {
+            let mut unset = Document::new();
+            for field in update_description.removed_fields.iter() {
+                unset.insert(field, "");
+            }
+            update.insert(MongoConstants::UNSET, unset);
+        }
+
+        if update.is_empty() {
+            bail!("change stream update event has an empty updateDescription");
+        }
+        Ok(update)
+    }
+
+    /// Applies the configured policy to an update we can not replay: fail the task by default,
+    /// so the target does not silently diverge from the source.
+    fn on_unsupported_diff(&self, err: anyhow::Error, context: &str) -> anyhow::Result<()> {
+        match self.on_unsupported_diff {
+            MongoUnsupportedDiffPolicy::Error => Err(err.context(format!(
+                "unsupported mongo update, set [extractor] on_unsupported_diff=skip to ignore it, {}",
+                context
+            ))),
+            MongoUnsupportedDiffPolicy::Skip => {
+                log_error!("skipping unsupported mongo update: {}, {}", err, context);
+                Ok(())
+            }
+        }
+    }
+
+    fn require_doc<'a>(value: &'a Option<&Bson>, field: &str) -> anyhow::Result<&'a Document> {
+        value
+            .and_then(|v| v.as_document())
+            .with_context(|| format!("op_log entry has no valid `{}`", field))
     }
 
     async fn push_row_to_buf(
@@ -483,9 +599,12 @@ impl MongoCdcExtractor {
             let mut start_time = Instant::now();
             while !cancel_token.is_cancelled() {
                 if start_time.elapsed().as_secs() >= heartbeat_interval_secs {
-                    Self::heartbeat(&app_name, &db_tb[0], &db_tb[1], &syncer, &mongo_client)
-                        .await
-                        .unwrap();
+                    if let Err(err) =
+                        Self::heartbeat(&app_name, &db_tb[0], &db_tb[1], &syncer, &mongo_client)
+                            .await
+                    {
+                        log_error!("heartbeat failed: {}", err);
+                    }
                     start_time = Instant::now();
                 }
                 // sleep interruptibly, so shutdown is not delayed by a full heartbeat interval

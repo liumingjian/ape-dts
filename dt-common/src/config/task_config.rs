@@ -567,6 +567,8 @@ impl TaskConfig {
                         source: loader.get_optional(EXTRACTOR, "source")?,
                         heartbeat_interval_secs,
                         heartbeat_tb,
+                        on_unsupported_diff: loader
+                            .get_optional(EXTRACTOR, "on_unsupported_diff")?,
                     },
 
                     ExtractType::CheckLog => ExtractorConfig::MongoCheck {

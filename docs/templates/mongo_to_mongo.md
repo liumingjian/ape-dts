@@ -88,6 +88,7 @@ log4rs_file=./log4rs.yaml
 | :-------- | :-------- | :-------- | :-------- |
 | source | op_log / change_stream, change_stream is recommended if the source mongo version is 6.0+ | op_log | change_stream |
 | start_timestamp | the starting UTC timestamp to pull op logs from | 1728525445 | 0, which means from newest |
+| on_unsupported_diff | what to do with an update that can not be replayed on the target, e.g. an array that was both truncated and edited in one update, whose replay needs the whole array the op log does not carry. error: fail the task; skip: log the update and move on, letting the target diverge from the source | skip | error |
 
 # CDC, by change_stream
 ```
@@ -135,6 +136,7 @@ log4rs_file=./log4rs.yaml
 | Config | Description | Example | Default |
 | :-------- | :-------- | :-------- | :-------- |
 | resume_token | the resume_token to pull change stream from | - | empty, which means from newest |
+| on_unsupported_diff | same as in op_log mode, it applies when an update event carries neither a post image nor a replayable updateDescription | skip | error |
 
 # Data check
 ```

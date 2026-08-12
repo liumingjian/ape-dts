@@ -13,7 +13,8 @@ use dt_common::{
     },
     meta::{
         avro::avro_converter::AvroConverter, dt_queue::DtQueue,
-        mongo::mongo_cdc_source::MongoCdcSource, mysql::mysql_meta_manager::MysqlMetaManager,
+        mongo::{mongo_cdc_source::MongoCdcSource, mongo_diff_policy::MongoUnsupportedDiffPolicy},
+        mysql::mysql_meta_manager::MysqlMetaManager,
         pg::pg_meta_manager::PgMetaManager, rdb_meta_manager::RdbMetaManager,
         redis::redis_statistic_type::RedisStatisticType, syncer::Syncer,
     },
@@ -484,6 +485,7 @@ impl ExtractorUtil {
                 source,
                 heartbeat_interval_secs,
                 heartbeat_tb,
+                on_unsupported_diff,
                 ..
             } => {
                 let mongo_client = match extractor_client {
@@ -491,6 +493,9 @@ impl ExtractorUtil {
                     _ => bail!("connection pool not found"),
                 };
                 let extractor = MongoCdcExtractor {
+                    on_unsupported_diff: MongoUnsupportedDiffPolicy::from_str(
+                        &on_unsupported_diff,
+                    )?,
                     filter,
                     resume_token,
                     start_timestamp,
