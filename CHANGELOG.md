@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Key data check results on id column values so rows carrying a NULL id are no longer collapsed onto one entry.
 - Validate task concurrency settings, report malformed INI files without panicking, and reject oversized buffer items without blocking forever.
 - Prevent DtQueue byte-accounting races from permanently blocking producers.
 - Preserve Oracle LogMiner row cursor ordering across empty polls and improve GaussDBOracle CDC keepalive behavior.
