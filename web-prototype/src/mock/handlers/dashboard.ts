@@ -33,7 +33,7 @@ export const dashboardHandlers = [
     const all = allTasks();
 
     const statusCounts: Record<TaskStatus, number> = {
-      draft: 0, ready: 0, running: 0, paused: 0, stopping: 0, stopped: 0, failed: 0, completed: 0, creating: 0, pending: 0,
+      draft: 0, ready: 0, running: 0, pausing: 0, paused: 0, stopping: 0, stopped: 0, failed: 0, completed: 0, creating: 0, pending: 0,
     };
     const engineCounts: Partial<Record<EngineType, number>> = {};
     for (const t of all) {

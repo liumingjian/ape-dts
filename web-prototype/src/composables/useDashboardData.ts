@@ -83,6 +83,9 @@ const STATUS_MAP: Record<string, TaskStatus> = {
   ready: 'pending',
   defined: 'pending',
   running: 'running',
+  // The engine is still alive while it drains, so a pausing task counts as
+  // running in the dashboard's coarse buckets (ADR 0004).
+  pausing: 'running',
   paused: 'paused',
   stopping: 'running',
   stopped: 'completed',
@@ -195,7 +198,7 @@ export function useDashboardData() {
         const runs = await api.get<{ items: RunRow[] }>(`/tasks/${t.id}/runs?page=1&size=1`);
         const items = runs.items ?? [];
         const active = items.find(
-          (r) => r.status === 'running' || r.status === 'paused',
+          (r) => r.status === 'running' || r.status === 'pausing' || r.status === 'paused',
         );
         if (!active) continue;
         runId = active.id;

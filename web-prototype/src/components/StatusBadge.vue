@@ -8,10 +8,12 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
-import type { TaskStatus } from '@/types/domain';
+import type { RunStatus, TaskStatus } from '@/types/domain';
 
+// Runs are badged too (task detail's history table), and their status set is
+// not the task's — `orphaned` has no task counterpart.
 const props = withDefaults(defineProps<{
-  status: TaskStatus;
+  status: TaskStatus | RunStatus;
   label?: string;
 }>(), {});
 
@@ -55,6 +57,18 @@ const labelText = computed(() => props.label ?? t(`task.status.${props.status}`)
   background: var(--color-warning-soft);
   color: var(--color-warning);
   border-color: color-mix(in oklab, var(--color-warning) 25%, transparent);
+}
+/* Transient states: warning-toned like `paused`, but with the running dot's
+   pulse so "in progress" reads without the label. */
+.status-badge--pausing,
+.status-badge--stopping {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+  border-color: color-mix(in oklab, var(--color-warning) 25%, transparent);
+}
+.status-badge--pausing .status-badge__dot,
+.status-badge--stopping .status-badge__dot {
+  animation: pulse 1.8s infinite var(--ease-soft);
 }
 .status-badge--failed {
   background: var(--color-danger-soft);

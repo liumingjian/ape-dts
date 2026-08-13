@@ -229,11 +229,11 @@ const hasTimeseries = computed(() => (summary.value?.rpsSeries?.length ?? 0) > 0
 /* ---- ECharts options ---- */
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
-  draft: '草稿', ready: '就绪', running: '运行中', paused: '已暂停', stopping: '停止中', stopped: '已停止', failed: '错误', completed: '已完成',
+  draft: '草稿', ready: '就绪', running: '运行中', pausing: '暂停中', paused: '已暂停', stopping: '停止中', stopped: '已停止', failed: '错误', completed: '已完成',
   creating: '创建中', pending: '等待',
 };
 const STATUS_COLORS: Record<TaskStatus, string> = {
-  draft: '#94A3B8', ready: '#67E8F9', running: '#10B981', paused: '#F59E0B', stopping: '#F97316', stopped: '#64748B', failed: '#EF4444', completed: '#0EA5E9',
+  draft: '#94A3B8', ready: '#67E8F9', running: '#10B981', pausing: '#FBBF24', paused: '#F59E0B', stopping: '#F97316', stopped: '#64748B', failed: '#EF4444', completed: '#0EA5E9',
   creating: '#94A3B8', pending: '#CBD5E1',
 };
 

@@ -352,15 +352,15 @@
                   {{ t('task.action.view') }}
                 </el-button>
                 <el-button
-                  v-if="can('task.pause') && row.status === 'running'"
+                  v-if="can('task.pause') && pauseAvailable(row)"
                   link
                   type="warning"
-                  @click="doAction(row, 'pause')"
+                  @click="confirmPause(row)"
                 >
                   {{ t('task.action.pause') }}
                 </el-button>
                 <el-button
-                  v-if="can('task.resume') && (row.status === 'paused' || row.status === 'failed')"
+                  v-if="can('task.resume') && resumeAvailable(row)"
                   link
                   type="success"
                   @click="doAction(row, 'resume')"
@@ -368,7 +368,7 @@
                   {{ t('task.action.resume') }}
                 </el-button>
                 <el-button
-                  v-if="can('task.start') && (row.status === 'draft' || row.status === 'ready' || row.status === 'stopped' || row.status === 'pending' || row.status === 'creating')"
+                  v-if="can('task.start') && (row.status === 'draft' || row.status === 'ready' || row.status === 'stopped' || row.status === 'failed' || row.status === 'pending' || row.status === 'creating')"
                   link
                   type="success"
                   @click="doAction(row, 'start')"
@@ -452,6 +452,7 @@ import type {
 import { mapApiTask } from '@/types/domain';
 import { ENGINE_LABELS } from '@/types/domain';
 import { categoryForView, createPathForView, detailPathForView, isMigrationMode } from '@/utils/migrationMode';
+import { canPause, canResume } from '@/utils/taskLifecycle';
 
 type ViewKind = TaskViewKind;
 
@@ -727,7 +728,9 @@ async function doAction(row: Task, action: string) {
 
 function mapToastKey(action: string): string {
   if (action === 'resume' || action === 'start') return 'resumed';
-  if (action === 'pause') return 'paused';
+  // Pause is accepted (202) while the engine is still draining; it is not
+  // paused until the supervisor sees the exit code (ADR 0004).
+  if (action === 'pause') return 'pausing';
   if (action === 'stop') return 'stopped';
   return 'started';
 }
@@ -750,6 +753,26 @@ function onRowMore(row: Task, cmd: string) {
   } else if (cmd === 'delete') {
     confirmDelete(row);
   }
+}
+
+/**
+ * Pause is offered only where the backend accepts it: a running task whose
+ * kind has a resumable position. See `@/utils/taskLifecycle`.
+ */
+function pauseAvailable(row: Task): boolean {
+  return canPause(row);
+}
+
+function resumeAvailable(row: Task): boolean {
+  return canResume(row);
+}
+
+function confirmPause(row: Task) {
+  ElMessageBox.confirm(
+    t('taskList.confirm.pause', { name: row.name }),
+    t('task.action.pause'),
+    { type: 'warning', confirmButtonText: t('common.confirm'), cancelButtonText: t('common.cancel') },
+  ).then(() => doAction(row, 'pause')).catch(() => {});
 }
 
 function confirmStop(row: Task) {
@@ -782,8 +805,19 @@ async function onBatch(cmd: string) {
   };
   const endpoint = lifecycleMap[cmd];
   if (!endpoint) return;
+  // Batch actions run over a mixed selection; sending pause to a check task or
+  // resume to a running one would just collect 409s.
+  const targets = cmd === 'pause'
+    ? selected.value.filter((row) => pauseAvailable(row))
+    : cmd === 'resume'
+      ? selected.value.filter((row) => resumeAvailable(row))
+      : selected.value;
+  if (!targets.length) {
+    ElMessage.warning(t('taskList.toast.batchNoTarget'));
+    return;
+  }
   await Promise.all(
-    selected.value.map((row) => api.post(`/tasks/${row.id}/${endpoint}`)),
+    targets.map((row) => api.post(`/tasks/${row.id}/${endpoint}`)),
   );
   ElMessage.success(t(`taskList.toast.action.${mapToastKey(cmd)}`));
   loadList();

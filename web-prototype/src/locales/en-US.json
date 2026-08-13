@@ -171,7 +171,9 @@
       "failed": "Failed",
       "completed": "Completed",
       "creating": "Creating",
-      "pending": "Pending"
+      "pending": "Pending",
+      "pausing": "Pausing",
+      "orphaned": "Orphaned"
     },
     "action": {
       "pause": "Pause",
@@ -190,6 +192,10 @@
       "check": "Check",
       "struct": "Struct Migration",
       "sync": "Sync task"
+    },
+    "pauseUnsupported": {
+      "kind": "Only snapshot and CDC tasks can be paused: check and struct tasks have no resumable position",
+      "twoPhase": "Managed snapshot+CDC tasks cannot be paused: the two-phase handover owns the start position"
     }
   },
   "taskDetail": {
@@ -261,6 +267,18 @@
       "stop": "Stop",
       "edit": "Edit",
       "delete": "Delete"
+    },
+    "confirm": {
+      "pause": "Pause task \"{name}\"? The engine stops gracefully (about 8s), its position is kept, and the task can be resumed from there.",
+      "pauseTitle": "Pause task",
+      "resume": "Resume task \"{name}\" from its paused position? A new Run starts from where the last one stopped.",
+      "resumeTitle": "Resume task"
+    },
+    "toast": {
+      "pausing": "Pause requested: the engine is stopping gracefully and will show as Paused in about 8s.",
+      "resumed": "Resumed from the paused position (a new Run was started).",
+      "done": "Done",
+      "failed": "Action failed"
     }
   },
   "wizard": {
@@ -1076,15 +1094,17 @@
     "confirm": {
       "delete": "Delete task \"{name}\"? This cannot be undone.",
       "stop": "Stop task \"{name}\"?",
-      "batchDelete": "Delete {n} selected tasks? This cannot be undone."
+      "batchDelete": "Delete {n} selected tasks? This cannot be undone.",
+      "pause": "Pause task \"{name}\"? The engine stops gracefully (about 8s), its position is kept, and the task can be resumed from there."
     },
     "toast": {
       "deleted": "Task deleted",
       "action": {
         "paused": "Paused",
-        "resumed": "Resumed",
+        "resumed": "Resumed from the paused position (a new Run was started).",
         "stopped": "Stopped",
-        "started": "Started"
+        "started": "Started",
+        "pausing": "Pause requested: the engine is stopping gracefully and will show as Paused in about 8s."
       },
       "exported": "Task list exported as JSON",
       "importHint": "Demo: please upload an ape-dts task.ini bundle",
@@ -1092,7 +1112,8 @@
       "importedPartial": "Import finished: {ok} succeeded, {fail} failed",
       "importFailed": "Import failed",
       "loadFailed": "Failed to load tasks",
-      "actionFailed": "Action failed"
+      "actionFailed": "Action failed",
+      "batchNoTarget": "None of the selected tasks can take this action."
     },
     "cols": {
       "manage": "Columns",
