@@ -127,7 +127,8 @@ impl MongoDiff {
                 // inserted / updated sub fields
                 "i" | "u" => {
                     for (field, new_value) in Self::as_document(value, key)?.iter() {
-                        acc.set.insert(Self::join(prefix, field)?, new_value.clone());
+                        acc.set
+                            .insert(Self::join(prefix, field)?, new_value.clone());
                     }
                 }
 

@@ -434,7 +434,10 @@ impl MongoCdcExtractor {
                         .context("change stream update event has no documentKey")?;
 
                     if let Some(document) = doc.full_document {
-                        after.insert(MongoConstants::DOC.to_string(), ColValue::MongoDoc(document));
+                        after.insert(
+                            MongoConstants::DOC.to_string(),
+                            ColValue::MongoDoc(document),
+                        );
                     } else if doc.operation_type == OperationType::Replace {
                         // a replace event carries no updateDescription, and the post image is
                         // missing only when the doc was deleted right after: the delete event
@@ -491,7 +494,9 @@ impl MongoCdcExtractor {
     ) -> anyhow::Result<Document> {
         let update_description = match update_description {
             Some(update_description) => update_description,
-            None => bail!("change stream update event has neither fullDocument nor updateDescription"),
+            None => {
+                bail!("change stream update event has neither fullDocument nor updateDescription")
+            }
         };
 
         if let Some(truncated_arrays) = &update_description.truncated_arrays {

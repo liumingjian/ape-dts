@@ -159,4 +159,4 @@ ifeq (, $(shell which typos 2>/dev/null))
 	@echo "typos not found, installing..."
 	cargo install typos-cli
 endif
-	typos --exclude "*.sql"
+	typos

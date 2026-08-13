@@ -1,0 +1,88 @@
+# cargo-deny configuration.
+#
+# Scope in CI (see .github/workflows/ci.yml):
+#   * `bans` + `sources` are BLOCKING — they are drift gates and pass today.
+#   * `advisories` is REPORT-ONLY for now. The tree currently carries ~26 open
+#     RUSTSEC advisories, nearly all of them reached through the vendored
+#     sqlx 0.6 tree (async-std / ring <0.17 / rustls 0.21 / webpki) and
+#     mongodb 2.x. Registering all of them as "accepted" would be dishonest,
+#     and blocking on them would leave CI permanently red — so the step runs
+#     `continue-on-error` and the backlog is cleared by the vendor-upgrade
+#     work. Flip it to blocking once that count reaches the ignore list below.
+#   * `licenses` is not gated at all — the vendored trees have never been
+#     license-audited. Separate work.
+
+[graph]
+all-features = true
+
+# ---------------------------------------------------------------------------
+# Advisories
+# ---------------------------------------------------------------------------
+# The three entries below are the advisories that have actually been assessed
+# (issue #23 traced each to its real source). They stay registered so the
+# report-only run stays readable, and so they are already accounted for when
+# this check is flipped to blocking. Do not add an ignore without a follow-up
+# note naming the crate it comes from and what clears it.
+[advisories]
+# 4 crates in the lock are yanked upstream (core2, lz4_flex, slab, spin), all
+# transitively via the vendored trees — warn until those are refreshed.
+yanked = "warn"
+ignore = [
+    # RUSTSEC-2023-0071 — Marvin attack (timing sidechannel) in `rsa` 0.6.1,
+    # pulled in via sqlx-core/sqlx-mysql. Upstream has published NO fixed
+    # version of `rsa` at all, so there is nothing to upgrade to; this is a
+    # long-lived registration, not a temporary one. Only reachable when
+    # connecting to MySQL over the RSA-encrypted-password auth path.
+    # https://rustsec.org/advisories/RUSTSEC-2023-0071
+    { id = "RUSTSEC-2023-0071", reason = "rsa 0.6.1: upstream has no fixed release; long-term registration" },
+
+    # RUSTSEC-2024-0421 — `idna` 0.2.3 punycode confusion. Reached via
+    # mongodb 2.5 (NOT via the reqwest fork — see the answer on issue #23,
+    # which corrected that earlier assumption). Eliminated by upgrading the
+    # `mongodb` crate; tracked separately.
+    # https://rustsec.org/advisories/RUSTSEC-2024-0421
+    { id = "RUSTSEC-2024-0421", reason = "idna 0.2.3 comes from mongodb 2.5; clears when the mongodb crate is upgraded" },
+
+    # RUSTSEC-2026-0009 — `protobuf` 2.28.0 denial of service via stack
+    # exhaustion on untrusted input. Reached only through orc-format (ORC file
+    # writing). Clears when apecloud/orc-format moves to protobuf 3.x.
+    # https://rustsec.org/advisories/RUSTSEC-2026-0009
+    { id = "RUSTSEC-2026-0009", reason = "protobuf 2.28.0 comes from orc-format; awaiting an orc-format bump" },
+]
+
+# ---------------------------------------------------------------------------
+# Bans
+# ---------------------------------------------------------------------------
+# The tree-wide duplicate-version check stays off (this workspace has plenty of
+# benign duplicates). What we DO gate is the pair that actually costs us: two
+# major versions of hyper / reqwest linked into one binary. The currently known
+# old halves are skipped explicitly, so any NEW major-version split fails CI.
+[bans]
+multiple-versions = "allow"
+wildcards = "allow"
+
+deny = [
+    { crate = "hyper", deny-multiple-versions = true },
+    { crate = "reqwest", deny-multiple-versions = true },
+]
+
+skip = [
+    # hyper 0.14 / reqwest 0.11 arrive through the apecloud/reqwest fork
+    # (`redirect-with-sensitive-headers`). They disappear once that fork is
+    # retired or rebased onto reqwest 0.12 — see issue #23.
+    { crate = "hyper@0.14", reason = "pulled in by the apecloud/reqwest 0.11 fork" },
+    { crate = "reqwest@0.11", reason = "the apecloud/reqwest fork itself; retire the fork to clear this" },
+]
+
+# ---------------------------------------------------------------------------
+# Sources
+# ---------------------------------------------------------------------------
+# Only crates.io and apecloud-owned git repos. A dependency appearing from any
+# other host fails the build.
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+
+[sources.allow-org]
+github = ["apecloud"]

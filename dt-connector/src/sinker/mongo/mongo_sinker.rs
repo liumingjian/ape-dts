@@ -98,7 +98,8 @@ impl MongoSinker {
                             .context("mongo doc missing `_id`")?;
                         let query_doc = doc! {MongoConstants::ID: id};
                         let update_doc = doc! {MongoConstants::SET: doc};
-                        self.update(&collection, query_doc, update_doc, true).await?;
+                        self.update(&collection, query_doc, update_doc, true)
+                            .await?;
                         rts.push((start_time.elapsed().as_millis() as u64, 1));
                     }
                 }
@@ -131,21 +132,20 @@ impl MongoSinker {
                     let after = row_data.require_after_mut()?;
                     // an Update from a change stream (or a replacement style op_log entry) carries
                     // the whole new doc, one from an op_log diff carries operators to apply
-                    let update = if let Some(ColValue::MongoDoc(doc)) =
-                        after.remove(MongoConstants::DOC)
-                    {
-                        Some((doc, MongoUpdateKind::Replacement))
-                    } else if let Some(ColValue::MongoDoc(doc)) =
-                        after.remove(MongoConstants::DIFF_DOC)
-                    {
-                        Some((doc, MongoUpdateKind::Diff))
-                    } else if let Some(ColValue::MongoDoc(doc)) =
-                        after.remove(MongoConstants::DIFF_DOC_NO_UPSERT)
-                    {
-                        Some((doc, MongoUpdateKind::DiffWithoutUpsert))
-                    } else {
-                        None
-                    };
+                    let update =
+                        if let Some(ColValue::MongoDoc(doc)) = after.remove(MongoConstants::DOC) {
+                            Some((doc, MongoUpdateKind::Replacement))
+                        } else if let Some(ColValue::MongoDoc(doc)) =
+                            after.remove(MongoConstants::DIFF_DOC)
+                        {
+                            Some((doc, MongoUpdateKind::Diff))
+                        } else if let Some(ColValue::MongoDoc(doc)) =
+                            after.remove(MongoConstants::DIFF_DOC_NO_UPSERT)
+                        {
+                            Some((doc, MongoUpdateKind::DiffWithoutUpsert))
+                        } else {
+                            None
+                        };
 
                     if let (Some(query_doc), Some((update_doc, kind))) = (query_doc, update) {
                         match kind {
@@ -153,7 +153,8 @@ impl MongoSinker {
                                 self.replace(&collection, query_doc, update_doc).await?
                             }
                             MongoUpdateKind::Diff => {
-                                self.update(&collection, query_doc, update_doc, true).await?
+                                self.update(&collection, query_doc, update_doc, true)
+                                    .await?
                             }
                             MongoUpdateKind::DiffWithoutUpsert => {
                                 self.update(&collection, query_doc, update_doc, false)

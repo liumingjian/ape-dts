@@ -115,9 +115,9 @@ pub fn restore_secrets(incoming: &mut serde_json::Value, stored: &serde_json::Va
                 };
                 match (new_child, old_child) {
                     (serde_json::Value::String(new_s), serde_json::Value::String(old_s)) => {
-                        if is_secret_key(key) && new_s == REDACTED {
-                            *new_s = old_s.clone();
-                        } else if is_url_key(key) && new_s.as_str() == redact_url(old_s) {
+                        if (is_secret_key(key) && new_s == REDACTED)
+                            || (is_url_key(key) && new_s.as_str() == redact_url(old_s))
+                        {
                             *new_s = old_s.clone();
                         }
                     }
