@@ -41,6 +41,12 @@ export type TaskStatus =
   | "draft"
   | "ready"
   | "running"
+  /**
+   * Engine signalled, still draining (~8s) before it lands in `paused`.
+   * Derived client-side from the active Run — the `tasks.status` column has no
+   * such value (see `utils/taskLifecycle.displayStatus`).
+   */
+  | "pausing"
   | "paused"
   | "stopping"
   | "stopped"
@@ -470,6 +476,8 @@ export type TableLoadState = {
 export type RunStatus =
   | "pending"
   | "running"
+  /** Pause requested: SIGTERM sent, the engine is draining (ADR 0004). */
+  | "pausing"
   | "paused"
   | "stopping"
   | "stopped"

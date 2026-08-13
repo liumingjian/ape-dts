@@ -171,7 +171,9 @@
       "failed": "错误",
       "completed": "已完成",
       "creating": "创建中",
-      "pending": "等待启动"
+      "pending": "等待启动",
+      "pausing": "暂停中",
+      "orphaned": "已失联"
     },
     "action": {
       "pause": "暂停",
@@ -324,6 +326,18 @@
       "stop": "终止",
       "edit": "编辑",
       "delete": "删除"
+    },
+    "confirm": {
+      "pause": "确定暂停任务「{name}」？引擎进程会优雅停止（约 8 秒），同步位点保留，之后可从该位点续传。",
+      "pauseTitle": "暂停任务",
+      "resume": "确定从暂停位点续传任务「{name}」？将新建一次运行，从上次暂停的位点继续。",
+      "resumeTitle": "续传任务"
+    },
+    "toast": {
+      "pausing": "暂停中：引擎正在优雅停止，约 8 秒后转为「已暂停」",
+      "resumed": "已从暂停位点续传（新建一次运行）",
+      "done": "操作成功",
+      "failed": "操作失败"
     }
   },
   "wizard": {
@@ -1076,15 +1090,17 @@
     "confirm": {
       "delete": "确定删除任务「{name}」？该操作不可撤销。",
       "stop": "确定终止任务「{name}」？",
-      "batchDelete": "确定删除已选中的 {n} 条任务？该操作不可撤销。"
+      "batchDelete": "确定删除已选中的 {n} 条任务？该操作不可撤销。",
+      "pause": "确定暂停任务「{name}」？引擎进程会优雅停止（约 8 秒），同步位点保留，之后可从该位点续传。"
     },
     "toast": {
       "deleted": "任务已删除",
       "action": {
         "paused": "已暂停",
-        "resumed": "已续传",
+        "resumed": "已从暂停位点续传（新建一次运行）",
         "stopped": "已终止",
-        "started": "已启动"
+        "started": "已启动",
+        "pausing": "暂停中：引擎正在优雅停止，约 8 秒后转为「已暂停」"
       },
       "exported": "已导出任务列表 JSON",
       "importHint": "演示环境：请上传符合 ape-dts 规范的 task.ini 批量包",
@@ -1092,7 +1108,9 @@
       "importedPartial": "导入完成：成功 {ok}，失败 {fail}",
       "importFailed": "导入失败",
       "loadFailed": "加载任务失败",
-      "actionFailed": "操作失败"
+      "actionFailed": "操作失败",
+      "batchNoTarget": "所选任务中没有可执行该操作的任务",
+      "batchResult": "{action}：成功 {ok}，失败 {failed}，跳过 {skipped}"
     },
     "cols": {
       "manage": "列",

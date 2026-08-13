@@ -8,7 +8,7 @@
         </el-button>
         <span class="detail__sep">|</span>
         <h1 class="detail__title">{{ task?.name ?? '—' }}</h1>
-        <StatusBadge v-if="task" :status="task.status" />
+        <StatusBadge v-if="task" :status="displayedStatus" />
       </div>
       <div class="detail__header-right">
         <el-button
@@ -20,16 +20,16 @@
           {{ t('taskDetail.action.start') }}
         </el-button>
         <el-button
-          v-if="rbac.can('task.pause') && task?.status === 'running'"
-          @click="doLifecycle('pause')"
+          v-if="rbac.can('task.pause') && pauseAvailable"
+          @click="confirmPause"
         >
           <template #icon><IconPlayerPause /></template>
           {{ t('taskDetail.action.pause') }}
         </el-button>
         <el-button
-          v-if="rbac.can('task.resume') && (task?.status === 'paused')"
+          v-if="rbac.can('task.resume') && resumeAvailable"
           type="primary"
-          @click="doLifecycle('resume')"
+          @click="confirmResume"
         >
           <template #icon><IconPlayerPlay /></template>
           {{ t('taskDetail.action.resume') }}
@@ -382,6 +382,7 @@ import { useLogStream, type LogLine, type LogStreamHandle } from '@/composables/
 import type { Task, Alert, ApiAlert, MetricQueryResponse, Run, RunPosition, ApiTask, TableLoadState, TaskCategory } from '@/types/domain';
 import { mapApiTask, mapApiAlert } from '@/types/domain';
 import { listPathForTaskKind } from '@/utils/migrationMode';
+import { canPause, canResume, displayStatus } from '@/utils/taskLifecycle';
 import KpiCard from '@/components/KpiCard.vue';
 import ChartCard from '@/components/ChartCard.vue';
 import LevelBadge from '@/components/LevelBadge.vue';
@@ -421,8 +422,13 @@ const canStart = computed(() => {
 });
 const canStop = computed(() => {
   const s = task.value?.status;
+  // `running` also covers the drain window — the task row keeps that status
+  // while the Run sits in `pausing` — so a pause whose engine will not
+  // converge can still be stopped, which is what keeps the task from freezing
+  // (ADR 0004).
   return s === 'running' || s === 'paused' || s === 'stopping';
 });
+
 
 /* ---------- edit form ---------- */
 const editForm = reactive({
@@ -464,12 +470,34 @@ function backToListPath(): RouteLocationRaw {
 async function doLifecycle(action: string) {
   try {
     await api.post(`/tasks/${taskId.value}/${action}`);
-    ElMessage.success('操作成功');
+    // Pause returns 202 while the engine is still draining, so the toast must
+    // not claim the task is already paused.
+    const toastKey = action === 'pause' ? 'pausing' : action === 'resume' ? 'resumed' : 'done';
+    ElMessage.success(t(`taskDetail.toast.${toastKey}`));
     await loadTask();
+    await loadCurrentRunId();
   } catch (err: unknown) {
-    const msg = (err as { message?: string })?.message ?? '操作失败';
+    const msg = (err as { message?: string })?.message ?? t('taskDetail.toast.failed');
     ElMessage.error(msg);
   }
+}
+
+function confirmPause() {
+  if (!task.value) return;
+  ElMessageBox.confirm(
+    t('taskDetail.confirm.pause', { name: task.value.name }),
+    t('taskDetail.confirm.pauseTitle'),
+    { type: 'warning' },
+  ).then(() => doLifecycle('pause')).catch(() => {});
+}
+
+function confirmResume() {
+  if (!task.value) return;
+  ElMessageBox.confirm(
+    t('taskDetail.confirm.resume', { name: task.value.name }),
+    t('taskDetail.confirm.resumeTitle'),
+    { type: 'info' },
+  ).then(() => doLifecycle('resume')).catch(() => {});
 }
 
 function confirmStop() {
@@ -545,6 +573,18 @@ watch(activeTab, (tab) => {
 /* ---------- KPI metrics ---------- */
 const currentRunId = ref('');
 const latestRun = ref<Run | null>(null);
+/** Latest Run status — the only place `pausing` is visible (see taskLifecycle). */
+const latestRunStatus = computed(() => latestRun.value?.status ?? null);
+const displayedStatus = computed(() =>
+  task.value ? displayStatus(task.value.status, latestRunStatus.value) : 'draft',
+);
+const pauseAvailable = computed(() =>
+  task.value ? canPause(task.value, latestRunStatus.value) : false,
+);
+const resumeAvailable = computed(() =>
+  task.value ? canResume(task.value, latestRunStatus.value) : false,
+);
+
 const rawLatestMetrics = ref<Record<string, number>>({});
 const metricsHistory = ref<Record<string, { ts: number; value: number }[]>>({});
 const MAX_HISTORY_POINTS = 720; // ~1 h at 5 s interval
@@ -693,7 +733,8 @@ function formatLogTime(ts: number): string {
 function reopenLogStream() {
   logStreamHandle.value?.close();
   if (!currentRunId.value) return;
-  if (latestRun.value && !['running', 'paused'].includes(latestRun.value.status)) {
+  // A `pausing` Run is still writing its drain log, so keep the live stream.
+  if (latestRun.value && !['running', 'pausing', 'paused'].includes(latestRun.value.status)) {
     loadArchivedLogIntoPane(latestRun.value);
     return;
   }
@@ -857,6 +898,18 @@ async function loadCurrentRunId() {
     currentRunId.value = '';
   }
 }
+
+/**
+ * A resume starts a *new* Run (ADR 0004), so the "current Run" the tabs read
+ * from moves while the page stays open. Follow it, or the log stream and the
+ * per-table objects keep reporting the Run that was paused.
+ */
+watch(currentRunId, (id, prev) => {
+  if (!id || id === prev) return;
+  if (activeTab.value === 'logs') reopenLogStream();
+  if (activeTab.value === 'objects') loadObjects();
+  if (activeTab.value === 'history') loadHistory();
+});
 
 /* ---------- lifecycle ---------- */
 let pollId: ReturnType<typeof setInterval> | null = null;
