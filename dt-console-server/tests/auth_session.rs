@@ -79,6 +79,9 @@ fn build_test_app(
             error::ApiError::new(error::codes::PARSE_ERROR, err.to_string()).into()
         }))
         .app_data(web::Data::new(pool))
+        .app_data(web::Data::new(
+            dt_console_server::sse_session_tracker::SseSessionTracker::new(),
+        ))
         .app_data(web::Data::new(RateLimiter::new(RateLimitConfig::default())))
         .app_data(web::Data::new(IDLE_TIMEOUT_SECS))
         .app_data(web::Data::new(metrics_scraper::ScraperState::new()))
@@ -125,6 +128,9 @@ fn build_test_app_with_rate_limit(
             error::ApiError::new(error::codes::PARSE_ERROR, err.to_string()).into()
         }))
         .app_data(web::Data::new(pool))
+        .app_data(web::Data::new(
+            dt_console_server::sse_session_tracker::SseSessionTracker::new(),
+        ))
         .app_data(web::Data::new(limiter))
         .app_data(web::Data::new(idle_timeout))
         .app_data(web::Data::new(metrics_scraper::ScraperState::new()))

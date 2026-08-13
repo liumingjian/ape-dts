@@ -200,7 +200,10 @@ mod tests {
     #[test]
     fn an_explicit_timeout_is_honoured_including_zero() {
         assert_eq!(parse_shutdown_timeout(Some("12")), Duration::from_secs(12));
-        assert_eq!(parse_shutdown_timeout(Some(" 12 ")), Duration::from_secs(12));
+        assert_eq!(
+            parse_shutdown_timeout(Some(" 12 ")),
+            Duration::from_secs(12)
+        );
         assert_eq!(parse_shutdown_timeout(Some("0")), Duration::ZERO);
     }
 
@@ -239,7 +242,10 @@ mod tests {
         let (tx, mut rx) = watch::channel(None);
 
         handle_signal(SIGINT, &tx, &cancel_token);
-        assert!(cancel_token.is_cancelled(), "the signal must cancel the task");
+        assert!(
+            cancel_token.is_cancelled(),
+            "the signal must cancel the task"
+        );
 
         let outcome = supervise(
             std::future::pending::<()>(),
@@ -265,7 +271,13 @@ mod tests {
         let outcome = supervise(std::future::ready(()), &mut rx, Duration::from_secs(60)).await;
 
         assert!(
-            matches!(outcome, Shutdown::Interrupted { signal: SIGTERM, .. }),
+            matches!(
+                outcome,
+                Shutdown::Interrupted {
+                    signal: SIGTERM,
+                    ..
+                }
+            ),
             "{outcome:?}"
         );
     }
@@ -284,7 +296,6 @@ mod tests {
         let outcome = supervise(
             async move {
                 task_token.cancelled().await;
-                ()
             },
             &mut rx,
             Duration::from_secs(60),
@@ -292,7 +303,13 @@ mod tests {
         .await;
 
         assert!(
-            matches!(outcome, Shutdown::Interrupted { signal: SIGTERM, .. }),
+            matches!(
+                outcome,
+                Shutdown::Interrupted {
+                    signal: SIGTERM,
+                    ..
+                }
+            ),
             "{outcome:?}"
         );
     }

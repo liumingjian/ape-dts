@@ -103,7 +103,9 @@ async fn run() -> i32 {
             // A wait released by the cancellation itself is the shutdown working, not a failure
             // (ADR 0002 demotes those to `Error::Cancelled`); anything else really did fail.
             Err(e) if is_cancellation(&e) => {
-                eprintln!("task stopped gracefully after signal {signal}: position recorded ({e:#})");
+                eprintln!(
+                    "task stopped gracefully after signal {signal}: position recorded ({e:#})"
+                );
                 shutdown::exit_code_for_signal(signal)
             }
             Err(e) => {

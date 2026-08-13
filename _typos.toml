@@ -1,0 +1,42 @@
+# typos-cli configuration (`make typos`, and the CI lint job).
+#
+# The gate is here to stop NEW typos, not to force a rename of the existing
+# vocabulary: most entries below are identifiers, protocol names or test
+# fixtures, and renaming them would mean an engine-wide refactor (red line)
+# for zero behavioural gain. Cleaning up the genuine prose typos among them
+# is separate, deliberate work.
+
+[files]
+extend-exclude = [
+    "target/",
+    "vendor/",
+    "Cargo.lock",
+    "*.sql",
+    "*.svg",
+    "*.png",
+    "*.jpg",
+    "dt-console-server/tests/golden/",
+]
+
+[default.extend-words]
+# Protocol / product vocabulary — not typos at all.
+smove = "smove"          # Redis SMOVE command
+helo = "helo"            # `helo` database name used across rdb_filter tests
+dbe = "dbe"              # database name in system_dbs fixtures
+ba = "ba"                # IPv6 literals (2001:4f8:3:ba::) and Lua fixtures
+pn = "pn"                # column/alias name in rdb_test_runner fixtures
+
+# Existing identifiers in engine and test code. Renaming = wide refactor.
+datas = "datas"
+splitted = "splitted"
+indexs = "indexs"
+squences = "squences"
+partion = "partion"
+astrisk = "astrisk"      # `ASTRISK` const in task_config
+pipline = "pipline"      # key inside a dt-tests task_config.ini fixture
+
+# Accepted English variants used in comments.
+clonable = "clonable"
+unparseable = "unparseable"
+wheather = "wheather"
+wel = "wel"

@@ -3885,7 +3885,7 @@ dependencies = [
 [[package]]
 name = "orc-format"
 version = "0.1.0"
-source = "git+https://github.com/apecloud/orc-format#4fb40f9d94b00286d09396a1f3e520aa9cdcb7be"
+source = "git+https://github.com/apecloud/orc-format?rev=4fb40f9d94b00286d09396a1f3e520aa9cdcb7be#4fb40f9d94b00286d09396a1f3e520aa9cdcb7be"
 dependencies = [
  "byteorder",
  "protobuf 2.28.0",
@@ -4704,7 +4704,7 @@ dependencies = [
 [[package]]
 name = "reqwest"
 version = "0.11.22"
-source = "git+https://github.com/apecloud/reqwest#a9c1f4b9e613ae38439ee4ede06786c54aca87bd"
+source = "git+https://github.com/apecloud/reqwest?rev=a9c1f4b9e613ae38439ee4ede06786c54aca87bd#a9c1f4b9e613ae38439ee4ede06786c54aca87bd"
 dependencies = [
  "base64 0.21.7",
  "bytes",

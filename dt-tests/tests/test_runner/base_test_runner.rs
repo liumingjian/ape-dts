@@ -337,7 +337,9 @@ mod tests {
     #[test]
     fn extract_dollar_tag_ignores_mongo_variables() {
         assert_eq!(
-            BaseTestRunner::extract_dollar_tag(r#"db.tb_1.updateOne({}, [{ "$set": { "a": "$$ROOT" } }]);"#),
+            BaseTestRunner::extract_dollar_tag(
+                r#"db.tb_1.updateOne({}, [{ "$set": { "a": "$$ROOT" } }]);"#
+            ),
             None
         );
     }
