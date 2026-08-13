@@ -510,7 +510,7 @@ mod tests {
         assert_eq!(run.status, "running");
 
         // Simulate reconciliation: find non-terminal runs and mark dead ones as orphaned.
-        let active_statuses = ["pending", "running", "paused", "stopping"];
+        let active_statuses = ["pending", "running", "pausing", "stopping"];
         let runs = crate::repositories::run_repository::RunRepository::list_by_statuses(
             &pool,
             &active_statuses,

@@ -248,6 +248,7 @@ async fn seed_run(pool: &SqlitePool, run_id: &str, task_id: &str) {
         exit_code: None,
         stop_method: None,
         metrics_port: None,
+        resumed_from_run_id: None,
         created_at: now.clone(),
         updated_at: now,
     };

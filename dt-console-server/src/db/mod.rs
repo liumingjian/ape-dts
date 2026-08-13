@@ -204,8 +204,8 @@ mod tests {
             .fetch_one(&pool)
             .await
             .unwrap();
-        // 25 migrations, each applied exactly once.
-        assert_eq!(count.0, 25);
+        // 26 migrations, each applied exactly once.
+        assert_eq!(count.0, 26);
     }
 
     #[tokio::test]
@@ -259,7 +259,7 @@ mod tests {
             .fetch_one(&pool)
             .await
             .unwrap();
-        assert_eq!(count_before.0, 25, "all 25 migrations should be recorded");
+        assert_eq!(count_before.0, 26, "all 26 migrations should be recorded");
 
         // Mark the first applied migration as dirty (success = false).
         // Migration versions are timestamps like 20260507000001, not sequential.
@@ -342,11 +342,11 @@ mod tests {
             result.err()
         );
 
-        // Verify that all 25 migrations are now recorded.
+        // Verify that all 26 migrations are now recorded.
         let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM _sqlx_migrations")
             .fetch_one(&pool)
             .await
             .unwrap();
-        assert_eq!(count.0, 25);
+        assert_eq!(count.0, 26);
     }
 }

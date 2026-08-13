@@ -67,8 +67,9 @@ Canonical Run states:
 pending | running | pausing | paused | stopping | stopped | failed
 ```
 
-A Run must not enter `paused` until the engine confirms that processing has
-paused safely.
+A Run must not enter `paused` until the engine confirms that processing
+stopped safely — in practice, until it exits `143` after a completed drain
+(see [ADR 0004](../adr/0004-pause-is-a-graceful-stop-with-a-resumable-position.md)).
 
 ### 4.3 Phase
 
@@ -308,20 +309,26 @@ Errors must not be reduced to an empty panel.
 
 ### 7.1 Pause and resume
 
-Pause and resume are unavailable until the engine implements an acknowledged,
-checkpoint-safe protocol.
+Pause is a graceful stop carrying intent; resume starts a **new Run** from the
+paused Run's position log. See
+[ADR 0004](../adr/0004-pause-is-a-graceful-stop-with-a-resumable-position.md).
 
-If implemented later:
+1. Pause moves the Run to `pausing` and sends SIGTERM — the same cooperative
+   signal a stop sends.
+2. The engine drains, forces a final checkpoint and exits `143`.
+3. The supervisor reads the exit code: `143` under `pausing` becomes `paused`;
+   exit `4` (the drain never converged) becomes `failed`, because a position
+   that was never finished is not resumable.
+4. Resume renders a fresh INI pinned to the paused Run's position log, starts
+   a new Run, and closes the predecessor out as `stopped`/`resumed`.
 
-1. Pause moves the Run to `pausing`.
-2. The engine stops accepting or applying new work and persists a safe
-   checkpoint.
-3. The engine returns an acknowledgement containing the checkpoint.
-4. Only then does the Run become `paused`.
-5. Failure or timeout returns the Run to its last confirmed state and surfaces
-   an actionable error.
+The acknowledgement is the exit code, not the signal: sending a signal
+successfully is still not pause confirmation, and nothing but the supervisor
+may write `paused`.
 
-Sending an operating-system signal successfully is not pause confirmation.
+Pause is offered for `snapshot` and `cdc` tasks only — `check` and `struct`
+have no position to resume from, and managed `snapshot_and_cdc` tasks own
+their own snapshot→cdc start marker.
 
 ### 7.2 Stop
 
@@ -483,9 +490,11 @@ ID.
 
 ### 10.8 Pause unavailable
 
-When the engine does not advertise acknowledged pause capability, Pause is
-not actionable. The Console cannot enter a paused state by merely sending a
-signal.
+Pause is not offered for task kinds with no resumable position (`check`,
+`struct`) or for managed `snapshot_and_cdc` tasks; the API answers those with
+409 `UNSUPPORTED_FOR_KIND`. The Console still cannot enter a paused state by
+merely sending a signal: it shows `pausing` until the engine's exit code says
+the position landed.
 
 ### 10.9 Stop during CDC
 

@@ -118,6 +118,66 @@ pub enum ChildStatus {
     Exited(ExitStatus),
 }
 
+/// Exit codes `dt-main` uses to report *how* it stopped (see ADR 0003).
+pub mod engine_exit {
+    /// SIGINT was handled cooperatively: 128 + 2.
+    pub const CLEAN_SIGINT: i32 = 130;
+    /// SIGTERM was handled cooperatively: 128 + 15.
+    pub const CLEAN_SIGTERM: i32 = 143;
+    /// The engine did not converge inside its shutdown window. Whatever the
+    /// caller intended, the persisted position is not trustworthy.
+    pub const SHUTDOWN_TIMED_OUT: i32 = 4;
+}
+
+/// What a Run's exit means, given the status the Run was in when it exited.
+///
+/// The same exit code means different things depending on intent: a
+/// cooperative SIGTERM exit is `paused` when the console asked to pause,
+/// `stopped` when it asked to stop, and an *externally* delivered stop when
+/// nobody asked at all (a k8s rolling update, an operator's `kill`). That
+/// last case is deliberately not `failed`: it is routine in a supervised
+/// deployment, and marking it failed would drown alerting in noise — but it
+/// leaves a trace in the control log so it is still auditable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExitDisposition {
+    /// A requested pause completed: position log is trustworthy, resumable.
+    Paused,
+    /// A requested stop completed, or the task ran to completion.
+    Stopped,
+    /// The engine was stopped cooperatively by someone other than the console.
+    StoppedExternally,
+    /// The Run ended badly; the position may be incomplete.
+    Failed,
+}
+
+/// Classify a child exit into the Run status it should land in.
+///
+/// `current_status` is the Run's status in the database at the moment the
+/// exit is observed — the record of what the console asked for.
+pub fn classify_exit(current_status: &str, exit: &ExitStatus) -> ExitDisposition {
+    let code = match exit {
+        ExitStatus::Exited { code } => *code,
+        // Killed outright (SIGKILL, or a signal the engine never handled):
+        // no graceful drain happened, so nothing here is trustworthy.
+        ExitStatus::Signaled { .. } => return ExitDisposition::Failed,
+    };
+
+    match code {
+        0 => ExitDisposition::Stopped,
+        // The shutdown window expired. Even under `pausing` this must not be
+        // `paused`: a position that never finished being written would make
+        // "you can resume from here" a lie.
+        engine_exit::SHUTDOWN_TIMED_OUT => ExitDisposition::Failed,
+        engine_exit::CLEAN_SIGTERM | engine_exit::CLEAN_SIGINT => match current_status {
+            "pausing" => ExitDisposition::Paused,
+            "stopping" => ExitDisposition::Stopped,
+            // Nobody in the console asked for this stop.
+            _ => ExitDisposition::StoppedExternally,
+        },
+        _ => ExitDisposition::Failed,
+    }
+}
+
 /// Result of a kill operation.
 #[derive(Debug, Clone)]
 pub struct KillResult {
@@ -1127,5 +1187,74 @@ mod tests {
         }
 
         let _ = std::fs::remove_dir_all(&spawned.run_dir);
+    }
+
+    // ── classify_exit: the supervisor's three-way dispatch ────────────────
+
+    #[test]
+    fn test_clean_sigterm_under_pausing_is_paused() {
+        assert_eq!(
+            classify_exit("pausing", &ExitStatus::Exited { code: 143 }),
+            ExitDisposition::Paused
+        );
+    }
+
+    #[test]
+    fn test_clean_sigterm_under_stopping_is_stopped() {
+        assert_eq!(
+            classify_exit("stopping", &ExitStatus::Exited { code: 143 }),
+            ExitDisposition::Stopped
+        );
+    }
+
+    #[test]
+    fn test_clean_sigterm_while_running_is_an_external_stop() {
+        // Nobody in the console asked: a k8s rolling update or an operator's
+        // `kill`. Routine, so not `failed` — but distinguishable.
+        assert_eq!(
+            classify_exit("running", &ExitStatus::Exited { code: 143 }),
+            ExitDisposition::StoppedExternally
+        );
+        assert_eq!(
+            classify_exit("running", &ExitStatus::Exited { code: 130 }),
+            ExitDisposition::StoppedExternally
+        );
+    }
+
+    #[test]
+    fn test_shutdown_timeout_is_failed_even_under_pausing() {
+        // exit 4 means the drain never converged: calling that `paused`
+        // would advertise a resumable position that may not exist.
+        assert_eq!(
+            classify_exit("pausing", &ExitStatus::Exited { code: 4 }),
+            ExitDisposition::Failed
+        );
+        assert_eq!(
+            classify_exit("stopping", &ExitStatus::Exited { code: 4 }),
+            ExitDisposition::Failed
+        );
+    }
+
+    #[test]
+    fn test_zero_exit_is_stopped_in_every_state() {
+        for status in ["running", "pausing", "stopping"] {
+            assert_eq!(
+                classify_exit(status, &ExitStatus::Exited { code: 0 }),
+                ExitDisposition::Stopped,
+                "status {status}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_other_nonzero_exits_and_signal_kills_are_failed() {
+        assert_eq!(
+            classify_exit("running", &ExitStatus::Exited { code: 3 }),
+            ExitDisposition::Failed
+        );
+        assert_eq!(
+            classify_exit("pausing", &ExitStatus::Signaled { signal: 9 }),
+            ExitDisposition::Failed
+        );
     }
 }

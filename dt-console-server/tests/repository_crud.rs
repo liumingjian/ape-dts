@@ -369,6 +369,7 @@ async fn run_repository_crud() {
         exit_code: None,
         stop_method: None,
         metrics_port: Some(9100),
+        resumed_from_run_id: None,
         created_at: now(),
         updated_at: now(),
     };
@@ -392,6 +393,39 @@ async fn run_repository_crud() {
     let saved = RunRepository::update(&pool, &updated).await.unwrap();
     assert_eq!(saved.status, "stopped");
     assert_eq!(saved.exit_code, Some(0));
+
+    // ── transition_status: only from the status the caller expects ──────
+    //
+    // A handler that read a Run, did some work and wrote the whole row back
+    // could resurrect a Run the supervisor had already finalised — losing
+    // its exit code and leaving an "active" Run with no process and nobody
+    // watching it, which freezes the task for good.
+    assert!(
+        !RunRepository::transition_status(&pool, &run.id, "running", "pausing")
+            .await
+            .unwrap(),
+        "the run is `stopped` by now, so a pause must not take"
+    );
+    let after = RunRepository::find_by_id(&pool, &run.id).await.unwrap();
+    assert_eq!(after.status, "stopped", "the terminal status must survive");
+    assert_eq!(after.exit_code, Some(0), "and so must its exit code");
+
+    let mut back = after.clone();
+    back.status = "running".to_string();
+    RunRepository::update(&pool, &back).await.unwrap();
+    assert!(
+        RunRepository::transition_status(&pool, &run.id, "running", "pausing")
+            .await
+            .unwrap(),
+        "a run that is still running does transition"
+    );
+    assert_eq!(
+        RunRepository::find_by_id(&pool, &run.id)
+            .await
+            .unwrap()
+            .status,
+        "pausing"
+    );
 }
 
 // ─── LicenseRepository ──────────────────────────────────────────────────

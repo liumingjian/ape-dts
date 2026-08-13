@@ -173,8 +173,8 @@ async fn main() -> std::io::Result<()> {
 
 /// Reconcile live Runs from a previous orchestrator session.
 ///
-/// On restart, any Run in a non-terminal state (pending, running, paused,
-/// stopping) must be reconciled:
+/// On restart, any Run in a non-terminal state whose engine is expected to
+/// be alive (pending, running, pausing, stopping) must be reconciled:
 /// - If the PID is still alive, re-attach:
 ///   - Reconstruct a `RunHandle` (with `reattached = true`)
 ///   - Insert into the `ActiveRuns` registry
@@ -193,7 +193,11 @@ async fn reconcile_live_runs(
     scraper_state: &metrics_scraper::ScraperState,
     port_pool: &PortPool,
 ) {
-    let active_statuses = ["pending", "running", "paused", "stopping"];
+    // `paused` is deliberately absent: a paused Run has no process by
+    // design (pause is a graceful stop, ADR 0004), so reconciliation would
+    // see a dead pid and mark it failed — destroying the position log the
+    // operator paused in order to resume from.
+    let active_statuses = ["pending", "running", "pausing", "stopping"];
 
     let runs: Vec<Run> = match RunRepository::list_by_statuses(pool, &active_statuses).await {
         Ok(r) => r,

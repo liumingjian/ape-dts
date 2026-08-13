@@ -15,10 +15,10 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::error::{codes, ApiError};
-use crate::redaction::redact_url;
 use crate::ini_renderer;
 use crate::middleware::rbac::{self, RbacAction};
 use crate::models::{CreateTaskRequest, Task, UserContext};
+use crate::redaction::redact_url;
 use crate::repositories::task_repository::TaskRepository;
 
 use dt_common::config::task_config::TaskConfig;
@@ -50,7 +50,6 @@ fn new_request_id() -> String {
         .take(REQUEST_ID_LEN)
         .collect()
 }
-
 
 /// Extract a redacted endpoint URL from the JSON-encoded endpoint config
 /// stored on `Task` (best-effort; absent / malformed entries fall back to

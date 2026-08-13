@@ -17,16 +17,18 @@
 //! - anything else (`EINVAL`, …) — a programming error; also an error.
 
 /// A signal the orchestrator sends to an engine subprocess.
+///
+/// Only the two signals `dt-main` actually handles: SIGTERM (cooperative
+/// shutdown, exit 143) and SIGKILL (last resort). There is deliberately no
+/// SIGUSR1/2 "pause"/"resume" pair — the engine never registered those
+/// handlers, so their default action is Terminate, and sending them was a
+/// disguised kill. Pause is a SIGTERM with intent; resume is a new Run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EngineSignal {
     /// Graceful shutdown.
     Term,
     /// Forced kill.
     Kill,
-    /// Pause (engine-defined, SIGUSR1).
-    Pause,
-    /// Resume (engine-defined, SIGUSR2).
-    Resume,
 }
 
 impl EngineSignal {
@@ -35,8 +37,6 @@ impl EngineSignal {
         match self {
             EngineSignal::Term => "SIGTERM",
             EngineSignal::Kill => "SIGKILL",
-            EngineSignal::Pause => "SIGUSR1",
-            EngineSignal::Resume => "SIGUSR2",
         }
     }
 
@@ -45,8 +45,6 @@ impl EngineSignal {
         match self {
             EngineSignal::Term => libc::SIGTERM,
             EngineSignal::Kill => libc::SIGKILL,
-            EngineSignal::Pause => libc::SIGUSR1,
-            EngineSignal::Resume => libc::SIGUSR2,
         }
     }
 }
@@ -155,8 +153,6 @@ mod tests {
     fn test_signal_names() {
         assert_eq!(EngineSignal::Term.name(), "SIGTERM");
         assert_eq!(EngineSignal::Kill.name(), "SIGKILL");
-        assert_eq!(EngineSignal::Pause.name(), "SIGUSR1");
-        assert_eq!(EngineSignal::Resume.name(), "SIGUSR2");
     }
 
     #[test]

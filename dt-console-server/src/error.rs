@@ -50,6 +50,9 @@ pub mod codes {
     pub const RUN_ALREADY_ACTIVE: &str = "RUN_ALREADY_ACTIVE";
     pub const RUN_NOT_ACTIVE: &str = "RUN_NOT_ACTIVE";
     pub const ILLEGAL_TRANSITION: &str = "ILLEGAL_TRANSITION";
+    /// The operation is meaningless for this task kind (e.g. pausing a
+    /// `check` task, which has no position to resume from).
+    pub const UNSUPPORTED_FOR_KIND: &str = "UNSUPPORTED_FOR_KIND";
     pub const RUN_NOT_FOUND: &str = "RUN_NOT_FOUND";
 
     // Task validation
@@ -192,6 +195,7 @@ impl actix_web::ResponseError for ApiError {
             | codes::RUN_ALREADY_ACTIVE
             | codes::RUN_NOT_ACTIVE
             | codes::ILLEGAL_TRANSITION
+            | codes::UNSUPPORTED_FOR_KIND
             | codes::RESOURCE_GROUP_NAME_TAKEN
             | codes::DEFAULT_RESOURCE_GROUP_PROTECTED
             | codes::RESOURCE_GROUP_HAS_TASKS

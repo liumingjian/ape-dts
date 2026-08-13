@@ -251,6 +251,7 @@ async fn seed_run_with_log_dir(pool: &SqlitePool, run_id: &str, task_id: &str, l
         exit_code: None,
         stop_method: None,
         metrics_port: None,
+        resumed_from_run_id: None,
         created_at: now.clone(),
         updated_at: now,
     };
@@ -645,6 +646,7 @@ async fn objects_null_log_dir_returns_empty() {
         exit_code: None,
         stop_method: None,
         metrics_port: None,
+        resumed_from_run_id: None,
         created_at: now.clone(),
         updated_at: now,
     };
@@ -681,6 +683,7 @@ async fn objects_orphaned_run_no_task_returns_empty() {
         exit_code: None,
         stop_method: None,
         metrics_port: None,
+        resumed_from_run_id: None,
         created_at: now.clone(),
         updated_at: now,
     };
