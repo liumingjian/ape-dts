@@ -117,7 +117,7 @@ impl ExtractorUtil {
                         bail!("connection pool not found");
                     }
                 };
-                let meta_manager = TaskUtil::create_mysql_meta_manager(
+                let mut meta_manager = TaskUtil::create_mysql_meta_manager(
                     &url,
                     &connection_auth,
                     &config.runtime.log_level,
@@ -126,6 +126,8 @@ impl ExtractorUtil {
                     Some(conn_pool.clone()),
                 )
                 .await?;
+                meta_manager
+                    .set_unknown_col_type_policy(config.extractor_basic.unknown_col_type_policy);
                 let db_tb = (db, tb);
                 let user_defined_partition_col = partition_cols
                     .map(|m| m.get(&db_tb).cloned().unwrap_or_default())
@@ -158,7 +160,7 @@ impl ExtractorUtil {
                         bail!("connection pool not found");
                     }
                 };
-                let meta_manager = TaskUtil::create_mysql_meta_manager(
+                let mut meta_manager = TaskUtil::create_mysql_meta_manager(
                     &url,
                     &connection_auth,
                     &config.runtime.log_level,
@@ -167,6 +169,8 @@ impl ExtractorUtil {
                     None,
                 )
                 .await?;
+                meta_manager
+                    .set_unknown_col_type_policy(config.extractor_basic.unknown_col_type_policy);
                 let extractor = MysqlCheckExtractor {
                     conn_pool,
                     meta_manager,
@@ -199,7 +203,7 @@ impl ExtractorUtil {
                     ConnClient::MySQL(conn_pool) => conn_pool,
                     _ => bail!("connection pool not found"),
                 };
-                let meta_manager = TaskUtil::create_mysql_meta_manager(
+                let mut meta_manager = TaskUtil::create_mysql_meta_manager(
                     &url,
                     &connection_auth,
                     &config.runtime.log_level,
@@ -208,6 +212,8 @@ impl ExtractorUtil {
                     Some(conn_pool.clone()),
                 )
                 .await?;
+                meta_manager
+                    .set_unknown_col_type_policy(config.extractor_basic.unknown_col_type_policy);
                 base_extractor.time_filter = TimeFilter::new(&start_time_utc, &end_time_utc)?;
                 let extractor = MysqlCdcExtractor {
                     meta_manager,
@@ -756,11 +762,14 @@ impl ExtractorUtil {
                 let conn_pool =
                     TaskUtil::create_mysql_conn_pool(extractor_url, connection_auth, 1, true, None)
                         .await?;
-                let meta_manager = MysqlMetaManager::new_mysql_compatible(
+                let mut meta_manager = MysqlMetaManager::new_mysql_compatible(
                     conn_pool.clone(),
                     task_config.extractor_basic.db_type.clone(),
                 )
                 .await?;
+                meta_manager.set_unknown_col_type_policy(
+                    task_config.extractor_basic.unknown_col_type_policy,
+                );
                 Some(RdbMetaManager::from_mysql(meta_manager))
             }
             DbType::Pg | DbType::GaussDBPg | DbType::GaussDBOracle => {

@@ -165,6 +165,22 @@ mod tests {
     }
 }
 
+/// What to do when a source column has a type ape-dts does not model.
+///
+/// The three extraction paths (snapshot query, cdc binlog, check log) used to disagree
+/// (silently NULL, raw blob, hard error), so the same column could migrate differently
+/// depending on the phase. Both policies below apply to all three paths alike.
+#[derive(Display, EnumString, IntoStaticStr, Debug, Clone, Copy, Default, Hash, PartialEq)]
+pub enum UnknownColTypePolicy {
+    /// stop the task with an error naming the column and its type
+    #[default]
+    #[strum(serialize = "fail")]
+    Fail,
+    /// migrate the value as the raw bytes the source stores/streams
+    #[strum(serialize = "keep_raw")]
+    KeepRaw,
+}
+
 #[derive(Display, EnumString, IntoStaticStr, Debug, Clone, Hash)]
 pub enum ExtractType {
     #[strum(serialize = "snapshot")]

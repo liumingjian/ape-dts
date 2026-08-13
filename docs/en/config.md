@@ -17,6 +17,7 @@ Different tasks may require extra configs, refer to [task templates](/docs/templ
 | batch_size      | number of extracted records in a batch                                       | 10000                                                          | same as [pipeline] buffer_size                          |
 | parallel_size   | number of workers for extracting a table                                     | 4                                                              | 1                         |
 | partition_cols  | partition column for data splitting during snapshot migration, only single column supported          | json:[{"db":"db_1","tb":"tb_1","partition_col":"id"},{"db":"db_2","tb":"tb_2","partition_col":"id"}]                                 | -       |
+| unknown_col_type_policy | what to do with a source column whose type ape-dts does not model: `fail` stops the task naming the column and its type, `keep_raw` migrates the value as the raw bytes the source stores/streams. Applies to snapshot, cdc and check-log alike. | keep_raw | fail |
 
 ## URL escaping
 

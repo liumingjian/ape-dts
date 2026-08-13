@@ -38,6 +38,20 @@ impl Sinker for ClickhouseSinker {
             return Ok(());
         }
 
+        // these sinkers rewrite the whole row, so a value the source did not carry
+        // (postgres unchanged toast) would be written over a good target value.
+        for row_data in data.iter() {
+            let unavailable_cols = row_data.get_unavailable_cols();
+            if !unavailable_cols.is_empty() {
+                bail!(
+                    "schema: {}, tb: {}, cols: {:?} are unavailable (unchanged toast), which can not be sunk by a whole-row sinker",
+                    row_data.schema,
+                    row_data.tb,
+                    unavailable_cols
+                )
+            }
+        }
+
         call_batch_fn!(self, data, Self::batch_sink);
         Ok(())
     }

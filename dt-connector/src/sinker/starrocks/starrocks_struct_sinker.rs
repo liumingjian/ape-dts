@@ -296,7 +296,8 @@ impl StarrocksStructSinker {
             MysqlColType::Set { items: _ } => "VARCHAR(255)",
             MysqlColType::Enum { items: _ } => "VARCHAR(255)",
             MysqlColType::Json => "JSON",
-            MysqlColType::Unknown => "STRING",
+            MysqlColType::Geometry { .. } => "STRING",
+            MysqlColType::Unknown { .. } => "STRING",
         };
         Ok(dst_col.to_string())
     }

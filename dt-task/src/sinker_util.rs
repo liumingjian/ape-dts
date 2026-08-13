@@ -179,7 +179,11 @@ impl SinkerUtil {
             } => match client {
                 ConnClient::MySQL(conn_pool) => {
                     let router = create_router!(config, Mysql);
-                    let meta_manager = MysqlMetaManager::new(conn_pool.clone()).await?;
+                    let mut meta_manager = MysqlMetaManager::new(conn_pool.clone()).await?;
+                    // the target is read back on conflict handling and checks, so it must read
+                    // an unmodelled column type the same way the source side does
+                    meta_manager
+                        .set_unknown_col_type_policy(config.extractor_basic.unknown_col_type_policy);
 
                     for _ in 0..parallel_size {
                         let sinker = MysqlSinker {
@@ -252,7 +256,10 @@ impl SinkerUtil {
 
                 match client {
                     ConnClient::MySQL(conn_pool) => {
-                        let meta_manager = MysqlMetaManager::new(conn_pool.clone()).await?;
+                        let mut meta_manager = MysqlMetaManager::new(conn_pool.clone()).await?;
+                        meta_manager.set_unknown_col_type_policy(
+                            config.extractor_basic.unknown_col_type_policy,
+                        );
 
                         for _ in 0..parallel_size {
                             let sinker = MysqlChecker {

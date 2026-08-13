@@ -105,6 +105,12 @@ mod test {
 
     #[tokio::test]
     #[serial]
+    async fn snapshot_geometry_test() {
+        TestBase::run_snapshot_test("mysql_to_mysql/snapshot/geometry_test").await;
+    }
+
+    #[tokio::test]
+    #[serial]
     async fn snapshot_route_test() {
         TestBase::run_snapshot_test("mysql_to_mysql/snapshot/route_test").await;
     }

@@ -17,6 +17,7 @@
 | batch_size      | 批量拉取数据条数                                  | 10000                                                          | 和 [pipeline] buffer_size 一致 |
 | parallel_size   | 全量同步时，单表并行拉取任务数                    | 4                                                              | 1                              |
 | partition_cols | 全量同步时，指定分区列，用于数据切分，仅支持单列 | json:[{"db":"db_1","tb":"tb_1","partition_col":"id"},{"db":"db_2","tb":"tb_2","partition_col":"id"}] | - |
+| unknown_col_type_policy | 源端列类型 ape-dts 无法识别时的处理方式：`fail` 直接报错并给出库表列名与类型，`keep_raw` 按源端存储/传输的原始字节迁移。全量、增量、check_log 三条路径行为一致 | keep_raw | fail |
 ## url 转义
 
 - 如果用户名/密码中包含特殊字符，需要对相应部分进行通用的 url 百分号转义，如：

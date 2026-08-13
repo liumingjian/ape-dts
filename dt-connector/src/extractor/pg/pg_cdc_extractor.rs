@@ -1,6 +1,5 @@
 use std::{collections::HashMap, mem::size_of_val, pin::Pin, sync::Arc, time::UNIX_EPOCH};
 
-use anyhow::bail;
 use async_trait::async_trait;
 use futures::StreamExt;
 use postgres_protocol::message::backend::{
@@ -30,7 +29,6 @@ use dt_common::{
         config_enums::DbType, config_token_parser::ConfigTokenParser,
         connection_auth_config::ConnectionAuthConfig,
     },
-    error::Error,
     log_error, log_info, log_warn,
     meta::{
         adaptor::pg_col_value_convertor::PgColValueConvertor,
@@ -506,10 +504,11 @@ impl PgCdcExtractor {
                     col_values.insert(col.to_string(), col_value);
                 }
 
+                // an unchanged TOASTed column: the WAL record does not repeat the old value.
+                // keep it as an explicit placeholder so sinkers can skip the column
+                // instead of overwriting it with NULL.
                 TupleData::UnchangedToast => {
-                    bail! {Error::ExtractorError(
-                        "unexpected UnchangedToast value received".into(),
-                    )}
+                    col_values.insert(col.to_string(), ColValue::Unavailable);
                 }
             }
         }

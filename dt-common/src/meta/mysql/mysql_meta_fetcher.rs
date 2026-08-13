@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    config::config_enums::DbType,
+    config::config_enums::{DbType, UnknownColTypePolicy},
     error::Error,
     meta::{ddl_meta::ddl_data::DdlData, rdb_meta_manager::RDB_PRIMARY_KEY_FLAG},
 };
@@ -23,6 +23,9 @@ pub struct MysqlMetaFetcher {
     pub cache: HashMap<String, MysqlTbMeta>,
     pub version: String,
     pub db_type: DbType,
+    /// what to do with a column type ape-dts does not model. set by the task config on the
+    /// extractor side; defaults to failing fast so an unmodelled type is never migrated silently.
+    pub unknown_col_type_policy: UnknownColTypePolicy,
 }
 
 const COLUMN_NAME: &str = "COLUMN_NAME";
@@ -52,6 +55,7 @@ impl MysqlMetaFetcher {
             cache: HashMap::new(),
             version: String::new(),
             db_type,
+            unknown_col_type_policy: UnknownColTypePolicy::default(),
         };
         me.init_version().await?;
         Ok(me)
@@ -87,7 +91,14 @@ impl MysqlMetaFetcher {
         let full_name = format!("{}.{}", schema, tb);
         if !self.cache.contains_key(&full_name) {
             let (cols, col_origin_type_map, col_type_map, nullable_cols) =
-                Self::parse_cols(&self.conn_pool, &self.db_type, schema, tb).await?;
+                Self::parse_cols(
+                    &self.conn_pool,
+                    &self.db_type,
+                    schema,
+                    tb,
+                    self.unknown_col_type_policy,
+                )
+                .await?;
             let key_map = Self::parse_keys(&self.conn_pool, schema, tb).await?;
             let (order_cols, partition_col, id_cols) =
                 RdbMetaManager::parse_rdb_cols(&key_map, &cols, &nullable_cols)?;
@@ -124,6 +135,7 @@ impl MysqlMetaFetcher {
         db_type: &DbType,
         schema: &str,
         tb: &str,
+        unknown_col_type_policy: UnknownColTypePolicy,
     ) -> anyhow::Result<(
         Vec<String>,
         HashMap<String, String>,
@@ -158,7 +170,8 @@ impl MysqlMetaFetcher {
             let col: String = row.try_get(COLUMN_NAME)?;
             // Column and index names are not case sensitive on any platform, nor are column aliases.
             cols.push(col.clone());
-            let (origin_type, col_type) = Self::get_col_type(&row).await?;
+            let (origin_type, col_type) =
+                Self::get_col_type(&row, unknown_col_type_policy).await?;
             col_origin_type_map.insert(col.clone(), origin_type);
             col_type_map.insert(col.clone(), col_type);
 
@@ -177,7 +190,11 @@ impl MysqlMetaFetcher {
         Ok((cols, col_origin_type_map, col_type_map, nullable_cols))
     }
 
-    async fn get_col_type(row: &MySqlRow) -> anyhow::Result<(String, MysqlColType)> {
+    async fn get_col_type(
+        row: &MySqlRow,
+        unknown_col_type_policy: UnknownColTypePolicy,
+    ) -> anyhow::Result<(String, MysqlColType)> {
+        let keep_raw = matches!(unknown_col_type_policy, UnknownColTypePolicy::KeepRaw);
         let column_type: String = row.try_get(COLUMN_TYPE)?;
         let data_type: String = row.try_get(DATA_TYPE)?;
         let is_nullable = row.try_get::<String, _>(IS_NULLABLE)?.to_lowercase() == "yes";
@@ -225,7 +242,10 @@ impl MysqlMetaFetcher {
                     "mediumtext" => MysqlColType::MediumText { length, charset },
                     "longtext" => MysqlColType::LongText { length, charset },
                     "text" => MysqlColType::Text { length, charset },
-                    _ => MysqlColType::Unknown,
+                    _ => MysqlColType::Unknown {
+                        name: data_type.to_string(),
+                        keep_raw,
+                    },
                 }
             }
 
@@ -306,10 +326,16 @@ impl MysqlMetaFetcher {
             "bit" => MysqlColType::Bit,
             "json" => MysqlColType::Json,
 
-            // TODO
-            // "geometry": "geometrycollection": "linestring": "multilinestring":
-            // "multipoint": "multipolygon": "polygon": "point"
-            _ => MysqlColType::Unknown,
+            _ if MysqlColType::GEOMETRY_TYPES.contains(&data_type.as_str()) => {
+                MysqlColType::Geometry {
+                    sub_type: data_type.to_string(),
+                }
+            }
+
+            _ => MysqlColType::Unknown {
+                name: data_type.to_string(),
+                keep_raw,
+            },
         };
 
         Ok((data_type.to_string(), col_type))

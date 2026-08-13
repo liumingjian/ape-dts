@@ -263,6 +263,9 @@ impl OracleSinker {
             ColValue::Json3(v) => format!("'{}'", Self::escape_str(&v.to_string())),
             ColValue::MongoDoc(doc) => format!("'{}'", Self::escape_str(&doc.to_string())),
             ColValue::Year(y) => y.to_string(),
+            ColValue::Unavailable => {
+                bail!("unavailable (unchanged toast) col value can not be written to oracle")
+            }
         })
     }
 }

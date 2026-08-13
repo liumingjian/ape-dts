@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Keep replicating a PostgreSQL UPDATE that leaves a TOASTed column untouched, instead of aborting the task, and leave the target column as it is rather than overwriting it.
+- Align the MySQL snapshot, CDC and check-log paths on unmodelled column types: spatial types now migrate as the raw MySQL representation on every path, and anything still unmodelled follows the new `unknown_col_type_policy` instead of being silently written as NULL during a snapshot.
+
 - Key data check results on id column values so rows carrying a NULL id are no longer collapsed onto one entry.
 - Validate task concurrency settings, report malformed INI files without panicking, and reject oversized buffer items without blocking forever.
 - Prevent DtQueue byte-accounting races from permanently blocking producers.
