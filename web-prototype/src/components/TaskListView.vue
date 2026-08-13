@@ -270,7 +270,7 @@
           </el-table-column>
           <el-table-column :label="t('taskList.col.status')" width="120" header-align="left" align="left" sortable="custom" sort-by="status">
             <template #default="{ row }">
-              <StatusBadge :status="row.status" />
+              <StatusBadge :status="rowStatus(row)" />
             </template>
           </el-table-column>
           <el-table-column :label="t('taskList.col.rps')" width="100" header-align="right" align="right" sortable="custom" sort-by="metrics.rpsLatest">
@@ -452,7 +452,7 @@ import type {
 import { mapApiTask } from '@/types/domain';
 import { ENGINE_LABELS } from '@/types/domain';
 import { categoryForView, createPathForView, detailPathForView, isMigrationMode } from '@/utils/migrationMode';
-import { canPause, canResume } from '@/utils/taskLifecycle';
+import { canPause, canResume, displayStatus } from '@/utils/taskLifecycle';
 
 type ViewKind = TaskViewKind;
 
@@ -498,6 +498,17 @@ const createLabel = computed(() =>
 );
 
 const list = ref<Task[]>([]);
+/**
+ * Tasks this session has just asked to pause.
+ *
+ * `pausing` lives on the Run, and the list only has the task row — which keeps
+ * reading `running` for the whole drain window (`tasks.status` has no
+ * `pausing`). Without this the row would offer Pause again mid-drain and
+ * collect a 409. Entries clear as soon as the row's status moves off
+ * `running`, i.e. when the supervisor has written the real outcome.
+ */
+const pausingIds = ref<Set<string>>(new Set());
+
 const total = ref(0);
 const page = ref(1);
 const pageSize = ref(10);
@@ -652,6 +663,7 @@ async function loadList() {
     }
     const data = await api.get<Paginated<ApiTask>>(`/tasks?${params.toString()}`);
     list.value = (data.items ?? []).map(mapApiTask);
+    reconcilePausingIds(list.value);
     total.value = data.total;
   } catch {
     ElMessage.error(t('taskList.toast.loadFailed'));
@@ -680,6 +692,16 @@ const tableRef = ref<{ toggleRowSelection: (row: Task, selected?: boolean) => vo
 
 function toggleRowSelection(row: Task) {
   tableRef.value?.toggleRowSelection(row);
+}
+
+/** Drop pause marks whose task has since left `running` — the drain is over. */
+function reconcilePausingIds(rows: Task[]) {
+  if (!pausingIds.value.size) return;
+  const next = new Set(pausingIds.value);
+  for (const row of rows) {
+    if (next.has(row.id) && row.status !== 'running') next.delete(row.id);
+  }
+  pausingIds.value = next;
 }
 
 function rowClassName({ row }: { row: Task }) {
@@ -719,6 +741,9 @@ async function doAction(row: Task, action: string) {
     if (endpoint) {
       await api.post(`/tasks/${row.id}/${endpoint}`);
     }
+    if (action === 'pause') {
+      pausingIds.value = new Set(pausingIds.value).add(row.id);
+    }
     ElMessage.success(t(`taskList.toast.action.${mapToastKey(action)}`));
     loadList();
   } catch {
@@ -727,7 +752,10 @@ async function doAction(row: Task, action: string) {
 }
 
 function mapToastKey(action: string): string {
-  if (action === 'resume' || action === 'start') return 'resumed';
+  // Start is not a resume: it runs from the task's own marker, so it must not
+  // borrow the resume copy about continuing from a paused position.
+  if (action === 'start') return 'started';
+  if (action === 'resume') return 'resumed';
   // Pause is accepted (202) while the engine is still draining; it is not
   // paused until the supervisor sees the exit code (ADR 0004).
   if (action === 'pause') return 'pausing';
@@ -755,12 +783,17 @@ function onRowMore(row: Task, cmd: string) {
   }
 }
 
+/** The status to badge: the drain window, where known, otherwise the task's. */
+function rowStatus(row: Task): TaskStatus {
+  return displayStatus(row.status, pausingIds.value.has(row.id) ? 'pausing' : null);
+}
+
 /**
  * Pause is offered only where the backend accepts it: a running task whose
  * kind has a resumable position. See `@/utils/taskLifecycle`.
  */
 function pauseAvailable(row: Task): boolean {
-  return canPause(row);
+  return canPause(row, pausingIds.value.has(row.id) ? 'pausing' : null);
 }
 
 function resumeAvailable(row: Task): boolean {
@@ -816,10 +849,31 @@ async function onBatch(cmd: string) {
     ElMessage.warning(t('taskList.toast.batchNoTarget'));
     return;
   }
-  await Promise.all(
+  // One 409 must not swallow the whole batch: a row can leave `running`
+  // between render and click, and a start can be refused by precheck.
+  const results = await Promise.allSettled(
     targets.map((row) => api.post(`/tasks/${row.id}/${endpoint}`)),
   );
-  ElMessage.success(t(`taskList.toast.action.${mapToastKey(cmd)}`));
+  const ok = targets.filter((_, i) => results[i].status === 'fulfilled');
+  const failed = results.length - ok.length;
+  const skipped = selected.value.length - targets.length;
+  if (cmd === 'pause' && ok.length) {
+    const next = new Set(pausingIds.value);
+    for (const row of ok) next.add(row.id);
+    pausingIds.value = next;
+  }
+  if (ok.length) {
+    ElMessage.success(
+      t('taskList.toast.batchResult', {
+        action: t(`taskList.batch.${cmd}`),
+        ok: ok.length,
+        failed,
+        skipped,
+      }),
+    );
+  } else {
+    ElMessage.error(t('taskList.toast.actionFailed'));
+  }
   loadList();
 }
 

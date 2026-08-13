@@ -83,8 +83,9 @@ const STATUS_MAP: Record<string, TaskStatus> = {
   ready: 'pending',
   defined: 'pending',
   running: 'running',
-  // The engine is still alive while it drains, so a pausing task counts as
-  // running in the dashboard's coarse buckets (ADR 0004).
+  // `tasks.status` has no `pausing` today, so this arm is only reachable if
+  // the task row ever starts carrying the drain window; the engine is still
+  // alive while it drains, so it belongs in the running bucket (ADR 0004).
   pausing: 'running',
   paused: 'paused',
   stopping: 'running',

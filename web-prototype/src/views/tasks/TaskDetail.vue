@@ -422,9 +422,11 @@ const canStart = computed(() => {
 });
 const canStop = computed(() => {
   const s = task.value?.status;
-  // `pausing` is stoppable on purpose: a pause whose engine will not converge
-  // must have a way out, or the task stays frozen (ADR 0004).
-  return s === 'running' || s === 'paused' || s === 'stopping' || latestRunStatus.value === 'pausing';
+  // `running` also covers the drain window — the task row keeps that status
+  // while the Run sits in `pausing` — so a pause whose engine will not
+  // converge can still be stopped, which is what keeps the task from freezing
+  // (ADR 0004).
+  return s === 'running' || s === 'paused' || s === 'stopping';
 });
 
 

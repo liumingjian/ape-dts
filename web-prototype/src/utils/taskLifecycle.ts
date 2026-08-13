@@ -6,9 +6,11 @@
  * offer a button the server will answer with 409:
  *
  * - **Pause** is only accepted for `snapshot` and `cdc` tasks, and not for the
- *   managed two-phase (`snapshot_and_cdc`) form — `check` and `struct` have no
- *   position to resume from, and the two-phase handover owns its own start
- *   marker. Rejected with `UNSUPPORTED_FOR_KIND`.
+ *   *managed* two-phase form — `check` and `struct` have no position to resume
+ *   from, and the two-phase handover owns its own start marker. Rejected with
+ *   `UNSUPPORTED_FOR_KIND`. A task is only managed two-phase when its source
+ *   engine is one the orchestration supports (`two_phase::is_two_phase_task`);
+ *   `snapshot_and_cdc` on any other engine is an ordinary Run and pauses fine.
  * - **Pause** requires the active Run to be `running`; the Run then sits in
  *   `pausing` while the engine drains (~8s) before the supervisor writes the
  *   terminal `paused`.
@@ -25,22 +27,45 @@ export interface LifecycleTask {
   category: TaskCategory;
   extractType: ExtractType;
   status: TaskStatus;
+  source: { engine: string };
 }
+
+/**
+ * Source engines for which `snapshot_and_cdc` runs as a *managed* two-phase
+ * Run — mirrors `is_supported_source` in `dt-console-server/src/two_phase.rs`.
+ * Both spellings are listed: the backend's `db_type_source` reaches the SPA
+ * raw for some engines and normalised for others (`mapApiTask`).
+ */
+const TWO_PHASE_SOURCE_ENGINES = [
+  'mysql',
+  'pg',
+  'postgres',
+  'gaussdb',
+  'gaussdb_pg',
+  'gaussdb_mysql',
+  'gaussdb_oracle',
+  'oracle',
+];
 
 /** Why pause is not on offer for this task, or `null` when it is. */
 export type PauseUnsupportedReason = 'kind' | 'twoPhase' | null;
 
 export function pauseUnsupportedReason(
-  task: Pick<LifecycleTask, 'category' | 'extractType'>,
+  task: Pick<LifecycleTask, 'category' | 'extractType' | 'source'>,
 ): PauseUnsupportedReason {
   if (task.category !== 'snapshot' && task.category !== 'cdc') return 'kind';
-  if (task.extractType === 'snapshot_and_cdc') return 'twoPhase';
+  if (
+    task.extractType === 'snapshot_and_cdc' &&
+    TWO_PHASE_SOURCE_ENGINES.includes(task.source.engine)
+  ) {
+    return 'twoPhase';
+  }
   return null;
 }
 
 /** Does this task kind have a resumable position at all? */
 export function isPausableKind(
-  task: Pick<LifecycleTask, 'category' | 'extractType'>,
+  task: Pick<LifecycleTask, 'category' | 'extractType' | 'source'>,
 ): boolean {
   return pauseUnsupportedReason(task) === null;
 }

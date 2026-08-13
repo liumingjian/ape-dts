@@ -192,10 +192,6 @@
       "check": "Check",
       "struct": "Struct Migration",
       "sync": "Sync task"
-    },
-    "pauseUnsupported": {
-      "kind": "Only snapshot and CDC tasks can be paused: check and struct tasks have no resumable position",
-      "twoPhase": "Managed snapshot+CDC tasks cannot be paused: the two-phase handover owns the start position"
     }
   },
   "taskDetail": {
@@ -1113,7 +1109,8 @@
       "importFailed": "Import failed",
       "loadFailed": "Failed to load tasks",
       "actionFailed": "Action failed",
-      "batchNoTarget": "None of the selected tasks can take this action."
+      "batchNoTarget": "None of the selected tasks can take this action.",
+      "batchResult": "{action}: {ok} ok, {failed} failed, {skipped} skipped"
     },
     "cols": {
       "manage": "Columns",

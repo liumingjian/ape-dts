@@ -12,7 +12,13 @@ import zh from '@/locales/zh-CN.json';
 import en from '@/locales/en-US.json';
 
 function task(over: Partial<LifecycleTask> = {}): LifecycleTask {
-  return { category: 'cdc', extractType: 'cdc', status: 'running', ...over };
+  return {
+    category: 'cdc',
+    extractType: 'cdc',
+    status: 'running',
+    source: { engine: 'mysql' },
+    ...over,
+  };
 }
 
 describe('pause kind gate — mirrors pause_unsupported_reason in the backend', () => {
@@ -27,9 +33,27 @@ describe('pause kind gate — mirrors pause_unsupported_reason in the backend', 
   });
 
   it('refuses the managed two-phase form, whose handover owns the start position', () => {
-    expect(
-      pauseUnsupportedReason(task({ category: 'snapshot', extractType: 'snapshot_and_cdc' })),
-    ).toBe('twoPhase');
+    for (const engine of ['mysql', 'pg', 'gaussdb_pg', 'gaussdb_oracle', 'oracle']) {
+      expect(
+        pauseUnsupportedReason(
+          task({ category: 'snapshot', extractType: 'snapshot_and_cdc', source: { engine } }),
+        ),
+        engine,
+      ).toBe('twoPhase');
+    }
+  });
+
+  it('allows snapshot_and_cdc on engines the two-phase orchestration does not manage', () => {
+    // `is_two_phase_task` returns false for these, so the backend accepts the
+    // pause and hiding the button would be the UI inventing a rule.
+    for (const engine of ['mongo', 'redis', 'kafka', 'starrocks']) {
+      expect(
+        isPausableKind(
+          task({ category: 'snapshot', extractType: 'snapshot_and_cdc', source: { engine } }),
+        ),
+        engine,
+      ).toBe(true);
+    }
   });
 
   it('hides pause on an unsupported kind even while it is running', () => {
@@ -96,6 +120,12 @@ describe('i18n', () => {
       expect((zh.task.status as Record<string, string>)[s], `zh ${s}`).toBeTruthy();
       expect((en.task.status as Record<string, string>)[s], `en ${s}`).toBeTruthy();
     }
+  });
+
+  it('keeps start copy free of resume language — start is not a resume', () => {
+    expect(zh.taskList.toast.action.started).not.toContain('位点');
+    expect(zh.taskList.toast.action.started).not.toContain('续传');
+    expect(en.taskList.toast.action.started.toLowerCase()).not.toContain('resum');
   });
 
   it('says pause stops the engine and keeps the position, in both locales', () => {

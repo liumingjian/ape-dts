@@ -192,10 +192,6 @@
       "check": "数据校验任务",
       "struct": "结构迁移任务",
       "sync": "同步任务"
-    },
-    "pauseUnsupported": {
-      "kind": "仅数据迁移 / 数据同步任务支持暂停：校验、结构迁移任务没有可续传的位点",
-      "twoPhase": "全量+增量任务不支持暂停：两阶段切换自己持有起始位点"
     }
   },
   "page": {
@@ -1113,7 +1109,8 @@
       "importFailed": "导入失败",
       "loadFailed": "加载任务失败",
       "actionFailed": "操作失败",
-      "batchNoTarget": "所选任务中没有可执行该操作的任务"
+      "batchNoTarget": "所选任务中没有可执行该操作的任务",
+      "batchResult": "{action}：成功 {ok}，失败 {failed}，跳过 {skipped}"
     },
     "cols": {
       "manage": "列",
