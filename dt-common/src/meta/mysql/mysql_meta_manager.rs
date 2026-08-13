@@ -7,7 +7,10 @@ use super::{
     mysql_tb_meta::MysqlTbMeta,
 };
 use crate::meta::{mysql::mysql_col_type::MysqlColType, row_data::RowData};
-use crate::{config::config_enums::DbType, meta::ddl_meta::ddl_data::DdlData};
+use crate::{
+    config::config_enums::{DbType, UnknownColTypePolicy},
+    meta::ddl_meta::ddl_data::DdlData,
+};
 
 #[derive(Clone)]
 pub struct MysqlMetaManager {
@@ -146,10 +149,26 @@ impl MysqlMetaManager {
             "bit" => MysqlColType::Bit,
             "json" => MysqlColType::Json,
 
-            // TODO
-            // "geometry": "geometrycollection": "linestring": "multilinestring":
-            // "multipoint": "multipolygon": "polygon": "point"
-            _ => MysqlColType::Unknown,
+            _ if MysqlColType::GEOMETRY_TYPES.contains(&col_type_str) => MysqlColType::Geometry {
+                sub_type: col_type_str.to_string(),
+            },
+
+            _ => MysqlColType::Unknown {
+                name: col_type_str.to_string(),
+                keep_raw: matches!(
+                    self.meta_fetcher.unknown_col_type_policy,
+                    UnknownColTypePolicy::KeepRaw
+                ),
+            },
+        }
+    }
+
+    /// Applies the task's policy for column types ape-dts does not model.
+    /// Only the extractor side needs it: it decides how such values are read from the source.
+    pub fn set_unknown_col_type_policy(&mut self, policy: UnknownColTypePolicy) {
+        self.meta_fetcher.unknown_col_type_policy = policy;
+        if let Some(meta_center) = &mut self.meta_center {
+            meta_center.meta_fetcher.unknown_col_type_policy = policy;
         }
     }
 }

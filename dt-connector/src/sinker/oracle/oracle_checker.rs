@@ -327,6 +327,8 @@ fn parse_with_expected(raw: &str, expected: &ColValue) -> anyhow::Result<ColValu
         ColValue::Json2(_) => ColValue::Json2(raw.to_string()),
         ColValue::Json3(_) => ColValue::Json2(raw.to_string()),
         ColValue::MongoDoc(_) => ColValue::String(raw.to_string()),
+        // a check never compares against a value the source did not carry
+        ColValue::Unavailable => ColValue::Unavailable,
     })
 }
 

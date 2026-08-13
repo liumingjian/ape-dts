@@ -103,6 +103,14 @@ impl MysqlColValueConvertor {
     }
 
     pub fn from_binlog(col_type: &MysqlColType, value: ColumnValue) -> anyhow::Result<ColValue> {
+        if let MysqlColType::Unknown {
+            keep_raw: false,
+            name,
+        } = col_type
+        {
+            bail! {Error::Unexpected(Self::unknown_col_type_err(name))}
+        }
+
         let col_value = match value {
             ColumnValue::Tiny(v) => {
                 if matches!(*col_type, MysqlColType::TinyInt { unsigned: true }) {
@@ -325,12 +333,18 @@ impl MysqlColValueConvertor {
                 | MysqlColType::MediumBlob
                 | MysqlColType::Blob
                 | MysqlColType::LongBlob => ColValue::Blob(hex::decode(value_str)?),
-                MysqlColType::Unknown => {
-                    bail! {Error::Unexpected(format!(
-                        "unsupported column type: {:?}",
-                        col_type
-                    )) }
+
+                // same raw bytes the snapshot query and the binlog carry
+                MysqlColType::Geometry { .. } => ColValue::Blob(hex::decode(value_str)?),
+
+                MysqlColType::Unknown { keep_raw: true, .. } => {
+                    ColValue::Blob(hex::decode(value_str)?)
                 }
+
+                MysqlColType::Unknown {
+                    keep_raw: false,
+                    ref name,
+                } => bail! {Error::Unexpected(Self::unknown_col_type_err(name))},
             };
 
         Ok(col_value)
@@ -496,8 +510,30 @@ impl MysqlColValueConvertor {
                 // |  1 | 212765.7                  |
                 Ok(ColValue::Json2(value.to_string()))
             }
-            MysqlColType::Unknown => Ok(ColValue::None),
+            // mysql stores geometry as 4 byte SRID + WKB, and accepts exactly those bytes back
+            MysqlColType::Geometry { .. } => {
+                let value: Vec<u8> = row.get_unchecked(col);
+                Ok(ColValue::Blob(value))
+            }
+
+            MysqlColType::Unknown { keep_raw: true, .. } => {
+                let value: Vec<u8> = row.get_unchecked(col);
+                Ok(ColValue::Blob(value))
+            }
+
+            MysqlColType::Unknown {
+                keep_raw: false,
+                name,
+            } => bail! {Error::Unexpected(Self::unknown_col_type_err(name))},
         }
+    }
+
+    /// Kept in one place so the snapshot, cdc and check-log paths report the same thing.
+    fn unknown_col_type_err(name: &str) -> String {
+        format!(
+            "unsupported column type: {}, set extractor's unknown_col_type_policy=keep_raw to migrate it as raw bytes",
+            name
+        )
     }
 
     fn from_query_none_value(
@@ -533,5 +569,76 @@ impl MysqlColValueConvertor {
         } else {
             Ok(ColValue::None)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // the internal representation mysql stores and streams for a geometry value:
+    // 4 byte SRID + WKB. both a snapshot query and the binlog deliver exactly these bytes.
+    const GEOMETRY_BYTES: [u8; 9] = [0, 0, 0, 0, 1, 1, 0, 0, 0];
+
+    fn geometry() -> MysqlColType {
+        MysqlColType::Geometry {
+            sub_type: "point".to_string(),
+        }
+    }
+
+    fn unknown(keep_raw: bool) -> MysqlColType {
+        MysqlColType::Unknown {
+            name: "vector".to_string(),
+            keep_raw,
+        }
+    }
+
+    // from_query needs a live MySqlRow, so the snapshot path is covered by the
+    // mysql_to_mysql geometry e2e case instead.
+    #[test]
+    fn geometry_binlog_and_check_log_paths_agree() {
+        let expected = ColValue::Blob(GEOMETRY_BYTES.to_vec());
+
+        let from_binlog =
+            MysqlColValueConvertor::from_binlog(&geometry(), ColumnValue::Blob(GEOMETRY_BYTES.to_vec()))
+                .unwrap();
+        assert_eq!(from_binlog, expected);
+
+        let from_str =
+            MysqlColValueConvertor::from_str(&geometry(), &hex::encode(GEOMETRY_BYTES)).unwrap();
+        assert_eq!(from_str, expected);
+    }
+
+    #[test]
+    fn unknown_col_type_fails_fast_on_every_path() {
+        let err = MysqlColValueConvertor::from_binlog(
+            &unknown(false),
+            ColumnValue::Blob(GEOMETRY_BYTES.to_vec()),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("vector"), "{}", err);
+        assert!(err.contains("unknown_col_type_policy"), "{}", err);
+
+        let err = MysqlColValueConvertor::from_str(&unknown(false), &hex::encode(GEOMETRY_BYTES))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("vector"), "{}", err);
+    }
+
+    #[test]
+    fn unknown_col_type_keeps_raw_bytes_on_every_path() {
+        let expected = ColValue::Blob(GEOMETRY_BYTES.to_vec());
+
+        let from_binlog = MysqlColValueConvertor::from_binlog(
+            &unknown(true),
+            ColumnValue::Blob(GEOMETRY_BYTES.to_vec()),
+        )
+        .unwrap();
+        assert_eq!(from_binlog, expected);
+
+        let from_str =
+            MysqlColValueConvertor::from_str(&unknown(true), &hex::encode(GEOMETRY_BYTES)).unwrap();
+        assert_eq!(from_str, expected);
     }
 }

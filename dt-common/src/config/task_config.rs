@@ -23,7 +23,7 @@ use crate::{
 use super::{
     config_enums::{
         ConflictPolicyEnum, DbType, ExtractType, MetaCenterType, ParallelType, PipelineType,
-        SinkType,
+        SinkType, UnknownColTypePolicy,
     },
     data_marker_config::DataMarkerConfig,
     extractor_config::{BasicExtractorConfig, ExtractorConfig},
@@ -239,6 +239,11 @@ impl TaskConfig {
             connection_auth: connection_auth.clone(),
             max_connections,
             rate_limiter,
+            unknown_col_type_policy: loader.get_with_default(
+                EXTRACTOR,
+                "unknown_col_type_policy",
+                UnknownColTypePolicy::default(),
+            )?,
         };
 
         let not_supported_err =

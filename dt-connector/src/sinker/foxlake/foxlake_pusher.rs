@@ -1,6 +1,6 @@
 use std::{cmp, str::FromStr, sync::Arc};
 
-use anyhow::{Context, Ok};
+use anyhow::{bail, Context, Ok};
 use async_trait::async_trait;
 use chrono::{DateTime, Datelike, Timelike, Utc};
 use opendal::Operator;
@@ -119,6 +119,18 @@ impl FoxlakePusher {
             // there may be DtData::Commit items, ignore them
             if let DtData::Dml { row_data } = item.dt_data {
                 batch_data_size += row_data.data_size;
+
+                // an update is pushed as delete + insert, so a value the source did not carry
+                // (postgres unchanged toast) would be lost from the rewritten row.
+                let unavailable_cols = row_data.get_unavailable_cols();
+                if !unavailable_cols.is_empty() {
+                    bail!(
+                        "schema: {}, tb: {}, cols: {:?} are unavailable (unchanged toast), which can not be pushed to foxlake",
+                        row_data.schema,
+                        row_data.tb,
+                        unavailable_cols
+                    )
+                }
 
                 if row_data.row_type == RowType::Update {
                     let (delete_row_data, insert_row_data) = row_data.split_update_row_data();
@@ -442,7 +454,8 @@ impl FoxlakePusher {
             | MysqlColType::MediumBlob
             | MysqlColType::LongBlob
             | MysqlColType::Blob
-            | MysqlColType::Unknown => Schema::Binary,
+            | MysqlColType::Geometry { .. }
+            | MysqlColType::Unknown { .. } => Schema::Binary,
 
             MysqlColType::Char { .. }
             | MysqlColType::Varchar { .. }

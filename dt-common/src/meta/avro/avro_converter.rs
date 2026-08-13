@@ -6,7 +6,7 @@ use apache_avro::{from_avro_datum, to_avro_datum, types::Value, Schema};
 use crate::{
     config::config_enums::DbType,
     meta::{
-        col_value::ColValue,
+        col_value::{ColValue, UNAVAILABLE_VALUE_PLACEHOLDER},
         ddl_meta::{ddl_data::DdlData, ddl_type::DdlType},
         dt_data::DtData,
         rdb_meta_manager::RdbMetaManager,
@@ -326,6 +326,8 @@ impl AvroConverter {
             ColValue::Json3(v) => Value::String(v.to_string()),
 
             ColValue::MongoDoc(v) => Value::String(v.to_string()),
+
+            ColValue::Unavailable => Value::String(UNAVAILABLE_VALUE_PLACEHOLDER.to_string()),
 
             ColValue::Bool(v) => Value::Boolean(*v),
             ColValue::None => Value::Null,

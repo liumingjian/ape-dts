@@ -3,7 +3,7 @@ use crate::config::{
 };
 
 use super::{
-    config_enums::{DbType, ExtractType},
+    config_enums::{DbType, ExtractType, UnknownColTypePolicy},
     s3_config::S3Config,
 };
 
@@ -247,4 +247,5 @@ pub struct BasicExtractorConfig {
     pub connection_auth: ConnectionAuthConfig,
     pub max_connections: u32,
     pub rate_limiter: RateLimiterConfig,
+    pub unknown_col_type_policy: UnknownColTypePolicy,
 }

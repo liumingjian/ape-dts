@@ -32,7 +32,7 @@ mod tests {
 
     use crate::{
         config::{
-            config_enums::{DbType, ExtractType, SinkType},
+            config_enums::{DbType, ExtractType, SinkType, UnknownColTypePolicy},
             connection_auth_config::ConnectionAuthConfig,
             extractor_config::BasicExtractorConfig,
             filter_config::FilterConfig,
@@ -52,6 +52,7 @@ mod tests {
             connection_auth: ConnectionAuthConfig::NoAuth,
             max_connections: 10,
             rate_limiter: RateLimiterConfig::default(),
+            unknown_col_type_policy: UnknownColTypePolicy::default(),
         };
         let sinker_config = BasicSinkerConfig {
             db_type: DbType::Mysql,

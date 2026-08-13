@@ -43,7 +43,17 @@ pub enum ColValue {
     Json2(String),
     Json3(serde_json::Value),
     MongoDoc(Document),
+    /// The value was not carried by the source event and is therefore unknown.
+    ///
+    /// Postgres emits it for an unchanged TOASTed column of an UPDATE: the column
+    /// still holds its old value in the source, the WAL record just does not repeat it.
+    /// Sinkers must leave such a column untouched instead of writing anything for it.
+    Unavailable,
 }
+
+/// Placeholder rendered for [`ColValue::Unavailable`] wherever a value must be produced
+/// (logs, json/avro payloads). Aligned with debezium's `__debezium_unavailable_value`.
+pub const UNAVAILABLE_VALUE_PLACEHOLDER: &str = "__ape_dts_unavailable_value";
 
 impl std::fmt::Display for ColValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -80,6 +90,10 @@ impl ColValue {
 
     pub fn is_string(&self) -> bool {
         matches!(self, Self::String { .. })
+    }
+
+    pub fn is_unavailable(&self) -> bool {
+        matches!(self, Self::Unavailable)
     }
 
     pub fn convert_into_integer_128(&self) -> anyhow::Result<i128> {
@@ -196,6 +210,7 @@ impl ColValue {
             ColValue::Json2(_) => "Json2",
             ColValue::Json3(_) => "Json3",
             ColValue::MongoDoc(_) => "MongoDoc",
+            ColValue::Unavailable => "Unavailable",
         }
     }
 
@@ -229,6 +244,7 @@ impl ColValue {
             ColValue::Json3(v) => Some(v.to_string()),
             ColValue::Blob(v) => Some(hex::encode(v)),
             ColValue::MongoDoc(v) => Some(Self::mongo_doc_to_string(v)),
+            ColValue::Unavailable => Some(UNAVAILABLE_VALUE_PLACEHOLDER.to_string()),
             ColValue::Bool(v) => Some(v.to_string()),
             ColValue::None => Option::None,
         }
@@ -267,7 +283,7 @@ impl ColValue {
             ColValue::Json(v) | ColValue::Blob(v) | ColValue::RawString(v) => v.len(),
             ColValue::Json3(v) => v.to_string().len(),
             ColValue::MongoDoc(v) => Self::get_bson_size_doc(v),
-            ColValue::None => 0,
+            ColValue::None | ColValue::Unavailable => 0,
         }
     }
 
@@ -350,6 +366,7 @@ impl Serialize for ColValue {
             ColValue::MongoDoc(v) => Bson::Document(v.clone())
                 .into_relaxed_extjson()
                 .serialize(serializer),
+            ColValue::Unavailable => serializer.serialize_str(UNAVAILABLE_VALUE_PLACEHOLDER),
             ColValue::None => serializer.serialize_none(),
         }
     }

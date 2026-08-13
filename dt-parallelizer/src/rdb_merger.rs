@@ -90,6 +90,14 @@ impl RdbMerger {
                     return Ok(());
                 }
 
+                // merging rewrites an update into delete + insert, but an update carrying an
+                // unavailable value (postgres unchanged toast) has no full after image,
+                // so the insert would wipe the untouched column. keep it as an update.
+                if Self::has_unavailable_value(&row_data)? {
+                    merged.unmerged_rows.push(row_data);
+                    return Ok(());
+                }
+
                 let (delete, insert) = row_data.split_update_row_data();
                 let insert_hash_code = Self::get_hash_code(&insert, tb_meta).await?;
 
@@ -119,6 +127,11 @@ impl RdbMerger {
             }
         }
         Ok(())
+    }
+
+    fn has_unavailable_value(row_data: &RowData) -> anyhow::Result<bool> {
+        let after = row_data.require_after()?;
+        Ok(after.values().any(|v| v.is_unavailable()))
     }
 
     fn check_uk_changed(tb_meta: &RdbTbMeta, row_data: &RowData) -> anyhow::Result<bool> {
@@ -194,5 +207,43 @@ impl RdbTbMergedData {
 
     pub fn get_unmerged_rows(&mut self) -> Vec<RowData> {
         self.unmerged_rows.drain(..).collect::<Vec<_>>()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use dt_common::meta::{col_value::ColValue, row_type::RowType};
+
+    use super::*;
+
+    fn update_row_data(payload: ColValue) -> RowData {
+        let mut before = HashMap::new();
+        before.insert("id".to_string(), ColValue::LongLong(1));
+
+        let mut after = HashMap::new();
+        after.insert("id".to_string(), ColValue::LongLong(1));
+        after.insert("payload".to_string(), payload);
+
+        RowData::new(
+            "test_db".to_string(),
+            "tb_1".to_string(),
+            RowType::Update,
+            Some(before),
+            Some(after),
+        )
+    }
+
+    #[test]
+    fn update_with_unavailable_value_can_not_be_merged() {
+        // merging rewrites the update into delete + insert, and the insert would need a
+        // full after image, which an unchanged toast column does not provide.
+        let row_data = update_row_data(ColValue::Unavailable);
+        assert!(RdbMerger::has_unavailable_value(&row_data).unwrap());
+    }
+
+    #[test]
+    fn update_with_complete_after_image_can_be_merged() {
+        let row_data = update_row_data(ColValue::String("p".to_string()));
+        assert!(!RdbMerger::has_unavailable_value(&row_data).unwrap());
     }
 }

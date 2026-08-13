@@ -31,6 +31,12 @@ mod test {
 
     #[tokio::test]
     #[serial]
+    async fn cdc_geometry_test() {
+        TestBase::run_cdc_test("mysql_to_mysql/cdc/geometry_test", 3000, 2000).await;
+    }
+
+    #[tokio::test]
+    #[serial]
     async fn cdc_ddl_test() {
         TestBase::run_ddl_test("mysql_to_mysql/cdc/ddl_test", 3000, 5000).await;
     }

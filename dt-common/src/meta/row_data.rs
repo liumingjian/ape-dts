@@ -157,6 +157,22 @@ impl RowData {
         }
     }
 
+    /// Cols the source event did not carry a value for (postgres unchanged toast).
+    ///
+    /// Sinkers that rewrite the whole row (rather than a partial UPDATE) must refuse
+    /// such a row instead of writing the placeholder over a good target value.
+    pub fn get_unavailable_cols(&self) -> Vec<String> {
+        let mut cols = Vec::new();
+        for values in [&self.before, &self.after].into_iter().flatten() {
+            for (col, value) in values.iter() {
+                if value.is_unavailable() && !cols.contains(col) {
+                    cols.push(col.to_owned());
+                }
+            }
+        }
+        cols
+    }
+
     pub fn require_after(&self) -> anyhow::Result<&HashMap<String, ColValue>> {
         self.after.as_ref().with_context(|| {
             format!(

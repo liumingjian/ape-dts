@@ -16,6 +16,7 @@ use dt_common::meta::{
 use dt_common::{config::config_enums::DbType, error::Error, utils::sql_util::SqlUtil};
 use sqlx::{mysql::MySqlArguments, postgres::PgArguments, query::Query, MySql, Postgres};
 
+#[derive(Debug)]
 pub struct RdbQueryInfo<'a> {
     pub sql: String,
     pub cols: Vec<String>,
@@ -169,6 +170,9 @@ impl RdbQueryBuilder<'_> {
             for col in self.rdb_tb_meta.id_cols.iter() {
                 cols.push(col.clone());
                 let col_value = Self::get_col_value(before, col)?;
+                if let Some(value) = col_value {
+                    Self::reject_unavailable(col, value)?;
+                }
                 if col_value.is_none() || matches!(col_value, Some(ColValue::None)) {
                     bail! {
                         "where col: {} is NULL, which should not happen in batch delete, sql: {}",
@@ -215,7 +219,11 @@ impl RdbQueryBuilder<'_> {
             let after = row_data.require_after()?;
             for col_name in self.rdb_tb_meta.cols.iter() {
                 cols.push(col_name.clone());
-                binds.push(Self::get_col_value(after, col_name)?);
+                let col_value = Self::get_col_value(after, col_name)?;
+                if let Some(value) = col_value {
+                    Self::reject_unavailable(col_name, value)?;
+                }
+                binds.push(col_value);
             }
         }
 
@@ -371,7 +379,11 @@ impl RdbQueryBuilder<'_> {
         let after = row_data.require_after()?;
         for col_name in self.rdb_tb_meta.cols.iter() {
             cols.push(col_name.clone());
-            binds.push(Self::get_col_value(after, col_name)?);
+            let col_value = Self::get_col_value(after, col_name)?;
+            if let Some(value) = col_value {
+                Self::reject_unavailable(col_name, value)?;
+            }
+            binds.push(col_value);
         }
 
         let mut col_values = Vec::with_capacity(self.rdb_tb_meta.cols.len());
@@ -473,8 +485,13 @@ impl RdbQueryBuilder<'_> {
     ) -> anyhow::Result<Vec<String>> {
         let mut cols = Vec::new();
         for col in self.rdb_tb_meta.cols.iter() {
-            if Self::get_col_value(values, col)?.is_some() {
-                cols.push(col.clone());
+            match Self::get_col_value(values, col)? {
+                // an unavailable value (postgres unchanged toast) means the source did not
+                // carry the column, so it must be left out of the SET list, otherwise the
+                // target column would be overwritten by a placeholder.
+                Some(value) if value.is_unavailable() => continue,
+                Some(_) => cols.push(col.clone()),
+                None => continue,
             }
         }
         Ok(cols)
@@ -601,6 +618,18 @@ impl RdbQueryBuilder<'_> {
         Ok(extract_cols.join(","))
     }
 
+    /// An unavailable value never identifies a row and never belongs in a written value,
+    /// so any query that would have to render it is a bug rather than a row to skip.
+    fn reject_unavailable(col: &str, col_value: &ColValue) -> anyhow::Result<()> {
+        if col_value.is_unavailable() {
+            bail! {Error::Unexpected(format!(
+                "col: {} is unavailable (unchanged toast), which can not be used in this query",
+                col
+            ))}
+        }
+        Ok(())
+    }
+
     fn get_where_info(
         &self,
         mut index: usize,
@@ -618,6 +647,7 @@ impl RdbQueryBuilder<'_> {
             let escaped_col = self.escape(col);
             let col_value = Self::get_col_value(col_value_map, col)?;
             if let Some(value) = col_value {
+                Self::reject_unavailable(col, value)?;
                 if *value == ColValue::None {
                     where_sql = format!("{} {} IS NULL", where_sql, escaped_col);
                 } else {
@@ -1025,6 +1055,106 @@ mod tests {
         assert_eq!(delete_info.cols, vec!["id".to_string(), "id".to_string()]);
         assert_eq!(delete_info.binds[0], Some(&ColValue::LongLong(3)));
         assert_eq!(delete_info.binds[1], Some(&ColValue::LongLong(3)));
+    }
+
+    #[test]
+    fn pg_update_leaves_unavailable_col_out_of_set_list() {
+        let tb_meta = pg_tb_meta("public", "t_batch");
+        let query_builder = RdbQueryBuilder::new_for_pg(&tb_meta, None);
+        let row_data = pg_update_row_data(ColValue::Unavailable);
+
+        let query_info = query_builder.get_query_info(&row_data, false).unwrap();
+
+        assert_eq!(
+            query_info.sql,
+            r#"UPDATE "public"."t_batch" SET "id"=$1::int4,"tracer"=$2::text WHERE "id" = $3::int4 LIMIT 1"#
+        );
+        assert_eq!(
+            query_info.cols,
+            vec!["id".to_string(), "tracer".to_string(), "id".to_string()]
+        );
+        assert_eq!(
+            query_info.binds,
+            vec![
+                Some(&ColValue::LongLong(1)),
+                Some(&ColValue::String("t".to_string())),
+                Some(&ColValue::LongLong(1)),
+            ]
+        );
+    }
+
+    #[test]
+    fn pg_update_still_writes_an_available_col() {
+        let tb_meta = pg_tb_meta("public", "t_batch");
+        let query_builder = RdbQueryBuilder::new_for_pg(&tb_meta, None);
+        let row_data = pg_update_row_data(ColValue::String("p".to_string()));
+
+        let query_info = query_builder.get_query_info(&row_data, false).unwrap();
+
+        assert!(query_info.sql.contains(r#""payload"="#));
+    }
+
+    #[test]
+    fn pg_insert_rejects_unavailable_col() {
+        let tb_meta = pg_tb_meta("public", "t_batch");
+        let query_builder = RdbQueryBuilder::new_for_pg(&tb_meta, None);
+        let mut row_data = pg_row_data(1);
+        row_data
+            .after
+            .as_mut()
+            .unwrap()
+            .insert("payload".to_string(), ColValue::Unavailable);
+
+        let err = query_builder
+            .get_query_info(&row_data, false)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("payload"), "{}", err);
+        assert!(err.contains("unavailable"), "{}", err);
+
+        let rows = [row_data];
+        let err = query_builder
+            .get_batch_insert_query(&rows, 0, 1, false)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("unavailable"), "{}", err);
+    }
+
+    #[test]
+    fn pg_update_rejects_unavailable_key_col() {
+        let tb_meta = pg_tb_meta("public", "t_batch");
+        let query_builder = RdbQueryBuilder::new_for_pg(&tb_meta, None);
+        let mut row_data = pg_update_row_data(ColValue::String("p".to_string()));
+        row_data
+            .before
+            .as_mut()
+            .unwrap()
+            .insert("id".to_string(), ColValue::Unavailable);
+
+        let err = query_builder
+            .get_query_info(&row_data, false)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("id"), "{}", err);
+        assert!(err.contains("unavailable"), "{}", err);
+    }
+
+    fn pg_update_row_data(payload: ColValue) -> RowData {
+        let mut before = HashMap::new();
+        before.insert("id".to_string(), ColValue::LongLong(1));
+
+        let mut after = HashMap::new();
+        after.insert("id".to_string(), ColValue::LongLong(1));
+        after.insert("tracer".to_string(), ColValue::String("t".to_string()));
+        after.insert("payload".to_string(), payload);
+
+        RowData::new(
+            "public".to_string(),
+            "t_batch".to_string(),
+            RowType::Update,
+            Some(before),
+            Some(after),
+        )
     }
 
     fn pg_row_data(id: i64) -> RowData {

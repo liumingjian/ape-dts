@@ -5,7 +5,13 @@ use strum::Display;
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Display)]
 pub enum MysqlColType {
-    Unknown,
+    /// a type ape-dts does not model. `name` is the source `DATA_TYPE`, kept so errors and
+    /// logs can name it; `keep_raw` mirrors the task's `unknown_col_type_policy` and decides
+    /// whether values are migrated as raw bytes or the task fails fast.
+    Unknown {
+        name: String,
+        keep_raw: bool,
+    },
     TinyInt {
         unsigned: bool,
     },
@@ -90,9 +96,33 @@ pub enum MysqlColType {
         items: Vec<String>,
     },
     Json,
+    /// geometry / point / linestring / polygon / multipoint / multilinestring /
+    /// multipolygon / geometrycollection.
+    ///
+    /// Values are carried as the raw mysql internal representation (4 byte SRID + WKB),
+    /// which is what both a snapshot query and the binlog deliver, and what mysql accepts
+    /// back on insert.
+    Geometry {
+        sub_type: String,
+    },
 }
 
 impl MysqlColType {
+    pub const GEOMETRY_TYPES: [&'static str; 8] = [
+        "geometry",
+        "point",
+        "linestring",
+        "polygon",
+        "multipoint",
+        "multilinestring",
+        "multipolygon",
+        "geometrycollection",
+    ];
+
+    pub fn is_geometry(&self) -> bool {
+        matches!(self, Self::Geometry { .. })
+    }
+
     pub fn is_integer(&self) -> bool {
         matches!(
             self,

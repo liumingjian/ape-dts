@@ -208,7 +208,8 @@ impl ClickhouseStructSinker {
             MysqlColType::Set { items: _ } => "String",
             MysqlColType::Enum { items: _ } => "String",
             MysqlColType::Json => "String",
-            MysqlColType::Unknown => "String",
+            MysqlColType::Geometry { .. } => "String",
+            MysqlColType::Unknown { .. } => "String",
         };
         Ok(dst_col.to_string())
     }
