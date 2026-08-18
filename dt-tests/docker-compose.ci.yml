@@ -37,10 +37,14 @@ services:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p123456"]
-      timeout: 5s
-      retries: 10
-      start_period: 30s
+      # Over TCP, and a real query: the entrypoint runs initdb against a temporary
+      # `--skip-networking` server, so a socket-based `mysqladmin ping` reports healthy
+      # seconds after start, while the server the tests actually connect to is still
+      # minutes away. The first five CDC cases died on "connection aborted" that way.
+      test: ["CMD-SHELL", "mysql -h 127.0.0.1 -P 3306 -u root -p123456 -e 'SELECT 1' > /dev/null 2>&1"]
+      timeout: 10s
+      retries: 30
+      start_period: 20s
       interval: 5s
 
   mysql-dst:
@@ -63,10 +67,14 @@ services:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p123456"]
-      timeout: 5s
-      retries: 10
-      start_period: 30s
+      # Over TCP, and a real query: the entrypoint runs initdb against a temporary
+      # `--skip-networking` server, so a socket-based `mysqladmin ping` reports healthy
+      # seconds after start, while the server the tests actually connect to is still
+      # minutes away. The first five CDC cases died on "connection aborted" that way.
+      test: ["CMD-SHELL", "mysql -h 127.0.0.1 -P 3306 -u root -p123456 -e 'SELECT 1' > /dev/null 2>&1"]
+      timeout: 10s
+      retries: 30
+      start_period: 20s
       interval: 5s
 
   # Third node of the mysql cycle tests, and the "meta center" instance.
@@ -90,10 +98,14 @@ services:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p123456"]
-      timeout: 5s
-      retries: 10
-      start_period: 30s
+      # Over TCP, and a real query: the entrypoint runs initdb against a temporary
+      # `--skip-networking` server, so a socket-based `mysqladmin ping` reports healthy
+      # seconds after start, while the server the tests actually connect to is still
+      # minutes away. The first five CDC cases died on "connection aborted" that way.
+      test: ["CMD-SHELL", "mysql -h 127.0.0.1 -P 3306 -u root -p123456 -e 'SELECT 1' > /dev/null 2>&1"]
+      timeout: 10s
+      retries: 30
+      start_period: 20s
       interval: 5s
 
   # `mysql_*_url_8_0` — the 8.0-only cases (json diff format, utf8mb4_0900 collations,
@@ -119,10 +131,14 @@ services:
       - --collation-server=utf8mb4_unicode_ci
       - --default-authentication-plugin=mysql_native_password
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p123456"]
-      timeout: 5s
-      retries: 10
-      start_period: 30s
+      # Over TCP, and a real query: the entrypoint runs initdb against a temporary
+      # `--skip-networking` server, so a socket-based `mysqladmin ping` reports healthy
+      # seconds after start, while the server the tests actually connect to is still
+      # minutes away. The first five CDC cases died on "connection aborted" that way.
+      test: ["CMD-SHELL", "mysql -h 127.0.0.1 -P 3306 -u root -p123456 -e 'SELECT 1' > /dev/null 2>&1"]
+      timeout: 10s
+      retries: 30
+      start_period: 20s
       interval: 5s
 
   mysql-dst-8-0:
@@ -146,10 +162,14 @@ services:
       - --collation-server=utf8mb4_unicode_ci
       - --default-authentication-plugin=mysql_native_password
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p123456"]
-      timeout: 5s
-      retries: 10
-      start_period: 30s
+      # Over TCP, and a real query: the entrypoint runs initdb against a temporary
+      # `--skip-networking` server, so a socket-based `mysqladmin ping` reports healthy
+      # seconds after start, while the server the tests actually connect to is still
+      # minutes away. The first five CDC cases died on "connection aborted" that way.
+      test: ["CMD-SHELL", "mysql -h 127.0.0.1 -P 3306 -u root -p123456 -e 'SELECT 1' > /dev/null 2>&1"]
+      timeout: 10s
+      retries: 30
+      start_period: 20s
       interval: 5s
 
   # ── PostgreSQL ───────────────────────────────────────────────────────────────────
@@ -178,10 +198,13 @@ services:
       - -c
       - max_replication_slots=10
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      timeout: 5s
-      retries: 10
-      start_period: 20s
+      # -h 127.0.0.1 for the same reason as MySQL: initdb (and the scripts in
+      # docker-entrypoint-initdb.d) runs against a server with listen_addresses = '',
+      # so only a TCP probe distinguishes "ready" from "still bootstrapping".
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres"]
+      timeout: 10s
+      retries: 20
+      start_period: 10s
       interval: 5s
 
   postgres-dst:
@@ -205,10 +228,13 @@ services:
       - -c
       - max_replication_slots=10
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      timeout: 5s
-      retries: 10
-      start_period: 20s
+      # -h 127.0.0.1 for the same reason as MySQL: initdb (and the scripts in
+      # docker-entrypoint-initdb.d) runs against a server with listen_addresses = '',
+      # so only a TCP probe distinguishes "ready" from "still bootstrapping".
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres"]
+      timeout: 10s
+      retries: 20
+      start_period: 10s
       interval: 5s
 
   # `pg_cycle_node3_url` — the pg cycle topologies need a third independent node.
@@ -231,10 +257,13 @@ services:
       - -c
       - max_replication_slots=10
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      timeout: 5s
-      retries: 10
-      start_period: 20s
+      # -h 127.0.0.1 for the same reason as MySQL: initdb (and the scripts in
+      # docker-entrypoint-initdb.d) runs against a server with listen_addresses = '',
+      # so only a TCP probe distinguishes "ready" from "still bootstrapping".
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres"]
+      timeout: 10s
+      retries: 20
+      start_period: 10s
       interval: 5s
 
   # ── MongoDB ──────────────────────────────────────────────────────────────────────
@@ -282,9 +311,9 @@ services:
         exec docker-entrypoint.sh mongod --port 27018 --replSet rs1 --auth --keyFile /data/keyfile --bind_ip_all
     healthcheck:
       test: ["CMD", "mongo", "--quiet", "--port", "27018", "-u", "ape_dts", "-p", "123456", "--authenticationDatabase", "admin", "--eval", "db.adminCommand('ping').ok"]
-      timeout: 5s
-      retries: 10
-      start_period: 20s
+      timeout: 10s
+      retries: 20
+      start_period: 10s
       interval: 5s
 
   mongo-init:
@@ -598,9 +627,9 @@ services:
       - "9000:9000"
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8123/ping"]
-      timeout: 5s
-      retries: 10
-      start_period: 20s
+      timeout: 10s
+      retries: 20
+      start_period: 10s
       interval: 5s
 
 networks:
