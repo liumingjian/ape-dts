@@ -135,14 +135,15 @@ jobs:
           tool: cargo-nextest
 
       # No `--lib --bins`: dt-console-server's tests/ suite has no external
-      # dependencies and must run in CI. dt-tests stays excluded (needs live DBs).
+      # dependencies and must run in CI. dt-tests is included too: without a
+      # `.env` every case that needs a live database skips with a printed reason
+      # (issue #50), so what runs here is its ~400 pure unit tests.
       # The `ci` profile quarantines 13 rotted tests — see .config/nextest.toml.
       - name: Run unit tests with nextest
         run: |
           cargo nextest run \
             --profile ci \
             --workspace \
-            --exclude dt-tests \
             --all-features
 
       - name: Run doc tests

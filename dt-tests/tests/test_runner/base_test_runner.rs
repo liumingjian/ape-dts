@@ -1,11 +1,14 @@
-use dt_common::{config::task_config::TaskConfig, utils::time_util::TimeUtil};
+use dt_common::{config::task_config::TaskConfig, error::Error, utils::time_util::TimeUtil};
 use dt_connector::data_marker::DataMarker;
 use dt_task::task_runner::TaskRunner;
 use std::{
     fs::{self, File},
     io::{BufRead, BufReader},
+    sync::Mutex,
+    time::{Duration, Instant},
 };
 use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 
 use crate::test_config_util::TestConfigUtil;
 
@@ -21,7 +24,12 @@ pub struct BaseTestRunner {
     pub src_clean_sqls: Vec<String>,
     pub dst_clean_sqls: Vec<String>,
     pub meta_center_prepare_sqls: Vec<String>,
+    /// One per task spawned by this runner, so `abort_task` can stop the engine cooperatively.
+    cancel_tokens: Mutex<Vec<CancellationToken>>,
 }
+
+/// How long a cancelled task gets to drain before we resort to a hard abort.
+const GRACEFUL_STOP_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[allow(dead_code)]
 impl BaseTestRunner {
@@ -54,6 +62,7 @@ impl BaseTestRunner {
             src_clean_sqls,
             dst_clean_sqls,
             meta_center_prepare_sqls,
+            cancel_tokens: Mutex::new(Vec::new()),
         })
     }
 
@@ -94,14 +103,53 @@ impl BaseTestRunner {
 
     pub async fn spawn_task(&self) -> anyhow::Result<JoinHandle<()>> {
         let task_runner = TaskRunner::new(&self.task_config_file)?;
-        let task = tokio::spawn(async move { task_runner.start_task().await.unwrap() });
+        let cancel_token = CancellationToken::new();
+        self.cancel_tokens
+            .lock()
+            .unwrap()
+            .push(cancel_token.clone());
+
+        let task = tokio::spawn(async move {
+            if let Err(e) = task_runner.start_task_with_cancel(cancel_token).await {
+                // A cancelled task is how every CDC test ends; anything else is a real failure
+                // and must stay loud.
+                if !e
+                    .chain()
+                    .any(|cause| matches!(cause.downcast_ref::<Error>(), Some(Error::Cancelled(_))))
+                {
+                    panic!("task failed: {:#}", e);
+                }
+            }
+        });
         Ok(task)
     }
 
+    /// Stops the engine and waits for it to be gone.
+    ///
+    /// A bare `JoinHandle::abort` only drops the outer future: the engine's inner extractor /
+    /// sinker tasks are aborted from a `Drop` guard and can still be mid-write. Those late writes
+    /// used to land in the *next* test's target database, which is invisible while every test
+    /// sleeps out its propagation window but breaks the moment compares converge in milliseconds.
+    /// So cancel cooperatively first, and only hard-abort if the engine will not leave.
     pub async fn abort_task(&self, task: &JoinHandle<()>) -> anyhow::Result<()> {
-        task.abort();
-        while !task.is_finished() {
-            TimeUtil::sleep_millis(1).await;
+        for token in self.cancel_tokens.lock().unwrap().iter() {
+            token.cancel();
+        }
+
+        let deadline = Instant::now() + GRACEFUL_STOP_TIMEOUT;
+        while !task.is_finished() && Instant::now() < deadline {
+            TimeUtil::sleep_millis(10).await;
+        }
+
+        if !task.is_finished() {
+            println!(
+                "task did not stop within {:?} after cancel, aborting it",
+                GRACEFUL_STOP_TIMEOUT
+            );
+            task.abort();
+            while !task.is_finished() {
+                TimeUtil::sleep_millis(1).await;
+            }
         }
         Ok(())
     }

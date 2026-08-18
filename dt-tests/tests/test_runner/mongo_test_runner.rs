@@ -34,6 +34,8 @@ pub struct MongoTestRunner {
 pub const SRC: &str = "src";
 pub const DST: &str = "dst";
 
+pub const COMPARE_POLL_INTERVAL_MILLIS: u64 = 200;
+
 #[allow(dead_code)]
 impl MongoTestRunner {
     pub async fn new(relative_test_dir: &str) -> anyhow::Result<Self> {
@@ -155,24 +157,27 @@ impl MongoTestRunner {
         TimeUtil::sleep_millis(start_millis).await;
 
         let task = self.base.spawn_task().await?;
-        TimeUtil::sleep_millis(start_millis).await;
-        for (db, _) in src_sqls.iter() {
-            self.compare_db_data(db).await;
-        }
+        let res: anyhow::Result<()> = async {
+            for (db, _) in src_sqls.iter() {
+                self.wait_compare_db_data(db, start_millis).await?;
+            }
 
-        for (db, sqls) in src_sqls.iter() {
-            let (_, _, src_delete_sqls) = Self::slice_sqls_by_type(sqls);
-            // delete
-            self.execute_dmls(src_mongo_client, db, &src_delete_sqls)
-                .await
-                .unwrap();
+            for (db, sqls) in src_sqls.iter() {
+                let (_, _, src_delete_sqls) = Self::slice_sqls_by_type(sqls);
+                // delete
+                self.execute_dmls(src_mongo_client, db, &src_delete_sqls)
+                    .await?;
+            }
+            for (db, _) in src_sqls.iter() {
+                self.wait_compare_db_data(db, parse_millis).await?;
+            }
+            Ok(())
         }
-        TimeUtil::sleep_millis(parse_millis).await;
-        for (db, _) in src_sqls.iter() {
-            self.compare_db_data(db).await;
-        }
+        .await;
 
-        self.base.abort_task(&task).await
+        // Always abort: a failed compare must not leak a long-running CDC task.
+        let _ = self.base.abort_task(&task).await;
+        res
     }
 
     pub async fn run_cdc_test(&self, start_millis: u64, parse_millis: u64) -> anyhow::Result<()> {
@@ -184,31 +189,32 @@ impl MongoTestRunner {
         let src_mongo_client = self.src_mongo_client.as_ref().unwrap();
 
         let src_sqls = Self::slice_sqls_by_db(&self.base.src_test_sqls);
-        for (db, sqls) in src_sqls.iter() {
-            let (src_insert_sqls, src_update_sqls, src_delete_sqls) =
-                Self::slice_sqls_by_type(sqls);
-            // insert
-            self.execute_dmls(src_mongo_client, db, &src_insert_sqls)
-                .await
-                .unwrap();
-            TimeUtil::sleep_millis(parse_millis).await;
-            self.compare_db_data(db).await;
+        let res: anyhow::Result<()> = async {
+            for (db, sqls) in src_sqls.iter() {
+                let (src_insert_sqls, src_update_sqls, src_delete_sqls) =
+                    Self::slice_sqls_by_type(sqls);
+                // insert
+                self.execute_dmls(src_mongo_client, db, &src_insert_sqls)
+                    .await?;
+                self.wait_compare_db_data(db, parse_millis).await?;
 
-            // update
-            self.execute_dmls(src_mongo_client, db, &src_update_sqls)
-                .await
-                .unwrap();
-            TimeUtil::sleep_millis(parse_millis).await;
-            self.compare_db_data(db).await;
+                // update
+                self.execute_dmls(src_mongo_client, db, &src_update_sqls)
+                    .await?;
+                self.wait_compare_db_data(db, parse_millis).await?;
 
-            // delete
-            self.execute_dmls(src_mongo_client, db, &src_delete_sqls)
-                .await
-                .unwrap();
-            TimeUtil::sleep_millis(parse_millis).await;
-            self.compare_db_data(db).await;
+                // delete
+                self.execute_dmls(src_mongo_client, db, &src_delete_sqls)
+                    .await?;
+                self.wait_compare_db_data(db, parse_millis).await?;
+            }
+            Ok(())
         }
-        self.base.abort_task(&task).await
+        .await;
+
+        // Always abort: a failed compare must not leak a long-running CDC task.
+        let _ = self.base.abort_task(&task).await;
+        res
     }
 
     pub async fn run_snapshot_test(&self, compare_data: bool) -> anyhow::Result<()> {
@@ -544,29 +550,72 @@ impl MongoTestRunner {
     }
 
     async fn compare_db_data(&self, db: &str) {
-        let tbs = self.list_tb(db, SRC).await;
-        for tb in tbs.iter() {
-            self.compare_tb_data(db, tb).await;
-        }
+        self.try_compare_db_data(db).await.unwrap()
     }
 
-    async fn compare_tb_data(&self, db: &str, tb: &str) {
-        println!("compare tb data, db: {}, tb: {}", db, tb);
+    /// Polls src against dst every `COMPARE_POLL_INTERVAL_MILLIS` until they agree or
+    /// `max_wait_millis` runs out, instead of sleeping through the worst-case propagation
+    /// delay and comparing once. Same convergence the red-line script uses.
+    async fn wait_compare_db_data(&self, db: &str, max_wait_millis: u64) -> anyhow::Result<()> {
+        let started = std::time::Instant::now();
+        let mut last_err = match self.try_compare_db_data(db).await {
+            Ok(()) => return Ok(()),
+            Err(e) => e,
+        };
+
+        while started.elapsed().as_millis() < max_wait_millis as u128 {
+            TimeUtil::sleep_millis(COMPARE_POLL_INTERVAL_MILLIS).await;
+            match self.try_compare_db_data(db).await {
+                Ok(()) => return Ok(()),
+                Err(e) => last_err = e,
+            }
+        }
+
+        anyhow::bail!(
+            "compare db data failed after {} ms (db={}): {:#}",
+            max_wait_millis,
+            db,
+            last_err
+        )
+    }
+
+    async fn try_compare_db_data(&self, db: &str) -> anyhow::Result<()> {
+        let tbs = self.list_tb(db, SRC).await;
+        for tb in tbs.iter() {
+            self.try_compare_tb_data(db, tb).await?;
+        }
+        Ok(())
+    }
+
+    async fn try_compare_tb_data(&self, db: &str, tb: &str) -> anyhow::Result<()> {
         let src_data = self.fetch_data(db, tb, SRC).await;
 
         let (dst_db, dst_tb) = self.router.get_tb_map(db, tb);
         let dst_data = self.fetch_data(dst_db, dst_tb, DST).await;
 
-        assert_eq!(src_data.len(), dst_data.len());
+        if src_data.len() != dst_data.len() {
+            anyhow::bail!(
+                "compare tb data failed, db: {}, tb: {}, src count: {}, dst count: {}",
+                db,
+                tb,
+                src_data.len(),
+                dst_data.len()
+            );
+        }
         for id in src_data.keys() {
             let src_value = src_data.get(id);
             let dst_value = dst_data.get(id);
-            println!(
-                "compare tb data, db: {}, tb: {}, src_value: {:?}, dst_value: {:?}",
-                db, tb, src_value, dst_value
-            );
-            assert_eq!(src_value, dst_value);
+            if src_value != dst_value {
+                anyhow::bail!(
+                    "compare tb data failed, db: {}, tb: {}, src_value: {:?}, dst_value: {:?}",
+                    db,
+                    tb,
+                    src_value,
+                    dst_value
+                );
+            }
         }
+        Ok(())
     }
 
     async fn list_tb(&self, db: &str, from: &str) -> Vec<String> {

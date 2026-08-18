@@ -6,6 +6,7 @@ use tokio::task::JoinHandle;
 use crate::test_config_util::TestConfigUtil;
 
 use super::redis_test_runner::RedisTestRunner;
+use super::test_env::TestEnv;
 
 pub struct RedisCycleTestRunner {
     base: RedisTestRunner,
@@ -19,6 +20,10 @@ impl RedisCycleTestRunner {
     }
 
     pub async fn run_cycle_cdc_test(test_dir: &str, start_millis: u64, parse_millis: u64) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let sub_paths = TestConfigUtil::get_absolute_sub_dir(test_dir);
         let mut handlers: Vec<JoinHandle<()>> = vec![];
         let mut runner_map: HashMap<String, RedisCycleTestRunner> = HashMap::new();

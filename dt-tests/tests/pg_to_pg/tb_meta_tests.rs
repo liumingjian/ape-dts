@@ -1,12 +1,17 @@
 #[cfg(test)]
 mod test {
     use crate::test_runner::rdb_test_runner::RdbTestRunner;
+    use crate::test_runner::test_env::TestEnv;
     use dt_common::meta::pg::pg_meta_manager::PgMetaManager;
     use serial_test::serial;
 
     #[tokio::test]
     #[serial]
     async fn struct_basic_test() {
+        if TestEnv::skip("pg_to_pg/tb_meta/basic_test").await {
+            return;
+        }
+
         let runner = RdbTestRunner::new("pg_to_pg/tb_meta/basic_test")
             .await
             .unwrap();

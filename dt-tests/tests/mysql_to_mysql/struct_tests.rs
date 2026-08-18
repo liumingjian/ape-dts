@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod test {
+    use crate::test_runner::test_env::TestEnv;
 
     use serial_test::serial;
 
@@ -58,6 +59,10 @@ mod test {
     #[tokio::test]
     #[serial]
     async fn struct_batch_bench_test_1() {
+        if TestEnv::skip("mysql_to_mysql/struct/batch_test/bench_test_1/src_to_dst").await {
+            return;
+        }
+
         let mut runner =
             RdbStructTestRunner::new("mysql_to_mysql/struct/batch_test/bench_test_1/src_to_dst")
                 .await
