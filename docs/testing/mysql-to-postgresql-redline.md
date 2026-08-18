@@ -80,6 +80,28 @@ MySQL 官方镜像在初始化期间会先起一个临时服务端、随后重�
 
 `die` 之外，脚本还挂了 `ERR` trap：任何被 `set -e` 直接带走的语句（裸的 `mysql_sql` heredoc、`compose` 调用、命令替换赋值）都会记录「阶段 + 失败命令 + 退出码 + 行号」。`summary.md` 的 `Reason` 在失败运行中优先取 `die` 的显式原因，其次取 trap 记录，绝不再出现空白或 `none`。
 
+## CI 接入
+
+红线在 GitHub Actions 上由独立 workflow `.github/workflows/redline.yml`（`Migration Red-line`）执行，不是 `CI` 里的一个 job——GitHub 的路径过滤只能按 workflow 声明，而红线要起两个数据库和一个真实 `dt-main`，必须避开纯文档和纯 console 的改动。
+
+触发条件：`main` 的 push、指向 `main` 的 PR（两者都限定在下列路径），以及手动 `workflow_dispatch`。
+
+```text
+dt-common/** dt-connector/** dt-main/** dt-parallelizer/** dt-pipeline/** dt-task/**
+Cargo.toml Cargo.lock
+scripts/e2e/mysql_to_postgresql_redline*.sh
+scripts/e2e/docker-compose.mysql-to-postgresql-redline.yml
+.github/workflows/redline.yml
+```
+
+**没有触碰这些路径的 PR 根本不会启动该 workflow**，因此把它设为 required status check 之前必须先想清楚这一点（不然这类 PR 会永远卡在等待检查）。
+
+Job 步骤依次为：脚本自检（`mysql_to_postgresql_redline_test.sh`，秒级失败，不必等构建）→ `rm -f target/debug/dt-main` 后 `cargo build -p dt-main`（`ensure_dt_main` 只在二进制缺失时构建，缓存命中时会拿到旧二进制，所以这里显式重建）→ 全量红线 → 把 `summary.md` 写进 job summary。
+
+失败时 `actions/upload-artifact` 上传整个 `.local/e2e/mysql-to-postgresql/**`（summary、dumps、diffs、engine-logs、容器日志、INI），保留 14 天，产物名为 `redline-artifacts-<run-id>-<attempt>`。成功的运行不上传产物。
+
+Job 超时 60 分钟：冷构建占大头，脚本本身还有一个 120 秒的排空持有窗口。
+
 ## 隔离、产物与清理
 
 每次运行使用唯一 Compose Project，MySQL 和 PostgreSQL 只绑定 `127.0.0.1` 动态端口，不声明固定容器名、网络名或持久卷。默认退出时先采集诊断并停止 CDC，再执行 `docker compose down -v --remove-orphans`。

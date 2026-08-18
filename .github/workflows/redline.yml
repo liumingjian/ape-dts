@@ -1,0 +1,114 @@
+name: Migration Red-line
+
+# The red-line is the project's mandatory gate for engine changes (see CLAUDE.md),
+# but it used to live only in a human's discretion. This workflow makes it falsifiable.
+#
+# It is a workflow of its own rather than a job inside `CI` because GitHub only
+# supports path filters per workflow: the red-line boots two databases and a real
+# `dt-main`, so it must stay off doc-only and console-only changes. A pull request
+# that touches none of the paths below never starts this workflow — do not make it a
+# required status check without accounting for that.
+
+on:
+  push:
+    branches: [main]
+    # GitHub Actions does not support YAML anchors, so this list is duplicated below.
+    paths:
+      - "dt-common/**"
+      - "dt-connector/**"
+      - "dt-main/**"
+      - "dt-parallelizer/**"
+      - "dt-pipeline/**"
+      - "dt-task/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "scripts/e2e/mysql_to_postgresql_redline*.sh"
+      - "scripts/e2e/docker-compose.mysql-to-postgresql-redline.yml"
+      - ".github/workflows/redline.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "dt-common/**"
+      - "dt-connector/**"
+      - "dt-main/**"
+      - "dt-parallelizer/**"
+      - "dt-pipeline/**"
+      - "dt-task/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "scripts/e2e/mysql_to_postgresql_redline*.sh"
+      - "scripts/e2e/docker-compose.mysql-to-postgresql-redline.yml"
+      - ".github/workflows/redline.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  redline:
+    name: MySQL to PostgreSQL Red-line
+    runs-on: ubuntu-latest
+    # Cold build dominates; the script itself holds a 120s drain window and a handful
+    # of shorter deadlines.
+    timeout-minutes: 60
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: redline-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            lint-${{ runner.os }}-
+
+      # Cheap self-check of the script's own pure helpers (port parsing, run-id
+      # sanitizing, expected-row fixtures). Fails in seconds instead of after a build.
+      - name: Run red-line script self-test
+        run: bash scripts/e2e/mysql_to_postgresql_redline_test.sh
+
+      # `ensure_dt_main` only builds when the binary is missing, so a restored cache
+      # could otherwise hand the run a stale binary. Build it explicitly, from scratch.
+      - name: Build dt-main
+        run: |
+          rm -f target/debug/dt-main
+          cargo build -p dt-main
+
+      - name: Run MySQL to PostgreSQL red-line
+        id: redline
+        run: bash scripts/e2e/mysql_to_postgresql_redline.sh
+
+      - name: Summarize red-line result
+        if: always()
+        run: |
+          echo "## 🚦 MySQL → PostgreSQL Red-line" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          summary="$(find .local/e2e/mysql-to-postgresql -name summary.md -print -quit 2>/dev/null || true)"
+          if [ -n "$summary" ]; then
+            cat "$summary" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.redline.outcome }}" == "success" ]; then
+            echo "✅ **Red-line passed** (no summary file found)." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Red-line failed before it could write a summary.** Check the step log." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      # Everything needed to diagnose a failure without reproducing it: summary.md,
+      # per-stage dumps and diffs, engine logs, INIs, container logs.
+      - name: Upload red-line artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: redline-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .local/e2e/mysql-to-postgresql/**
+          if-no-files-found: warn
+          retention-days: 14

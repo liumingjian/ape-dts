@@ -10,6 +10,8 @@ bash scripts/e2e/mysql_to_postgresql_redline.sh
 
 The change passes only when Snapshot, CDC readiness, INSERT, UPDATE, DELETE, and final MySQL/PostgreSQL equality all pass with the real `dt-main` binary.
 
+CI enforces the same gate: the `Migration Red-line` workflow (`.github/workflows/redline.yml`) runs it on every push to `main` and every PR that touches the engine crates.
+
 Do not bypass or weaken this red-line. On failure, report the failing stage and artifact path; fix the cause or explicitly leave the work unverified. Detailed scope and diagnostics: [docs/testing/mysql-to-postgresql-redline.md](docs/testing/mysql-to-postgresql-redline.md).
 
 ## Agent skills
