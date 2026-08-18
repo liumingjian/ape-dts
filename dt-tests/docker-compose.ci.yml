@@ -1,10 +1,26 @@
-version: '3.8'
+# Integration-test stack for CI (and for anyone who wants the same stack locally).
+#
+# Every service carries a `profiles` entry named after the test suite that needs it, so a job
+# starts only what it uses:
+#
+#   docker compose -f docker-compose.ci.yml --profile mysql up --detach --wait
+#   docker compose -f docker-compose.ci.yml --profile redis up --detach --wait
+#
+# The endpoints here are the ones `.env.ci` points at — the two files are a pair, and
+# `dt-tests/tests/test_runner/env_ci.rs` asserts every `{placeholder}` a suite references is
+# defined in `.env.ci`. Ports follow `tests/.env.src` wherever that file is self-consistent.
+#
+# Images are pinned. `docker-compose.override.local.yml` swaps the MySQL 5.7 instances for 8.0
+# because 5.7 has no arm64 image — that override is for developer machines only; CI runs amd64
+# and must keep 5.7, since `mysql_extractor_url` and `mysql_extractor_url_8_0` are two different
+# server versions on purpose.
 
 services:
-  # MySQL instances for testing
+  # ── MySQL ────────────────────────────────────────────────────────────────────────
   mysql-src:
     image: mysql:5.7
     container_name: mysql-src-ci
+    profiles: ["mysql"]
     environment:
       MYSQL_ROOT_PASSWORD: 123456
       MYSQL_DATABASE: test_db
@@ -23,13 +39,14 @@ services:
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p123456"]
       timeout: 5s
-      retries: 5
-      start_period: 20s
+      retries: 10
+      start_period: 30s
       interval: 5s
 
   mysql-dst:
     image: mysql:5.7
     container_name: mysql-dst-ci
+    profiles: ["mysql"]
     environment:
       MYSQL_ROOT_PASSWORD: 123456
       MYSQL_DATABASE: test_db
@@ -48,13 +65,15 @@ services:
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p123456"]
       timeout: 5s
-      retries: 5
-      start_period: 20s
+      retries: 10
+      start_period: 30s
       interval: 5s
 
+  # Third node of the mysql cycle tests, and the "meta center" instance.
   mysql-meta:
     image: mysql:5.7
     container_name: mysql-meta-ci
+    profiles: ["mysql"]
     environment:
       MYSQL_ROOT_PASSWORD: 123456
       MYSQL_DATABASE: test_db
@@ -73,14 +92,71 @@ services:
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p123456"]
       timeout: 5s
-      retries: 5
-      start_period: 20s
+      retries: 10
+      start_period: 30s
       interval: 5s
 
-  # PostgreSQL instances
+  # `mysql_*_url_8_0` — the 8.0-only cases (json diff format, utf8mb4_0900 collations,
+  # case-sensitivity) run against these, not against the 5.7 pair above.
+  mysql-src-8-0:
+    image: mysql:8.0
+    container_name: mysql-src-8-0-ci
+    profiles: ["mysql"]
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_DATABASE: test_db
+    ports:
+      - "3311:3306"
+    command:
+      - mysqld
+      - --server-id=11
+      - --log-bin=mysql-bin
+      - --binlog-format=ROW
+      - --gtid-mode=ON
+      - --enforce-gtid-consistency=ON
+      - --log-replica-updates=ON
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p123456"]
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+      interval: 5s
+
+  mysql-dst-8-0:
+    image: mysql:8.0
+    container_name: mysql-dst-8-0-ci
+    profiles: ["mysql"]
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_DATABASE: test_db
+    ports:
+      - "3312:3306"
+    command:
+      - mysqld
+      - --server-id=12
+      - --log-bin=mysql-bin
+      - --binlog-format=ROW
+      - --gtid-mode=ON
+      - --enforce-gtid-consistency=ON
+      - --log-replica-updates=ON
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p123456"]
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+      interval: 5s
+
+  # ── PostgreSQL ───────────────────────────────────────────────────────────────────
   postgres-src:
     image: postgres:13
     container_name: postgres-src-ci
+    profiles: ["pg"]
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -98,13 +174,14 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       timeout: 5s
-      retries: 5
+      retries: 10
       start_period: 20s
       interval: 5s
 
   postgres-dst:
     image: postgres:13
     container_name: postgres-dst-ci
+    profiles: ["pg"]
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -122,102 +199,360 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       timeout: 5s
-      retries: 5
+      retries: 10
       start_period: 20s
       interval: 5s
 
-  # MongoDB instances
+  # `pg_cycle_node3_url` — the pg cycle topologies need a third independent node.
+  postgres-node3:
+    image: postgres:13
+    container_name: postgres-node3-ci
+    profiles: ["pg"]
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5435:5432"
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_wal_senders=10
+      - -c
+      - max_replication_slots=10
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+      interval: 5s
+
+  # ── MongoDB ──────────────────────────────────────────────────────────────────────
+  # Both sides are single-node replica sets: op_log / change_stream extraction needs one, and
+  # the check suite reads the sink back through the same driver. `mongo-init` runs rs.initiate()
+  # once and exits; `--wait` treats a clean exit as ready.
   mongo-src:
     image: mongo:4.4
     container_name: mongo-src-ci
+    profiles: ["mongo"]
     ports:
       - "27017:27017"
-    command: mongod --replSet rs0
+    command: mongod --replSet rs0 --bind_ip_all
     healthcheck:
-      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD", "mongo", "--quiet", "--eval", "db.adminCommand('ping').ok"]
       timeout: 5s
-      retries: 5
-      start_period: 20s
+      retries: 10
+      start_period: 10s
       interval: 5s
 
   mongo-dst:
     image: mongo:4.4
     container_name: mongo-dst-ci
+    profiles: ["mongo"]
     environment:
       MONGO_INITDB_ROOT_USERNAME: ape_dts
       MONGO_INITDB_ROOT_PASSWORD: 123456
     ports:
       - "27018:27017"
-    command: mongod --replSet rs1 --auth
+    # A replica set with --auth also needs internal (keyfile) auth, so the keyfile is generated
+    # before handing over to the stock entrypoint.
+    entrypoint:
+      - bash
+      - -c
+      - |
+        set -e
+        openssl rand -base64 756 > /data/keyfile
+        chmod 400 /data/keyfile
+        chown mongodb:mongodb /data/keyfile
+        exec docker-entrypoint.sh mongod --replSet rs1 --auth --keyFile /data/keyfile --bind_ip_all
     healthcheck:
-      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD", "mongo", "--quiet", "-u", "ape_dts", "-p", "123456", "--authenticationDatabase", "admin", "--eval", "db.adminCommand('ping').ok"]
       timeout: 5s
-      retries: 5
+      retries: 10
       start_period: 20s
       interval: 5s
 
-  # Redis instances
-  redis-src:
+  mongo-init:
+    image: mongo:4.4
+    container_name: mongo-init-ci
+    profiles: ["mongo"]
+    depends_on:
+      mongo-src:
+        condition: service_healthy
+      mongo-dst:
+        condition: service_healthy
+    network_mode: host
+    restart: "no"
+    entrypoint:
+      - bash
+      - -c
+      - |
+        set -e
+        mongo --quiet --host 127.0.0.1 --port 27017 --eval \
+          'try { rs.status().ok } catch (e) { rs.initiate({_id: "rs0", members: [{_id: 0, host: "127.0.0.1:27017"}]}) }'
+        mongo --quiet --host 127.0.0.1 --port 27018 -u ape_dts -p 123456 --authenticationDatabase admin --eval \
+          'try { rs.status().ok } catch (e) { rs.initiate({_id: "rs1", members: [{_id: 0, host: "127.0.0.1:27018"}]}) }'
+        # A freshly initiated single-node set takes a moment to elect itself primary.
+        for i in $$(seq 1 30); do
+          if mongo --quiet --host 127.0.0.1 --port 27017 --eval 'db.isMaster().ismaster' | grep -q true; then
+            break
+          fi
+          sleep 1
+        done
+        mongo --quiet --host 127.0.0.1 --port 27017 --eval 'db.isMaster().ismaster' | grep -q true
+
+  # ── Redis ────────────────────────────────────────────────────────────────────────
+  # One src/dst pair per supported wire format. `redis_to_redis` references every one of them,
+  # so a job that only starts 7.0 would skip most of the suite (or, under
+  # DT_TESTS_STRICT_ENV=1, fail).
+  redis-src-7-0:
     image: redis:7.0
-    container_name: redis-src-ci
+    container_name: redis-src-7-0-ci
+    profiles: ["redis"]
     ports:
       - "6380:6379"
     command: redis-server --requirepass 123456 --save 60 1 --loglevel warning
-    healthcheck:
+    healthcheck: &redis_auth_healthcheck
       test: ["CMD", "redis-cli", "-a", "123456", "ping"]
       timeout: 5s
-      retries: 5
-      start_period: 10s
+      retries: 10
+      start_period: 5s
       interval: 3s
 
-  redis-dst:
+  redis-dst-7-0:
     image: redis:7.0
-    container_name: redis-dst-ci
+    container_name: redis-dst-7-0-ci
+    profiles: ["redis"]
     ports:
       - "6390:6379"
     command: redis-server --requirepass 123456 --save 60 1 --loglevel warning
-    healthcheck:
-      test: ["CMD", "redis-cli", "-a", "123456", "ping"]
+    healthcheck: *redis_auth_healthcheck
+
+  # Third node of the redis cycle topologies.
+  redis-node3:
+    image: redis:7.0
+    container_name: redis-node3-ci
+    profiles: ["redis"]
+    ports:
+      - "6400:6379"
+    command: redis-server --requirepass 123456 --save 60 1 --loglevel warning
+    healthcheck: *redis_auth_healthcheck
+
+  redis-src-6-2:
+    image: redis:6.2
+    container_name: redis-src-6-2-ci
+    profiles: ["redis"]
+    ports:
+      - "6382:6379"
+    command: redis-server --requirepass 123456 --save 60 1 --loglevel warning
+    healthcheck: *redis_auth_healthcheck
+
+  redis-dst-6-2:
+    image: redis:6.2
+    container_name: redis-dst-6-2-ci
+    profiles: ["redis"]
+    ports:
+      - "6392:6379"
+    command: redis-server --requirepass 123456 --save 60 1 --loglevel warning
+    healthcheck: *redis_auth_healthcheck
+
+  redis-src-6-0:
+    image: redis:6.0
+    container_name: redis-src-6-0-ci
+    profiles: ["redis"]
+    ports:
+      - "6383:6379"
+    command: redis-server --requirepass 123456 --save 60 1 --loglevel warning
+    healthcheck: *redis_auth_healthcheck
+
+  redis-dst-6-0:
+    image: redis:6.0
+    container_name: redis-dst-6-0-ci
+    profiles: ["redis"]
+    ports:
+      - "6393:6379"
+    command: redis-server --requirepass 123456 --save 60 1 --loglevel warning
+    healthcheck: *redis_auth_healthcheck
+
+  redis-src-5-0:
+    image: redis:5.0
+    container_name: redis-src-5-0-ci
+    profiles: ["redis"]
+    ports:
+      - "6384:6379"
+    command: redis-server --requirepass 123456 --save 60 1 --loglevel warning
+    healthcheck: *redis_auth_healthcheck
+
+  redis-dst-5-0:
+    image: redis:5.0
+    container_name: redis-dst-5-0-ci
+    profiles: ["redis"]
+    ports:
+      - "6394:6379"
+    command: redis-server --requirepass 123456 --save 60 1 --loglevel warning
+    healthcheck: *redis_auth_healthcheck
+
+  redis-src-4-0:
+    image: redis:4.0
+    container_name: redis-src-4-0-ci
+    profiles: ["redis"]
+    ports:
+      - "6385:6379"
+    command: redis-server --requirepass 123456 --save 60 1 --loglevel warning
+    healthcheck: *redis_auth_healthcheck
+
+  redis-dst-4-0:
+    image: redis:4.0
+    container_name: redis-dst-4-0-ci
+    profiles: ["redis"]
+    ports:
+      - "6395:6379"
+    command: redis-server --requirepass 123456 --save 60 1 --loglevel warning
+    healthcheck: *redis_auth_healthcheck
+
+  # 2.8 predates `--requirepass` on the command line being usable together with the entrypoint's
+  # default config, so the password is set the same way dt-tests/k8s does it: after boot.
+  redis-src-2-8:
+    image: redis:2.8.22
+    container_name: redis-src-2-8-ci
+    profiles: ["redis"]
+    ports:
+      - "6386:6379"
+    command: redis-server --requirepass 123456
+    healthcheck: *redis_auth_healthcheck
+
+  redis-dst-2-8:
+    image: redis:2.8.22
+    container_name: redis-dst-2-8-ci
+    profiles: ["redis"]
+    ports:
+      - "6396:6379"
+    command: redis-server --requirepass 123456
+    healthcheck: *redis_auth_healthcheck
+
+  redis-src-8-0:
+    image: redis:8.0
+    container_name: redis-src-8-0-ci
+    profiles: ["redis"]
+    ports:
+      - "6387:6379"
+    command: redis-server --requirepass 123456 --save 60 1 --loglevel warning
+    healthcheck: *redis_auth_healthcheck
+
+  redis-dst-8-0:
+    image: redis:8.0
+    container_name: redis-dst-8-0-ci
+    profiles: ["redis"]
+    ports:
+      - "6397:6379"
+    command: redis-server --requirepass 123456 --save 60 1 --loglevel warning
+    healthcheck: *redis_auth_healthcheck
+
+  # Module images, pinned to the same versions dt-tests/k8s uses. They run without a password,
+  # matching the module URLs in `.env.ci`.
+  redis-src-rejson:
+    image: redislabs/rejson:2.6.4
+    container_name: redis-src-rejson-ci
+    profiles: ["redis"]
+    ports:
+      - "6388:6379"
+    healthcheck: &redis_noauth_healthcheck
+      test: ["CMD", "redis-cli", "ping"]
       timeout: 5s
-      retries: 5
-      start_period: 10s
+      retries: 10
+      start_period: 5s
       interval: 3s
 
-  # FalkorDB (RedisGraph) instances
+  redis-dst-rejson:
+    image: redislabs/rejson:2.6.4
+    container_name: redis-dst-rejson-ci
+    profiles: ["redis"]
+    ports:
+      - "6398:6379"
+    healthcheck: *redis_noauth_healthcheck
+
+  redis-src-rebloom:
+    image: redislabs/rebloom:2.6.3
+    container_name: redis-src-rebloom-ci
+    profiles: ["redis"]
+    ports:
+      - "6389:6379"
+    healthcheck: *redis_noauth_healthcheck
+
+  redis-dst-rebloom:
+    image: redislabs/rebloom:2.6.3
+    container_name: redis-dst-rebloom-ci
+    profiles: ["redis"]
+    ports:
+      - "6399:6379"
+    healthcheck: *redis_noauth_healthcheck
+
+  redis-src-redisearch:
+    image: redislabs/redisearch:2.8.4
+    container_name: redis-src-redisearch-ci
+    profiles: ["redis"]
+    ports:
+      - "6401:6379"
+    healthcheck: *redis_noauth_healthcheck
+
+  redis-dst-redisearch:
+    image: redislabs/redisearch:2.8.4
+    container_name: redis-dst-redisearch-ci
+    profiles: ["redis"]
+    ports:
+      - "6402:6379"
+    healthcheck: *redis_noauth_healthcheck
+
+  # RedisGraph, via FalkorDB (the maintained successor image).
   falkordb-src:
     image: falkordb/falkordb:v4.12.5
     container_name: falkordb-src-ci
+    profiles: ["redis"]
     ports:
       - "6381:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "-a", "123456", "ping"]
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-      interval: 3s
     environment:
-      - REDIS_ARGS=--requirepass 123456 --save 60 1 --loglevel warning
       - FALKORDB_ARGS=MAX_INFO_QUERIES 0
+    healthcheck: *redis_noauth_healthcheck
 
   falkordb-dst:
     image: falkordb/falkordb:v4.12.5
     container_name: falkordb-dst-ci
+    profiles: ["redis"]
     ports:
       - "6391:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "-a", "123456", "ping"]
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-      interval: 3s
     environment:
-      - REDIS_ARGS=--requirepass 123456 --save 60 1 --loglevel warning
       - FALKORDB_ARGS=MAX_INFO_QUERIES 0
+    healthcheck: *redis_noauth_healthcheck
 
-  # ClickHouse for testing
+  # `redis_cluster_sinker_url` — the two `to_cluster_test` cases need a real cluster, whose nodes
+  # announce their own addresses; host networking is what makes those announcements reachable
+  # from the test process.
+  redis-cluster:
+    image: grokzen/redis-cluster:7.0.10
+    container_name: redis-cluster-ci
+    profiles: ["redis"]
+    network_mode: host
+    environment:
+      IP: 127.0.0.1
+      INITIAL_PORT: 6371
+      MASTERS: 3
+      SLAVES_PER_MASTER: 0
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -p 6371 cluster info | grep -q cluster_state:ok"]
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+      interval: 5s
+
+  # ── ClickHouse ───────────────────────────────────────────────────────────────────
+  # Not part of the nightly matrix; kept so `--profile clickhouse` still brings up what the
+  # mysql_to_clickhouse / pg_to_clickhouse suites need.
   clickhouse:
     image: yandex/clickhouse-server:21.8
     container_name: clickhouse-ci
+    profiles: ["clickhouse"]
     environment:
       CLICKHOUSE_USER: admin
       CLICKHOUSE_PASSWORD: 123456
@@ -228,7 +563,7 @@ services:
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8123/ping"]
       timeout: 5s
-      retries: 5
+      retries: 10
       start_period: 20s
       interval: 5s
 

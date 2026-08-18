@@ -44,6 +44,37 @@ cargo test --package dt-tests --test integration_test -- mysql_to_mysql::cdc_tes
 
 环境本该就绪的地方（CI、compose 栈）设 `DT_TESTS_STRICT_ENV=1`，把跳过变成失败，避免坏环境冒充绿灯。
 
+# 每日 E2E 矩阵与它的 compose 栈
+
+`.github/workflows/e2e-tests.yml` 每晚跑 `mysql_to_mysql`、`pg_to_pg`、`mongo_to_mongo`、
+`redis_to_redis` 四个套件（也可手动 *Run workflow*，输入逗号分隔的子集）。每个 job 只起
+`docker-compose.ci.yml` 里对应的一个 profile，并把 `.env.ci` 复制成 `tests/.env`；本地要同一套
+环境，两条命令即可：
+
+```
+docker compose -f dt-tests/docker-compose.ci.yml --profile mysql up --detach --wait
+cp dt-tests/.env.ci dt-tests/tests/.env
+```
+
+profile 有 `mysql`、`pg`、`mongo`、`redis`、`clickhouse`。不指定 profile 什么都不会起——redis 的
+job 因此不会顺带拉起五个它根本用不到的 MySQL。
+
+工作流依赖的两条不变量，改它时请保留：
+
+- `DT_TESTS_STRICT_ENV=1`——夜间任务里「跳过」和「通过」看起来一模一样，所以跳过必须是失败。
+  反过来说，一个套件只有在 `docker-compose.ci.yml` 里备齐了整套依赖后，才够格进矩阵。
+- `--test-threads 1`——套件共用数据库、靠 `#[serial]` 串行，而 `#[serial]` 只在进程内有效，
+  nextest 给每个用例单独起进程。
+
+`.env.ci` 与 `.env.src` 必须覆盖所有 `task_config.ini` 引用的 `{占位符}`；
+`tests/test_runner/env_ci.rs` 不碰数据库就能断言这一点，工作流在起任何容器之前先跑它。所以新增
+一个引用了新端点的用例时，两个 env 文件都要补 key；若还希望夜间矩阵覆盖它，`docker-compose.ci.yml`
+里也要补上对应服务。
+
+arm64 机器上 `docker-compose.override.local.yml` 把 MySQL 5.7 换成 8.0（5.7 没有 arm64 镜像）；
+CI 跑 amd64，保持 5.7——`mysql_extractor_url` 与 `mysql_extractor_url_8_0` 本来就是两个不同版本的
+服务端。redis 2.8 与 `redislabs/*` 模块镜像同样只有 amd64，所以完整的 redis profile 是 CI 专用栈。
+
 依赖数据库之外的东西的用例标了 `#[ignore]`，需要显式运行：
 
 ```

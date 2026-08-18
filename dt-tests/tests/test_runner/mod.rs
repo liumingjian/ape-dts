@@ -1,5 +1,6 @@
 pub mod base_test_runner;
 pub mod check_util;
+pub mod env_ci;
 pub mod mock_utils;
 pub mod mongo_check_test_runner;
 pub mod mongo_test_runner;
