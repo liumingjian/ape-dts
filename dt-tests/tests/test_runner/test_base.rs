@@ -20,6 +20,7 @@ use super::{
     rdb_sql_test_runner::RdbSqlTestRunner, rdb_starrocks_test_runner::RdbStarRocksTestRunner,
     rdb_struct_test_runner::RdbStructTestRunner, rdb_test_runner::RdbTestRunner,
     redis_statistic_runner::RedisStatisticTestRunner, redis_test_runner::RedisTestRunner,
+    test_env::TestEnv,
 };
 
 pub struct TestBase {}
@@ -30,6 +31,9 @@ impl TestBase {
         test_dir.contains("gaussdb")
     }
 
+    /// Infrastructure hiccups only. A data mismatch is an assertion failure: retrying it (and
+    /// re-running the clean SQLs in between) launders a real missing/reordered-event bug into an
+    /// accidental green, which is exactly what the compare poll loop already rules out.
     fn is_transient_error(err: &Error) -> bool {
         let msg = format!("{:#}", err).to_lowercase();
         msg.contains("unexpected end of file")
@@ -40,7 +44,6 @@ impl TestBase {
             || msg.contains("operation timed out")
             || msg.contains("timeout expired")
             || msg.contains("pool timed out")
-            || msg.contains("compare tb data failed")
             || msg.contains("terminating connection")
             || msg.contains("server closed the connection")
     }
@@ -82,6 +85,10 @@ impl TestBase {
     }
 
     pub async fn run_snapshot_test(test_dir: &str) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         Self::run_with_retry(test_dir, "snapshot", || async {
             let runner = RdbTestRunner::new(test_dir).await?;
             let run_res = runner.run_snapshot_test(true).await;
@@ -102,6 +109,10 @@ impl TestBase {
         db_type: &DbType,
         dst_expected_counts: HashMap<&str, usize>,
     ) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let runner = RdbTestRunner::new(test_dir).await.unwrap();
         runner.run_snapshot_test(false).await.unwrap();
 
@@ -125,6 +136,10 @@ impl TestBase {
     }
 
     pub async fn run_cdc_test(test_dir: &str, start_millis: u64, parse_millis: u64) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         Self::run_with_retry(test_dir, "cdc", || async {
             let runner = RdbTestRunner::new(test_dir).await?;
             let run_res = runner.run_cdc_test(start_millis, parse_millis).await;
@@ -141,6 +156,10 @@ impl TestBase {
     }
 
     pub async fn run_cdc_resume_test(test_dir: &str, start_millis: u64, parse_millis: u64) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         Self::run_with_retry(test_dir, "cdc_resume", || async {
             let runner = RdbTestRunner::new(test_dir).await?;
             let run_res = runner.run_cdc_resume_test(start_millis, parse_millis).await;
@@ -157,6 +176,10 @@ impl TestBase {
     }
 
     pub async fn run_cdc_failover_test(test_dir: &str, start_millis: u64, parse_millis: u64) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         // Failover tests should not be retried automatically because each attempt can change
         // the primary node in a shared HA environment. Keep it single-attempt and rely on
         // the test's own best-effort restore logic.
@@ -209,6 +232,10 @@ impl TestBase {
         start_millis: u64,
         parse_millis: u64,
     ) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let runner = RdbSqlTestRunner::new(test_dir, reverse).await.unwrap();
         runner
             .run_cdc_to_sql_test(start_millis, parse_millis)
@@ -218,6 +245,10 @@ impl TestBase {
     }
 
     pub async fn run_cdc_lua_test(test_dir: &str, start_millis: u64, parse_millis: u64) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let runner = RdbLuaTestRunner::new(test_dir).await.unwrap();
         runner
             .run_cdc_test(start_millis, parse_millis)
@@ -227,12 +258,20 @@ impl TestBase {
     }
 
     pub async fn run_snapshot_lua_test(test_dir: &str) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let runner = RdbLuaTestRunner::new(test_dir).await.unwrap();
         runner.run_snapshot_test().await.unwrap();
         runner.close().await.unwrap();
     }
 
     pub async fn run_heartbeat_test(test_dir: &str, start_millis: u64, parse_millis: u64) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let runner = RdbTestRunner::new(test_dir).await.unwrap();
         runner
             .run_heartbeat_test(start_millis, parse_millis)
@@ -242,6 +281,10 @@ impl TestBase {
     }
 
     pub async fn run_ddl_test(test_dir: &str, start_millis: u64, parse_millis: u64) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let runner = RdbTestRunner::new(test_dir).await.unwrap();
         runner
             .run_ddl_test(start_millis, parse_millis)
@@ -251,6 +294,10 @@ impl TestBase {
     }
 
     pub async fn run_ddl_meta_center_test(test_dir: &str, start_millis: u64, parse_millis: u64) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let mut runner = RdbTestRunner::new(test_dir).await.unwrap();
         runner
             .run_ddl_meta_center_test(start_millis, parse_millis)
@@ -260,6 +307,10 @@ impl TestBase {
     }
 
     pub async fn run_check_test(test_dir: &str) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         Self::run_with_retry(test_dir, "check", || async {
             let runner = RdbCheckTestRunner::new(test_dir).await?;
             let res = runner.run_check_test().await;
@@ -271,24 +322,40 @@ impl TestBase {
     }
 
     pub async fn run_review_test(test_dir: &str) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let runner = RdbCheckTestRunner::new(test_dir).await.unwrap();
         runner.run_review_test().await.unwrap();
         runner.close().await.unwrap();
     }
 
     pub async fn run_revise_test(test_dir: &str) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let runner = RdbCheckTestRunner::new(test_dir).await.unwrap();
         runner.run_revise_test().await.unwrap();
         runner.close().await.unwrap();
     }
 
     pub async fn run_recheck_test(test_dir: &str) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let runner = RdbCheckTestRunner::new(test_dir).await.unwrap();
         runner.run_recheck_test().await.unwrap();
         runner.close().await.unwrap();
     }
 
     pub async fn run_mongo_snapshot_test(test_dir: &str) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let runner = MongoTestRunner::new(test_dir).await.unwrap();
         runner.run_snapshot_test(true).await.unwrap();
     }
@@ -297,6 +364,10 @@ impl TestBase {
         test_dir: &str,
         dst_expected_counts: HashMap<(&str, &str), usize>,
     ) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let runner = MongoTestRunner::new(test_dir).await.unwrap();
         runner.run_snapshot_test(false).await.unwrap();
 
@@ -313,6 +384,10 @@ impl TestBase {
     }
 
     pub async fn run_mongo_cdc_test(test_dir: &str, start_millis: u64, parse_millis: u64) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let runner = MongoTestRunner::new(test_dir).await.unwrap();
         runner
             .run_cdc_test(start_millis, parse_millis)
@@ -321,6 +396,10 @@ impl TestBase {
     }
 
     pub async fn run_mongo_cdc_resume_test(test_dir: &str, start_millis: u64, parse_millis: u64) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let runner = MongoTestRunner::new(test_dir).await.unwrap();
         runner
             .run_cdc_resume_test(start_millis, parse_millis)
@@ -329,6 +408,10 @@ impl TestBase {
     }
 
     pub async fn run_mongo_heartbeat_test(test_dir: &str, start_millis: u64, parse_millis: u64) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let runner = MongoTestRunner::new(test_dir).await.unwrap();
         runner
             .run_heartbeat_test(start_millis, parse_millis)
@@ -337,31 +420,55 @@ impl TestBase {
     }
 
     pub async fn run_mongo_check_test(test_dir: &str) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let runner = MongoCheckTestRunner::new(test_dir).await.unwrap();
         runner.run_check_test().await.unwrap();
     }
 
     pub async fn run_mongo_recheck_test(test_dir: &str) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let runner = MongoCheckTestRunner::new(test_dir).await.unwrap();
         runner.run_recheck_test().await.unwrap();
     }
 
     pub async fn run_mongo_revise_test(test_dir: &str) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let runner = MongoCheckTestRunner::new(test_dir).await.unwrap();
         runner.run_revise_test().await.unwrap();
     }
 
     pub async fn run_mongo_review_test(test_dir: &str) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let runner = MongoCheckTestRunner::new(test_dir).await.unwrap();
         runner.run_review_test().await.unwrap();
     }
 
     pub async fn run_redis_snapshot_test(test_dir: &str) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let mut runner = RedisTestRunner::new_default(test_dir).await.unwrap();
         runner.run_snapshot_test().await.unwrap();
     }
 
     pub async fn run_redis_rejson_snapshot_test(test_dir: &str) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let mut runner = RedisTestRunner::new(test_dir, vec![('\'', '\'')])
             .await
             .unwrap();
@@ -369,6 +476,10 @@ impl TestBase {
     }
 
     pub async fn run_redis_redisearch_snapshot_test(test_dir: &str) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let mut runner = RedisTestRunner::new(test_dir, vec![('\'', '\'')])
             .await
             .unwrap();
@@ -376,11 +487,19 @@ impl TestBase {
     }
 
     pub async fn run_redis_graph_snapshot_test(test_dir: &str) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let mut runner = RedisTestRunner::new_default(test_dir).await.unwrap();
         runner.run_snapshot_test().await.unwrap();
     }
 
     pub async fn run_redis_cdc_test(test_dir: &str, start_millis: u64, parse_millis: u64) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let mut runner = RedisTestRunner::new_default(test_dir).await.unwrap();
         runner
             .run_cdc_test(start_millis, parse_millis)
@@ -389,6 +508,10 @@ impl TestBase {
     }
 
     pub async fn run_redis_heartbeat_test(test_dir: &str, start_millis: u64, parse_millis: u64) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let mut runner = RedisTestRunner::new_default(test_dir).await.unwrap();
         runner
             .run_heartbeat_test(start_millis, parse_millis)
@@ -397,6 +520,10 @@ impl TestBase {
     }
 
     pub async fn run_redis_rejson_cdc_test(test_dir: &str, start_millis: u64, parse_millis: u64) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let mut runner = RedisTestRunner::new(test_dir, vec![('\'', '\'')])
             .await
             .unwrap();
@@ -407,6 +534,10 @@ impl TestBase {
     }
 
     pub async fn run_redis_graph_cdc_test(test_dir: &str, start_millis: u64, parse_millis: u64) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let mut runner = RedisTestRunner::new_default(test_dir).await.unwrap();
         runner
             .run_cdc_test(start_millis, parse_millis)
@@ -415,11 +546,19 @@ impl TestBase {
     }
 
     pub async fn run_redis_statistic_test(test_dir: &str) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let mut runner = RedisStatisticTestRunner::new(test_dir).await.unwrap();
         runner.run_statistic_test().await.unwrap();
     }
 
     pub async fn run_mysql_struct_test(test_dir: &str) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         Self::run_with_retry(test_dir, "mysql_struct", || async {
             let mut runner = RdbStructTestRunner::new(test_dir).await?;
             let run_res = runner.run_mysql_struct_test().await;
@@ -436,6 +575,10 @@ impl TestBase {
     }
 
     pub async fn run_pg_struct_test(test_dir: &str) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         Self::run_with_retry(test_dir, "pg_struct", || async {
             let mut runner = RdbStructTestRunner::new(test_dir).await?;
             let run_res = runner.run_pg_struct_test().await;
@@ -452,6 +595,10 @@ impl TestBase {
     }
 
     pub async fn run_oracle_struct_test(test_dir: &str) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         Self::run_with_retry(test_dir, "oracle_struct", || async {
             let mut runner = OracleStructTestRunner::new(test_dir).await?;
             let run_res = runner.run_struct_test().await;
@@ -468,6 +615,10 @@ impl TestBase {
     }
 
     pub async fn run_oracle_dst_struct_test(test_dir: &str) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         Self::run_with_retry(test_dir, "oracle_dst_struct", || async {
             let mut runner = OracleDstStructTestRunner::new(test_dir).await?;
             let run_res = runner.run_struct_test().await;
@@ -489,6 +640,10 @@ impl TestBase {
         src_expected_results: &HashMap<String, bool>,
         dst_expected_results: &HashMap<String, bool>,
     ) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         Self::run_with_retry(test_dir, "precheck", || async {
             let runner = PrecheckTestRunner::new(test_dir).await?;
             let run_res = runner
@@ -509,6 +664,10 @@ impl TestBase {
     }
 
     pub async fn run_rdb_kafka_rdb_cdc_test(test_dir: &str, start_millis: u64, parse_millis: u64) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let runner = RdbKafkaRdbTestRunner::new(test_dir).await.unwrap();
         runner
             .run_cdc_test(start_millis, parse_millis)
@@ -521,6 +680,10 @@ impl TestBase {
         start_millis: u64,
         parse_millis: u64,
     ) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let runner = RdbKafkaRdbTestRunner::new(test_dir).await.unwrap();
         runner
             .run_snapshot_test(start_millis, parse_millis)
@@ -529,6 +692,10 @@ impl TestBase {
     }
 
     pub async fn run_rdb_redis_cdc_test(test_dir: &str, start_millis: u64, parse_millis: u64) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let mut runner = RdbRedisTestRunner::new(test_dir).await.unwrap();
         runner
             .run_cdc_test(start_millis, parse_millis)
@@ -538,12 +705,20 @@ impl TestBase {
     }
 
     pub async fn run_rdb_redis_snapshot_test(test_dir: &str) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let mut runner = RdbRedisTestRunner::new(test_dir).await.unwrap();
         runner.run_snapshot_test().await.unwrap();
         runner.close().await.unwrap();
     }
 
     pub async fn run_rdb_starrocks_cdc_test(test_dir: &str, start_millis: u64, parse_millis: u64) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let runner = RdbStarRocksTestRunner::new(test_dir).await.unwrap();
         runner
             .run_cdc_soft_delete_test(start_millis, parse_millis)
@@ -553,6 +728,10 @@ impl TestBase {
     }
 
     pub async fn run_dcl_test(test_dir: &str, start_millis: u64, parse_millis: u64) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let runner = RdbTestRunner::new(test_dir).await.unwrap();
         runner
             .run_dcl_test(start_millis, parse_millis)
@@ -562,8 +741,50 @@ impl TestBase {
     }
 
     pub async fn run_dcl_check_test(test_dir: &str) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         let runner = RdbTestRunner::new(test_dir).await.unwrap();
         runner.dcl_check_sql_execution().await.unwrap();
         runner.close().await.unwrap();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn data_mismatch_is_never_transient() {
+        // The compare poll loop already waited out the propagation window, so this error means
+        // the data really differs. Retrying the whole test would hide it.
+        let err = anyhow::anyhow!(
+            "compare tb data failed after 4000 ms (stage=dml): src count 3, dst count 2"
+        );
+        assert!(!TestBase::is_transient_error(&err));
+    }
+
+    #[test]
+    fn infrastructure_hiccups_are_transient() {
+        for msg in [
+            "Connection refused (os error 61)",
+            "pool timed out while waiting for an open connection",
+            "terminating connection due to administrator command",
+            "server closed the connection unexpectedly",
+        ] {
+            let err = anyhow::anyhow!(msg.to_string());
+            assert!(
+                TestBase::is_transient_error(&err),
+                "expected transient: {}",
+                msg
+            );
+        }
+    }
+
+    #[test]
+    fn only_gaussdb_dirs_retry() {
+        assert!(TestBase::should_retry("gaussdb_to_pg/cdc/basic_test"));
+        assert!(!TestBase::should_retry("mysql_to_mysql/cdc/basic_test"));
     }
 }

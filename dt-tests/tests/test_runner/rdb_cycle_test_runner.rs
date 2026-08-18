@@ -7,6 +7,7 @@ use tokio::task::JoinHandle;
 use crate::{test_config_util::TestConfigUtil, test_runner::mongo_test_runner::SRC};
 
 use super::rdb_test_runner::RdbTestRunner;
+use super::test_env::TestEnv;
 
 pub struct RdbCycleTestRunner {
     base: RdbTestRunner,
@@ -49,6 +50,10 @@ impl RdbCycleTestRunner {
         parse_millis: u64,
         tx_check_data: &Vec<(&str, &str, &str, &str)>,
     ) {
+        if TestEnv::skip(test_dir).await {
+            return;
+        }
+
         // HashMap<(src_node, dst_node, data_origin_node), expect_tx_count>
         let expect_tx_count_map = Self::build_expect_tx_count_map(tx_check_data);
 

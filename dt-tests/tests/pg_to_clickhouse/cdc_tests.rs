@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod test {
+    use crate::test_runner::test_env::TestEnv;
 
     use serial_test::serial;
 
@@ -11,6 +12,10 @@ mod test {
     #[tokio::test]
     #[serial]
     async fn cdc_basic_test() {
+        if TestEnv::skip("pg_to_clickhouse/cdc/basic_test").await {
+            return;
+        }
+
         let runner = RdbClickHouseTestRunner::new("pg_to_clickhouse/cdc/basic_test")
             .await
             .unwrap();

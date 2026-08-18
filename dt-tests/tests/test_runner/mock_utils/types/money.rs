@@ -19,7 +19,9 @@ impl Money {
 impl fmt::Display for Money {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let is_negative = self.0 < 0;
-        let abs_value = self.0.abs();
+        // `i64::MIN.abs()` overflows, and i64::MIN is exactly the documented minimum of
+        // PostgreSQL's money type, so it must render rather than panic.
+        let abs_value = self.0.unsigned_abs();
         let dollars = abs_value / 100;
         let cents = abs_value % 100;
 

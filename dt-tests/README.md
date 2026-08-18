@@ -41,8 +41,28 @@ cargo test --package dt-tests --test integration_test -- mysql_to_mysql::cdc_tes
   - 4, sleep some milliseconds for task initialization (start_millis, you may change it based on source/target performance).
   - 5, execute src_test.sql in source database.
   - 6, execute dst_test.sql (if exists) in target database.
-  - 7, sleep some milliseconds for data sync (parse_millis, change it if needed).
-  - 8, compare data of source and target.
+  - 7, poll: re-compare source and target every 200ms until they match, or until parse_millis
+       elapses (a mismatch after that is a real failure, never retried away).
+
+# Environment guards
+
+Integration tests need live databases. Instead of panicking on a machine that never provisioned
+them, every test entry point checks first and **skips with a printed reason** when:
+
+- neither `dt-tests/tests/.env` nor `.env.local` exists (copy `.env.src` and fill it in), or
+- the test's `task_config.ini` references an env var nobody defined, or
+- the endpoint it points at refuses a TCP connection.
+
+So `cargo test -p dt-tests` is safe to run anywhere: it reports what is missing instead of failing.
+
+Set `DT_TESTS_STRICT_ENV=1` to turn every skip into a failure — use it wherever the environment is
+supposed to be up (CI, the compose stack) so a broken stack cannot pass as green.
+
+Tests that need more than databases are `#[ignore]`d and run explicitly:
+
+```
+cargo test -p dt-tests --test gaussdb_snapshot_cdc_e2e -- --ignored   # needs console + playwright + gaussdb
+```
 
 # Config
 - All database urls are configured in ./tests/.env file and referenced in task_config.ini of tests.

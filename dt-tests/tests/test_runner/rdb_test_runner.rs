@@ -63,6 +63,12 @@ pub const PUBLIC: &str = "public";
 
 const UTC_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
 
+/// How often a CDC test re-compares src against dst while waiting for propagation. The red-line
+/// script converges the same way: poll until equal or the deadline expires, instead of sleeping
+/// through the worst case and comparing once. Most CDC tests now finish their compare in one or
+/// two polls rather than burning the whole `parse_millis` budget.
+pub const COMPARE_POLL_INTERVAL_MILLIS: u64 = 200;
+
 #[derive(Debug, Clone)]
 struct CmDatanodeRow {
     instance: u32,
@@ -2847,7 +2853,6 @@ Please run the test from a normal terminal environment with network access."
         };
 
         let started = std::time::Instant::now();
-        let mut backoff_millis: u64 = 500;
 
         // First compare attempt (gives us an error to report if we time out).
         let mut last_err = match self.compare_data_for_tbs(src_db_tbs, dst_db_tbs).await {
@@ -2857,8 +2862,7 @@ Please run the test from a normal terminal environment with network access."
         check_task_shutdown()?;
 
         while started.elapsed().as_millis() < max_wait_millis as u128 {
-            TimeUtil::sleep_millis(backoff_millis).await;
-            backoff_millis = std::cmp::min(backoff_millis.saturating_mul(2), 2000);
+            TimeUtil::sleep_millis(COMPARE_POLL_INTERVAL_MILLIS).await;
 
             match self.compare_data_for_tbs(src_db_tbs, dst_db_tbs).await {
                 Ok(_) => return Ok(()),

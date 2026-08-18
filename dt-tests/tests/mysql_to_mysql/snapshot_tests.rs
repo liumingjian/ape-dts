@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod test {
+    use crate::test_runner::test_env::TestEnv;
 
     use std::collections::HashMap;
 
@@ -190,6 +191,10 @@ mod test {
     #[tokio::test]
     #[serial]
     async fn snapshot_deadlock_test() {
+        if TestEnv::skip("mysql_to_mysql/snapshot/deadlock_test").await {
+            return;
+        }
+
         // Unpredictable write orders for unique indices on non-ordering columns (relative to the ORDER BY clause) are
         // prone to causing deadlocks in the destination table.
         let runner = RdbTestRunner::new("mysql_to_mysql/snapshot/deadlock_test")

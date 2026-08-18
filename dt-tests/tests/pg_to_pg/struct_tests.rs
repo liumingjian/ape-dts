@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod test {
+    use crate::test_runner::test_env::TestEnv;
 
     use serial_test::serial;
 
@@ -15,6 +16,10 @@ mod test {
     #[tokio::test]
     #[serial]
     async fn struct_filter_test_1() {
+        if TestEnv::skip("pg_to_pg/struct/filter_test_1/src_to_dst").await {
+            return;
+        }
+
         let mut runner = RdbStructTestRunner::new("pg_to_pg/struct/filter_test_1/src_to_dst")
             .await
             .unwrap();
@@ -44,6 +49,10 @@ mod test {
     #[tokio::test]
     #[serial]
     async fn struct_rbac_test() {
+        if TestEnv::skip("pg_to_pg/struct/rbac_test").await {
+            return;
+        }
+
         let mut runner = RdbStructTestRunner::new("pg_to_pg/struct/rbac_test")
             .await
             .unwrap();
@@ -60,6 +69,10 @@ mod test {
     #[tokio::test]
     #[serial]
     async fn struct_batch_bench_test_1() {
+        if TestEnv::skip("pg_to_pg/struct/batch_test/bench_test_1/src_to_dst").await {
+            return;
+        }
+
         let mut runner =
             RdbStructTestRunner::new("pg_to_pg/struct/batch_test/bench_test_1/src_to_dst")
                 .await
@@ -71,6 +84,10 @@ mod test {
     #[tokio::test]
     #[serial]
     async fn struct_batch_bench_test_2() {
+        if TestEnv::skip("pg_to_pg/struct/batch_test/bench_test_2/src_to_dst").await {
+            return;
+        }
+
         let mut runner =
             RdbStructTestRunner::new("pg_to_pg/struct/batch_test/bench_test_2/src_to_dst")
                 .await

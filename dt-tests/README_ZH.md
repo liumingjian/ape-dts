@@ -30,8 +30,25 @@ cargo test --package dt-tests --test integration_test -- mysql_to_mysql::cdc_tes
   - 4，停顿若干毫秒（start_millis，根据测试环境的性能和网络状况，你可修改测试用例的预设值），等待任务初始化。
   - 5，对源库执行 src_test.sql。
   - 6，对目标库执行 dst_test.sql（如果有）。
-  - 7，停顿若干毫秒（parse_millis，同前，你可根据实际情况修改），等待数据同步完成。
-  - 8，对比源和目标数据。
+  - 7，轮询收敛：每 200ms 比对一次源和目标，直到一致，或耗尽 parse_millis（超时后的不一致就是真失败，不会被重试洗白）。
+
+# 环境守卫
+
+集成测试需要真实的数据库。在没有环境的机器上，测试不再 panic，而是**打印原因后跳过**：
+
+- `dt-tests/tests/.env` 与 `.env.local` 都不存在（复制 `.env.src` 填好即可）；
+- 用例的 `task_config.ini` 引用了未定义的环境变量；
+- 引用的地址 TCP 连不上。
+
+所以 `cargo test -p dt-tests` 在任何机器上都可以跑：缺什么会说清楚，而不是挂掉。
+
+环境本该就绪的地方（CI、compose 栈）设 `DT_TESTS_STRICT_ENV=1`，把跳过变成失败，避免坏环境冒充绿灯。
+
+依赖数据库之外的东西的用例标了 `#[ignore]`，需要显式运行：
+
+```
+cargo test -p dt-tests --test gaussdb_snapshot_cdc_e2e -- --ignored   # 需要 console + playwright + gaussdb
+```
 
 # 配置
 - 所有数据库的 extractor url，sinker url 均配置在 ./tests/.env 文件，各测试用例的 task_config.ini 中引用。

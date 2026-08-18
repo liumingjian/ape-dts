@@ -38,7 +38,11 @@ mod test {
     const GAUSSDB_SQL_ATTEMPT_TIMEOUT: Duration = Duration::from_secs(20);
     static GAUSSDB_PROBE_SEQ: AtomicU64 = AtomicU64::new(1);
 
+    // Needs the whole managed stack: console server, a Playwright browser and live GaussDB /
+    // Oracle instances. Nothing here degrades gracefully, so it is opt-in:
+    //   cargo test -p dt-tests --test gaussdb_snapshot_cdc_e2e -- --ignored
     #[tokio::test]
+    #[ignore = "needs console + playwright + gaussdb; run with --ignored"]
     async fn gaussdb_bidirectional_snapshot_cdc_via_console_and_playwright() {
         let result = run_matrix(MatrixScope::Full).await;
         if let Err(e) = result {
@@ -46,7 +50,11 @@ mod test {
         }
     }
 
+    // Needs the whole managed stack: console server, a Playwright browser and live GaussDB /
+    // Oracle instances. Nothing here degrades gracefully, so it is opt-in:
+    //   cargo test -p dt-tests --test gaussdb_snapshot_cdc_e2e -- --ignored
     #[tokio::test]
+    #[ignore = "needs console + playwright + gaussdb; run with --ignored"]
     async fn gaussdb_pg_mysql_snapshot_cdc_via_console_and_playwright() {
         let result = run_matrix(MatrixScope::GaussDbPgMysql).await;
         if let Err(e) = result {
@@ -54,7 +62,11 @@ mod test {
         }
     }
 
+    // Needs the whole managed stack: console server, a Playwright browser and live GaussDB /
+    // Oracle instances. Nothing here degrades gracefully, so it is opt-in:
+    //   cargo test -p dt-tests --test gaussdb_snapshot_cdc_e2e -- --ignored
     #[tokio::test]
+    #[ignore = "needs console + playwright + gaussdb; run with --ignored"]
     async fn gaussdb_oracle_snapshot_cdc_via_console_and_playwright() {
         let result = run_matrix(MatrixScope::GaussDbOracle).await;
         if let Err(e) = result {
@@ -62,7 +74,11 @@ mod test {
         }
     }
 
+    // Needs the whole managed stack: console server, a Playwright browser and live GaussDB /
+    // Oracle instances. Nothing here degrades gracefully, so it is opt-in:
+    //   cargo test -p dt-tests --test gaussdb_snapshot_cdc_e2e -- --ignored
     #[tokio::test]
+    #[ignore = "needs console + playwright + gaussdb; run with --ignored"]
     async fn gaussdb_oracle_self_check_prepare_normal() {
         let result = self_check_prepare_normal().await;
         if let Err(e) = result {
@@ -70,7 +86,11 @@ mod test {
         }
     }
 
+    // Needs the whole managed stack: console server, a Playwright browser and live GaussDB /
+    // Oracle instances. Nothing here degrades gracefully, so it is opt-in:
+    //   cargo test -p dt-tests --test gaussdb_snapshot_cdc_e2e -- --ignored
     #[tokio::test]
+    #[ignore = "needs console + playwright + gaussdb; run with --ignored"]
     async fn gaussdb_oracle_self_check_mutate_normal() {
         let result = self_check_mutate_normal().await;
         if let Err(e) = result {
@@ -78,7 +98,11 @@ mod test {
         }
     }
 
+    // Needs the whole managed stack: console server, a Playwright browser and live GaussDB /
+    // Oracle instances. Nothing here degrades gracefully, so it is opt-in:
+    //   cargo test -p dt-tests --test gaussdb_snapshot_cdc_e2e -- --ignored
     #[tokio::test]
+    #[ignore = "needs console + playwright + gaussdb; run with --ignored"]
     async fn gaussdb_oracle_self_check_verify_normal() {
         let result = self_check_verify_normal().await;
         if let Err(e) = result {
