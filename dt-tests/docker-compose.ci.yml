@@ -153,8 +153,12 @@ services:
       interval: 5s
 
   # ── PostgreSQL ───────────────────────────────────────────────────────────────────
+  # `postgis/postgis`, not stock `postgres`: nine of the pg_to_pg cases run
+  # `CREATE EXTENSION IF NOT EXISTS postgis` in their prepare SQL, which stock postgres:13
+  # answers with "could not open extension control file". The image is postgres:13 with the
+  # extension installed, so everything else about these services is unchanged.
   postgres-src:
-    image: postgres:13
+    image: postgis/postgis:13-3.3
     container_name: postgres-src-ci
     profiles: ["pg"]
     environment:
@@ -163,6 +167,8 @@ services:
       POSTGRES_DB: postgres
     ports:
       - "5433:5432"
+    volumes:
+      - ./ci/pg-init/20-euc-cn-db.sql:/docker-entrypoint-initdb.d/20-euc-cn-db.sql:ro
     command:
       - postgres
       - -c
@@ -179,7 +185,7 @@ services:
       interval: 5s
 
   postgres-dst:
-    image: postgres:13
+    image: postgis/postgis:13-3.3
     container_name: postgres-dst-ci
     profiles: ["pg"]
     environment:
@@ -188,6 +194,8 @@ services:
       POSTGRES_DB: postgres
     ports:
       - "5434:5432"
+    volumes:
+      - ./ci/pg-init/20-euc-cn-db.sql:/docker-entrypoint-initdb.d/20-euc-cn-db.sql:ro
     command:
       - postgres
       - -c
@@ -205,7 +213,7 @@ services:
 
   # `pg_cycle_node3_url` — the pg cycle topologies need a third independent node.
   postgres-node3:
-    image: postgres:13
+    image: postgis/postgis:13-3.3
     container_name: postgres-node3-ci
     profiles: ["pg"]
     environment:
@@ -254,8 +262,13 @@ services:
     environment:
       MONGO_INITDB_ROOT_USERNAME: ape_dts
       MONGO_INITDB_ROOT_PASSWORD: 123456
+    # The container listens on 27018 as well, rather than being mapped 27018->27017. A replica
+    # set member is configured by host:port, and mongod decides whether a member *is itself* by
+    # dialing that address from inside its own network namespace — where a host port mapping does
+    # not exist. Announced as 127.0.0.1:27018 while listening on 27017, rs.initiate() fails with
+    # "no host described in new configuration maps to this node" and the node never elects itself.
     ports:
-      - "27018:27017"
+      - "27018:27018"
     # A replica set with --auth also needs internal (keyfile) auth, so the keyfile is generated
     # before handing over to the stock entrypoint.
     entrypoint:
@@ -266,9 +279,9 @@ services:
         openssl rand -base64 756 > /data/keyfile
         chmod 400 /data/keyfile
         chown mongodb:mongodb /data/keyfile
-        exec docker-entrypoint.sh mongod --replSet rs1 --auth --keyFile /data/keyfile --bind_ip_all
+        exec docker-entrypoint.sh mongod --port 27018 --replSet rs1 --auth --keyFile /data/keyfile --bind_ip_all
     healthcheck:
-      test: ["CMD", "mongo", "--quiet", "-u", "ape_dts", "-p", "123456", "--authenticationDatabase", "admin", "--eval", "db.adminCommand('ping').ok"]
+      test: ["CMD", "mongo", "--quiet", "--port", "27018", "-u", "ape_dts", "-p", "123456", "--authenticationDatabase", "admin", "--eval", "db.adminCommand('ping').ok"]
       timeout: 5s
       retries: 10
       start_period: 20s
@@ -285,23 +298,44 @@ services:
         condition: service_healthy
     network_mode: host
     restart: "no"
+    # `--wait` only waits for a container to be *running* or *healthy*; a one-shot container is
+    # running the instant it starts, so without the marker healthcheck below `compose up --wait`
+    # returned while rs.initiate() was still in flight and the suite raced it, failing every test
+    # with NotWritablePrimary. So this container initiates, touches a marker, then idles, and the
+    # healthcheck is what makes "ready" mean "the replica sets are usable".
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/rs-ready"]
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+      interval: 2s
     entrypoint:
       - bash
       - -c
       - |
         set -e
+        # rs.status() is a plain runCommand: on an uninitiated member it *returns* {ok: 0,
+        # code: 94}, it does not throw. Branch on ok, not on an exception that never arrives.
         mongo --quiet --host 127.0.0.1 --port 27017 --eval \
-          'try { rs.status().ok } catch (e) { rs.initiate({_id: "rs0", members: [{_id: 0, host: "127.0.0.1:27017"}]}) }'
+          'if (rs.status().ok != 1) { rs.initiate({_id: "rs0", members: [{_id: 0, host: "127.0.0.1:27017"}]}) }'
         mongo --quiet --host 127.0.0.1 --port 27018 -u ape_dts -p 123456 --authenticationDatabase admin --eval \
-          'try { rs.status().ok } catch (e) { rs.initiate({_id: "rs1", members: [{_id: 0, host: "127.0.0.1:27018"}]}) }'
-        # A freshly initiated single-node set takes a moment to elect itself primary.
-        for i in $$(seq 1 30); do
-          if mongo --quiet --host 127.0.0.1 --port 27017 --eval 'db.isMaster().ismaster' | grep -q true; then
-            break
-          fi
-          sleep 1
-        done
-        mongo --quiet --host 127.0.0.1 --port 27017 --eval 'db.isMaster().ismaster' | grep -q true
+          'if (rs.status().ok != 1) { rs.initiate({_id: "rs1", members: [{_id: 0, host: "127.0.0.1:27018"}]}) }'
+        # A freshly initiated single-node set takes a moment to elect itself primary. Both sides
+        # are waited on: the suite writes to the sink as much as it reads from the source.
+        wait_primary() {
+          for i in $$(seq 1 60); do
+            if mongo --quiet "$$@" --eval 'db.isMaster().ismaster' | grep -q true; then
+              return 0
+            fi
+            sleep 1
+          done
+          echo "timed out waiting for primary: $$*" >&2
+          return 1
+        }
+        wait_primary --host 127.0.0.1 --port 27017
+        wait_primary --host 127.0.0.1 --port 27018 -u ape_dts -p 123456 --authenticationDatabase admin
+        touch /tmp/rs-ready
+        sleep infinity
 
   # ── Redis ────────────────────────────────────────────────────────────────────────
   # One src/dst pair per supported wire format. `redis_to_redis` references every one of them,
@@ -412,10 +446,12 @@ services:
     command: redis-server --requirepass 123456 --save 60 1 --loglevel warning
     healthcheck: *redis_auth_healthcheck
 
-  # 2.8 predates `--requirepass` on the command line being usable together with the entrypoint's
-  # default config, so the password is set the same way dt-tests/k8s does it: after boot.
+  # `redis:2.8`, not the pinned `redis:2.8.22`: that patch tag is only published as a Docker
+  # manifest v2 *schema 1*, which modern dockerd refuses to pull, and one refused pull aborts
+  # `compose up` for the entire profile. The floating `2.8` tag is a schema 2 manifest of
+  # 2.8.23 — the last 2.8 release — and has not moved since 2016.
   redis-src-2-8:
-    image: redis:2.8.22
+    image: redis:2.8
     container_name: redis-src-2-8-ci
     profiles: ["redis"]
     ports:
@@ -424,7 +460,7 @@ services:
     healthcheck: *redis_auth_healthcheck
 
   redis-dst-2-8:
-    image: redis:2.8.22
+    image: redis:2.8
     container_name: redis-dst-2-8-ci
     profiles: ["redis"]
     ports:
