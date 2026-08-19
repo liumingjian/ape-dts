@@ -1,0 +1,196 @@
+name: E2E Tests
+
+# The nightly integration matrix, rebuilt from the workflow deleted in 99ab1ac7.
+#
+# One job per suite, each starting only the compose profile it needs. Two properties this
+# workflow is built around, both learned the hard way:
+#
+#   * `DT_TESTS_STRICT_ENV=1` — the environment guards skip a test whose endpoint is missing or
+#     unreachable, which is right for a laptop and disastrous for a nightly job: half a suite
+#     could quietly do nothing and still report green. Strict mode turns every such skip into a
+#     failure, so a broken stack cannot pass.
+#   * `--test-threads=1` — the suites share databases and rely on `#[serial]`, which only
+#     serialises within one process. nextest runs every test in its own process, so without
+#     this the tests trample each other's data.
+#
+# No retries: a re-run that turns red green is exactly the "wash a real bug into a flake"
+# behaviour issue #50 removed from the runners.
+
+on:
+  workflow_dispatch:
+    inputs:
+      suites:
+        description: "Comma-separated suites to run, e.g. mysql_to_mysql,pg_to_pg. Empty = all four."
+        required: false
+        default: ""
+  schedule:
+    # 02:00 Asia/Shanghai.
+    - cron: "0 18 * * *"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Both the cron and a manual dispatch resolve to the default branch, so they share this group.
+  # A dispatch of one suite at 02:30 must not cancel the nightly run it collides with — that
+  # would throw away the night's baseline and report it as "cancelled" rather than as a result.
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # Cheap gate: a placeholder no env file defines used to surface as a mid-suite failure and,
+  # since the environment guards landed, as a silent skip. Catch it before booting anything.
+  preflight:
+    name: Env coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@1.85.0
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: e2e-preflight-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Assert .env.ci / .env.src cover every referenced placeholder
+        run: cargo test -p dt-tests --test integration_test test_runner::env_ci -- --nocapture
+
+      # Suite → compose profile lives here, in one place, so a hand-picked subset from
+      # workflow_dispatch cannot silently start the wrong stack.
+      - name: Resolve suite matrix
+        id: matrix
+        env:
+          REQUESTED: ${{ inputs.suites }}
+        run: |
+          set -euo pipefail
+          all='[
+            {"suite":"mysql_to_mysql","profile":"mysql"},
+            {"suite":"pg_to_pg","profile":"pg"},
+            {"suite":"mongo_to_mongo","profile":"mongo"},
+            {"suite":"redis_to_redis","profile":"redis"}
+          ]'
+          if [ -z "${REQUESTED}" ]; then
+            selected=$(echo "$all" | jq -c .)
+          else
+            selected=$(echo "$all" | jq -c --arg want "$REQUESTED" \
+              '($want | split(",") | map(gsub("^\\s+|\\s+$";""))) as $w | map(select(.suite | IN($w[])))')
+            # Compare against the number requested, not against zero: `pg_to_pg,mysql_to_mysq`
+            # matches one suite, and a run that silently drops the typo'd half would report
+            # green having never touched MySQL.
+            want=$(echo "$all" | jq --arg want "$REQUESTED" \
+              '($want | split(",") | map(gsub("^\\s+|\\s+$";"")) | map(select(length > 0)) | unique | length)')
+            got=$(echo "$selected" | jq length)
+            if [ "$got" -ne "$want" ]; then
+              known=$(echo "$selected" | jq -r 'map(.suite) | join(",")')
+              echo "unknown suite in '${REQUESTED}' (recognised: ${known:-none})" >&2
+              exit 1
+            fi
+          fi
+          echo "matrix=$selected" >> "$GITHUB_OUTPUT"
+
+  integration-tests:
+    name: E2E - ${{ matrix.suite }}
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      # Every suite runs even when one fails — a partial picture is what made the old matrix
+      # useless for triage.
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.preflight.outputs.matrix) }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@1.85.0
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: e2e-${{ matrix.suite }}-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            e2e-${{ matrix.suite }}-${{ runner.os }}-
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      # Build first: a compile error should not cost a container boot, and the containers get
+      # their warm-up time for free while the next step runs.
+      - name: Build test binary
+        run: cargo build -p dt-tests --tests --locked
+
+      - name: Start ${{ matrix.profile }} services
+        working-directory: ./dt-tests
+        run: |
+          docker compose -f docker-compose.ci.yml --profile ${{ matrix.profile }} \
+            up --detach --wait --wait-timeout 420
+          docker compose -f docker-compose.ci.yml --profile ${{ matrix.profile }} ps
+
+      - name: Write tests/.env
+        working-directory: ./dt-tests
+        run: cp .env.ci tests/.env
+
+      - name: Run ${{ matrix.suite }}
+        env:
+          # See the header: skips are failures here, on purpose.
+          DT_TESTS_STRICT_ENV: "1"
+        run: |
+          cargo nextest run \
+            --profile ci \
+            --package dt-tests \
+            --test integration_test \
+            --test-threads 1 \
+            --no-fail-fast \
+            -E 'test(/^${{ matrix.suite }}::/)'
+
+      - name: Collect logs
+        if: always()
+        working-directory: ./dt-tests
+        run: |
+          mkdir -p ../.e2e-artifacts
+          docker compose -f docker-compose.ci.yml --profile ${{ matrix.profile }} logs --tail 200 \
+            > ../.e2e-artifacts/docker-compose.log 2>&1 || true
+          # Engine logs do NOT land under dt-tests: 363 of the task configs set `log_dir=./logs`,
+          # and update_file_paths_in_task_config rewrites that against the project root, so every
+          # default.log ends up in <repo_root>/logs. Collecting `tests/**/*logs*` instead — as the
+          # first draft did — uploaded 14 checked-in resume_logs fixtures and nothing from the run.
+          if [ -d ../logs ]; then cp -r ../logs ../.e2e-artifacts/engine-logs || true; fi
+          # Check logs are the exception: their dir is configured per test and sits next to the
+          # fixture, so these copies carry the checked-in expectations alongside the run's output —
+          # which is what a diff-log mismatch needs to be readable anyway.
+          find tests -type d -name "check_log*" -exec cp -r --parents {} ../.e2e-artifacts/ \; || true
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-${{ matrix.suite }}-${{ github.run_id }}
+          # tests/.env is deliberately not uploaded: it is generated from .env.ci, which is in
+          # the repo anyway, and an env file in an artifact is a habit worth not forming.
+          path: |
+            .e2e-artifacts/
+            target/nextest/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Stop services
+        if: always()
+        working-directory: ./dt-tests
+        run: |
+          docker compose -f docker-compose.ci.yml --profile ${{ matrix.profile }} down --volumes

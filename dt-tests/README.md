@@ -58,6 +58,53 @@ So `cargo test -p dt-tests` is safe to run anywhere: it reports what is missing 
 Set `DT_TESTS_STRICT_ENV=1` to turn every skip into a failure — use it wherever the environment is
 supposed to be up (CI, the compose stack) so a broken stack cannot pass as green.
 
+# The nightly matrix and its compose stack
+
+`.github/workflows/e2e-tests.yml` runs `mysql_to_mysql`, `pg_to_pg`, `mongo_to_mongo` and
+`redis_to_redis` every night (and on demand via *Run workflow*, which takes a comma-separated
+subset). Each job starts one compose profile from `docker-compose.ci.yml` and copies `.env.ci`
+to `tests/.env`, so the same stack is one command away locally (locally it goes to `.env.local`,
+which wins over `.env` and is the only one of the two `.gitignore` has always covered):
+
+```
+docker compose -f dt-tests/docker-compose.ci.yml --profile mysql up --detach --wait
+cp dt-tests/.env.ci dt-tests/tests/.env.local
+```
+
+Profiles: `mysql`, `pg`, `mongo`, `redis`, `clickhouse`. Nothing starts without one — that is
+what keeps a redis job from booting five MySQL servers it never touches.
+
+Two invariants the workflow relies on, worth keeping if you edit it:
+
+- `DT_TESTS_STRICT_ENV=1` — in a nightly job a skip is indistinguishable from a pass, so every
+  skip must be a failure. That in turn means a suite may only enter the matrix once its whole
+  stack exists in `docker-compose.ci.yml`.
+- `--test-threads 1` — the suites share databases and rely on `#[serial]`, which serialises
+  within a process only. nextest gives every test its own process.
+
+`.env.ci` and `.env.src` must define every `{placeholder}` any `task_config.ini` references;
+`tests/test_runner/env_ci.rs` asserts it without touching a database, and the workflow runs it
+before starting a single container. Adding a test that references a new endpoint therefore means
+adding the key to both env files — and, if the nightly matrix should cover it, a service to
+`docker-compose.ci.yml`.
+
+On arm64 machines `docker-compose.override.local.yml` swaps MySQL 5.7 for 8.0 (5.7 has no arm64
+image); CI runs amd64 and keeps 5.7, because `mysql_extractor_url` and `mysql_extractor_url_8_0`
+are two different server versions on purpose. The redis 2.8 and `redislabs/*` module images are
+amd64-only too, so the full redis profile is a CI-only stack.
+
+# The matrix reports, it does not flatter
+
+The first nights are red, and that is the intended outcome. `DT_TESTS_STRICT_ENV=1` plus a suite
+that has not run anywhere since 2026-07 means the baseline debt surfaces all at once: run
+[32145904273](https://github.com/liumingjian/ape-dts/actions/runs/32145904273) had redis green,
+mongo 19/21, mysql 56/72 and pg 56/71 with two timeouts. Every remaining failure is triaged into
+a ticket (#94 fixture semicolons, #95 MySQL 5.7 vs 8.0 fixtures, #96 pg schema dependencies,
+#97 checker expectation drift, #98 pg parallel/resume, #99 cdc-to-sql, #100 the mysql remainder).
+
+Relaxing strict mode or deleting the failing cases would make the matrix green and worthless. If
+you are tempted to do either, fix the ticket instead.
+
 Tests that need more than databases are `#[ignore]`d and run explicitly:
 
 ```

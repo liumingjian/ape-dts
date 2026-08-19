@@ -179,7 +179,7 @@ impl TestEnv {
             let end = start + end_offset;
             let name = &rest[start + 1..end];
             // `{}` or a brace that is part of the value itself: copy it through untouched.
-            if name.is_empty() || name.contains(['/', ':', '@', ' ']) {
+            if !Self::is_placeholder_name(name) {
                 out.push_str(&rest[..end + 1]);
                 rest = &rest[end + 1..];
                 continue;
@@ -195,6 +195,33 @@ impl TestEnv {
         }
         out.push_str(rest);
         Ok(out)
+    }
+
+    /// Every `{VAR}` in `raw`, in order of appearance, duplicates included.
+    ///
+    /// Shares `is_placeholder_name` with `resolve_placeholders`, so what the coverage tests
+    /// demand and what the guard resolves can never drift apart.
+    pub fn placeholders(raw: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        let mut rest = raw;
+
+        while let Some(start) = rest.find('{') {
+            let Some(end_offset) = rest[start..].find('}') else {
+                break;
+            };
+            let end = start + end_offset;
+            let name = &rest[start + 1..end];
+            if Self::is_placeholder_name(name) {
+                out.push(name.to_string());
+            }
+            rest = &rest[end + 1..];
+        }
+        out
+    }
+
+    /// `{}` and braces that belong to the value itself (json, url options) are not placeholders.
+    fn is_placeholder_name(name: &str) -> bool {
+        !name.is_empty() && !name.contains(['/', ':', '@', ' '])
     }
 
     /// Best-effort `host:port` extraction. `None` means "not probeable", never "unreachable".
