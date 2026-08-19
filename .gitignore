@@ -30,6 +30,9 @@ Session.vim
 
 ## local env settings
 /**/.env.local
+# `cp dt-tests/.env.ci dt-tests/tests/.env` is a documented step; the file it creates holds
+# credentials and must never be committable.
+/**/.env
 
 ## local scratch (manual runs / secrets)
 .local/

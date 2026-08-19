@@ -29,7 +29,10 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Both the cron and a manual dispatch resolve to the default branch, so they share this group.
+  # A dispatch of one suite at 02:30 must not cancel the nightly run it collides with — that
+  # would throw away the night's baseline and report it as "cancelled" rather than as a result.
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -80,8 +83,15 @@ jobs:
           else
             selected=$(echo "$all" | jq -c --arg want "$REQUESTED" \
               '($want | split(",") | map(gsub("^\\s+|\\s+$";""))) as $w | map(select(.suite | IN($w[])))')
-            if [ "$(echo "$selected" | jq length)" -eq 0 ]; then
-              echo "no known suite in '${REQUESTED}'" >&2
+            # Compare against the number requested, not against zero: `pg_to_pg,mysql_to_mysq`
+            # matches one suite, and a run that silently drops the typo'd half would report
+            # green having never touched MySQL.
+            want=$(echo "$all" | jq --arg want "$REQUESTED" \
+              '($want | split(",") | map(gsub("^\\s+|\\s+$";"")) | map(select(length > 0)) | unique | length)')
+            got=$(echo "$selected" | jq length)
+            if [ "$got" -ne "$want" ]; then
+              known=$(echo "$selected" | jq -r 'map(.suite) | join(",")')
+              echo "unknown suite in '${REQUESTED}' (recognised: ${known:-none})" >&2
               exit 1
             fi
           fi
@@ -156,8 +166,15 @@ jobs:
           mkdir -p ../.e2e-artifacts
           docker compose -f docker-compose.ci.yml --profile ${{ matrix.profile }} logs --tail 200 \
             > ../.e2e-artifacts/docker-compose.log 2>&1 || true
-          # Engine logs the runners leave behind next to each test's config.
-          find tests -name "*.log" -path "*logs*" -exec cp --parents {} ../.e2e-artifacts/ \; || true
+          # Engine logs do NOT land under dt-tests: 363 of the task configs set `log_dir=./logs`,
+          # and update_file_paths_in_task_config rewrites that against the project root, so every
+          # default.log ends up in <repo_root>/logs. Collecting `tests/**/*logs*` instead — as the
+          # first draft did — uploaded 14 checked-in resume_logs fixtures and nothing from the run.
+          if [ -d ../logs ]; then cp -r ../logs ../.e2e-artifacts/engine-logs || true; fi
+          # Check logs are the exception: their dir is configured per test and sits next to the
+          # fixture, so these copies carry the checked-in expectations alongside the run's output —
+          # which is what a diff-log mismatch needs to be readable anyway.
+          find tests -type d -name "check_log*" -exec cp -r --parents {} ../.e2e-artifacts/ \; || true
 
       - name: Upload artifacts
         if: always()

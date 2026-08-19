@@ -63,11 +63,12 @@ supposed to be up (CI, the compose stack) so a broken stack cannot pass as green
 `.github/workflows/e2e-tests.yml` runs `mysql_to_mysql`, `pg_to_pg`, `mongo_to_mongo` and
 `redis_to_redis` every night (and on demand via *Run workflow*, which takes a comma-separated
 subset). Each job starts one compose profile from `docker-compose.ci.yml` and copies `.env.ci`
-to `tests/.env`, so the same stack is one command away locally:
+to `tests/.env`, so the same stack is one command away locally (locally it goes to `.env.local`,
+which wins over `.env` and is the only one of the two `.gitignore` has always covered):
 
 ```
 docker compose -f dt-tests/docker-compose.ci.yml --profile mysql up --detach --wait
-cp dt-tests/.env.ci dt-tests/tests/.env
+cp dt-tests/.env.ci dt-tests/tests/.env.local
 ```
 
 Profiles: `mysql`, `pg`, `mongo`, `redis`, `clickhouse`. Nothing starts without one — that is

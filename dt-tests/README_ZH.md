@@ -49,11 +49,11 @@ cargo test --package dt-tests --test integration_test -- mysql_to_mysql::cdc_tes
 `.github/workflows/e2e-tests.yml` 每晚跑 `mysql_to_mysql`、`pg_to_pg`、`mongo_to_mongo`、
 `redis_to_redis` 四个套件（也可手动 *Run workflow*，输入逗号分隔的子集）。每个 job 只起
 `docker-compose.ci.yml` 里对应的一个 profile，并把 `.env.ci` 复制成 `tests/.env`；本地要同一套
-环境，两条命令即可：
+环境，两条命令即可（本地落到 `.env.local`：它优先于 `.env`，且一直在 `.gitignore` 覆盖范围内）：
 
 ```
 docker compose -f dt-tests/docker-compose.ci.yml --profile mysql up --detach --wait
-cp dt-tests/.env.ci dt-tests/tests/.env
+cp dt-tests/.env.ci dt-tests/tests/.env.local
 ```
 
 profile 有 `mysql`、`pg`、`mongo`、`redis`、`clickhouse`。不指定 profile 什么都不会起——redis 的

@@ -37,6 +37,13 @@ fn referenced_placeholders() -> Vec<(String, String)> {
     out
 }
 
+/// `struct_task_config.ini` counts too: `generate_tmp_task_config_file` substitutes
+/// `{placeholder}`s in it exactly like the plain one, so a struct test pointing at a new
+/// endpoint would otherwise pass this guard and then die mid-suite under strict env.
+fn is_task_config(name: &str) -> bool {
+    name == "task_config.ini" || name.ends_with("_task_config.ini")
+}
+
 fn collect_task_configs(dir: &Path, out: &mut Vec<String>) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;
@@ -45,7 +52,11 @@ fn collect_task_configs(dir: &Path, out: &mut Vec<String>) {
         let path = entry.path();
         if path.is_dir() {
             collect_task_configs(&path, out);
-        } else if path.file_name().and_then(|n| n.to_str()) == Some("task_config.ini") {
+        } else if path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(is_task_config)
+        {
             out.push(path.to_string_lossy().to_string());
         }
     }

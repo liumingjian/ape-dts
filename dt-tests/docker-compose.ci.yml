@@ -332,10 +332,14 @@ services:
     # returned while rs.initiate() was still in flight and the suite raced it, failing every test
     # with NotWritablePrimary. So this container initiates, touches a marker, then idles, and the
     # healthcheck is what makes "ready" mean "the replica sets are usable".
+    # The budget must exceed the entrypoint's own worst case, or Docker declares the container
+    # unhealthy while it is still legitimately waiting for an election and `up --wait` fails the
+    # whole mongo job — a flake indistinguishable from a broken stack. The entrypoint allows two
+    # 60-second wait_primary loops plus two rs.initiate calls, so 90 x 2s = 180s clears it.
     healthcheck:
       test: ["CMD", "test", "-f", "/tmp/rs-ready"]
       timeout: 5s
-      retries: 30
+      retries: 90
       start_period: 5s
       interval: 2s
     entrypoint:
