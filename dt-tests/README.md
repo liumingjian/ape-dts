@@ -92,6 +92,18 @@ image); CI runs amd64 and keeps 5.7, because `mysql_extractor_url` and `mysql_ex
 are two different server versions on purpose. The redis 2.8 and `redislabs/*` module images are
 amd64-only too, so the full redis profile is a CI-only stack.
 
+# The matrix reports, it does not flatter
+
+The first nights are red, and that is the intended outcome. `DT_TESTS_STRICT_ENV=1` plus a suite
+that has not run anywhere since 2026-07 means the baseline debt surfaces all at once: run
+[32145904273](https://github.com/liumingjian/ape-dts/actions/runs/32145904273) had redis green,
+mongo 19/21, mysql 56/72 and pg 56/71 with two timeouts. Every remaining failure is triaged into
+a ticket (#94 fixture semicolons, #95 MySQL 5.7 vs 8.0 fixtures, #96 pg schema dependencies,
+#97 checker expectation drift, #98 pg parallel/resume, #99 cdc-to-sql, #100 the mysql remainder).
+
+Relaxing strict mode or deleting the failing cases would make the matrix green and worthless. If
+you are tempted to do either, fix the ticket instead.
+
 Tests that need more than databases are `#[ignore]`d and run explicitly:
 
 ```

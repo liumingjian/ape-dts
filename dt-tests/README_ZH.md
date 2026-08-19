@@ -75,6 +75,16 @@ arm64 机器上 `docker-compose.override.local.yml` 把 MySQL 5.7 换成 8.0（5
 CI 跑 amd64，保持 5.7——`mysql_extractor_url` 与 `mysql_extractor_url_8_0` 本来就是两个不同版本的
 服务端。redis 2.8 与 `redislabs/*` 模块镜像同样只有 amd64，所以完整的 redis profile 是 CI 专用栈。
 
+# 矩阵的职责是如实报告，不是好看
+
+头几晚是红的，这是预期内的结果。`DT_TESTS_STRICT_ENV=1` 加上「这套用例自 2026-07 起就没在任何地方
+跑过」，意味着基线债会一次性全部显形：[run 32145904273](https://github.com/liumingjian/ape-dts/actions/runs/32145904273)
+里 redis 全绿，mongo 19/21，mysql 56/72，pg 56/71 外加 2 条超时。剩下的每一条失败都已归到票上
+（#94 fixture 漏分号、#95 MySQL 5.7 vs 8.0、#96 pg 库内对象依赖、#97 checker 期望漂移、
+#98 pg 并行与续跑、#99 cdc-to-sql、#100 mysql 剩余）。
+
+放宽 strict 或删掉失败用例都能让矩阵变绿，代价是它同时变得毫无意义。想这么做的时候，去修票。
+
 依赖数据库之外的东西的用例标了 `#[ignore]`，需要显式运行：
 
 ```
